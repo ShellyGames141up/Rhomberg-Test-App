@@ -112,7 +112,7 @@ const pressureGaugeConfig = product => {
   fields.push(choice('threadSize', 'Thread size', product.threadSizes || gaugeThreadSizes));
   fields.push(choice('fill', 'Dampening / fill', product.fillOptions || ['Dry', 'Glycerine filled', 'Silicone filled', 'Vibration-free movement']));
   fields.push(choice('installationOption', 'Block / adaptor option', product.installationOptions || ['Standard - no modification', 'Block welded to case', 'Adaptor fitted', 'Centre-back option - where applicable']));
-  fields.push(choice('logo', 'Dial branding', ['Standard Rhomberg logo', 'Customer logo', 'No logo']));
+  fields.push(choice('logo', 'Dial branding', ['Standard Rhomberg logo', 'Customer logo']));
   fields.push(multiChoice('gaugeOptions', 'Optional gauge features', product.gaugeOptions || gaugeOptionalFeatures, false, 'Choose only the extras needed. Final compatibility is checked against the selected gauge.'));
   fields.push(choice('sanas', 'SANAS calibration', ['No SANAS certificate', 'SANAS calibration required']));
   if (product.allowChemicalSeal !== false) {
@@ -128,7 +128,7 @@ const pressureTransmitterConfig = product => [
   choice('output', 'Output signal', product.outputs || ['4-20 mA', '0-5 V', '0-10 V', 'RS485']),
   choice('processConnection', 'Process connection', product.connections || rptConnections),
   choice('electricalConnection', 'Electrical connection', product.electrical || ['DIN Maxi connector', 'M12 4-pin connector', 'Cable outlet IP68', 'KSE head']),
-  choice('branding', 'Customer branding', ['Standard Rhomberg branding', 'Customer company logo', 'No logo']),
+  choice('branding', 'Customer branding', ['Standard Rhomberg branding', 'Customer company logo']),
   choice('sanas', 'SANAS calibration', ['No SANAS certificate', 'SANAS calibration required']),
   textarea('specialRequirements', 'Special requirements', 'Hazardous area, display, HART, cable length or installation notes', false),
 ];

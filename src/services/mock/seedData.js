@@ -80,7 +80,7 @@ export const DEMO_ENQUIRIES = Object.freeze([
     area: 'Gauteng', application: 'Mine dewatering pump discharge pressure monitoring.', medium: 'Process water', emergency: 'no',
     fulfilment: 'delivery', deliveryAddress: 'Demo mine site, Gauteng', collectionBranch: '', notes: 'Public preview sample only.',
     poMode: 'number', poNumber: 'PO-DEMO-1042', poFileName: '',
-    selectedRep: { id: 'J-20', code: '20', name: 'Tammy Landey', branchId: 'johannesburg', branchName: 'Johannesburg' },
+    selectedRep: { id: 'J-21', code: '21', name: 'Danny', branchId: 'johannesburg', branchName: 'Johannesburg' },
     items: [{ lineId: 'demo-line-pbb', productId: 'pbb', code: 'PBB', name: 'Stainless steel process gauge', quantity: 6, image: 'assets/images/products/pbb.webp', configuration: { dialSize: '100 mm', material: '316L stainless steel system', range: '0 to 16 bar', connectionPosition: 'Bottom entry' } }],
     trackingStatus: 'in-production', status: 'In production', createdAt: '2026-07-16T08:20:00.000Z', updatedAt: '2026-07-21T07:35:00.000Z', isDemo: true,
     trackingHistory: [
@@ -109,7 +109,7 @@ export const DEMO_ENQUIRIES = Object.freeze([
     area: 'KwaZulu-Natal', application: 'Reservoir level transmitter replacement.', medium: 'Potable water', emergency: 'no',
     fulfilment: 'delivery', deliveryAddress: 'Demo water works, Durban', collectionBranch: '', notes: 'Public preview sample only.',
     poMode: 'number', poNumber: 'PO-DEMO-2099', poFileName: '',
-    selectedRep: { id: 'D-21', code: '21', name: 'Amy Riley', branchId: 'durban', branchName: 'Durban' },
+    selectedRep: { id: 'J-21', code: '21', name: 'Danny', branchId: 'johannesburg', branchName: 'Johannesburg' },
     items: [{ lineId: 'demo-line-rpt', productId: 'rpt200-level', code: 'RPT200', name: 'Submersible level transmitter', quantity: 1, image: 'assets/images/products/rpt200-level.webp', configuration: { range: '0 to 10 mH2O', output: '4-20 mA', cableLength: '15 m' } }],
     trackingStatus: 'ready', status: 'Ready for dispatch', createdAt: '2026-07-12T12:15:00.000Z', updatedAt: '2026-07-21T07:15:00.000Z', isDemo: true,
     trackingHistory: [

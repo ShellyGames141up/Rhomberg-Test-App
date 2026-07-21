@@ -5,6 +5,7 @@ import { createApiServices } from '../src/services/api/createApiServices.js';
 import { createMockServices } from '../src/services/mock/createMockServices.js';
 import { ServiceError, USER_ROLES } from '../src/services/contracts.js';
 import { optionsForField, shouldShowField } from '../src/domain/productConfiguration.js';
+import { representativesByBranch } from '../src/data/representatives.js';
 
 class TestStorage {
   constructor() {
@@ -49,6 +50,17 @@ for (const file of uiFiles) {
 const catalogue = await services.products.getCatalogue();
 assert.ok(catalogue.categories.length >= 8, 'catalogue categories should load through the product service');
 assert.ok(catalogue.products.length > 50, 'catalogue products should load through the product service');
+assert.deepEqual(
+  Object.fromEntries(Object.entries(representativesByBranch).map(([branch, reps]) => [branch, reps.map(rep => rep.name)])),
+  {
+    'cape-town': ['Alphonso Majiet', 'Andrew Japhtha', 'Quintin van Wyk', 'Arthur Daniels', 'Ericu Vercuiel'],
+    durban: [],
+    johannesburg: ['Danny', 'Siya', 'Reneil'],
+    'port-elizabeth': ['Carmen Bellew'],
+  },
+  'only the approved branch representatives should be available',
+);
+assert.ok(catalogue.products.every(product => product.configurations.every(field => !field.options?.includes('No logo'))), 'logo removal must not be offered');
 
 const customer = await services.auth.signIn({ email: 'demo@client.co.za', password: 'Demo123!' });
 assert.equal(customer.role, 'customer');
@@ -99,7 +111,7 @@ const submission = await reopenedServices.enquiries.submit({
   application: 'Test pressure monitoring application',
   medium: 'Water',
   area: 'Gauteng',
-  selectedRep: { id: 'J-20', code: '20', name: 'Tammy Landey', branchId: 'johannesburg', branchName: 'Johannesburg' },
+  selectedRep: { id: 'J-21', code: '21', name: 'Danny', branchId: 'johannesburg', branchName: 'Johannesburg' },
   emergency: 'no',
   fulfilment: 'collect',
   deliveryAddress: '',
