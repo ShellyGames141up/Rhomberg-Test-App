@@ -27,8 +27,8 @@ export function Intro({ onComplete }) {
         </div>
         <IntroMessage number="01" title="Precision engineered" copy="for every application" className="message-one" />
         <IntroMessage number="02" title="Configure with confidence" copy="guided instrument selection" className="message-two" />
-        <IntroMessage number="03" title="Your quote portal." copy="Rhomberg expertise in your pocket" className="message-three" />
-        <p className="intro-welcome">Welcome to Rhomberg Quote Portal</p>
+        <IntroMessage number="03" title="Stay informed." copy="RFQs and order progress in one place" className="message-three" />
+        <p className="intro-welcome">Welcome to Rhomberg Instruments</p>
       </div>
       <div className="intro-progress" aria-hidden="true"><span /></div>
     </section>

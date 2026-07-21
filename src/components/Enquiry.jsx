@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { areas, nearestBranchForArea } from '../data/branches.js';
+import { representativesForArea } from '../data/representatives.js';
 import { MAX_EMAIL_ATTACHMENT_BYTES, RFQ_EMAIL_RECIPIENT } from '../lib/rfqEmail.js';
 import { LeadTimeNotice } from './Layout.jsx';
 
@@ -12,6 +13,7 @@ export function Enquiry({ account, lines, onAddProducts, onEdit, onRemove, onQua
   const [poMode, setPoMode] = useState('none');
   const [poFile, setPoFile] = useState(null);
   const [area, setArea] = useState(areas.includes(account.area) ? account.area : 'Western Cape');
+  const [selectedRepId, setSelectedRepId] = useState('');
   const [emergency, setEmergency] = useState('no');
   const [fulfilment, setFulfilment] = useState('');
   const [error, setError] = useState('');
@@ -19,6 +21,11 @@ export function Enquiry({ account, lines, onAddProducts, onEdit, onRemove, onQua
   const [isSubmitting, setIsSubmitting] = useState(false);
   const totalQuantity = lines.reduce((sum, line) => sum + line.quantity, 0);
   const nearestBranch = useMemo(() => nearestBranchForArea(area), [area]);
+  const repSelection = useMemo(() => representativesForArea(area), [area]);
+
+  useEffect(() => {
+    if (selectedRepId && !repSelection.representatives.some(representative => representative.id === selectedRepId)) setSelectedRepId('');
+  }, [repSelection, selectedRepId]);
 
   const selectPoFile = event => {
     const file = event.target.files?.[0] || null;
@@ -58,6 +65,10 @@ export function Enquiry({ account, lines, onAddProducts, onEdit, onRemove, onQua
       setError('Please choose whether the units must be delivered or collected.');
       return;
     }
+    if (!selectedRepId) {
+      setError(`Please select a ${repSelection.branch.name} representative for this RFQ.`);
+      return;
+    }
     if (fulfilment === 'delivery' && !data.deliveryAddress?.trim()) {
       setError('Please enter the delivery address.');
       return;
@@ -71,6 +82,7 @@ export function Enquiry({ account, lines, onAddProducts, onEdit, onRemove, onQua
       return;
     }
 
+    const selectedRepresentative = repSelection.representatives.find(representative => representative.id === selectedRepId);
     setIsSubmitting(true);
     let result;
     try {
@@ -78,6 +90,10 @@ export function Enquiry({ account, lines, onAddProducts, onEdit, onRemove, onQua
         application: data.application?.trim(),
         medium: data.medium?.trim(),
         area,
+        selectedRep: {
+          ...selectedRepresentative,
+          branchName: repSelection.branch.name,
+        },
         emergency,
         fulfilment,
         deliveryAddress: fulfilment === 'delivery' ? data.deliveryAddress.trim() : '',
@@ -102,6 +118,7 @@ export function Enquiry({ account, lines, onAddProducts, onEdit, onRemove, onQua
     form.reset();
     setPoMode('none');
     setPoFile(null);
+    setSelectedRepId('');
     setEmergency('no');
     setFulfilment('');
   };
@@ -136,6 +153,11 @@ export function Enquiry({ account, lines, onAddProducts, onEdit, onRemove, onQua
           <label className="form-field"><span>What is the application?</span><textarea name="application" required rows="4" placeholder="Tell us what the instruments will measure and where they will be used..." /></label>
           <label className="form-field"><span>Process medium or product <i>Optional</i></span><input name="medium" placeholder="e.g. Water, steam, hydraulic oil or chemical" /></label>
           <label className="form-field"><span>Area</span><select name="area" required value={area} onChange={event => setArea(event.target.value)}>{areas.map(item => <option key={item}>{item}</option>)}</select></label>
+          <div className="rep-selection-card">
+            <span className="rep-branch-mark">R</span>
+            <div className="rep-selection-copy"><small>Representatives for your nearest branch</small><strong>{repSelection.branch.name}</strong><p>Only representatives assigned to this branch are shown.</p></div>
+            <label className="form-field rep-select"><span>Select your representative</span><select required value={selectedRepId} onChange={event => setSelectedRepId(event.target.value)}><option value="" disabled>Choose a representative</option>{repSelection.representatives.map(representative => <option key={representative.id} value={representative.id}>{representative.name} · Code {representative.code}</option>)}</select></label>
+          </div>
 
           <fieldset className="rfq-choice-field">
             <legend>Is this an emergency request?</legend>
@@ -202,5 +224,20 @@ function EnquiryLine({ line, onEdit, onRemove, onQuantity }) {
 }
 
 function SuccessDialog({ success, onClose }) {
-  return <div className="dialog-backdrop" role="presentation"><section className="success-dialog" role="dialog" aria-modal="true" aria-labelledby="success-title"><span className="success-icon">✓</span><small>RFQ email submitted</small><h2 id="success-title">Thank you, {success.firstName}.</h2><p>Your RFQ was accepted for <strong>{success.recipient}</strong> and saved in this device's enquiry history.</p><strong className="success-reference">{success.reference}</strong>{success.pricedPdfAttached ? <p className="priced-pdf-note"><span>PDF</span> A protected rep-only PDF with internal price-list estimates was attached.</p> : <p className="activation-note"><span>i</span> The public test fallback sent an unpriced RFQ PDF. Pricing remains private and must be added by the protected service.</p>}{success.warning && <p className="activation-note"><span>!</span>{success.warning}</p>}{success.activationMayBeRequired && <p className="activation-note"><span>i</span> First test only: open the FormSubmit activation email in {success.recipient}. Once confirmed, the queued RFQ will be forwarded.</p>}<button className="primary-button full" type="button" onClick={onClose}>Return home <span>→</span></button></section></div>;
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <section className="success-dialog" role="dialog" aria-modal="true" aria-labelledby="success-title">
+        <span className="success-icon">✓</span>
+        <small>{success.emailFailed ? 'RFQ saved to account' : 'RFQ email submitted'}</small>
+        <h2 id="success-title">Thank you, {success.firstName}.</h2>
+        <p>{success.emailFailed ? 'Your RFQ is safely stored in this browser and remains visible in Order Tracking. The test email still needs attention.' : <>Your RFQ was accepted for <strong>{success.recipient}</strong> and saved permanently in this device's account history.</>}</p>
+        <strong className="success-reference">{success.reference}</strong>
+        {success.pricedPdfAttached ? <p className="priced-pdf-note"><span>PDF</span> A protected rep-only PDF with internal price-list estimates was attached.</p> : !success.emailFailed && <p className="activation-note"><span>i</span> The public test fallback sent an unpriced RFQ PDF. Pricing remains private and must be added by the protected service.</p>}
+        {success.warning && <p className="activation-note"><span>!</span>{success.warning}</p>}
+        {success.fallbackUrl && <a className="email-fallback" href={success.fallbackUrl}>Open my email app with the saved RFQ <span>→</span></a>}
+        {success.activationMayBeRequired && <p className="activation-note"><span>i</span> First test only: open the FormSubmit activation email in {success.recipient}. Once confirmed, the queued RFQ will be forwarded.</p>}
+        <button className="primary-button full" type="button" onClick={onClose}>View order tracking <span>→</span></button>
+      </section>
+    </div>
+  );
 }

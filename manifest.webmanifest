@@ -1,7 +1,7 @@
 {
-  "name": "Rhomberg Quote Portal",
-  "short_name": "Rhomberg Quote",
-  "description": "A mobile catalogue and quote-request preview for Rhomberg Instruments.",
+  "name": "Rhomberg Instruments App",
+  "short_name": "Rhomberg",
+  "description": "A mobile catalogue, RFQ and order-tracking preview for Rhomberg Instruments.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

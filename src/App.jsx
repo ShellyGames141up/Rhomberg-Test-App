@@ -3,11 +3,12 @@ import { Account } from './components/Account.jsx';
 import { Auth } from './components/Auth.jsx';
 import { Catalogue } from './components/Catalogue.jsx';
 import { Configurator } from './components/Configurator.jsx';
-import { Contact } from './components/Contact.jsx';
 import { Enquiry } from './components/Enquiry.jsx';
+import { ExpeditorDashboard } from './components/ExpeditorDashboard.jsx';
 import { Home } from './components/Home.jsx';
 import { Intro } from './components/Intro.jsx';
 import { AppHeader, BottomNav, Toast } from './components/Layout.jsx';
+import { OrderTracking } from './components/OrderTracking.jsx';
 import { ProductDetail } from './components/ProductDetail.jsx';
 import { productById } from './data/catalogue.js';
 import { sendRfqEmail } from './lib/rfqEmail.js';
@@ -18,11 +19,14 @@ import {
   createAccount,
   getDraft,
   getEnquiries,
+  getTheme,
   makeId,
   saveDraft,
   saveEnquiry,
+  saveTheme,
   seedPreview,
   setSession,
+  updateEnquiryTracking,
 } from './lib/storage.js';
 
 seedPreview();
@@ -30,26 +34,35 @@ seedPreview();
 export default function App() {
   const [introComplete, setIntroComplete] = useState(false);
   const [account, setAccount] = useState(() => accountFromSession());
-  const [view, setView] = useState('home');
+  const [view, setView] = useState(() => accountFromSession()?.role === 'expeditor' ? 'expeditor' : 'home');
+  const [theme, setTheme] = useState(() => getTheme());
   const [categoryId, setCategoryId] = useState(null);
   const [productId, setProductId] = useState(null);
   const [configOrigin, setConfigOrigin] = useState('product');
   const [editingLine, setEditingLine] = useState(null);
-  const [draft, setDraft] = useState(() => account ? getDraft(account.id) : []);
+  const [draft, setDraft] = useState(() => account?.role === 'customer' ? getDraft(account.id) : []);
   const [enquiries, setEnquiries] = useState(() => getEnquiries());
   const [success, setSuccess] = useState(null);
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
 
+  const isExpeditor = account?.role === 'expeditor';
   const selectedProduct = productById(productId);
-  const accountEnquiries = useMemo(() => account ? enquiries.filter(enquiry => enquiry.accountId === account.id) : [], [account, enquiries]);
+  const accountEnquiries = useMemo(() => account && !isExpeditor ? enquiries.filter(enquiry => enquiry.accountId === account.id) : [], [account, enquiries, isExpeditor]);
   const totalQuantity = draft.reduce((sum, line) => sum + line.quantity, 0);
-  const detailView = view === 'product' || view === 'configurator';
+  const detailView = !isExpeditor && (view === 'product' || view === 'configurator');
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    saveTheme(theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(current => current === 'dark' ? 'light' : 'dark');
 
   const notify = message => {
     setToast(message);
     window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(''), 2400);
+    toastTimer.current = window.setTimeout(() => setToast(''), 2600);
   };
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
@@ -59,8 +72,8 @@ export default function App() {
     if (!matched) return { ok: false, message: 'The email address or password does not match a preview account.' };
     setSession(matched);
     setAccount(matched);
-    setDraft(getDraft(matched.id));
-    setView('home');
+    setDraft(matched.role === 'customer' ? getDraft(matched.id) : []);
+    setView(matched.role === 'expeditor' ? 'expeditor' : 'home');
     return { ok: true };
   };
 
@@ -78,8 +91,9 @@ export default function App() {
   };
 
   const navigate = target => {
-    if (target === 'catalogue') setCategoryId(null);
-    setView(target);
+    const destination = isExpeditor && !['expeditor', 'account'].includes(target) ? 'expeditor' : target;
+    if (destination === 'catalogue') setCategoryId(null);
+    setView(destination);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -129,10 +143,11 @@ export default function App() {
     const { poFile, ...serialisableDetails } = details;
     const allEnquiries = getEnquiries();
     const reference = `RQ-PREVIEW-${String(allEnquiries.length + 1).padStart(4, '0')}`;
+    const createdAt = new Date().toISOString();
     const enquiry = {
       id: makeId('enquiry'),
       reference,
-      version: 3,
+      version: 4,
       accountId: account.id,
       company: account.company,
       contact: account.contact,
@@ -140,32 +155,47 @@ export default function App() {
       phone: account.phone,
       ...serialisableDetails,
       items: draft.map(line => ({ ...line })),
-      status: 'Sending test email',
-      createdAt: new Date().toISOString(),
+      trackingStatus: 'rfq-submitted',
+      status: 'RFQ submitted',
+      trackingHistory: [{ id: makeId('event'), status: 'rfq-submitted', note: 'RFQ submitted by the customer and saved to the account.', actor: account.contact, createdAt }],
+      emailDeliveryStatus: 'sending',
+      createdAt,
+      updatedAt: createdAt,
     };
 
+    saveEnquiry(enquiry);
+    setEnquiries(getEnquiries());
     const emailResult = await sendRfqEmail(enquiry, poFile);
-    if (!emailResult.ok) return emailResult;
-
-    saveEnquiry({
+    const saved = saveEnquiry({
       ...enquiry,
-      status: 'RFQ email submitted',
-      emailRecipient: emailResult.recipient,
-      deliveryMode: emailResult.deliveryMode,
-      pricedPdfAttached: emailResult.pricedPdfAttached,
-      emailSubmittedAt: new Date().toISOString(),
+      emailDeliveryStatus: emailResult.ok ? 'submitted' : 'pending',
+      emailRecipient: emailResult.recipient || '',
+      deliveryMode: emailResult.deliveryMode || 'saved-locally',
+      pricedPdfAttached: Boolean(emailResult.pricedPdfAttached),
+      emailSubmittedAt: emailResult.ok ? new Date().toISOString() : '',
+      emailError: emailResult.ok ? '' : emailResult.message,
     });
     setEnquiries(getEnquiries());
     persistDraft([]);
     setSuccess({
       reference,
       firstName: account.contact.split(/\s+/)[0],
-      recipient: emailResult.recipient,
+      recipient: emailResult.recipient || 'Rhomberg sales',
       activationMayBeRequired: emailResult.activationMayBeRequired,
       pricedPdfAttached: emailResult.pricedPdfAttached,
-      warning: emailResult.warning,
+      emailFailed: !emailResult.ok,
+      fallbackUrl: emailResult.fallbackUrl,
+      warning: emailResult.warning || (!emailResult.ok ? emailResult.message : ''),
     });
-    return { ok: true, enquiry };
+    return { ok: true, enquiry: saved };
+  };
+
+  const updateTracking = (enquiryId, status, note, actor) => {
+    const updated = updateEnquiryTracking(enquiryId, { status, note, actor });
+    if (!updated) return null;
+    setEnquiries(getEnquiries());
+    notify(`${updated.reference} updated to ${updated.status}`);
+    return updated;
   };
 
   const signOut = () => {
@@ -178,7 +208,7 @@ export default function App() {
   };
 
   if (!introComplete) return <Intro onComplete={() => setIntroComplete(true)} />;
-  if (!account) return <Auth onSignIn={login} onCreateAccount={register} />;
+  if (!account) return <Auth onSignIn={login} onCreateAccount={register} theme={theme} onToggleTheme={toggleTheme} />;
 
   const backFromDetail = () => {
     if (view === 'configurator') {
@@ -193,19 +223,28 @@ export default function App() {
 
   return (
     <div className="app-canvas">
-      <span className="desktop-caption">RHOMBERG INSTRUMENTS · MOBILE APP TEST PREVIEW</span>
-      <div className="app-shell">
-        <AppHeader account={account} onNavigate={navigate} onBack={detailView ? backFromDetail : null} backLabel={view === 'configurator' ? 'Product configuration' : selectedProduct?.code || 'Catalogue'} />
+      <span className="desktop-caption">RHOMBERG INSTRUMENTS · CONNECTED APP TEST</span>
+      <div className={`app-shell ${isExpeditor ? 'expeditor-shell' : ''}`}>
+        <AppHeader account={account} onNavigate={navigate} onBack={detailView ? backFromDetail : null} backLabel={view === 'configurator' ? 'Product configuration' : selectedProduct?.code || 'Catalogue'} theme={theme} onToggleTheme={toggleTheme} />
         <main className="app-main">
-          {view === 'home' && <Home account={account} enquiryCount={accountEnquiries.length} onNavigate={navigate} onCategory={openCategory} />}
-          {view === 'catalogue' && <Catalogue categoryId={categoryId} onCategory={setCategoryId} onProduct={openProduct} />}
-          {view === 'product' && selectedProduct && <ProductDetail product={selectedProduct} onConfigure={() => startConfigurator(null, 'product')} />}
-          {view === 'configurator' && selectedProduct && <Configurator product={selectedProduct} existingLine={editingLine} onSave={saveConfiguredLine} onCancel={backFromDetail} />}
-          {view === 'enquiry' && <Enquiry account={account} lines={draft} onAddProducts={() => navigate('catalogue')} onEdit={line => startConfigurator(line, 'enquiry')} onRemove={removeLine} onQuantity={updateQuantity} onSubmit={submitEnquiry} success={success} onCloseSuccess={() => { setSuccess(null); navigate('home'); }} />}
-          {view === 'contact' && <Contact />}
-          {view === 'account' && <Account account={account} enquiries={accountEnquiries} onSignOut={signOut} />}
+          {isExpeditor ? (
+            <>
+              {view === 'expeditor' && <ExpeditorDashboard account={account} enquiries={enquiries} onUpdate={updateTracking} />}
+              {view === 'account' && <Account account={account} enquiries={enquiries} onSignOut={signOut} />}
+            </>
+          ) : (
+            <>
+              {view === 'home' && <Home account={account} enquiries={accountEnquiries} onNavigate={navigate} onCategory={openCategory} />}
+              {view === 'catalogue' && <Catalogue categoryId={categoryId} onCategory={setCategoryId} onProduct={openProduct} />}
+              {view === 'product' && selectedProduct && <ProductDetail product={selectedProduct} onConfigure={() => startConfigurator(null, 'product')} />}
+              {view === 'configurator' && selectedProduct && <Configurator product={selectedProduct} existingLine={editingLine} onSave={saveConfiguredLine} onCancel={backFromDetail} />}
+              {view === 'enquiry' && <Enquiry account={account} lines={draft} onAddProducts={() => navigate('catalogue')} onEdit={line => startConfigurator(line, 'enquiry')} onRemove={removeLine} onQuantity={updateQuantity} onSubmit={submitEnquiry} success={success} onCloseSuccess={() => { setSuccess(null); navigate('tracking'); }} />}
+              {view === 'tracking' && <OrderTracking account={account} enquiries={accountEnquiries} onStartEnquiry={() => navigate('enquiry')} />}
+              {view === 'account' && <Account account={account} enquiries={accountEnquiries} onSignOut={signOut} />}
+            </>
+          )}
         </main>
-        {!detailView && <BottomNav active={view} quantity={totalQuantity} onNavigate={navigate} />}
+        {!detailView && <BottomNav active={view} quantity={totalQuantity} role={account.role} onNavigate={navigate} />}
       </div>
       <Toast message={toast} />
     </div>
