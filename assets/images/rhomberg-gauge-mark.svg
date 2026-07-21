@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 112" role="img" aria-label="Rhomberg gauge R mark">
+  <defs>
+    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fbfc"/><stop offset=".2" stop-color="#758990"/><stop offset=".48" stop-color="#eef5f6"/><stop offset=".73" stop-color="#536870"/><stop offset="1" stop-color="#dce7e9"/>
+    </linearGradient>
+  </defs>
+  <circle cx="48" cy="48" r="44" fill="url(#steel)" stroke="#06384f" stroke-width="2"/>
+  <circle cx="48" cy="48" r="36" fill="#fff" stroke="#b8c8cc" stroke-width="2"/>
+  <g stroke="#173d50" stroke-width="2">
+    <path d="M19 56l5-2M19 40l5 1M27 25l4 4M42 16l1 6M58 17l-2 6M72 26l-5 4M79 41l-6 1"/>
+  </g>
+  <text x="48" y="60" text-anchor="middle" fill="#0877a4" font-family="Arial,sans-serif" font-size="34" font-weight="900" font-style="italic">R</text>
+  <path d="M48 72l-5 20h10z" fill="#7a8d92" stroke="#06384f" stroke-width="2"/>
+  <rect x="37" y="91" width="22" height="11" rx="2" fill="url(#steel)" stroke="#06384f" stroke-width="2"/>
+</svg>

@@ -1,0 +1,19 @@
+{
+  "name": "Rhomberg Quote Portal",
+  "short_name": "Rhomberg Quote",
+  "description": "A mobile catalogue and quote-request preview for Rhomberg Instruments.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f4f7f8",
+  "theme_color": "#073b53",
+  "icons": [
+    {
+      "src": "assets/images/rhomberg-gauge-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

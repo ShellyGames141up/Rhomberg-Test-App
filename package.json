@@ -1,0 +1,17 @@
+{
+  "name": "rhomberg-quote-app-preview",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.jsx --bundle --minify --sourcemap --jsx=automatic --target=es2020 --outfile=app.js",
+    "check": "esbuild src/main.jsx --bundle --jsx=automatic --target=es2020 --outfile=work-check.js"
+  },
+  "dependencies": {
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  }
+}
