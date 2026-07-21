@@ -70,14 +70,14 @@ function SpecGroup({ group }) {
 }
 
 function ConfigurationOverview({ product }) {
-  const visibleFields = product.configurations.filter(field => !field.showWhen && field.key !== 'customRange');
+  const visibleFields = product.configurations.filter(field => !['customRange', 'chemicalSealNotes'].includes(field.key));
   return (
     <div className="configuration-overview">
       <span className="eyebrow">Only relevant choices</span><h2>Available configurations</h2>
       <p>The guided enquiry builder presents these options one at a time. Rules automatically hide SANAS outside Pressure and Traceability outside Temperature.</p>
       <div className="configuration-list">{visibleFields.map((field, index) => {
         const selectionCount = field.options?.length || 1;
-        return <article key={field.key}><span>{String(index + 1).padStart(2, '0')}</span><div><strong>{field.label}</strong><small>{field.help || `${selectionCount} available selection${selectionCount === 1 ? '' : 's'}`}</small></div></article>;
+        return <article key={field.key}><span>{String(index + 1).padStart(2, '0')}</span><div><strong>{field.label}</strong><small>{field.help || `${selectionCount} available selection${selectionCount === 1 ? '' : 's'}`}{field.showWhen ? ' · shown only when applicable' : ''}</small></div></article>;
       })}</div>
       {product.rules.chemicalSealRequest && <div className="seal-policy"><span>✓</span><p><strong>Chemical seal request, not self-configuration.</strong> Selecting the seal toggle asks for application notes and alerts a Rhomberg representative.</p></div>}
     </div>

@@ -3,3 +3,8 @@ work-check.js
 *.log
 .DS_Store
 Thumbs.db
+.env
+.env.*
+.netlify/
+private/
+dist/

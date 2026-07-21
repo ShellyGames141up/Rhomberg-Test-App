@@ -1,3 +1,5 @@
+import { branches } from '../data/branches.js';
+
 export function Contact() {
   return (
     <section className="app-screen contact-screen" aria-labelledby="contact-title">
@@ -7,7 +9,7 @@ export function Contact() {
         <a className="contact-card" href="mailto:info@rhom.co.za"><span>✉</span><div><small>Email us</small><strong>info@rhom.co.za</strong></div><i>→</i></a>
         <a className="contact-card" href="https://rhomberginstruments.co.za/" target="_blank" rel="noopener"><span>◎</span><div><small>Official website</small><strong>rhomberginstruments.co.za</strong></div><i>↗</i></a>
       </div>
-      <div className="branch-section"><span className="eyebrow">National support</span><h2>Our locations</h2><div className="branch-grid"><span>Cape Town<small>Manufacturing & Head Office</small></span><span>Johannesburg<small>Sales support</small></span><span>Durban<small>Regional support</small></span><span>Port Elizabeth<small>Regional support</small></span></div></div>
+      <div className="branch-section"><span className="eyebrow">National support</span><h2>Our locations</h2><div className="branch-grid">{branches.map(branch => <span key={branch.id}>{branch.name}<small>{branch.role}<br />{branch.address}<br />{branch.phone}</small></span>)}</div></div>
     </section>
   );
 }
