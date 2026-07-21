@@ -10,6 +10,7 @@ import { Intro } from './components/Intro.jsx';
 import { AppHeader, BottomNav, Toast } from './components/Layout.jsx';
 import { ProductDetail } from './components/ProductDetail.jsx';
 import { productById } from './data/catalogue.js';
+import { sendRfqEmail } from './lib/rfqEmail.js';
 import {
   accountFromSession,
   authenticate,
@@ -122,28 +123,48 @@ export default function App() {
   };
   const removeLine = lineId => persistDraft(draft.filter(line => line.lineId !== lineId));
 
-  const submitEnquiry = details => {
+  const submitEnquiry = async details => {
     if (!details.application) return { ok: false, message: 'Please describe the application before submitting the request.' };
+    if (!draft.length) return { ok: false, message: 'Please add and configure at least one unit before submitting the RFQ.' };
+    const { poFile, ...serialisableDetails } = details;
     const allEnquiries = getEnquiries();
     const reference = `RQ-PREVIEW-${String(allEnquiries.length + 1).padStart(4, '0')}`;
     const enquiry = {
       id: makeId('enquiry'),
       reference,
-      version: 2,
+      version: 3,
       accountId: account.id,
       company: account.company,
       contact: account.contact,
       email: account.email,
       phone: account.phone,
-      ...details,
+      ...serialisableDetails,
       items: draft.map(line => ({ ...line })),
-      status: 'Preview saved',
+      status: 'Sending test email',
       createdAt: new Date().toISOString(),
     };
-    saveEnquiry(enquiry);
+
+    const emailResult = await sendRfqEmail(enquiry, poFile);
+    if (!emailResult.ok) return emailResult;
+
+    saveEnquiry({
+      ...enquiry,
+      status: 'RFQ email submitted',
+      emailRecipient: emailResult.recipient,
+      deliveryMode: emailResult.deliveryMode,
+      pricedPdfAttached: emailResult.pricedPdfAttached,
+      emailSubmittedAt: new Date().toISOString(),
+    });
     setEnquiries(getEnquiries());
     persistDraft([]);
-    setSuccess({ reference, firstName: account.contact.split(/\s+/)[0] });
+    setSuccess({
+      reference,
+      firstName: account.contact.split(/\s+/)[0],
+      recipient: emailResult.recipient,
+      activationMayBeRequired: emailResult.activationMayBeRequired,
+      pricedPdfAttached: emailResult.pricedPdfAttached,
+      warning: emailResult.warning,
+    });
     return { ok: true, enquiry };
   };
 
@@ -172,7 +193,7 @@ export default function App() {
 
   return (
     <div className="app-canvas">
-      <span className="desktop-caption">RHOMBERG INSTRUMENTS · INTERNAL MOBILE APP PREVIEW</span>
+      <span className="desktop-caption">RHOMBERG INSTRUMENTS · MOBILE APP TEST PREVIEW</span>
       <div className="app-shell">
         <AppHeader account={account} onNavigate={navigate} onBack={detailView ? backFromDetail : null} backLabel={view === 'configurator' ? 'Product configuration' : selectedProduct?.code || 'Catalogue'} />
         <main className="app-main">

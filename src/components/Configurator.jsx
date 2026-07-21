@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { shouldShowField } from '../data/catalogue.js';
+import { optionsForField, shouldShowField } from '../data/catalogue.js';
 import { LeadTimeNotice } from './Layout.jsx';
 
 const normaliseQuantity = value => Math.min(9999, Math.max(1, Math.trunc(Number(value) || 1)));
@@ -25,12 +25,27 @@ export function Configurator({ product, existingLine, onSave, onCancel }) {
 
   const update = value => {
     setError('');
-    setValues(current => ({ ...current, [field.key]: value }));
+    setValues(current => {
+      const next = { ...current, [field.key]: value };
+      product.configurations.forEach(candidate => {
+        if (candidate.key === field.key) return;
+        if (!shouldShowField(candidate, next)) {
+          delete next[candidate.key];
+          return;
+        }
+        if (candidate.optionsBy && next[candidate.key] !== undefined) {
+          const allowed = optionsForField(candidate, next);
+          if (!allowed.includes(next[candidate.key])) delete next[candidate.key];
+        }
+      });
+      return next;
+    });
   };
 
   const validateCurrent = () => {
     if (field.type === 'quantity') return Number(quantity) >= 1;
-    if (field.required && (values[field.key] === undefined || values[field.key] === null || String(values[field.key]).trim() === '')) return false;
+    const value = values[field.key];
+    if (field.required && (value === undefined || value === null || (Array.isArray(value) ? value.length === 0 : String(value).trim() === ''))) return false;
     return true;
   };
 
@@ -49,10 +64,15 @@ export function Configurator({ product, existingLine, onSave, onCancel }) {
       productId: product.id,
       code: product.code,
       name: product.name,
+      description: product.description,
       image: product.image,
       category: product.category,
+      variant: product.variant || '',
       quantity: normaliseQuantity(quantity),
-      configuration: values,
+      configuration: Object.fromEntries(product.configurations
+        .filter(configField => shouldShowField(configField, values))
+        .filter(configField => values[configField.key] !== undefined)
+        .map(configField => [configField.key, values[configField.key]])),
       updatedAt: new Date().toISOString(),
     };
     onSave(line);
@@ -70,8 +90,9 @@ export function Configurator({ product, existingLine, onSave, onCancel }) {
       <div className="config-stage" key={field.key}>
         <div className="config-stage-number">{String(stepIndex + 1).padStart(2, '0')}</div>
         {field.type === 'quantity' && <QuantityStep quantity={quantity} setQuantity={setQuantity} product={product} />}
-        {field.type === 'choice' && <ChoiceStep field={field} value={values[field.key]} onChange={update} />}
-        {field.type === 'select' && <SelectStep field={field} value={values[field.key]} onChange={update} />}
+        {field.type === 'choice' && <ChoiceStep field={field} options={optionsForField(field, values)} value={values[field.key]} onChange={update} />}
+        {field.type === 'multiChoice' && <MultiChoiceStep field={field} options={optionsForField(field, values)} value={values[field.key] || []} onChange={update} />}
+        {field.type === 'select' && <SelectStep field={field} options={optionsForField(field, values)} value={values[field.key]} onChange={update} />}
         {field.type === 'text' && <TextStep field={field} value={values[field.key] || ''} onChange={update} />}
         {field.type === 'textarea' && <TextAreaStep field={field} value={values[field.key] || ''} onChange={update} />}
         {field.type === 'toggle' && <ToggleStep field={field} value={Boolean(values[field.key])} onChange={update} />}
@@ -100,12 +121,17 @@ function QuestionHeader({ field }) {
   return <><span className="eyebrow">Product configuration</span><h2>{field.label}</h2>{field.help && <p>{field.help}</p>}</>;
 }
 
-function ChoiceStep({ field, value, onChange }) {
-  return <div className="config-question"><QuestionHeader field={field} /><div className="choice-grid">{field.options.map(option => <button key={option} type="button" className={value === option ? 'selected' : ''} onClick={() => onChange(option)}><span>{value === option ? '✓' : ''}</span><strong>{option}</strong></button>)}</div></div>;
+function ChoiceStep({ field, options, value, onChange }) {
+  return <div className="config-question"><QuestionHeader field={field} /><div className="choice-grid">{options.map(option => <button key={option} type="button" className={value === option ? 'selected' : ''} onClick={() => onChange(option)}><span>{value === option ? '✓' : ''}</span><strong>{option}</strong></button>)}</div></div>;
 }
 
-function SelectStep({ field, value, onChange }) {
-  return <div className="config-question"><QuestionHeader field={field} /><label className="config-select"><span>Select an option</span><select value={value || ''} onChange={event => onChange(event.target.value)}><option value="" disabled>Choose {field.label.toLowerCase()}</option>{field.options.map(option => <option key={option}>{option}</option>)}</select></label></div>;
+function MultiChoiceStep({ field, options, value, onChange }) {
+  const toggleOption = option => onChange(value.includes(option) ? value.filter(item => item !== option) : [...value, option]);
+  return <div className="config-question"><QuestionHeader field={field} /><div className="choice-grid multi-choice-grid">{options.map(option => <button key={option} type="button" className={value.includes(option) ? 'selected' : ''} onClick={() => toggleOption(option)}><span>{value.includes(option) ? '✓' : ''}</span><strong>{option}</strong></button>)}</div><p className="multi-choice-hint">Select any that apply, or continue without choosing an extra.</p></div>;
+}
+
+function SelectStep({ field, options, value, onChange }) {
+  return <div className="config-question"><QuestionHeader field={field} /><label className="config-select"><span>Select an option</span><select value={value || ''} onChange={event => onChange(event.target.value)}><option value="" disabled>Choose {field.label.toLowerCase()}</option>{options.map(option => <option key={option}>{option}</option>)}</select></label></div>;
 }
 
 function TextStep({ field, value, onChange }) {
@@ -133,7 +159,13 @@ function ReviewStep({ product, quantity, values, fields }) {
   return (
     <div className="config-question review-question"><span className="eyebrow">Final check</span><h2>Review this configured unit</h2><p>You can edit it again from the enquiry page before submission.</p>
       <div className="review-product"><img src={product.image} alt="" /><div><strong>{product.code}</strong><small>{product.name}</small></div><b>Qty {quantity}</b></div>
-      <dl className="review-config-list">{rows.map(field => <div key={field.key}><dt>{field.label}</dt><dd>{typeof values[field.key] === 'boolean' ? values[field.key] ? 'Yes' : 'No' : values[field.key]}</dd></div>)}</dl>
+      <dl className="review-config-list">{rows.map(field => <div key={field.key}><dt>{field.label}</dt><dd>{formatConfigurationValue(values[field.key])}</dd></div>)}</dl>
     </div>
   );
+}
+
+function formatConfigurationValue(value) {
+  if (Array.isArray(value)) return value.join(', ');
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  return value;
 }

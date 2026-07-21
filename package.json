@@ -1,13 +1,15 @@
 {
   "name": "rhomberg-quote-app-preview",
-  "version": "2.0.0",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild src/main.jsx --bundle --minify --sourcemap --jsx=automatic --target=es2020 --outfile=app.js",
-    "check": "esbuild src/main.jsx --bundle --jsx=automatic --target=es2020 --outfile=work-check.js"
+    "build": "esbuild ./src/main.jsx --bundle --minify --sourcemap --jsx=automatic --target=es2020 --outfile=app.js",
+    "build:netlify": "npm run build && node ./scripts/stage-static.mjs",
+    "check": "esbuild ./src/main.jsx --bundle --jsx=automatic --target=es2020 --outfile=work-check.js"
   },
   "dependencies": {
+    "pdf-lib": "1.17.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

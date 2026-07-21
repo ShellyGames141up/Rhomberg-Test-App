@@ -1,8 +1,7 @@
 import { useState } from 'react';
+import { areas } from '../data/branches.js';
 import { industries } from '../data/catalogue.js';
 import { DEMO_ACCOUNT } from '../lib/storage.js';
-
-const areas = ['Western Cape', 'Gauteng', 'KwaZulu-Natal', 'Eastern Cape', 'Free State', 'Limpopo', 'Mpumalanga', 'North West', 'Northern Cape', 'International'];
 
 export function Auth({ onSignIn, onCreateAccount }) {
   const [tab, setTab] = useState('signin');
@@ -36,7 +35,7 @@ export function Auth({ onSignIn, onCreateAccount }) {
           <img src="assets/images/rhomberg-gauge-mark.svg" alt="" />
           <img src="assets/images/rhomberg-wordmark-transparent.png" alt="Rhomberg Instruments" />
         </div>
-        <span className="preview-chip">Internal preview</span>
+        <span className="preview-chip">Public test preview</span>
         <h1 id="auth-title">{tab === 'signin' ? <>Welcome to your<br /><em>quote portal.</em></> : <>Create your company<br /><em>workspace.</em></>}</h1>
         <p className="auth-intro">Find the right instrument, configure your requirements and send Rhomberg a clear quote request.</p>
 
@@ -65,13 +64,13 @@ export function Auth({ onSignIn, onCreateAccount }) {
             <FormField label="Area"><select name="area" required defaultValue=""><option value="" disabled>Select area</option>{areas.map(area => <option key={area}>{area}</option>)}</select></FormField>
             <FormField label="Industry / field"><select name="industry" required defaultValue=""><option value="" disabled>Select your field</option>{industries.map(industry => <option key={industry}>{industry}</option>)}</select></FormField>
             <PasswordField name="password" label="Create password" show={showPassword} onToggle={() => setShowPassword(value => !value)} placeholder="Minimum 8 characters" />
-            <label className="consent-row"><input name="consent" type="checkbox" required /><span>I agree to use this internal preview and understand that its data is stored on this device.</span></label>
+            <label className="consent-row"><input name="consent" type="checkbox" required /><span>I agree to use this test preview and understand that its account data is stored on this device.</span></label>
             <p className="form-error" role="alert">{error}</p>
             <button className="primary-button full" type="submit">Create company account <span>→</span></button>
           </form>
         )}
 
-        <p className="preview-note"><span>i</span> Preview accounts and enquiries are stored locally on this device. Production will use secure domain authentication.</p>
+        <p className="preview-note"><span>i</span> Public test preview: use sample data only and do not upload confidential Purchase Orders. Accounts and enquiry history are stored locally on this device.</p>
       </section>
     </main>
   );
