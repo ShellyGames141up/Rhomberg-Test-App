@@ -1,11 +1,11 @@
-export function AppHeader({ account, onNavigate, onBack, backLabel, theme, onToggleTheme }) {
+export function AppHeader({ account, onNavigate, onBack, backLabel, theme, onToggleTheme, serviceMode }) {
   const initials = account.contact.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
   return (
     <header className="app-header">
       {onBack ? (
         <button className="header-back" type="button" onClick={onBack} aria-label={backLabel || 'Go back'}><span>←</span></button>
       ) : (
-        <button className="mini-brand" type="button" onClick={() => onNavigate(account.role === 'expeditor' ? 'expeditor' : 'home')} aria-label="Rhomberg home">
+        <button className="mini-brand" type="button" onClick={() => onNavigate(account.role === 'customer' ? 'home' : 'expeditor')} aria-label="Rhomberg home">
           <img src="assets/images/rhomberg-gauge-mark.svg" alt="" />
           <span><strong>RHOMBERG</strong><small>INSTRUMENTS</small></span>
         </button>
@@ -13,7 +13,7 @@ export function AppHeader({ account, onNavigate, onBack, backLabel, theme, onTog
       {onBack && <span className="header-context">{backLabel || 'Catalogue'}</span>}
       <div className="header-tools">
         <button className="theme-toggle" type="button" onClick={onToggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}><span>{theme === 'dark' ? '☀' : '☾'}</span></button>
-        <span className="preview-status"><i /> Test</span>
+        <span className="preview-status"><i /> {serviceMode === 'mock' ? 'Test' : 'Secure'}</span>
         <button className="header-avatar" type="button" onClick={() => onNavigate('account')} aria-label="Open account">{initials}</button>
       </div>
     </header>
@@ -21,7 +21,8 @@ export function AppHeader({ account, onNavigate, onBack, backLabel, theme, onTog
 }
 
 export function BottomNav({ active, quantity, role, onNavigate }) {
-  const items = role === 'expeditor'
+  const isStaff = role !== 'customer';
+  const items = isStaff
     ? [['expeditor', '↻', 'Orders'], ['account', '○', 'Account']]
     : [
       ['home', '⌂', 'Home'],
@@ -31,7 +32,7 @@ export function BottomNav({ active, quantity, role, onNavigate }) {
       ['account', '○', 'Account'],
     ];
   return (
-    <nav className={`bottom-nav ${role === 'expeditor' ? 'expeditor-nav' : ''}`} aria-label="Main navigation">
+    <nav className={`bottom-nav ${isStaff ? 'expeditor-nav' : ''}`} aria-label="Main navigation">
       {items.map(([id, glyph, label]) => (
         <button key={id} type="button" className={`${active === id ? 'active' : ''} ${id === 'enquiry' ? 'nav-primary' : ''}`} onClick={() => onNavigate(id)}>
           <span className="nav-icon">{glyph}</span><small>{label}</small>

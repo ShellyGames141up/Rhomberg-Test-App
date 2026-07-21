@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
-import { progressForStatus, statusById } from '../data/tracking.js';
+import { progressForStatus, statusById } from '../domain/tracking.js';
 
 const formatDate = value => new Date(value).toLocaleString('en-ZA', {
   day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
 });
 
-export function OrderTracking({ account, enquiries, onStartEnquiry }) {
+export function OrderTracking({ account, enquiries, onStartEnquiry, serviceMode }) {
   const ordered = useMemo(() => [...enquiries].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)), [enquiries]);
   const [openId, setOpenId] = useState(null);
   const activeCount = ordered.filter(enquiry => enquiry.trackingStatus !== 'completed').length;
@@ -15,7 +15,7 @@ export function OrderTracking({ account, enquiries, onStartEnquiry }) {
       <header className="tracking-hero">
         <span className="eyebrow">Customer order tracking</span>
         <h1 id="tracking-title">Your requests.<br /><em>One clear timeline.</em></h1>
-        <p>RFQs and orders saved to {account.company} remain available when you close and reopen this app on this device.</p>
+        <p>{serviceMode === 'mock' ? `RFQs and orders saved to ${account.company} remain available when you close and reopen this app on this device.` : `RFQs and orders for ${account.company} are loaded from the secure company service.`}</p>
         <div className="tracking-stats"><span><strong>{activeCount}</strong><small>Active</small></span><span><strong>{ordered.length}</strong><small>Total requests</small></span></div>
       </header>
 
@@ -29,7 +29,7 @@ export function OrderTracking({ account, enquiries, onStartEnquiry }) {
         <div className="tracking-empty"><span>◎</span><h2>No RFQs yet</h2><p>Once you submit an RFQ, its details and future progress updates will appear here.</p><button className="primary-button" type="button" onClick={onStartEnquiry}>Start an enquiry <span>→</span></button></div>
       )}
 
-      <p className="tracking-storage-note"><span>i</span><span><strong>Public test storage</strong> Updates are retained in this browser. The production app will use secure domain storage so customers and staff can see the same live order information on different devices.</span></p>
+      <p className="tracking-storage-note"><span>i</span><span><strong>{serviceMode === 'mock' ? 'Public test storage' : 'Authorised company records'}</strong> {serviceMode === 'mock' ? 'Updates are retained in this browser. The production API will provide secure shared records across approved devices.' : 'The server restricts this view to records associated with your authorised company account.'}</span></p>
     </section>
   );
 }

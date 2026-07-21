@@ -1,16 +1,16 @@
 import { useMemo, useState } from 'react';
-import { categories, categoryById, products, productsForCategory } from '../data/catalogue.js';
 import { LeadTimeNotice } from './Layout.jsx';
 
-export function Catalogue({ categoryId, onCategory, onProduct }) {
+export function Catalogue({ categories, products, categoryId, onCategory, onProduct }) {
   const [query, setQuery] = useState('');
-  const category = categoryById(categoryId);
+  const category = categories.find(item => item.id === categoryId) || null;
+  const productsForCategory = id => products.filter(product => product.category === id);
   const visibleProducts = useMemo(() => {
     const source = category ? productsForCategory(category.id) : products;
     const term = query.trim().toLowerCase();
     if (!term) return source;
     return source.filter(product => `${product.code} ${product.name} ${product.description} ${product.measuringRange}`.toLowerCase().includes(term));
-  }, [category, query]);
+  }, [category, products, query]);
 
   if (!category) {
     return (

@@ -10,88 +10,140 @@ import { Intro } from './components/Intro.jsx';
 import { AppHeader, BottomNav, Toast } from './components/Layout.jsx';
 import { OrderTracking } from './components/OrderTracking.jsx';
 import { ProductDetail } from './components/ProductDetail.jsx';
-import { productById } from './data/catalogue.js';
-import { sendRfqEmail } from './lib/rfqEmail.js';
-import {
-  accountFromSession,
-  authenticate,
-  clearSession,
-  createAccount,
-  getDraft,
-  getEnquiries,
-  getTheme,
-  makeId,
-  saveDraft,
-  saveEnquiry,
-  saveTheme,
-  seedPreview,
-  setSession,
-  updateEnquiryTracking,
-} from './lib/storage.js';
+import { friendlyServiceError, PERMISSIONS, roleCan, services, USER_ROLES } from './services/index.js';
 
-seedPreview();
+const EMPTY_CATALOGUE = { categories: [], products: [], recommendedCategories: {} };
+const EMPTY_REGISTRATION = { areas: [], industries: [], branches: [], areaDirectory: {} };
 
 export default function App() {
   const [introComplete, setIntroComplete] = useState(false);
-  const [account, setAccount] = useState(() => accountFromSession());
-  const [view, setView] = useState(() => accountFromSession()?.role === 'expeditor' ? 'expeditor' : 'home');
-  const [theme, setTheme] = useState(() => getTheme());
+  const [appStatus, setAppStatus] = useState('loading');
+  const [appError, setAppError] = useState('');
+  const [retryToken, setRetryToken] = useState(0);
+  const [account, setAccount] = useState(null);
+  const [view, setView] = useState('home');
+  const [theme, setTheme] = useState('light');
+  const [catalogue, setCatalogue] = useState(EMPTY_CATALOGUE);
+  const [registrationOptions, setRegistrationOptions] = useState(EMPTY_REGISTRATION);
+  const [demoLogins, setDemoLogins] = useState([]);
   const [categoryId, setCategoryId] = useState(null);
   const [productId, setProductId] = useState(null);
   const [configOrigin, setConfigOrigin] = useState('product');
   const [editingLine, setEditingLine] = useState(null);
-  const [draft, setDraft] = useState(() => account?.role === 'customer' ? getDraft(account.id) : []);
-  const [enquiries, setEnquiries] = useState(() => getEnquiries());
+  const [draft, setDraft] = useState([]);
+  const [enquiries, setEnquiries] = useState([]);
   const [success, setSuccess] = useState(null);
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
 
-  const isExpeditor = account?.role === 'expeditor';
-  const selectedProduct = productById(productId);
-  const accountEnquiries = useMemo(() => account && !isExpeditor ? enquiries.filter(enquiry => enquiry.accountId === account.id) : [], [account, enquiries, isExpeditor]);
-  const totalQuantity = draft.reduce((sum, line) => sum + line.quantity, 0);
-  const detailView = !isExpeditor && (view === 'product' || view === 'configurator');
+  useEffect(() => {
+    let active = true;
+    setAppStatus('loading');
+    setAppError('');
+
+    (async () => {
+      try {
+        await services.initialize();
+        const [savedTheme, loadedCatalogue, loadedRegistration, loadedDemoLogins, session] = await Promise.all([
+          services.preferences.getTheme(),
+          services.products.getCatalogue(),
+          services.accounts.getRegistrationOptions(),
+          services.auth.getDemoLogins(),
+          services.auth.getSession(),
+        ]);
+        if (!active) return;
+
+        let loadedDraft = [];
+        let loadedEnquiries = [];
+        if (session) {
+          [loadedDraft, loadedEnquiries] = await Promise.all([
+            session.role === USER_ROLES.CUSTOMER ? services.enquiries.getDraft() : Promise.resolve([]),
+            services.enquiries.list(),
+          ]);
+        }
+        if (!active) return;
+
+        setTheme(savedTheme);
+        setCatalogue(loadedCatalogue);
+        setRegistrationOptions(loadedRegistration);
+        setDemoLogins(loadedDemoLogins);
+        setAccount(session);
+        setDraft(loadedDraft);
+        setEnquiries(loadedEnquiries);
+        setView(session && session.role !== USER_ROLES.CUSTOMER ? 'expeditor' : 'home');
+        setAppStatus('ready');
+      } catch (error) {
+        if (!active) return;
+        setAppError(friendlyServiceError(error, 'The app could not load its test data. Please refresh and try again.'));
+        setAppStatus('error');
+      }
+    })();
+
+    return () => { active = false; };
+  }, [retryToken]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    saveTheme(theme);
   }, [theme]);
 
-  const toggleTheme = () => setTheme(current => current === 'dark' ? 'light' : 'dark');
+  useEffect(() => () => window.clearTimeout(toastTimer.current), []);
 
   const notify = message => {
     setToast(message);
     window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(''), 2600);
+    toastTimer.current = window.setTimeout(() => setToast(''), 3000);
   };
 
-  useEffect(() => () => window.clearTimeout(toastTimer.current), []);
-
-  const login = (email, password) => {
-    const matched = authenticate(email, password);
-    if (!matched) return { ok: false, message: 'The email address or password does not match a preview account.' };
-    setSession(matched);
-    setAccount(matched);
-    setDraft(matched.role === 'customer' ? getDraft(matched.id) : []);
-    setView(matched.role === 'expeditor' ? 'expeditor' : 'home');
-    return { ok: true };
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    services.preferences.setTheme(next).catch(error => notify(friendlyServiceError(error, 'The theme changed, but the preference could not be saved.')));
   };
 
-  const register = data => {
+  const isStaff = Boolean(account && account.role !== USER_ROLES.CUSTOMER);
+  const canUpdateTracking = Boolean(account && roleCan(account.role, PERMISSIONS.UPDATE_TRACKING));
+  const selectedProduct = catalogue.products.find(product => product.id === productId) || null;
+  const selectedCategory = selectedProduct ? catalogue.categories.find(category => category.id === selectedProduct.category) || null : null;
+  const accountEnquiries = useMemo(() => {
+    if (!account || isStaff) return [];
+    return enquiries.filter(enquiry => enquiry.companyId === account.companyId || enquiry.accountId === account.id);
+  }, [account, enquiries, isStaff]);
+  const totalQuantity = draft.reduce((sum, line) => sum + line.quantity, 0);
+  const detailView = !isStaff && (view === 'product' || view === 'configurator');
+
+  const loadAccountWorkspace = async signedInAccount => {
+    const [loadedDraft, loadedEnquiries] = await Promise.all([
+      signedInAccount.role === USER_ROLES.CUSTOMER ? services.enquiries.getDraft() : Promise.resolve([]),
+      services.enquiries.list(),
+    ]);
+    setAccount(signedInAccount);
+    setDraft(loadedDraft);
+    setEnquiries(loadedEnquiries);
+    setView(signedInAccount.role !== USER_ROLES.CUSTOMER ? 'expeditor' : 'home');
+  };
+
+  const login = async (email, password) => {
     try {
-      const created = createAccount(data);
-      setSession(created);
-      setAccount(created);
-      setDraft([]);
-      setView('home');
+      const signedInAccount = await services.auth.signIn({ email, password });
+      await loadAccountWorkspace(signedInAccount);
       return { ok: true };
     } catch (error) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: friendlyServiceError(error, 'The app could not sign you in. Please try again.'), fieldErrors: error?.fieldErrors || {} };
+    }
+  };
+
+  const register = async data => {
+    try {
+      const created = await services.auth.register(data);
+      await loadAccountWorkspace(created);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: friendlyServiceError(error, 'The company account could not be created. Please try again.'), fieldErrors: error?.fieldErrors || {} };
     }
   };
 
   const navigate = target => {
-    const destination = isExpeditor && !['expeditor', 'account'].includes(target) ? 'expeditor' : target;
+    const destination = isStaff && !['expeditor', 'account'].includes(target) ? 'expeditor' : target;
     if (destination === 'catalogue') setCategoryId(null);
     setView(destination);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -119,7 +171,7 @@ export default function App() {
 
   const persistDraft = next => {
     setDraft(next);
-    saveDraft(account.id, next);
+    services.enquiries.saveDraft(next).catch(error => notify(friendlyServiceError(error, 'The draft could not be saved. Your current screen has not been cleared.')));
   };
 
   const saveConfiguredLine = line => {
@@ -135,80 +187,62 @@ export default function App() {
     const safeQuantity = Math.min(9999, Math.max(1, Math.trunc(Number(quantity) || 1)));
     persistDraft(draft.map(line => line.lineId === lineId ? { ...line, quantity: safeQuantity } : line));
   };
+
   const removeLine = lineId => persistDraft(draft.filter(line => line.lineId !== lineId));
 
   const submitEnquiry = async details => {
-    if (!details.application) return { ok: false, message: 'Please describe the application before submitting the request.' };
-    if (!draft.length) return { ok: false, message: 'Please add and configure at least one unit before submitting the RFQ.' };
-    const { poFile, ...serialisableDetails } = details;
-    const allEnquiries = getEnquiries();
-    const reference = `RQ-PREVIEW-${String(allEnquiries.length + 1).padStart(4, '0')}`;
-    const createdAt = new Date().toISOString();
-    const enquiry = {
-      id: makeId('enquiry'),
-      reference,
-      version: 4,
-      accountId: account.id,
-      company: account.company,
-      contact: account.contact,
-      email: account.email,
-      phone: account.phone,
-      ...serialisableDetails,
-      items: draft.map(line => ({ ...line })),
-      trackingStatus: 'rfq-submitted',
-      status: 'RFQ submitted',
-      trackingHistory: [{ id: makeId('event'), status: 'rfq-submitted', note: 'RFQ submitted by the customer and saved to the account.', actor: account.contact, createdAt }],
-      emailDeliveryStatus: 'sending',
-      createdAt,
-      updatedAt: createdAt,
-    };
-
-    saveEnquiry(enquiry);
-    setEnquiries(getEnquiries());
-    const emailResult = await sendRfqEmail(enquiry, poFile);
-    const saved = saveEnquiry({
-      ...enquiry,
-      emailDeliveryStatus: emailResult.ok ? 'submitted' : 'pending',
-      emailRecipient: emailResult.recipient || '',
-      deliveryMode: emailResult.deliveryMode || 'saved-locally',
-      pricedPdfAttached: Boolean(emailResult.pricedPdfAttached),
-      emailSubmittedAt: emailResult.ok ? new Date().toISOString() : '',
-      emailError: emailResult.ok ? '' : emailResult.message,
-    });
-    setEnquiries(getEnquiries());
-    persistDraft([]);
-    setSuccess({
-      reference,
-      firstName: account.contact.split(/\s+/)[0],
-      recipient: emailResult.recipient || 'Rhomberg sales',
-      activationMayBeRequired: emailResult.activationMayBeRequired,
-      pricedPdfAttached: emailResult.pricedPdfAttached,
-      emailFailed: !emailResult.ok,
-      fallbackUrl: emailResult.fallbackUrl,
-      warning: emailResult.warning || (!emailResult.ok ? emailResult.message : ''),
-    });
-    return { ok: true, enquiry: saved };
+    try {
+      const result = await services.enquiries.submit(details, draft);
+      const updatedEnquiries = await services.enquiries.list();
+      setEnquiries(updatedEnquiries);
+      setDraft([]);
+      const delivery = result.delivery || { ok: true };
+      setSuccess({
+        reference: result.enquiry.reference,
+        firstName: account.contact.split(/\s+/)[0],
+        recipient: delivery.recipient || 'Rhomberg sales',
+        activationMayBeRequired: delivery.activationMayBeRequired,
+        pricedPdfAttached: delivery.pricedPdfAttached,
+        emailFailed: delivery.ok === false,
+        fallbackUrl: delivery.fallbackUrl,
+        warning: delivery.warning || (delivery.ok === false ? delivery.message : ''),
+      });
+      return { ok: true, enquiry: result.enquiry };
+    } catch (error) {
+      return {
+        ok: false,
+        message: friendlyServiceError(error, 'The RFQ could not be submitted. Your configured units are still here, so please try again.'),
+        fieldErrors: error?.fieldErrors || {},
+        fallbackUrl: error?.fallbackUrl || '',
+      };
+    }
   };
 
-  const updateTracking = (enquiryId, status, note, actor) => {
-    const updated = updateEnquiryTracking(enquiryId, { status, note, actor });
-    if (!updated) return null;
-    setEnquiries(getEnquiries());
+  const updateTracking = async (enquiryId, status, note, actor) => {
+    const updated = await services.tracking.updateStatus(enquiryId, { status, note, actor });
+    setEnquiries(current => current.map(enquiry => enquiry.id === updated.id ? updated : enquiry));
     notify(`${updated.reference} updated to ${updated.status}`);
     return updated;
   };
 
-  const signOut = () => {
-    clearSession();
-    setAccount(null);
-    setDraft([]);
-    setCategoryId(null);
-    setProductId(null);
-    setView('home');
+  const signOut = async () => {
+    try {
+      await services.auth.signOut();
+      setAccount(null);
+      setDraft([]);
+      setEnquiries([]);
+      setCategoryId(null);
+      setProductId(null);
+      setView('home');
+    } catch (error) {
+      notify(friendlyServiceError(error, 'Sign-out could not be completed. Please try again.'));
+    }
   };
 
   if (!introComplete) return <Intro onComplete={() => setIntroComplete(true)} />;
-  if (!account) return <Auth onSignIn={login} onCreateAccount={register} theme={theme} onToggleTheme={toggleTheme} />;
+  if (appStatus === 'loading') return <AppLoading theme={theme} onToggleTheme={toggleTheme} />;
+  if (appStatus === 'error') return <AppLoadError message={appError} onRetry={() => setRetryToken(value => value + 1)} />;
+  if (!account) return <Auth onSignIn={login} onCreateAccount={register} theme={theme} onToggleTheme={toggleTheme} registrationOptions={registrationOptions} demoLogins={demoLogins} serviceMode={services.mode} />;
 
   const backFromDetail = () => {
     if (view === 'configurator') {
@@ -223,24 +257,24 @@ export default function App() {
 
   return (
     <div className="app-canvas">
-      <span className="desktop-caption">RHOMBERG INSTRUMENTS · CONNECTED APP TEST</span>
-      <div className={`app-shell ${isExpeditor ? 'expeditor-shell' : ''}`}>
-        <AppHeader account={account} onNavigate={navigate} onBack={detailView ? backFromDetail : null} backLabel={view === 'configurator' ? 'Product configuration' : selectedProduct?.code || 'Catalogue'} theme={theme} onToggleTheme={toggleTheme} />
+      <span className="desktop-caption">RHOMBERG INSTRUMENTS · {services.mode === 'mock' ? 'CONNECTED APP TEST' : 'PRIVATE CLOUD'}</span>
+      <div className={`app-shell ${isStaff ? 'expeditor-shell' : ''}`}>
+        <AppHeader account={account} onNavigate={navigate} onBack={detailView ? backFromDetail : null} backLabel={view === 'configurator' ? 'Product configuration' : selectedProduct?.code || 'Catalogue'} theme={theme} onToggleTheme={toggleTheme} serviceMode={services.mode} />
         <main className="app-main">
-          {isExpeditor ? (
+          {isStaff ? (
             <>
-              {view === 'expeditor' && <ExpeditorDashboard account={account} enquiries={enquiries} onUpdate={updateTracking} />}
-              {view === 'account' && <Account account={account} enquiries={enquiries} onSignOut={signOut} />}
+              {view === 'expeditor' && <ExpeditorDashboard account={account} enquiries={enquiries} onUpdate={updateTracking} canUpdate={canUpdateTracking} serviceMode={services.mode} />}
+              {view === 'account' && <Account account={account} enquiries={enquiries} onSignOut={signOut} serviceMode={services.mode} />}
             </>
           ) : (
             <>
-              {view === 'home' && <Home account={account} enquiries={accountEnquiries} onNavigate={navigate} onCategory={openCategory} />}
-              {view === 'catalogue' && <Catalogue categoryId={categoryId} onCategory={setCategoryId} onProduct={openProduct} />}
-              {view === 'product' && selectedProduct && <ProductDetail product={selectedProduct} onConfigure={() => startConfigurator(null, 'product')} />}
+              {view === 'home' && <Home account={account} enquiries={accountEnquiries} categories={catalogue.categories} recommendedCategories={catalogue.recommendedCategories} onNavigate={navigate} onCategory={openCategory} />}
+              {view === 'catalogue' && <Catalogue categories={catalogue.categories} products={catalogue.products} categoryId={categoryId} onCategory={setCategoryId} onProduct={openProduct} />}
+              {view === 'product' && selectedProduct && <ProductDetail product={selectedProduct} category={selectedCategory} onConfigure={() => startConfigurator(null, 'product')} />}
               {view === 'configurator' && selectedProduct && <Configurator product={selectedProduct} existingLine={editingLine} onSave={saveConfiguredLine} onCancel={backFromDetail} />}
-              {view === 'enquiry' && <Enquiry account={account} lines={draft} onAddProducts={() => navigate('catalogue')} onEdit={line => startConfigurator(line, 'enquiry')} onRemove={removeLine} onQuantity={updateQuantity} onSubmit={submitEnquiry} success={success} onCloseSuccess={() => { setSuccess(null); navigate('tracking'); }} />}
-              {view === 'tracking' && <OrderTracking account={account} enquiries={accountEnquiries} onStartEnquiry={() => navigate('enquiry')} />}
-              {view === 'account' && <Account account={account} enquiries={accountEnquiries} onSignOut={signOut} />}
+              {view === 'enquiry' && <Enquiry account={account} lines={draft} registrationOptions={registrationOptions} deliverySettings={services.preview} onAddProducts={() => navigate('catalogue')} onEdit={line => startConfigurator(line, 'enquiry')} onRemove={removeLine} onQuantity={updateQuantity} onSubmit={submitEnquiry} success={success} onCloseSuccess={() => { setSuccess(null); navigate('tracking'); }} />}
+              {view === 'tracking' && <OrderTracking account={account} enquiries={accountEnquiries} onStartEnquiry={() => navigate('enquiry')} serviceMode={services.mode} />}
+              {view === 'account' && <Account account={account} enquiries={accountEnquiries} onSignOut={signOut} serviceMode={services.mode} />}
             </>
           )}
         </main>
@@ -248,5 +282,22 @@ export default function App() {
       </div>
       <Toast message={toast} />
     </div>
+  );
+}
+
+function AppLoading({ theme, onToggleTheme }) {
+  return (
+    <main className="app-state-view" aria-busy="true">
+      <button className="auth-theme-toggle" type="button" onClick={onToggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}>{theme === 'dark' ? 'Light' : 'Dark'}</button>
+      <section className="app-state-card"><img src="assets/images/rhomberg-gauge-mark.svg" alt="" /><span className="state-spinner" /><h1>Preparing your workspace</h1><p>Loading the catalogue and secure service boundary…</p></section>
+    </main>
+  );
+}
+
+function AppLoadError({ message, onRetry }) {
+  return (
+    <main className="app-state-view">
+      <section className="app-state-card is-error"><span className="state-error-mark">!</span><h1>The preview could not start</h1><p role="alert">{message}</p><button className="primary-button" type="button" onClick={onRetry}>Try again <span>→</span></button></section>
+    </main>
   );
 }

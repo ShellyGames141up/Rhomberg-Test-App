@@ -1,0 +1,837 @@
+openapi: 3.1.0
+info:
+  title: Rhomberg Instruments Private-Cloud API
+  version: 0.1.0-proposed
+  description: Proposed contract only. No production service is connected.
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /auth/csrf-token:
+    get:
+      security: []
+      operationId: getCsrfToken
+      responses:
+        '200':
+          description: CSRF token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CsrfResponse'
+  /auth/login:
+    post:
+      security: []
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/ApiError'
+  /auth/register:
+    post:
+      security: []
+      operationId: registerCustomer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Customer account created or queued for verification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '422':
+          $ref: '#/components/responses/ApiError'
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/ApiError'
+  /auth/logout:
+    post:
+      operationId: logout
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      responses:
+        '204':
+          description: Session revoked
+  /auth/refresh:
+    post:
+      operationId: refreshSession
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      responses:
+        '200':
+          description: Session and CSRF token rotated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRefreshResponse'
+  /reference-data/registration:
+    get:
+      security: []
+      operationId: getRegistrationReferenceData
+      responses:
+        '200':
+          description: Registration, branch and representative options
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationOptionsResponse'
+  /companies/me:
+    get:
+      operationId: getCurrentCompany
+      responses:
+        '200':
+          description: Current authorised company context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanyResponse'
+  /companies:
+    get:
+      operationId: listCompanies
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Companies within the caller's administrative scope
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Company'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '403':
+          $ref: '#/components/responses/ApiError'
+  /representatives:
+    get:
+      operationId: listRepresentatives
+      parameters:
+        - name: area
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Active representatives eligible for the selected area
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Representative'
+  /products/categories:
+    get:
+      security: []
+      operationId: listProductCategories
+      responses:
+        '200':
+          description: Product categories
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProductCategory'
+  /products/recommendations:
+    get:
+      security: []
+      operationId: getProductRecommendations
+      responses:
+        '200':
+          description: Industry-to-category recommendations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: string
+  /products:
+    get:
+      security: []
+      operationId: listProducts
+      parameters:
+        - $ref: '#/components/parameters/CategoryId'
+        - $ref: '#/components/parameters/Search'
+      responses:
+        '200':
+          description: Products visible to the caller
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+  /products/{productId}:
+    get:
+      security: []
+      operationId: getProduct
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: Full product
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/ApiError'
+  /enquiry-drafts/current:
+    get:
+      operationId: getCurrentDraft
+      responses:
+        '200':
+          description: Current customer's draft
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DraftResponse'
+    put:
+      operationId: saveCurrentDraft
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/EnquiryItemInput'
+      responses:
+        '200':
+          description: Draft saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DraftResponse'
+  /enquiries:
+    get:
+      operationId: listAuthorisedEnquiries
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Status'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Server-scoped enquiries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Enquiry'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+    post:
+      operationId: submitEnquiry
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [payload]
+              properties:
+                payload:
+                  type: string
+                  description: JSON-encoded EnquirySubmission
+                purchaseOrder:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: RFQ stored and delivery queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnquirySubmissionResponse'
+        '422':
+          $ref: '#/components/responses/ApiError'
+  /enquiries/{enquiryId}:
+    get:
+      operationId: getAuthorisedEnquiry
+      parameters:
+        - $ref: '#/components/parameters/EnquiryId'
+      responses:
+        '200':
+          description: Authorised enquiry
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Enquiry'
+        '404':
+          $ref: '#/components/responses/ApiError'
+  /enquiries/{enquiryId}/tracking-events:
+    post:
+      operationId: addEnquiryTrackingEvent
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      parameters:
+        - $ref: '#/components/parameters/EnquiryId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrackingEventInput'
+      responses:
+        '201':
+          description: Tracking event saved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Enquiry'
+        '403':
+          $ref: '#/components/responses/ApiError'
+  /orders:
+    get:
+      operationId: listAuthorisedOrders
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Status'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Server-scoped orders
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Order'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+  /orders/{orderId}/tracking-events:
+    get:
+      operationId: listOrderTrackingEvents
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Authorised order timeline
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TrackingEvent'
+    post:
+      operationId: addOrderTrackingEvent
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrackingEventInput'
+      responses:
+        '201':
+          description: Tracking event saved
+        '403':
+          $ref: '#/components/responses/ApiError'
+  /orders/{orderId}:
+    get:
+      operationId: getAuthorisedOrder
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Authorised order detail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Order'
+        '404':
+          $ref: '#/components/responses/ApiError'
+  /enquiries/{enquiryId}/documents:
+    post:
+      operationId: uploadEnquiryDocument
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      parameters:
+        - $ref: '#/components/parameters/EnquiryId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [kind, file]
+              properties:
+                kind:
+                  type: string
+                  enum: [purchase_order, datasheet, quotation, other]
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: File accepted for scan and storage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+  /documents/{documentId}/download:
+    get:
+      operationId: downloadAuthorisedDocument
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Authorised document stream or short-lived download result
+        '404':
+          $ref: '#/components/responses/ApiError'
+  /documents/{documentId}:
+    get:
+      operationId: getAuthorisedDocumentMetadata
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Authorised document metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '404':
+          $ref: '#/components/responses/ApiError'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: rhomberg_session
+    csrfHeader:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+  parameters:
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema: { type: string }
+    EnquiryId:
+      name: enquiryId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    DocumentId:
+      name: documentId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CategoryId:
+      name: categoryId
+      in: query
+      schema: { type: string }
+    Search:
+      name: search
+      in: query
+      schema: { type: string, maxLength: 120 }
+    Status:
+      name: status
+      in: query
+      schema: { type: string }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 8, maxLength: 128 }
+  responses:
+    ApiError:
+      description: Structured API error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    Role:
+      type: string
+      enum: [customer, sales_representative, expeditor, buyer, manager, administrator]
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 1, maxLength: 1024 }
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [company, contact, email, phone, area, industry, password]
+      properties:
+        company: { type: string, minLength: 2, maxLength: 200 }
+        contact: { type: string, minLength: 2, maxLength: 160 }
+        email: { type: string, format: email }
+        phone: { type: string, minLength: 7, maxLength: 40 }
+        area: { type: string, maxLength: 100 }
+        industry: { type: string, maxLength: 120 }
+        password: { type: string, minLength: 8, maxLength: 1024 }
+    User:
+      type: object
+      required: [id, contact, email, role, permissions]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: [string, 'null'], format: uuid }
+        company: { type: string }
+        contact: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        area: { type: string }
+        industry: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+        permissions:
+          type: array
+          items: { type: string }
+    UserResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/User' }
+    AuthResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [user, csrfToken]
+          properties:
+            user: { $ref: '#/components/schemas/User' }
+            csrfToken: { type: string }
+            onboardingStatus: { type: string }
+    CsrfResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [token]
+          properties:
+            token: { type: string }
+    SessionRefreshResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [expiresAt, csrfToken]
+          properties:
+            expiresAt: { type: string, format: date-time }
+            csrfToken: { type: string }
+    Company:
+      type: object
+      required: [id, name, status]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [pending, active, suspended, archived] }
+        area: { type: string }
+        industry: { type: string }
+    CompanyResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/Company' }
+    Branch:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        address: { type: string }
+        phone: { type: string }
+    Representative:
+      type: object
+      required: [id, code, name, branchId]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        branchId: { type: string }
+        branchName: { type: string }
+    RegistrationOptionsResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [areas, industries, branches, areaDirectory]
+          properties:
+            areas: { type: array, items: { type: string } }
+            industries: { type: array, items: { type: string } }
+            branches: { type: array, items: { $ref: '#/components/schemas/Branch' } }
+            areaDirectory:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  branch: { $ref: '#/components/schemas/Branch' }
+                  representatives: { type: array, items: { $ref: '#/components/schemas/Representative' } }
+    ProductCategory:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        number: { type: string }
+        name: { type: string }
+        short: { type: string }
+        icon: { type: string }
+        image: { type: string }
+        description: { type: string }
+    Product:
+      type: object
+      required: [id, code, name, category, description, configurations]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        category: { type: string }
+        description: { type: string }
+        image: { type: string }
+        measuringRange: { type: string }
+        pressureRange: { type: string }
+        accuracy: { type: string }
+        configurations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        datasheets:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      additionalProperties: true
+    EnquiryItemInput:
+      type: object
+      additionalProperties: false
+      required: [lineId, productId, quantity, configuration]
+      properties:
+        lineId: { type: string, maxLength: 160 }
+        productId: { type: string }
+        quantity: { type: integer, minimum: 1, maximum: 9999 }
+        configuration: { type: object, additionalProperties: true }
+    TrackingEvent:
+      type: object
+      required: [id, status, note, actor, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string }
+        note: { type: string }
+        actor: { type: string }
+        createdAt: { type: string, format: date-time }
+    TrackingEventInput:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string }
+        note: { type: string, maxLength: 1000 }
+        actor: { type: string, description: Display hint only; server identity is authoritative. }
+    Enquiry:
+      type: object
+      required: [id, reference, companyId, items, trackingStatus, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        reference: { type: string }
+        companyId: { type: string, format: uuid }
+        company: { type: string }
+        contact: { type: string }
+        application: { type: string }
+        selectedRep: { $ref: '#/components/schemas/Representative' }
+        items: { type: array, items: { $ref: '#/components/schemas/EnquiryItemInput' } }
+        trackingStatus: { type: string }
+        trackingHistory: { type: array, items: { $ref: '#/components/schemas/TrackingEvent' } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      additionalProperties: true
+    DraftResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/EnquiryItemInput' } }
+            updatedAt: { type: string, format: date-time }
+    EnquirySubmissionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [enquiry, delivery]
+          properties:
+            enquiry: { $ref: '#/components/schemas/Enquiry' }
+            delivery:
+              type: object
+              required: [ok, deliveryMode]
+              properties:
+                ok: { type: boolean }
+                deliveryMode: { type: string, enum: [queued, submitted, pending] }
+                pricedPdfAttached: { type: boolean }
+    Order:
+      type: object
+      required: [id, companyId, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        enquiryId: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        orderNumber: { type: string }
+        status: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    DocumentResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, kind, originalName, scanStatus]
+          properties:
+            id: { type: string, format: uuid }
+            kind: { type: string }
+            originalName: { type: string }
+            mediaType: { type: string }
+            sizeBytes: { type: integer }
+            scanStatus: { type: string, enum: [pending, clean, rejected] }
+    PageMeta:
+      type: object
+      required: [page, pageSize, total]
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+        requestId: { type: string }
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, correlationId]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            fieldErrors: { type: object, additionalProperties: { type: string } }
+            correlationId: { type: string }

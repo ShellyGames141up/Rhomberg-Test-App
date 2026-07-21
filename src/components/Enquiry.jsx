@@ -1,7 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { areas, nearestBranchForArea } from '../data/branches.js';
-import { representativesForArea } from '../data/representatives.js';
-import { MAX_EMAIL_ATTACHMENT_BYTES, RFQ_EMAIL_RECIPIENT } from '../lib/rfqEmail.js';
 import { LeadTimeNotice } from './Layout.jsx';
 
 const ALLOWED_PO_FILE = /\.(pdf|doc|docx|png|jpe?g|webp|gif|heic)$/i;
@@ -9,10 +6,12 @@ const normaliseQuantity = value => Math.min(9999, Math.max(1, Math.trunc(Number(
 const humanise = key => key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, character => character.toUpperCase());
 const formatValue = value => Array.isArray(value) ? value.join(', ') : typeof value === 'boolean' ? value ? 'Yes' : 'No' : value;
 
-export function Enquiry({ account, lines, onAddProducts, onEdit, onRemove, onQuantity, onSubmit, success, onCloseSuccess }) {
+export function Enquiry({ account, lines, registrationOptions, deliverySettings, onAddProducts, onEdit, onRemove, onQuantity, onSubmit, success, onCloseSuccess }) {
+  const areas = registrationOptions?.areas || [];
+  const areaDirectory = registrationOptions?.areaDirectory || {};
   const [poMode, setPoMode] = useState('none');
   const [poFile, setPoFile] = useState(null);
-  const [area, setArea] = useState(areas.includes(account.area) ? account.area : 'Western Cape');
+  const [area, setArea] = useState(areas.includes(account.area) ? account.area : areas[0] || account.area);
   const [selectedRepId, setSelectedRepId] = useState('');
   const [emergency, setEmergency] = useState('no');
   const [fulfilment, setFulfilment] = useState('');
@@ -20,8 +19,8 @@ export function Enquiry({ account, lines, onAddProducts, onEdit, onRemove, onQua
   const [fallbackUrl, setFallbackUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const totalQuantity = lines.reduce((sum, line) => sum + line.quantity, 0);
-  const nearestBranch = useMemo(() => nearestBranchForArea(area), [area]);
-  const repSelection = useMemo(() => representativesForArea(area), [area]);
+  const repSelection = useMemo(() => areaDirectory[area] || { branch: registrationOptions?.branches?.[0] || {}, representatives: [] }, [area, areaDirectory, registrationOptions]);
+  const nearestBranch = repSelection.branch;
 
   useEffect(() => {
     if (selectedRepId && !repSelection.representatives.some(representative => representative.id === selectedRepId)) setSelectedRepId('');
@@ -41,10 +40,10 @@ export function Enquiry({ account, lines, onAddProducts, onEdit, onRemove, onQua
       setError('Please choose a PDF, DOCX, DOC or image Purchase Order.');
       return;
     }
-    if (file.size > MAX_EMAIL_ATTACHMENT_BYTES) {
+    if (file.size > (deliverySettings?.maxPoFileBytes || 4 * 1024 * 1024)) {
       event.target.value = '';
       setPoFile(null);
-      setError('The Purchase Order document must be 4 MB or smaller for secure test email delivery.');
+      setError('The Purchase Order document must be 4 MB or smaller.');
       return;
     }
     setPoFile(file);
@@ -189,21 +188,21 @@ export function Enquiry({ account, lines, onAddProducts, onEdit, onRemove, onQua
             <button type="button" role="radio" aria-checked={poMode === 'none'} className={poMode === 'none' ? 'selected' : ''} onClick={() => setPoMode('none')}><span>—</span><strong>No PO yet</strong><small>Submit a quote request</small></button>
           </div>
           {poMode === 'number' && <label className="form-field po-detail"><span>Purchase Order number</span><input name="poNumber" required placeholder="Example: PO-450021" /></label>}
-          {poMode === 'upload' && <label className={`po-upload ${poFile ? 'has-file' : ''}`}><input type="file" accept=".pdf,.doc,.docx,image/*" required onChange={selectPoFile} /><span>↑</span><div><strong>{poFile ? poFile.name : 'Choose Purchase Order document'}</strong><small>{poFile ? 'Ready to attach to the RFQ email' : 'PDF, DOCX, DOC or image · maximum 4 MB'}</small></div></label>}
+          {poMode === 'upload' && <label className={`po-upload ${poFile ? 'has-file' : ''}`}><input type="file" accept=".pdf,.doc,.docx,image/*" required onChange={selectPoFile} /><span>↑</span><div><strong>{poFile ? poFile.name : 'Choose Purchase Order document'}</strong><small>{poFile ? 'Ready to submit with the RFQ' : 'PDF, DOCX, DOC or image · maximum 4 MB'}</small></div></label>}
           {poMode === 'none' && <p className="po-none-note"><span>i</span> You may submit the enquiry without a PO. The 3-10 working day review notice applies after Rhomberg receives the Purchase Order.</p>}
         </section>
 
         <section className="enquiry-section submit-panel">
           <div className="client-summary"><span className="client-avatar">{account.company.slice(0, 1)}</span><div><strong>{account.company}</strong><small>{account.contact} · {account.email} · {account.phone}</small></div></div>
-          <label className="consent-row"><input type="checkbox" required /><span>I confirm this is an RFQ and agree that these details, the structured RFQ PDF and any PO attachment may be emailed to Rhomberg through the test delivery service.</span></label>
+          <label className="consent-row"><input type="checkbox" required /><span>{deliverySettings?.emailRecipient ? 'I confirm this is an RFQ and agree that these details, the structured RFQ PDF and any PO attachment may be emailed to Rhomberg through the test delivery service.' : 'I confirm this is an RFQ and agree that these details and any PO attachment may be securely submitted to Rhomberg for processing.'}</span></label>
           {error && <p className="form-error submit-error" role="alert">{error}</p>}
           {fallbackUrl && <a className="email-fallback" href={fallbackUrl}>Open my email app with this RFQ summary <span>→</span></a>}
           <button className="primary-button full submit-enquiry" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Sending RFQ email…' : 'Submit RFQ'} <span>{isSubmitting ? '•••' : '→'}</span></button>
-          <p className="preview-submit-note">Test RFQs are sent to {RFQ_EMAIL_RECIPIENT}. The protected service adds rep-only price-list estimates to the PDF; the public fallback never exposes pricing to the client.</p>
+          <p className="preview-submit-note">{deliverySettings?.emailRecipient ? <>Test RFQs are sent to {deliverySettings.emailRecipient}. The protected service adds rep-only price-list estimates to the PDF; the public fallback never exposes pricing to the client.</> : <>RFQs are submitted to the private company service and routed according to the customer’s authorised company and representative assignment.</>}</p>
         </section>
       </form>
 
-      {success && <SuccessDialog success={success} onClose={onCloseSuccess} />}
+      {success && <SuccessDialog success={success} onClose={onCloseSuccess} persistenceLabel={deliverySettings?.persistenceLabel || 'this browser'} />}
     </section>
   );
 }
@@ -223,14 +222,14 @@ function EnquiryLine({ line, onEdit, onRemove, onQuantity }) {
   );
 }
 
-function SuccessDialog({ success, onClose }) {
+function SuccessDialog({ success, onClose, persistenceLabel }) {
   return (
     <div className="dialog-backdrop" role="presentation">
       <section className="success-dialog" role="dialog" aria-modal="true" aria-labelledby="success-title">
         <span className="success-icon">✓</span>
         <small>{success.emailFailed ? 'RFQ saved to account' : 'RFQ email submitted'}</small>
         <h2 id="success-title">Thank you, {success.firstName}.</h2>
-        <p>{success.emailFailed ? 'Your RFQ is safely stored in this browser and remains visible in Order Tracking. The test email still needs attention.' : <>Your RFQ was accepted for <strong>{success.recipient}</strong> and saved permanently in this device's account history.</>}</p>
+        <p>{success.emailFailed ? <>Your RFQ is safely stored in {persistenceLabel} and remains visible in Order Tracking. The email delivery still needs attention.</> : <>Your RFQ was accepted for <strong>{success.recipient}</strong> and saved in {persistenceLabel}.</>}</p>
         <strong className="success-reference">{success.reference}</strong>
         {success.pricedPdfAttached ? <p className="priced-pdf-note"><span>PDF</span> A protected rep-only PDF with internal price-list estimates was attached.</p> : !success.emailFailed && <p className="activation-note"><span>i</span> The public test fallback sent an unpriced RFQ PDF. Pricing remains private and must be added by the protected service.</p>}
         {success.warning && <p className="activation-note"><span>!</span>{success.warning}</p>}

@@ -1,11 +1,10 @@
-import { categories, recommendedCategories } from '../data/catalogue.js';
 import { LeadTimeNotice, SectionHeading } from './Layout.jsx';
 
-export function Home({ account, enquiries, onNavigate, onCategory }) {
+export function Home({ account, enquiries, categories, recommendedCategories, onNavigate, onCategory }) {
   const firstName = account.contact.split(/\s+/)[0];
   const enquiryCount = enquiries.length;
   const activeCount = enquiries.filter(enquiry => enquiry.trackingStatus !== 'completed').length;
-  const categoryIds = recommendedCategories[account.industry] || recommendedCategories.Other;
+  const categoryIds = recommendedCategories[account.industry] || recommendedCategories.Other || [];
   const recommended = categoryIds.map(id => categories.find(category => category.id === id)).filter(Boolean);
   const greeting = new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening';
 

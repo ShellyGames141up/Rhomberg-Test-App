@@ -1,10 +1,11 @@
-const CACHE_NAME = 'rhomberg-app-preview-v7';
+const CACHE_NAME = 'rhomberg-app-preview-v8';
 
 const APP_FILES = [
   './',
   './index.html',
-  './styles.css?v=7',
-  './app.js?v=7',
+  './styles.css?v=8',
+  './runtime-config.js?v=8',
+  './app.js?v=8',
   './manifest.webmanifest',
   './assets/images/rhomberg-gauge-mark.svg',
   './assets/images/rhomberg-wordmark-transparent.png',
@@ -38,20 +39,37 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET' || new URL(event.request.url).origin !== self.location.origin) return;
+  const requestUrl = new URL(event.request.url);
+  if (event.request.method !== 'GET' || requestUrl.origin !== self.location.origin) return;
 
-  if (event.request.mode === 'navigate') {
+  // Authenticated API responses must never enter the public application cache.
+  if (requestUrl.pathname.includes('/api/')) return;
+
+  // Runtime mode and API URL must update immediately during a controlled deployment.
+  if (requestUrl.pathname.endsWith('/runtime-config.js')) {
+    event.respondWith(fetch(event.request, { cache: 'no-store' }).catch(() => caches.match(event.request)));
+    return;
+  }
+
+  const acceptsHtml = event.request.headers.get('accept')?.includes('text/html');
+  if (event.request.mode === 'navigate' && acceptsHtml) {
     event.respondWith(
       fetch(event.request)
         .then(response => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put('./index.html', copy));
+          if (response.ok && response.headers.get('content-type')?.includes('text/html')) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put('./index.html', copy));
+          }
           return response;
         })
         .catch(() => caches.match('./index.html'))
     );
     return;
   }
+
+  const isPublicAsset = requestUrl.pathname.includes('/assets/');
+  const cacheableDestination = ['script', 'style', 'image', 'font', 'manifest'].includes(event.request.destination);
+  if (!isPublicAsset && !cacheableDestination) return;
 
   event.respondWith(
     caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {

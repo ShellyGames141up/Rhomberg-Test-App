@@ -1,10 +1,8 @@
 import { useState } from 'react';
-import { categoryById } from '../data/catalogue.js';
 import { LeadTimeNotice } from './Layout.jsx';
 
-export function ProductDetail({ product, onConfigure }) {
+export function ProductDetail({ product, category, onConfigure }) {
   const [tab, setTab] = useState('overview');
-  const category = categoryById(product.category);
   const tabs = [['overview', 'Overview'], ['specs', 'Technical specs'], ['config', 'Configurations'], ['datasheets', 'Datasheets']];
 
   return (

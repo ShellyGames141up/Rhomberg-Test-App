@@ -3,7 +3,7 @@ import path from 'node:path';
 
 const root = process.cwd();
 const output = path.join(root, 'dist');
-const files = ['index.html', 'app.js', 'app.js.map', 'styles.css', 'sw.js', 'manifest.webmanifest'];
+const files = ['index.html', 'app.js', 'app.js.map', 'styles.css', 'sw.js', 'manifest.webmanifest', 'runtime-config.js'];
 
 await fs.rm(output, { recursive: true, force: true });
 await fs.mkdir(output, { recursive: true });

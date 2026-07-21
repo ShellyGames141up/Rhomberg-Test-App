@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { optionsForField, shouldShowField } from '../data/catalogue.js';
+import { optionsForField, shouldShowField } from '../domain/productConfiguration.js';
 import { LeadTimeNotice } from './Layout.jsx';
 
 const normaliseQuantity = value => Math.min(9999, Math.max(1, Math.trunc(Number(value) || 1)));
