@@ -1,10 +1,10 @@
-const CACHE_NAME = 'rhomberg-quote-preview-v6';
+const CACHE_NAME = 'rhomberg-app-preview-v7';
 
 const APP_FILES = [
   './',
   './index.html',
-  './styles.css?v=6',
-  './app.js?v=6',
+  './styles.css?v=7',
+  './app.js?v=7',
   './manifest.webmanifest',
   './assets/images/rhomberg-gauge-mark.svg',
   './assets/images/rhomberg-wordmark-transparent.png',

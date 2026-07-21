@@ -279,7 +279,7 @@ export async function buildRfqPdf(enquiry, options = {}) {
   document.setTitle(`Rhomberg RFQ ${safeText(enquiry.reference)}`);
   document.setAuthor('Rhomberg Instruments');
   document.setSubject('Request for quotation');
-  document.setCreator('Rhomberg Quote Portal');
+  document.setCreator('Rhomberg Instruments Mobile App');
   const fonts = {
     regular: await document.embedFont(StandardFonts.Helvetica),
     bold: await document.embedFont(StandardFonts.HelveticaBold),
@@ -303,7 +303,8 @@ export async function buildRfqPdf(enquiry, options = {}) {
   drawInfoGrid(state, [
     ['Company', enquiry.company], ['Contact person', enquiry.contact],
     ['Email', enquiry.email], ['Telephone', enquiry.phone],
-    ['Area', enquiry.area], ['RFQ reference', enquiry.reference],
+    ['Area', enquiry.area], ['Selected representative', enquiry.selectedRep?.name || 'Not selected'],
+    ['Representative branch', enquiry.selectedRep?.branchName || 'Not assigned'], ['RFQ reference', enquiry.reference],
   ], label);
 
   drawSectionTitle(state, '02 - Requirement', 'Application and fulfilment', label);

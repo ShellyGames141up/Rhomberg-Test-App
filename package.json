@@ -1,6 +1,6 @@
 {
-  "name": "rhomberg-quote-app-preview",
-  "version": "2.2.0",
+  "name": "rhomberg-instruments-app-preview",
+  "version": "2.3.0",
   "private": true,
   "type": "module",
   "scripts": {

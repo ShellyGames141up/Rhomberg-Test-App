@@ -33,6 +33,7 @@ const buildPlainTextSummary = enquiry => [
   `Telephone: ${enquiry.phone}`,
   `Email: ${enquiry.email}`,
   `Area: ${enquiry.area}`,
+  `Selected representative: ${enquiry.selectedRep?.name || 'Not selected'}${enquiry.selectedRep?.code ? ` (code ${enquiry.selectedRep.code}, ${enquiry.selectedRep.branchName})` : ''}`,
   `Emergency: ${enquiry.emergency === 'yes' ? 'Yes - representative to determine emergency pricing' : 'No'}`,
   `Fulfilment: ${enquiry.fulfilment === 'collect' ? `Collect from ${enquiry.collectionBranch}` : `Delivery to ${enquiry.deliveryAddress}`}`,
   `Application: ${enquiry.application}`,
@@ -103,6 +104,7 @@ async function sendPublicTestFallback(enquiry, poFile, signal) {
   form.append('Contact person', enquiry.contact);
   form.append('Telephone', enquiry.phone);
   form.append('Area', enquiry.area);
+  form.append('Selected representative', enquiry.selectedRep?.name ? `${enquiry.selectedRep.name} - code ${enquiry.selectedRep.code} - ${enquiry.selectedRep.branchName}` : 'Not selected');
   form.append('Application', enquiry.application);
   form.append('Process medium', enquiry.medium || 'Not supplied');
   form.append('Emergency request', enquiry.emergency === 'yes' ? 'YES - emergency pricing to be determined by the representative' : 'No');

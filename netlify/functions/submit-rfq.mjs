@@ -50,6 +50,13 @@ function cleanEnquiry(input) {
     email: safe(input.email, 240).toLowerCase(),
     phone: safe(input.phone, 80),
     area: safe(input.area, 120),
+    selectedRep: {
+      id: safe(input.selectedRep?.id, 80),
+      code: safe(input.selectedRep?.code, 20),
+      name: safe(input.selectedRep?.name, 160),
+      branchId: safe(input.selectedRep?.branchId, 80),
+      branchName: safe(input.selectedRep?.branchName, 120),
+    },
     application: safe(input.application, 6000),
     medium: safe(input.medium, 1200),
     emergency: input.emergency === 'yes' ? 'yes' : 'no',
@@ -69,6 +76,7 @@ function cleanEnquiry(input) {
 function validateEnquiry(enquiry) {
   if (!enquiry.reference || !enquiry.company || !enquiry.contact || !enquiry.phone || !enquiry.application) return 'Required RFQ details are missing.';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(enquiry.email)) return 'A valid client email address is required.';
+  if (!enquiry.selectedRep.name) return 'A representative must be selected.';
   if (!enquiry.items.length) return 'At least one configured unit is required.';
   if (enquiry.fulfilment === 'delivery' && !enquiry.deliveryAddress) return 'A delivery address is required.';
   if (enquiry.fulfilment === 'collect' && !enquiry.collectionBranch) return 'A collection branch is required.';
@@ -101,7 +109,8 @@ async function sendEmail(enquiry, pricing, pdfBytes, poFile) {
       <div style="padding:24px;border:1px solid #d1e0e4;border-top:0">
         <p><strong>Company:</strong> ${escapeHtml(enquiry.company)}<br>
         <strong>Contact:</strong> ${escapeHtml(enquiry.contact)} - ${escapeHtml(enquiry.phone)}<br>
-        <strong>Reply to:</strong> ${escapeHtml(enquiry.email)}</p>
+        <strong>Reply to:</strong> ${escapeHtml(enquiry.email)}<br>
+        <strong>Selected rep:</strong> ${escapeHtml(enquiry.selectedRep.name)} (code ${escapeHtml(enquiry.selectedRep.code)}, ${escapeHtml(enquiry.selectedRep.branchName)})</p>
         <p><strong>Configured lines:</strong> ${enquiry.items.length}<br>
         <strong>Known catalogue subtotal:</strong> R${pricing.knownSubtotal.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}<br>
         <strong>Lines needing rep review:</strong> ${manualCount}</p>

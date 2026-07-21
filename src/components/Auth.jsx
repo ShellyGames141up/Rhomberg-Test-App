@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { areas } from '../data/branches.js';
 import { industries } from '../data/catalogue.js';
-import { DEMO_ACCOUNT } from '../lib/storage.js';
+import { DEMO_ACCOUNT, EXPEDITOR_ACCOUNT } from '../lib/storage.js';
 
-export function Auth({ onSignIn, onCreateAccount }) {
+export function Auth({ onSignIn, onCreateAccount, theme, onToggleTheme }) {
   const [tab, setTab] = useState('signin');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -30,14 +30,15 @@ export function Auth({ onSignIn, onCreateAccount }) {
 
   return (
     <main className="auth-view">
+      <button className="auth-theme-toggle" type="button" onClick={onToggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}><span>{theme === 'dark' ? '☀' : '☾'}</span>{theme === 'dark' ? 'Light' : 'Dark'}</button>
       <section className="auth-card" aria-labelledby="auth-title">
         <div className="auth-brand">
           <img src="assets/images/rhomberg-gauge-mark.svg" alt="" />
           <img src="assets/images/rhomberg-wordmark-transparent.png" alt="Rhomberg Instruments" />
         </div>
         <span className="preview-chip">Public test preview</span>
-        <h1 id="auth-title">{tab === 'signin' ? <>Welcome to your<br /><em>quote portal.</em></> : <>Create your company<br /><em>workspace.</em></>}</h1>
-        <p className="auth-intro">Find the right instrument, configure your requirements and send Rhomberg a clear quote request.</p>
+        <h1 id="auth-title">{tab === 'signin' ? <>Welcome to Rhomberg<br /><em>Instruments.</em></> : <>Create your company<br /><em>workspace.</em></>}</h1>
+        <p className="auth-intro">Find the right instrument, submit clear RFQs and follow every saved request or order from one place.</p>
 
         <div className="auth-tabs" role="tablist" aria-label="Account access">
           <button type="button" role="tab" aria-selected={tab === 'signin'} className={tab === 'signin' ? 'active' : ''} onClick={() => { setTab('signin'); setError(''); }}>Sign in</button>
@@ -54,6 +55,10 @@ export function Auth({ onSignIn, onCreateAccount }) {
               <span className="demo-avatar">D</span><span><strong>Use demo company</strong><small>Demo Mining Solutions</small></span><i>›</i>
             </button>
             <p className="demo-credentials">Demo: {DEMO_ACCOUNT.email} · {DEMO_ACCOUNT.password}</p>
+            <button className="demo-account expeditor-demo" type="button" onClick={() => onSignIn(EXPEDITOR_ACCOUNT.email, EXPEDITOR_ACCOUNT.password)}>
+              <span className="demo-avatar">E</span><span><strong>Use expeditor test login</strong><small>Search and update customer orders</small></span><i>›</i>
+            </button>
+            <p className="demo-credentials">Expeditor: {EXPEDITOR_ACCOUNT.email} · {EXPEDITOR_ACCOUNT.password}</p>
           </form>
         ) : (
           <form className="auth-form register-grid" onSubmit={submitRegister}>
@@ -70,7 +75,7 @@ export function Auth({ onSignIn, onCreateAccount }) {
           </form>
         )}
 
-        <p className="preview-note"><span>i</span> Public test preview: use sample data only and do not upload confidential Purchase Orders. Accounts and enquiry history are stored locally on this device.</p>
+        <p className="preview-note"><span>i</span> Public test preview: use sample data only and do not upload confidential Purchase Orders. Accounts, RFQs and order updates are stored locally on this device.</p>
       </section>
     </main>
   );

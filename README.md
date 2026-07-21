@@ -1,15 +1,30 @@
-# Rhomberg Client Portal - Public Test Preview
+# Rhomberg Instruments App - Public Test Preview
 
-This repository contains a phone-first test preview of a future Rhomberg Instruments catalogue and RFQ app. It is intentionally suitable for public source-code review while testing. No private price values, passwords, email API keys or customer database records are committed.
+This repository contains a phone-first test preview of a future Rhomberg Instruments catalogue, RFQ and order-tracking app. It is intentionally suitable for public source-code review while testing. No private price values, email API keys or real customer database records are committed.
 
 ## Preview login
 
-- Email: `demo@client.co.za`
-- Password: `Demo123!`
+- Customer email: `demo@client.co.za`
+- Customer password: `Demo123!`
+- Expeditor email: `expeditor.test@rhom.co.za`
+- Expeditor password: `Expedite123!`
 
-You can also create a test company account. Preview accounts, sessions, drafts and enquiry history are saved only in that browser on that device. This is not production authentication.
+You can also create a test company account. Preview accounts, sessions, drafts, RFQs and expeditor updates are saved only in that browser on that device. Closing and reopening the site retains the data. This is not production authentication and it does not synchronise between devices.
 
-## Included in version 2.2
+## Included in version 2.3
+
+- Persistent same-browser RFQ and order history for each customer account
+- Customer order tracking with progress, requested instruments and a full update timeline
+- Expeditor test login with an oldest-update-first daily work queue
+- Expeditor search by customer, representative, RFQ reference or PO number
+- Quick status progression plus customer-facing update notes
+- Representative selection filtered to the nearest Rhomberg branch
+- Branch representative codes sourced from the supplied salesperson export
+- Light and dark themes retained on the device
+- Softer, larger typography and refreshed mobile layouts
+- Three clearly labelled, fabricated demonstration orders for workflow testing
+
+## Existing catalogue and RFQ functionality
 
 - Animated opening sequence and mobile app-style sign-in
 - Eight catalogue categories and 82 product families/models
@@ -24,6 +39,10 @@ You can also create a test company account. Preview accounts, sessions, drafts a
 - Emergency, delivery, chemical-seal and unpriced special requirements flagged for representative assessment
 - Public FormSubmit fallback that sends an unpriced RFQ PDF when the protected service is not connected
 - Installable web-app manifest and offline static-asset cache
+
+## Customer-data protection
+
+The supplied historical customer exports were used only for private structure analysis. Their 1,785 customer records, contact details, addresses and account information are not copied into this public repository or browser bundle. Only the requested branch representative names and codes are included for the test selector.
 
 ## Pricing and email security
 
@@ -55,6 +74,7 @@ The two local price-book parts are generated from the supplied March 2026 workbo
 ## Important test limitations
 
 - Use sample customer and PO data only while this repository is public.
-- Accounts are local browser records, not shared company accounts.
+- Accounts, passwords and tracked requests are local browser test records, not shared company accounts.
+- An expeditor update is visible to a customer only when both roles are tested in the same browser profile.
 - Price matching is an internal aid and always requires representative verification before a quotation.
-- The production phase still needs domain authentication, a database, encrypted file storage, audit logging, privacy terms and representative-to-client assignment.
+- The production phase still needs domain authentication, a shared database, role-based permissions, encrypted file storage, audit logging, privacy terms and verified representative-to-client assignment.

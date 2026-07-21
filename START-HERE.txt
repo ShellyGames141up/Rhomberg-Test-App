@@ -1,18 +1,23 @@
-RHOMBERG CLIENT PORTAL — INTERNAL MOBILE PREVIEW
+RHOMBERG INSTRUMENTS APP - PUBLIC TEST PREVIEW
 
-QUICK PREVIEW
-1. Open index.html on a laptop to view the app.
-2. Use the demo account:
-   Email: demo@client.co.za
-   Password: Demo123!
+CUSTOMER PREVIEW
+Email: demo@client.co.za
+Password: Demo123!
 
-VIEW ON A PHONE
-Upload the complete folder to GitHub Pages or another secure web host, then open
-the resulting link on the phone. In Chrome or Safari, choose "Add to Home Screen"
-to install the preview like an app.
+EXPEDITOR PREVIEW
+Email: expeditor.test@rhom.co.za
+Password: Expedite123!
+
+WHAT TO TEST
+1. Sign in as the demo customer and submit an RFQ.
+2. Open Orders to confirm the RFQ remains in the customer timeline.
+3. Sign out and use the expeditor login.
+4. Search for the company or representative, then add a status update.
+5. Sign back in as the customer to see the update.
+6. Try the light/dark theme button in the top bar.
 
 IMPORTANT
-This internal-testing version stores accounts and quote requests only in the
-browser on that device. It does not yet email Ericuv@Rhom.co.za or upload the
-selected Purchase Order document to a server. Those functions belong to the
-production backend phase.
+Accounts, RFQs and updates persist in this browser only. They remain after the
+site is closed and reopened, but do not synchronise to another phone or browser.
+Use fabricated test information only. The production version needs secure
+authentication, a shared database and encrypted Purchase Order storage.

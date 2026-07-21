@@ -1,8 +1,10 @@
 import { categories, recommendedCategories } from '../data/catalogue.js';
 import { LeadTimeNotice, SectionHeading } from './Layout.jsx';
 
-export function Home({ account, enquiryCount, onNavigate, onCategory }) {
+export function Home({ account, enquiries, onNavigate, onCategory }) {
   const firstName = account.contact.split(/\s+/)[0];
+  const enquiryCount = enquiries.length;
+  const activeCount = enquiries.filter(enquiry => enquiry.trackingStatus !== 'completed').length;
   const categoryIds = recommendedCategories[account.industry] || recommendedCategories.Other;
   const recommended = categoryIds.map(id => categories.find(category => category.id === id)).filter(Boolean);
   const greeting = new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening';
@@ -26,7 +28,7 @@ export function Home({ account, enquiryCount, onNavigate, onCategory }) {
         <div className="quick-actions">
           <button className="quick-card cyan" type="button" onClick={() => onNavigate('catalogue')}><span className="quick-icon">⌕</span><span><strong>Browse catalogue</strong><small>Explore instruments</small></span><i>→</i></button>
           <button className="quick-card navy" type="button" onClick={() => onNavigate('enquiry')}><span className="quick-icon">+</span><span><strong>Submit enquiry</strong><small>Review configured units</small></span><i>→</i></button>
-          <button className="quick-card light" type="button" onClick={() => onNavigate('contact')}><span className="quick-icon">☎</span><span><strong>Contact Rhomberg</strong><small>Speak to our team</small></span><i>→</i></button>
+          <button className="quick-card light" type="button" onClick={() => onNavigate('tracking')}><span className="quick-icon">◎</span><span><strong>Track requests & orders</strong><small>{activeCount ? `${activeCount} active update${activeCount === 1 ? '' : 's'}` : 'View your saved timeline'}</small></span><i>→</i></button>
         </div>
       </div>
 
@@ -38,7 +40,7 @@ export function Home({ account, enquiryCount, onNavigate, onCategory }) {
       </div>
 
       <div className="content-block activity-block">
-        <div className="activity-card"><span className="activity-icon">RQ</span><div><small>Your requests</small><strong>{enquiryCount ? `${enquiryCount} saved quote request${enquiryCount === 1 ? '' : 's'}` : 'No enquiries yet'}</strong></div><button type="button" onClick={() => onNavigate('account')} aria-label="View account activity">›</button></div>
+        <div className="activity-card"><span className="activity-icon">RQ</span><div><small>Persistent account activity</small><strong>{enquiryCount ? `${enquiryCount} saved request${enquiryCount === 1 ? '' : 's'} · ${activeCount} active` : 'No enquiries yet'}</strong></div><button type="button" onClick={() => onNavigate('tracking')} aria-label="View order tracking">›</button></div>
       </div>
     </section>
   );
