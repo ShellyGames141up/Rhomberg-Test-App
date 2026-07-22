@@ -6,27 +6,38 @@
 |---|---|
 | Customer | Catalogue, own authorised company profile, own-company RFQs, own-company orders and documents |
 | Sales representative | Catalogue plus enquiries and orders for companies explicitly assigned to that representative |
-| Expeditor | Operational queue for all authorised branches; create customer-visible tracking updates |
+| Planning | Accepted orders awaiting internal job/PO planning and controlled handoff to Expediting |
+| Expeditor | Orders submitted by Planning; create controlled fulfilment updates and hand off to Dispatch |
+| Dispatch | Orders handed off by Expediting; control collection, delivery and completion actions |
 | Buyer | Read approved order requirements and supplier/procurement information needed for fulfilment; no customer-account administration |
-| Manager | Cross-branch operational visibility, tracking oversight and approved reporting |
-| Administrator | User, company, role, representative assignment and product administration; audited elevated access |
+| Manager | Cross-branch visibility, workflow oversight, audited override and approved reporting |
+| Administrator | User, company, role, representative assignment, product and retention administration; audited elevated access |
 
-The application role values are `customer`, `sales_representative`, `expeditor`, `buyer`, `manager` and `administrator`.
+The application role values are `customer`, `sales_representative`, `planning`, `expeditor`, `dispatch`, `buyer`, `manager` and `administrator`. `system` is a trusted backend actor for automatic assignment/retention actions; it is not a user-selectable role.
 
 ## Permission matrix
 
-| Capability | Customer | Sales rep | Expeditor | Buyer | Manager | Administrator |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| Read catalogue | Yes | Yes | Yes | Yes | Yes | Yes |
-| Create RFQ | Own company | No | No | No | Optional policy | Yes/support |
-| Read customer RFQs | Own company | Assigned companies | All authorised branches | All authorised branches | All | All |
-| Read orders | Own company | Assigned companies | All authorised branches | All authorised branches | All | All |
-| Add tracking updates | No | No by default | Yes | No by default | Yes | Yes |
-| Manage products | No | No | No | No | No by default | Yes |
-| Manage users/roles | No | No | No | No | No | Yes |
-| View reports | Own records only | Assigned portfolio | Operational | Procurement | Yes | Yes |
+| Capability | Customer | Sales rep | Planning | Expeditor | Dispatch | Buyer | Manager | Administrator |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Read catalogue | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| Create RFQ | Own company | No | No | No | No | No | Optional policy | Yes/support |
+| Read customer RFQs | Own company | Assigned | No by default | Approved scope | No by default | Approved scope | All | All |
+| Read orders | Own company | Assigned | Approved scope | Approved scope | Approved scope | Approved scope | All | All |
+| Representative RFQ actions | No | Assigned only | No | No | No | No | Yes | Yes |
+| Planning actions | No | No | Yes | No | No | No | Yes | Yes |
+| Expediting actions | No | No | No | Yes | No | No | Yes | Yes |
+| Dispatch actions | No | No | No | No | Yes | No | Yes | Yes |
+| Workflow override | No | No | No | No | No | No | Audited | Audited |
+| Manage products/users | No | No | No | No | No | No | No by default | Yes |
+| View reports | Own only | Assigned | Operational | Operational | Operational | Procurement | Yes | Yes |
 
 Any broader access must be an explicit approved permission, not an assumption based on a job title.
+
+## Workflow enforcement
+
+The backend must accept action codes, never arbitrary status assignments. For each action it must re-read the record in a transaction and validate current state, role, representative assignment, company scope, required fields, expected row version and any fulfilment guard. The state update, workflow event, audit event and notification outbox rows must commit atomically.
+
+Manager/administrator override requires a separate reason and comment. It must be visible in audit reporting and cannot silently rewrite history. See `WORKFLOW_STATE_MACHINE.md`.
 
 ## Company isolation requirement
 
@@ -66,4 +77,4 @@ A sales representative may see a company only through an active `representative_
 
 ## Audit events
 
-At minimum, record successful/failed sign-ins, session revocation, account creation, role changes, company/rep assignment changes, RFQ submission, PO upload/download, tracking changes, email delivery/retry and administrative product edits. Audit records should be append-only for ordinary application roles.
+At minimum, record successful/failed sign-ins, session revocation, account creation, role changes, company/rep assignment changes, every successful or denied workflow action, overrides, RFQ submission, PO upload/download, notification/email delivery/retry, retention/archive actions and administrative product edits. Audit records should be append-only for ordinary application roles.

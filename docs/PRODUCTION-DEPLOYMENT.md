@@ -185,8 +185,13 @@ Use zero-downtime migrations where practical. Destructive schema changes require
 - Customer A cannot list, fetch, alter or download anything owned by Customer B.
 - Changing a company, enquiry, order or document ID in a URL does not cross the authorised scope.
 - A sales representative sees only actively assigned companies.
-- Expeditor can update tracking but cannot administer users.
-- Buyer cannot update tracking unless an explicit approved permission is added.
+- A customer cannot invoke internal RFQ or order workflow actions.
+- An unassigned representative cannot review, quote, accept or convert another representative's RFQ.
+- Planning cannot start an order without accepted/conversion evidence and cannot skip its required references.
+- Expeditor cannot act until Planning submits the order and cannot administer users.
+- Dispatch cannot complete an order until the required collection or delivery stages occur.
+- Buyer cannot perform workflow actions unless an explicit approved permission is added.
+- Only manager/administrator can override a mandatory step, and the reason/comment are audited.
 - Manager/admin actions are audited.
 - Session and CSRF attacks are rejected.
 - Duplicate RFQ retries with one idempotency key create one RFQ.

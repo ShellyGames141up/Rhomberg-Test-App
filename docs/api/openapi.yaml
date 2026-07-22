@@ -336,9 +336,22 @@ paths:
                     $ref: '#/components/schemas/Enquiry'
         '404':
           $ref: '#/components/responses/ApiError'
-  /enquiries/{enquiryId}/tracking-events:
+  /enquiries/{enquiryId}/workflow-actions:
+    get:
+      operationId: listEnquiryWorkflowActions
+      parameters:
+        - $ref: '#/components/parameters/EnquiryId'
+      responses:
+        '200':
+          description: Actions allowed for the current actor and RFQ state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowActionsResponse'
+        '404':
+          $ref: '#/components/responses/ApiError'
     post:
-      operationId: addEnquiryTrackingEvent
+      operationId: performEnquiryWorkflowAction
       security:
         - sessionCookie: []
           csrfHeader: []
@@ -350,10 +363,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TrackingEventInput'
+              $ref: '#/components/schemas/WorkflowActionRequest'
       responses:
         '201':
-          description: Tracking event saved
+          description: Controlled RFQ action completed
           content:
             application/json:
               schema:
@@ -363,6 +376,10 @@ paths:
                   data:
                     $ref: '#/components/schemas/Enquiry'
         '403':
+          $ref: '#/components/responses/ApiError'
+        '409':
+          $ref: '#/components/responses/ApiError'
+        '422':
           $ref: '#/components/responses/ApiError'
   /orders:
     get:
@@ -405,8 +422,22 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/TrackingEvent'
+  /orders/{orderId}/workflow-actions:
+    get:
+      operationId: listOrderWorkflowActions
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Actions allowed for the current actor and order state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowActionsResponse'
+        '404':
+          $ref: '#/components/responses/ApiError'
     post:
-      operationId: addOrderTrackingEvent
+      operationId: performOrderWorkflowAction
       security:
         - sessionCookie: []
           csrfHeader: []
@@ -418,11 +449,23 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TrackingEventInput'
+              $ref: '#/components/schemas/WorkflowActionRequest'
       responses:
         '201':
-          description: Tracking event saved
+          description: Controlled order action completed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Order'
         '403':
+          $ref: '#/components/responses/ApiError'
+        '409':
+          $ref: '#/components/responses/ApiError'
+        '422':
           $ref: '#/components/responses/ApiError'
   /orders/{orderId}:
     get:
@@ -441,6 +484,78 @@ paths:
                   data:
                     $ref: '#/components/schemas/Order'
         '404':
+          $ref: '#/components/responses/ApiError'
+  /notifications:
+    get:
+      operationId: listAuthorisedNotifications
+      parameters:
+        - name: unreadOnly
+          in: query
+          schema: { type: boolean, default: false }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Notifications within the caller's authorised scope
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Notification' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+  /notifications/{notificationId}/read:
+    post:
+      operationId: markNotificationRead
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Notification marked as read
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Notification' }
+        '404':
+          $ref: '#/components/responses/ApiError'
+  /audit-events:
+    get:
+      operationId: listAuditEvents
+      parameters:
+        - name: entityId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: entityType
+          in: query
+          schema: { type: string, enum: [rfq, order] }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Append-only audit events within the caller's internal scope
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/AuditEvent' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+        '403':
           $ref: '#/components/responses/ApiError'
   /enquiries/{enquiryId}/documents:
     post:
@@ -566,7 +681,16 @@ components:
   schemas:
     Role:
       type: string
-      enum: [customer, sales_representative, expeditor, buyer, manager, administrator]
+      enum: [customer, sales_representative, planning, expeditor, dispatch, buyer, manager, administrator]
+    WorkflowActorRole:
+      type: string
+      enum: [customer, sales_representative, planning, expeditor, dispatch, buyer, manager, administrator, system]
+    RfqStatus:
+      type: string
+      enum: [draft, submitted, assigned_to_rep, under_rep_review, quoted, awaiting_customer_acceptance, accepted, cancelled, expired, converted_to_order]
+    OrderStatus:
+      type: string
+      enum: [awaiting_planning, planning_in_progress, planned, submitted_to_expediting, expediting_in_progress, awaiting_dispatch, ready_for_collection, out_for_delivery, delivered, collected, completed, on_hold, cancelled, archived]
     LoginRequest:
       type: object
       additionalProperties: false
@@ -732,24 +856,57 @@ components:
         configuration: { type: object, additionalProperties: true }
     TrackingEvent:
       type: object
-      required: [id, status, note, actor, createdAt]
+      required: [id, entityType, action, fromStatus, toStatus, note, actorRole, customerVisible, createdAt]
       properties:
         id: { type: string, format: uuid }
-        status: { type: string }
+        entityType: { type: string, enum: [rfq, order] }
+        action: { type: string }
+        fromStatus: { type: string }
+        toStatus: { type: string }
         note: { type: string }
         actor: { type: string }
+        actorRole: { $ref: '#/components/schemas/WorkflowActorRole' }
+        customerVisible: { type: boolean }
+        isOverride: { type: boolean }
         createdAt: { type: string, format: date-time }
-    TrackingEventInput:
+    WorkflowActionRequest:
       type: object
       additionalProperties: false
-      required: [status]
+      required: [action, expectedVersion]
       properties:
-        status: { type: string }
-        note: { type: string, maxLength: 1000 }
-        actor: { type: string, description: Display hint only; server identity is authoritative. }
+        action: { type: string, minLength: 1, maxLength: 100 }
+        comment: { type: string, maxLength: 1000 }
+        data: { type: object, additionalProperties: true }
+        expectedVersion: { type: integer, minimum: 0 }
+    WorkflowActionDescriptor:
+      type: object
+      required: [action, label, fromStatus, requiresComment, generatesNotification, customerVisible]
+      properties:
+        action: { type: string }
+        label: { type: string }
+        fromStatus: { type: string }
+        toStatus: { type: string }
+        requiredFields:
+          type: array
+          items:
+            type: object
+            required: [path, label]
+            properties:
+              path: { type: string }
+              label: { type: string }
+        requiresComment: { type: boolean }
+        generatesNotification: { type: boolean }
+        customerVisible: { type: boolean }
+    WorkflowActionsResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/WorkflowActionDescriptor' }
     Enquiry:
       type: object
-      required: [id, reference, companyId, items, trackingStatus, createdAt, updatedAt]
+      required: [id, reference, companyId, workflowType, items, trackingStatus, version, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         reference: { type: string }
@@ -759,7 +916,10 @@ components:
         application: { type: string }
         selectedRep: { $ref: '#/components/schemas/Representative' }
         items: { type: array, items: { $ref: '#/components/schemas/EnquiryItemInput' } }
-        trackingStatus: { type: string }
+        workflowType: { type: string, const: rfq }
+        trackingStatus: { $ref: '#/components/schemas/RfqStatus' }
+        version: { type: integer, minimum: 0 }
+        allowedWorkflowActions: { type: array, items: { $ref: '#/components/schemas/WorkflowActionDescriptor' } }
         trackingHistory: { type: array, items: { $ref: '#/components/schemas/TrackingEvent' } }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -792,15 +952,45 @@ components:
                 pricedPdfAttached: { type: boolean }
     Order:
       type: object
-      required: [id, companyId, status, createdAt, updatedAt]
+      required: [id, companyId, workflowType, trackingStatus, version, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         enquiryId: { type: string, format: uuid }
         companyId: { type: string, format: uuid }
         orderNumber: { type: string }
-        status: { type: string }
+        workflowType: { type: string, const: order }
+        trackingStatus: { $ref: '#/components/schemas/OrderStatus' }
+        status: { type: string, description: Human-readable status label. }
+        version: { type: integer, minimum: 0 }
+        allowedWorkflowActions: { type: array, items: { $ref: '#/components/schemas/WorkflowActionDescriptor' } }
+        trackingHistory: { type: array, items: { $ref: '#/components/schemas/TrackingEvent' } }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    Notification:
+      type: object
+      required: [id, entityType, entityId, message, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        entityType: { type: string, enum: [rfq, order] }
+        entityId: { type: string, format: uuid }
+        status: { type: string }
+        message: { type: string }
+        createdAt: { type: string, format: date-time }
+        readAt: { type: [string, 'null'], format: date-time }
+    AuditEvent:
+      type: object
+      required: [id, action, outcome, entityType, entityId, actorRole, createdAt]
+      properties:
+        id: { type: string }
+        action: { type: string }
+        outcome: { type: string, enum: [success, failed, denied] }
+        entityType: { type: string, enum: [rfq, order] }
+        entityId: { type: string, format: uuid }
+        actorRole: { $ref: '#/components/schemas/WorkflowActorRole' }
+        fromStatus: { type: string }
+        toStatus: { type: string }
+        isOverride: { type: boolean }
+        createdAt: { type: string, format: date-time }
     DocumentResponse:
       type: object
       required: [data]

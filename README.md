@@ -11,20 +11,33 @@ This repository contains a phone-first test preview of a future Rhomberg Instrum
 
 You can also create a test company account. Preview accounts, sessions, drafts, RFQs and expeditor updates are saved only in that browser on that device. Closing and reopening the site retains the data. This is not production authentication and it does not synchronise between devices.
 
-## Included in version 2.4
+## Included in version 2.5
+
+- Central RFQ and order state machine with controlled action codes instead of arbitrary status selection
+- Exact role, assignment, required-field, comment, fulfilment and sequence guards for every transition
+- Planning and Dispatch roles added alongside the existing customer, sales, expeditor, buyer, manager and administrator roles
+- Optimistic record-version checks to stop stale workflow updates
+- Customer-visible timeline projection that omits internal-only events
+- Mock audit history and notification queue for successful and denied workflow actions
+- API adapter routes prepared for enquiry/order workflow actions, notifications and audit history
+- Valid/invalid transition tests plus updated OpenAPI, database and security documentation
+
+### Included in version 2.4
 
 - Replaceable asynchronous service layer for authentication, accounts, products, RFQs and tracking
 - GitHub Pages remains on a browser-only mock service with fabricated records
 - Prepared private-cloud HTTP service using secure cookies, CSRF protection, request IDs and idempotency keys
 - Customer-company scoping in the mock and an explicit server-side tenant-isolation contract
 - Shared validation at both the screen and service boundaries with friendly errors
-- Six proposed production roles and permissions
+- Initial proposed production roles and permissions
 - Proposed PostgreSQL schema with row-level-security policies
 - API contract, OpenAPI definition, security model and IT deployment handover
 
 ### Architecture and IT handover
 
 - [Service architecture](docs/SERVICE-ARCHITECTURE.md)
+- [Workflow state machine and transition flow](docs/WORKFLOW_STATE_MACHINE.md)
+- [Order workflow phased implementation plan](docs/ORDER_WORKFLOW_IMPLEMENTATION_PLAN.md)
 - [API endpoints and payloads](docs/API-CONTRACT.md)
 - [OpenAPI specification](docs/api/openapi.yaml)
 - [Production roles and company isolation](docs/SECURITY-AND-ROLES.md)
@@ -39,7 +52,7 @@ The normal `build` command creates the mock-only GitHub Pages preview. `build:pr
 - Customer order tracking with progress, requested instruments and a full update timeline
 - Expeditor test login with an oldest-update-first daily work queue
 - Expeditor search by customer, representative, RFQ reference or PO number
-- Quick status progression plus customer-facing update notes
+- Role- and stage-controlled workflow actions plus customer-facing update notes
 - Representative selection filtered to the nearest Rhomberg branch
 - Branch representative codes sourced from the supplied salesperson export
 - Light and dark themes retained on the device
@@ -90,7 +103,7 @@ The two local price-book parts are generated from the supplied March 2026 workbo
 ## Build commands
 
 - `pnpm run check` - compile-check the React source
-- `pnpm test` - run service, validation and company-isolation tests
+- `pnpm test` - run state-machine, service, validation, audit and company-isolation tests
 - `pnpm run build` - regenerate the GitHub Pages `app.js`
 - `pnpm run build:netlify` - build and stage only public static files in `dist/`
 - `pnpm run build:production` - generate an API-only candidate in ignored `dist-production/`
@@ -101,4 +114,4 @@ The two local price-book parts are generated from the supplied March 2026 workbo
 - Mock accounts, passwords and tracked requests are local browser test records, not shared company accounts.
 - An expeditor update is visible to a customer only when both roles are tested in the same browser profile.
 - Price matching is an internal aid and always requires representative verification before a quotation.
-- The production phase still needs domain authentication, a shared database, role-based permissions, encrypted file storage, audit logging, privacy terms and verified representative-to-client assignment.
+- The production phase still needs domain authentication, a shared database, server-enforced workflow rules, encrypted file storage, durable audit/notification delivery, privacy terms and verified representative-to-client assignment.

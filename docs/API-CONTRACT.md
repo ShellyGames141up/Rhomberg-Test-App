@@ -12,7 +12,7 @@ Base path: `/api/v1`
 - `GET /auth/csrf-token` supplies a CSRF token. State-changing requests send it as `X-CSRF-Token`.
 - Authenticated, CSRF and customer-record responses send `Cache-Control: no-store`.
 - Clients send `X-Request-ID`; the API returns a correlation ID in errors and logs.
-- RFQ and tracking creation accept `Idempotency-Key` to prevent duplicates after a retry.
+- RFQ submission and workflow actions accept `Idempotency-Key` to prevent duplicates after a retry.
 - Default JSON limit: 1 MB. Upload limit: 4 MB for the current PO workflow, adjustable through an approved server policy.
 
 ## Envelopes
@@ -87,8 +87,11 @@ Passwords and password hashes are never returned.
   "fulfilment": "delivery",
   "poNumber": "PO-DEMO-1001",
   "poFileName": "",
-  "trackingStatus": "rfq-submitted",
+  "workflowType": "rfq",
+  "trackingStatus": "submitted",
   "status": "RFQ submitted",
+  "version": 1,
+  "allowedWorkflowActions": [],
   "items": [],
   "trackingHistory": [],
   "createdAt": "2026-07-21T10:00:00.000Z",
@@ -280,7 +283,7 @@ Response `201`:
 ```json
 {
   "data": {
-    "enquiry": { "id": "uuid", "reference": "RQ-2026-000123", "trackingStatus": "rfq-submitted" },
+    "enquiry": { "id": "uuid", "reference": "RQ-2026-000123", "workflowType": "rfq", "trackingStatus": "submitted", "version": 1 },
     "delivery": { "ok": true, "deliveryMode": "queued", "pricedPdfAttached": true }
   }
 }
@@ -288,17 +291,27 @@ Response `201`:
 
 Email should be queued through an outbox/job worker; a temporary SMTP problem should not roll back a successfully stored RFQ.
 
-#### `POST /enquiries/{enquiryId}/tracking-events`
+#### `GET /enquiries/{enquiryId}/workflow-actions`
 
-Expeditor, manager or administrator according to policy.
+Returns only the action descriptors permitted for the signed-in actor at the RFQ's current state. The server derives role, company and representative identity from the session.
 
-Request:
+#### `POST /enquiries/{enquiryId}/workflow-actions`
+
+Request example:
 
 ```json
-{ "status": "in-production", "note": "Assembly is in progress.", "actor": "display value ignored when server identity is available" }
+{
+  "action": "mark_quoted",
+  "comment": "Quotation sent using the approved external channel.",
+  "data": {
+    "quotationSentAt": "2026-07-22T10:00:00.000Z",
+    "quotationReference": "QUOTE-REFERENCE"
+  },
+  "expectedVersion": 4
+}
 ```
 
-Response `201`: the updated enquiry with appended history. The server derives the actor from the session.
+The browser never sends actor, role, company ID, from-status or target status. The server locks/re-reads the record, validates the action through the central workflow rules and atomically writes the new state, workflow event, audit event and notification outbox record. Response `201` is the updated authorised enquiry with a new version and refreshed `allowedWorkflowActions`.
 
 ### Orders and tracking
 
@@ -314,9 +327,38 @@ Returns order, enquiry reference, line summary, representative, dates and latest
 
 Returns the authorised chronological timeline.
 
-#### `POST /orders/{orderId}/tracking-events`
+#### `GET /orders/{orderId}/workflow-actions`
 
-Same validation, role and idempotency rules as the enquiry tracking route. Use once an RFQ has become an order.
+Returns only actions available to the signed-in role for the exact current order stage.
+
+#### `POST /orders/{orderId}/workflow-actions`
+
+Uses the same action envelope and idempotency/version rules as the enquiry route. Example:
+
+```json
+{
+  "action": "complete_expediting",
+  "comment": "Completion checks passed; sent to Dispatch.",
+  "data": { "completionCheckConfirmed": true },
+  "expectedVersion": 8
+}
+```
+
+An arbitrary `{ "status": "..." }` update is not supported. See `WORKFLOW_STATE_MACHINE.md` for the authoritative transition list.
+
+### Notifications and audit
+
+#### `GET /notifications?unreadOnly=true&page=1&pageSize=50`
+
+Returns notifications within the caller's authorised company/role scope. Internal-only notification payloads are never returned to customers.
+
+#### `POST /notifications/{notificationId}/read`
+
+Marks one authorised notification as read. Response `200` returns the updated notification.
+
+#### `GET /audit-events?entityId=&entityType=&page=1&pageSize=50`
+
+Manager/administrator only unless a narrower audited support permission is approved. Audit records are append-only and include successful and denied workflow attempts.
 
 ### Documents
 
@@ -356,7 +398,7 @@ All administrative mutations require elevated role checks, MFA-backed staff sess
 | `401` | Missing/expired session |
 | `403` | Authenticated role lacks a general capability |
 | `404` | Unknown resource or resource outside caller scope |
-| `409` | Duplicate account, version conflict or idempotency conflict |
+| `409` | Duplicate account, invalid transition, stale version or idempotency conflict |
 | `413` | Upload too large |
 | `415` | Unsupported upload type |
 | `422` | Field or business-rule validation failure |

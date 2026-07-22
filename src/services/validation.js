@@ -57,9 +57,17 @@ export function validateEnquiry(details, items) {
   validatePoFile(details.poFile);
 }
 
-export function validateTrackingUpdate({ status, note }) {
+export function validateWorkflowActionRequest({ action, comment, data, expectedVersion } = {}) {
   const errors = {};
-  if (!present(status)) errors.status = 'Select a tracking status.';
-  if (String(note || '').length > 1000) errors.note = 'Keep the customer update below 1,000 characters.';
-  if (Object.keys(errors).length) throwValidation(errors, 'Check the tracking update.');
+  if (!present(action)) errors.action = 'Select an available workflow action.';
+  if (String(comment || '').length > 1000) errors.comment = 'Keep the workflow comment below 1,000 characters.';
+  if (data !== undefined && (data === null || Array.isArray(data) || typeof data !== 'object')) errors.data = 'Workflow action data must be a structured object.';
+  if (expectedVersion === undefined || !Number.isInteger(Number(expectedVersion)) || Number(expectedVersion) < 0) errors.expectedVersion = 'Refresh the record and try again.';
+  if (Object.keys(errors).length) throwValidation(errors, 'Check the workflow action.');
+  return {
+    action: present(action),
+    comment: present(comment),
+    data: data || {},
+    expectedVersion: Number(expectedVersion),
+  };
 }

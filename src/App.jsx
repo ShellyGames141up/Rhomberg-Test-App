@@ -101,7 +101,7 @@ export default function App() {
   };
 
   const isStaff = Boolean(account && account.role !== USER_ROLES.CUSTOMER);
-  const canUpdateTracking = Boolean(account && roleCan(account.role, PERMISSIONS.UPDATE_TRACKING));
+  const canPerformWorkflow = Boolean(account && roleCan(account.role, PERMISSIONS.PERFORM_WORKFLOW_ACTION));
   const selectedProduct = catalogue.products.find(product => product.id === productId) || null;
   const selectedCategory = selectedProduct ? catalogue.categories.find(category => category.id === selectedProduct.category) || null : null;
   const accountEnquiries = useMemo(() => {
@@ -218,8 +218,8 @@ export default function App() {
     }
   };
 
-  const updateTracking = async (enquiryId, status, note, actor) => {
-    const updated = await services.tracking.updateStatus(enquiryId, { status, note, actor });
+  const performWorkflowAction = async (enquiryId, action, comment, data, entityType, expectedVersion) => {
+    const updated = await services.workflow.performAction(enquiryId, { action, comment, data, entityType, expectedVersion });
     setEnquiries(current => current.map(enquiry => enquiry.id === updated.id ? updated : enquiry));
     notify(`${updated.reference} updated to ${updated.status}`);
     return updated;
@@ -263,7 +263,7 @@ export default function App() {
         <main className="app-main">
           {isStaff ? (
             <>
-              {view === 'expeditor' && <ExpeditorDashboard account={account} enquiries={enquiries} onUpdate={updateTracking} canUpdate={canUpdateTracking} serviceMode={services.mode} />}
+              {view === 'expeditor' && <ExpeditorDashboard account={account} enquiries={enquiries} onAction={performWorkflowAction} canUpdate={canPerformWorkflow} serviceMode={services.mode} />}
               {view === 'account' && <Account account={account} enquiries={enquiries} onSignOut={signOut} serviceMode={services.mode} />}
             </>
           ) : (

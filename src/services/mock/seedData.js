@@ -5,8 +5,10 @@ export const STORE_KEYS = Object.freeze({
   session: 'rhombergPreviewSessionV2',
   draft: 'rhombergPreviewDraftV2',
   enquiries: 'rhombergPreviewEnquiriesV2',
+  audit: 'rhombergPreviewAuditV1',
+  notifications: 'rhombergPreviewNotificationsV1',
   theme: THEME_PREFERENCE_KEY,
-  seedVersion: 'rhombergPreviewSeedV4',
+  seedVersion: 'rhombergPreviewSeedV5',
 });
 
 export const LEGACY_STORE_KEYS = Object.freeze({

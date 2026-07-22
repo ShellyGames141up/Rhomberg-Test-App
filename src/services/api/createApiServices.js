@@ -1,5 +1,5 @@
 import { ServiceError } from '../contracts.js';
-import { MAX_PO_FILE_BYTES, validateEnquiry, validateRegistration, validateSignIn, validateTrackingUpdate } from '../validation.js';
+import { MAX_PO_FILE_BYTES, validateEnquiry, validateRegistration, validateSignIn, validateWorkflowActionRequest } from '../validation.js';
 import { createBrowserStore } from '../browserStore.js';
 import { THEME_PREFERENCE_KEY } from '../serviceKeys.js';
 import { HttpClient } from './HttpClient.js';
@@ -90,14 +90,28 @@ export function createApiServices(config = {}) {
     },
   };
 
-  const tracking = {
+  const workflow = {
     list: filters => client.get('/orders', { query: filters }),
-    async updateStatus(enquiryId, input) {
-      validateTrackingUpdate(input);
-      return client.post(`/enquiries/${encodeURIComponent(enquiryId)}/tracking-events`, input, {
-        headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `tracking-${Date.now()}` },
+    getAllowedActions(recordId, { entityType = 'rfq' } = {}) {
+      const resource = entityType === 'order' ? 'orders' : 'enquiries';
+      return client.get(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`);
+    },
+    async performAction(recordId, input) {
+      const request = validateWorkflowActionRequest(input);
+      const resource = input?.entityType === 'order' ? 'orders' : 'enquiries';
+      return client.post(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`, request, {
+        headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `workflow-${Date.now()}` },
       });
     },
+  };
+
+  const audit = {
+    list: filters => client.get('/audit-events', { query: filters }),
+  };
+
+  const notifications = {
+    list: filters => client.get('/notifications', { query: filters }),
+    markRead: notificationId => client.post(`/notifications/${encodeURIComponent(notificationId)}/read`, {}),
   };
 
   const preferences = {
@@ -118,7 +132,10 @@ export function createApiServices(config = {}) {
     accounts,
     products,
     enquiries,
-    tracking,
+    workflow,
+    tracking: workflow,
+    audit,
+    notifications,
     preferences,
     preview: {
       emailRecipient: '',

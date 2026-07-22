@@ -1,6 +1,6 @@
 {
   "name": "rhomberg-instruments-app-preview",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
     "build:netlify": "npm run build && node ./scripts/stage-static.mjs",
     "check": "esbuild ./src/main.jsx --bundle --jsx=automatic --target=es2020 --outfile=work-check.js",
     "check:css": "esbuild ./styles.css --minify --outfile=work-check.css",
-    "test": "node ./tests/mock-services.test.mjs"
+    "test": "node ./tests/run-tests.mjs"
   },
   "dependencies": {
     "pdf-lib": "1.17.1",

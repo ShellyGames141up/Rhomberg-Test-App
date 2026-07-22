@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { progressForStatus, statusById } from '../domain/tracking.js';
 
+const TERMINAL_STATUSES = new Set(['completed', 'cancelled', 'expired', 'converted_to_order', 'archived']);
+
 const formatDate = value => new Date(value).toLocaleString('en-ZA', {
   day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
 });
@@ -8,7 +10,7 @@ const formatDate = value => new Date(value).toLocaleString('en-ZA', {
 export function OrderTracking({ account, enquiries, onStartEnquiry, serviceMode }) {
   const ordered = useMemo(() => [...enquiries].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)), [enquiries]);
   const [openId, setOpenId] = useState(null);
-  const activeCount = ordered.filter(enquiry => enquiry.trackingStatus !== 'completed').length;
+  const activeCount = ordered.filter(enquiry => !TERMINAL_STATUSES.has(enquiry.trackingStatus)).length;
 
   return (
     <section className="app-screen tracking-screen" aria-labelledby="tracking-title">
@@ -35,11 +37,11 @@ export function OrderTracking({ account, enquiries, onStartEnquiry, serviceMode 
 }
 
 function TrackingCard({ enquiry, expanded, onToggle }) {
-  const status = statusById(enquiry.trackingStatus);
-  const progress = progressForStatus(enquiry.trackingStatus);
+  const status = statusById(enquiry.trackingStatus, enquiry.workflowType);
+  const progress = progressForStatus(enquiry.trackingStatus, enquiry.workflowType);
   const totalQuantity = (enquiry.items || []).reduce((sum, item) => sum + Number(item.quantity || 1), 0);
   const history = [...(enquiry.trackingHistory || [])].reverse();
-  const isOrder = ['po-received', 'scheduled', 'in-production', 'quality-check', 'ready', 'dispatched', 'completed'].includes(enquiry.trackingStatus);
+  const isOrder = enquiry.workflowType === 'order';
 
   return (
     <article className={`tracking-card ${expanded ? 'expanded' : ''}`}>
@@ -64,8 +66,8 @@ function TrackingCard({ enquiry, expanded, onToggle }) {
           <div className="tracking-timeline">
             <h3>Update history</h3>
             {history.map((event, index) => {
-              const eventStatus = statusById(event.status);
-              return <div className="timeline-event" key={event.id || `${event.createdAt}-${index}`}><i className={index === 0 ? 'latest' : ''} /><span><small>{formatDate(event.createdAt)} · {event.actor || 'Rhomberg'}</small><strong>{eventStatus.label}</strong><p>{event.note || eventStatus.description}</p></span></div>;
+              const eventStatus = statusById(event.toStatus || event.status, event.entityType);
+              return <div className="timeline-event" key={event.id || `${event.createdAt}-${index}`}><i className={index === 0 ? 'latest' : ''} /><span><small>{formatDate(event.createdAt)} · {event.actor || 'Rhomberg'}</small><strong>{eventStatus.label}</strong><p>{event.note || eventStatus.customerDescription}</p></span></div>;
             })}
           </div>
         </div>

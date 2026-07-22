@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { createApiServices } from '../src/services/api/createApiServices.js';
 import { createMockServices } from '../src/services/mock/createMockServices.js';
+import { STORE_KEYS } from '../src/services/mock/seedData.js';
 import { ServiceError, USER_ROLES } from '../src/services/contracts.js';
 import { optionsForField, shouldShowField } from '../src/domain/productConfiguration.js';
 import { representativesByBranch } from '../src/data/representatives.js';
@@ -29,10 +30,10 @@ const emailSender = async enquiry => {
   return { ok: true, recipient: 'test-routing@example.invalid', deliveryMode: 'test', pricedPdfAttached: false, enquiryId: enquiry.id };
 };
 
-const services = createMockServices({ storage, emailSender, now: () => new Date('2026-07-21T12:00:00.000Z') });
+const services = createMockServices({ storage, emailSender, now: () => new Date('2026-07-22T12:00:00.000Z') });
 await services.initialize();
 
-assert.deepEqual(Object.values(USER_ROLES), ['customer', 'sales_representative', 'expeditor', 'buyer', 'manager', 'administrator']);
+assert.deepEqual(Object.values(USER_ROLES), ['customer', 'sales_representative', 'planning', 'expeditor', 'dispatch', 'buyer', 'manager', 'administrator']);
 
 const uiFiles = [
   path.resolve('src/App.jsx'),
@@ -43,8 +44,9 @@ const uiFiles = [
 for (const file of uiFiles) {
   const source = readFileSync(file, 'utf8');
   assert.equal(source.includes('localStorage'), false, `${path.basename(file)} must not access browser storage directly`);
-  assert.equal(source.includes("lib/storage"), false, `${path.basename(file)} must not import the removed legacy storage module`);
+  assert.equal(source.includes('lib/storage'), false, `${path.basename(file)} must not import the removed legacy storage module`);
   assert.equal(source.includes('/data/'), false, `${path.basename(file)} must receive persisted catalogue/account data through services rather than importing data modules`);
+  assert.equal(source.includes('updateStatus('), false, `${path.basename(file)} must not use a raw status-changing API`);
 }
 
 const catalogue = await services.products.getCatalogue();
@@ -69,6 +71,7 @@ assert.equal('password' in customer, false, 'passwords must not enter React-faci
 const customerEnquiries = await services.enquiries.list();
 assert.ok(customerEnquiries.length >= 1);
 assert.ok(customerEnquiries.every(enquiry => enquiry.companyId === customer.companyId), 'customer list must be limited to the authorised company');
+assert.ok(customerEnquiries.every(enquiry => enquiry.trackingHistory.every(event => event.customerVisible !== false)), 'customer history must exclude internal-only events');
 
 await assert.rejects(
   () => services.enquiries.getById('enquiry-demo-cape-001'),
@@ -96,7 +99,7 @@ const draftLine = {
 };
 await services.enquiries.saveDraft([draftLine]);
 
-const reopenedServices = createMockServices({ storage, emailSender, now: () => new Date('2026-07-21T12:00:00.000Z') });
+const reopenedServices = createMockServices({ storage, emailSender, now: () => new Date('2026-07-22T12:00:00.000Z') });
 await reopenedServices.initialize();
 assert.equal((await reopenedServices.auth.getSession()).id, customer.id, 'session should survive a service reinitialisation');
 assert.deepEqual(await reopenedServices.enquiries.getDraft(), [draftLine], 'draft should survive a browser-style reopen');
@@ -124,6 +127,7 @@ const submission = await reopenedServices.enquiries.submit({
 
 assert.match(submission.enquiry.reference, /^RQ-PREVIEW-/);
 assert.equal(submission.enquiry.companyId, customer.companyId);
+assert.equal(submission.enquiry.trackingStatus, 'submitted', 'internal assignment should remain hidden in the customer projection');
 assert.equal(submission.delivery.ok, true);
 assert.equal(emailCalls, 1, 'mock RFQ submission should use the injected delivery service once');
 assert.deepEqual(await reopenedServices.enquiries.getDraft(), [], 'successful submission should clear the draft');
@@ -132,21 +136,34 @@ await reopenedServices.auth.signOut();
 await reopenedServices.auth.signIn({ email: 'expeditor.test@rhom.co.za', password: 'Expedite123!' });
 const operationalQueue = await reopenedServices.enquiries.list();
 assert.ok(operationalQueue.some(enquiry => enquiry.companyId === 'company-demo-cape'), 'expeditor should see the authorised operational test queue');
-const updated = await reopenedServices.tracking.updateStatus(submission.enquiry.id, {
-  status: 'under-review',
-  note: 'Configuration is being checked.',
-  actor: 'Expeditor Test',
+const productionOrder = operationalQueue.find(enquiry => enquiry.id === 'enquiry-demo-jhb-001');
+assert.equal(productionOrder.trackingStatus, 'expediting_in_progress', 'legacy demo status should migrate into the controlled workflow');
+assert.ok(productionOrder.allowedWorkflowActions.some(action => action.action === 'complete_expediting'), 'service should return only actions available for the current actor and stage');
+
+const updated = await reopenedServices.workflow.performAction(productionOrder.id, {
+  entityType: 'order',
+  action: 'complete_expediting',
+  comment: 'All controlled test checks are complete.',
+  data: { completionCheckConfirmed: true },
+  expectedVersion: productionOrder.version,
 });
-assert.equal(updated.trackingStatus, 'under-review');
-assert.equal(updated.trackingHistory.at(-1).note, 'Configuration is being checked.');
+assert.equal(updated.trackingStatus, 'awaiting_dispatch');
+assert.equal(updated.trackingHistory.at(-1).action, 'complete_expediting');
+
+const auditEvents = JSON.parse(storage.getItem(STORE_KEYS.audit));
+assert.ok(auditEvents.some(event => event.action === 'workflow.complete_expediting' && event.outcome === 'success'), 'successful workflow actions must create audit entries');
+const notifications = JSON.parse(storage.getItem(STORE_KEYS.notifications));
+assert.ok(notifications.some(item => item.entityId === productionOrder.id && item.status === 'awaiting_dispatch'), 'notifiable transitions must queue a mock notification');
 
 await reopenedServices.auth.signOut();
 await reopenedServices.auth.signIn({ email: 'demo@client.co.za', password: 'Demo123!' });
 await assert.rejects(
-  () => reopenedServices.tracking.updateStatus(submission.enquiry.id, { status: 'completed', note: '' }),
+  () => reopenedServices.workflow.performAction(submission.enquiry.id, { entityType: 'rfq', action: 'start_rep_review', comment: '', data: {}, expectedVersion: submission.enquiry.version }),
   error => error instanceof ServiceError && error.status === 403,
-  'customer roles must not update tracking',
+  'customers must not perform an internal representative action',
 );
+const auditsAfterDenial = JSON.parse(storage.getItem(STORE_KEYS.audit));
+assert.ok(auditsAfterDenial.some(event => event.action === 'workflow.start_rep_review' && event.outcome === 'denied'), 'denied workflow attempts must create audit entries');
 
 await assert.rejects(
   () => reopenedServices.auth.register({ company: '', contact: '', email: 'bad', phone: '', area: '', industry: '', password: 'short' }),
@@ -167,7 +184,7 @@ const apiFetch = async (url, options) => {
   if (url.pathname.endsWith('/auth/me')) return jsonResponse(apiUser);
   if (url.pathname.endsWith('/auth/login')) return jsonResponse({ user: apiUser, csrfToken: 'rotated-test-token' });
   if (url.pathname.endsWith('/enquiries') && options.method === 'POST') return jsonResponse({ enquiry: { id: '00000000-0000-4000-8000-000000000003', reference: 'RQ-API-TEST', companyId: apiUser.companyId }, delivery: { ok: true, deliveryMode: 'queued' } }, 201);
-  if (url.pathname.endsWith('/tracking-events')) return jsonResponse({ id: '00000000-0000-4000-8000-000000000003', reference: 'RQ-API-TEST', trackingStatus: 'under-review' }, 201);
+  if (url.pathname.endsWith('/workflow-actions') && options.method === 'POST') return jsonResponse({ id: '00000000-0000-4000-8000-000000000003', reference: 'RQ-API-TEST', workflowType: 'order', trackingStatus: 'awaiting_dispatch', version: 6 }, 201);
   return jsonResponse([]);
 };
 
@@ -185,11 +202,16 @@ const apiSubmission = await apiServices.enquiries.submit({
   poMode: 'none',
 }, [draftLine]);
 assert.equal(apiSubmission.enquiry.reference, 'RQ-API-TEST');
-await apiServices.tracking.updateStatus(apiSubmission.enquiry.id, { status: 'under-review', note: 'API test' });
+await apiServices.workflow.performAction(apiSubmission.enquiry.id, {
+  entityType: 'order', action: 'complete_expediting', comment: 'API contract test.', data: { completionCheckConfirmed: true }, expectedVersion: 5,
+});
 assert.ok(apiRequests.every(request => request.options.credentials === 'include'), 'API calls must use secure cookie credentials');
 const apiStateChanges = apiRequests.filter(request => !['GET', 'HEAD'].includes(request.options.method));
 assert.ok(apiStateChanges.every(request => request.options.headers['X-CSRF-Token']), 'state-changing API calls must include a CSRF token');
 assert.ok(apiRequests.find(request => request.path.endsWith('/enquiries') && request.options.method === 'POST').options.body instanceof FormData, 'RFQ API request must use multipart form data');
-assert.ok(apiRequests.find(request => request.path.endsWith('/tracking-events')).options.headers['Idempotency-Key'], 'tracking updates must carry an idempotency key');
+const workflowRequest = apiRequests.find(request => request.path.endsWith('/orders/00000000-0000-4000-8000-000000000003/workflow-actions'));
+assert.ok(workflowRequest, 'API adapter must route order actions to the controlled workflow endpoint');
+assert.ok(workflowRequest.options.headers['Idempotency-Key'], 'workflow actions must carry an idempotency key');
+assert.equal(JSON.parse(workflowRequest.options.body).action, 'complete_expediting', 'API workflow request must send an action rather than a target status');
 
-console.log('Mock persistence, company isolation, validation and API contract-adapter tests passed.');
+console.log('Mock persistence, workflow audit, company isolation, validation and API adapter tests passed.');

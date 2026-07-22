@@ -8,7 +8,7 @@ The React interface is now separated from persistence, authentication and delive
 React screens and App orchestration
               |
               v
-  auth | accounts | products | enquiries | tracking
+ auth | accounts | products | enquiries | workflow | audit | notifications
               |
        service implementation
           /             \
@@ -26,7 +26,10 @@ This boundary lets the company replace the demo implementation without redesigni
 | `accounts` | Current company context, registration reference data and authorised company access |
 | `products` | Categories, product catalogue, product detail and recommendations |
 | `enquiries` | Customer-scoped RFQ drafts, RFQ submission and RFQ retrieval |
-| `tracking` | Authorised order/RFQ timelines and expeditor status updates |
+| `workflow` | Authorised RFQ/order timelines, permitted actions and controlled transitions |
+| `tracking` | Compatibility alias for `workflow` while existing tracking views are retained |
+| `audit` | Append-only workflow/security history within an authorised internal scope |
+| `notifications` | Customer/staff notification inbox operations; mock mode queues local test records |
 | `preferences` | Non-sensitive display preferences such as theme |
 
 Every method is asynchronous, including the browser mock. This is intentional: moving to the API implementation will not require UI event handlers to change from synchronous to asynchronous later.
@@ -39,9 +42,13 @@ auth.getSession() | signIn(credentials) | register(account) | signOut()
 accounts.getCurrent() | getRegistrationOptions() | listCompanies()
 products.getCatalogue() | list(filters) | getById(productId)
 enquiries.list(filters) | getById(id) | getDraft() | saveDraft(items) | submit(details, items)
-tracking.list(filters) | updateStatus(enquiryId, update)
+workflow.list(filters) | getAllowedActions(recordId) | performAction(recordId, actionRequest)
+audit.list(filters)
+notifications.list(filters) | markRead(notificationId)
 preferences.getTheme() | setTheme(theme)
 ```
+
+No service accepts an arbitrary target status. `performAction` accepts a stable action code, comment, structured action data and expected record version. The central validator in `src/domain/workflow.js` owns transitions, role checks, required fields, visibility, notifications and audit metadata. See `WORKFLOW_STATE_MACHINE.md`.
 
 RFQ draft writes are serialised in API mode so rapid quantity/configuration changes cannot finish out of order.
 
@@ -49,13 +56,17 @@ RFQ draft writes are serialised in API mode so rapid quantity/configuration chan
 
 ### Mock implementation
 
-`src/services/mock/createMockServices.js` is used by GitHub Pages. It preserves the existing same-browser demo accounts, drafts, RFQs and tracking updates. The only direct browser-storage adapter is `src/services/browserStore.js`; API mode uses it only for the non-sensitive theme preference.
+`src/services/mock/createMockServices.js` is used by GitHub Pages. It preserves the existing same-browser demo accounts, drafts, RFQs and controlled workflow history. The only direct browser-storage adapter is `src/services/browserStore.js`; API mode uses it only for the non-sensitive theme preference.
 
 The mock is not production security. It does, however, model important rules:
 
 - the password field is removed before an account enters React state;
 - a customer receives only RFQs whose `companyId` matches the signed-in account;
-- internal tracking changes require an authorised operational role;
+- status changes require an action allowed for the exact state and signed-in role;
+- representatives are checked against the RFQ assignment before representative-only actions;
+- Planning, Expediting and Dispatch handoffs cannot be skipped;
+- every successful or denied workflow attempt creates a mock audit entry;
+- notifiable actions queue mock notification records;
 - validation runs inside the service boundary, even when the UI has already validated the form;
 - an RFQ is persisted before the test email is attempted, so an email failure does not lose the request.
 
@@ -70,7 +81,7 @@ The API client is designed for:
 - `Secure`, `HttpOnly`, `SameSite` session cookies;
 - CSRF tokens for state-changing requests;
 - request correlation IDs;
-- idempotency keys for RFQ submission and tracking updates;
+- idempotency keys for RFQ submission and workflow actions;
 - structured validation errors;
 - multipart Purchase Order uploads;
 - request timeouts and friendly network errors.
