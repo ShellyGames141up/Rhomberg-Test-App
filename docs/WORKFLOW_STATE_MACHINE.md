@@ -60,11 +60,11 @@ stateDiagram-v2
 | `mark_quoted` | `under_rep_review` -> `quoted` | Assigned sales representative, manager, administrator | `quotationSentAt` | No | Yes | `quotedAt` |
 | `await_customer_acceptance` | `quoted` -> `awaiting_customer_acceptance` | System, assigned sales representative, manager, administrator | assignment match for representative | No | No | `awaitingAcceptanceAt` |
 | `accept_rfq` | `awaiting_customer_acceptance` -> `accepted` | Assigned sales representative, manager, administrator | `acceptanceBasis` | Yes | Yes | `acceptedAt` |
-| `convert_to_order` | `accepted` -> `converted_to_order` | System, assigned sales representative, manager, administrator | created `orderId` | No | Yes | `convertedToOrderAt` |
+| `convert_to_order` | `accepted` -> `converted_to_order` | System, assigned sales representative, manager, administrator | service-generated `orderId` | No | Yes | `convertedToOrderAt` |
 | `cancel_rfq` | eligible non-terminal RFQ -> `cancelled` | Customer only at approved external stages; otherwise manager or administrator | none | Yes | Yes | `cancelledAt` |
 | `expire_rfq` | active submitted RFQ -> `expired` | System, manager, administrator | none | Yes | Yes | `expiredAt` |
 
-The future backend must create the order and perform `convert_to_order` in one database transaction. The current phase controls the transition contract but intentionally does not implement a production order-conversion transaction.
+The mock service now generates the order identifier, creates an immutable order-item snapshot and updates the RFQ/order arrays through one versioned aggregate write. The UI cannot supply the order identifier. Repeating the action after conversion is rejected by the state machine. This provides deterministic preview behaviour; the future backend must still implement the equivalent RFQ update, order/items insert, events, audit and notification outbox writes in one PostgreSQL transaction.
 
 ## Order flow
 
@@ -176,4 +176,4 @@ This is a preview compatibility migration, not a production data-migration speci
 - the wrong role resuming a held order;
 - unauthorised step skipping and incomplete override evidence.
 
-`tests/mock-services.test.mjs` verifies service-only status changes, customer company isolation, customer-visible history filtering, audit entries, notification creation, legacy status migration, CSRF and idempotency headers, and the API workflow-action route.
+`tests/mock-services.test.mjs` verifies separate RFQ/order services, atomic single-order conversion, immutable item snapshots, duplicate-conversion rejection, role queues through Sales/Planning/Expediting/Dispatch, company isolation, recipient-scoped notifications and per-user read state, customer-visible history filtering, audit entries, legacy combined-record migration, CSRF/idempotency headers and the API workflow-action route.

@@ -21,7 +21,7 @@ The application role values are `customer`, `sales_representative`, `planning`, 
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | Read catalogue | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | Create RFQ | Own company | No | No | No | No | No | Optional policy | Yes/support |
-| Read customer RFQs | Own company | Assigned | No by default | Approved scope | No by default | Approved scope | All | All |
+| Read customer RFQs | Own company | Assigned | No by default | No | No by default | Approved read-only scope | All | All |
 | Read orders | Own company | Assigned | Approved scope | Approved scope | Approved scope | Approved scope | All | All |
 | Representative RFQ actions | No | Assigned only | No | No | No | No | Yes | Yes |
 | Planning actions | No | No | Yes | No | No | No | Yes | Yes |
@@ -45,7 +45,7 @@ Customer isolation is a server responsibility. The backend must:
 
 1. derive the authenticated `userId`, role and authorised company IDs from the server session;
 2. ignore a customer-supplied `companyId` when deciding access;
-3. add an authorised-company predicate to every enquiry, item, order, event and document query;
+3. add an authorised-company predicate to every enquiry, item, order, event, notification and document query;
 4. return `404` for a record outside the caller’s scope, avoiding confirmation that it exists;
 5. enforce the same rule on document download and email retry endpoints;
 6. use PostgreSQL row-level security as defence in depth;

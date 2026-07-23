@@ -8,6 +8,7 @@ import { ExpeditorDashboard } from './components/ExpeditorDashboard.jsx';
 import { Home } from './components/Home.jsx';
 import { Intro } from './components/Intro.jsx';
 import { AppHeader, BottomNav, Toast } from './components/Layout.jsx';
+import { Notifications } from './components/Notifications.jsx';
 import { OrderTracking } from './components/OrderTracking.jsx';
 import { ProductDetail } from './components/ProductDetail.jsx';
 import { friendlyServiceError, PERMISSIONS, roleCan, services, USER_ROLES } from './services/index.js';
@@ -32,6 +33,8 @@ export default function App() {
   const [editingLine, setEditingLine] = useState(null);
   const [draft, setDraft] = useState([]);
   const [enquiries, setEnquiries] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [success, setSuccess] = useState(null);
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
@@ -55,10 +58,14 @@ export default function App() {
 
         let loadedDraft = [];
         let loadedEnquiries = [];
+        let loadedOrders = [];
+        let loadedNotifications = [];
         if (session) {
-          [loadedDraft, loadedEnquiries] = await Promise.all([
+          [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications] = await Promise.all([
             session.role === USER_ROLES.CUSTOMER ? services.enquiries.getDraft() : Promise.resolve([]),
             services.enquiries.list(),
+            services.orders.list(),
+            services.notifications.list(),
           ]);
         }
         if (!active) return;
@@ -70,6 +77,8 @@ export default function App() {
         setAccount(session);
         setDraft(loadedDraft);
         setEnquiries(loadedEnquiries);
+        setOrders(loadedOrders);
+        setNotifications(loadedNotifications);
         setView(session && session.role !== USER_ROLES.CUSTOMER ? 'expeditor' : 'home');
         setAppStatus('ready');
       } catch (error) {
@@ -104,21 +113,27 @@ export default function App() {
   const canPerformWorkflow = Boolean(account && roleCan(account.role, PERMISSIONS.PERFORM_WORKFLOW_ACTION));
   const selectedProduct = catalogue.products.find(product => product.id === productId) || null;
   const selectedCategory = selectedProduct ? catalogue.categories.find(category => category.id === selectedProduct.category) || null : null;
-  const accountEnquiries = useMemo(() => {
+  const accountRecords = useMemo(() => {
     if (!account || isStaff) return [];
-    return enquiries.filter(enquiry => enquiry.companyId === account.companyId || enquiry.accountId === account.id);
-  }, [account, enquiries, isStaff]);
+    return [...enquiries, ...orders].filter(record => record.companyId === account.companyId || record.accountId === account.id);
+  }, [account, enquiries, isStaff, orders]);
+  const staffRecords = useMemo(() => [...enquiries, ...orders], [enquiries, orders]);
+  const unreadNotifications = notifications.filter(notification => !notification.readAt).length;
   const totalQuantity = draft.reduce((sum, line) => sum + line.quantity, 0);
   const detailView = !isStaff && (view === 'product' || view === 'configurator');
 
   const loadAccountWorkspace = async signedInAccount => {
-    const [loadedDraft, loadedEnquiries] = await Promise.all([
+    const [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications] = await Promise.all([
       signedInAccount.role === USER_ROLES.CUSTOMER ? services.enquiries.getDraft() : Promise.resolve([]),
       services.enquiries.list(),
+      services.orders.list(),
+      services.notifications.list(),
     ]);
     setAccount(signedInAccount);
     setDraft(loadedDraft);
     setEnquiries(loadedEnquiries);
+    setOrders(loadedOrders);
+    setNotifications(loadedNotifications);
     setView(signedInAccount.role !== USER_ROLES.CUSTOMER ? 'expeditor' : 'home');
   };
 
@@ -143,7 +158,7 @@ export default function App() {
   };
 
   const navigate = target => {
-    const destination = isStaff && !['expeditor', 'account'].includes(target) ? 'expeditor' : target;
+    const destination = isStaff && !['expeditor', 'notifications', 'account'].includes(target) ? 'expeditor' : target;
     if (destination === 'catalogue') setCategoryId(null);
     setView(destination);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -218,10 +233,23 @@ export default function App() {
     }
   };
 
-  const performWorkflowAction = async (enquiryId, action, comment, data, entityType, expectedVersion) => {
-    const updated = await services.workflow.performAction(enquiryId, { action, comment, data, entityType, expectedVersion });
-    setEnquiries(current => current.map(enquiry => enquiry.id === updated.id ? updated : enquiry));
-    notify(`${updated.reference} updated to ${updated.status}`);
+  const performWorkflowAction = async (recordId, action, comment, data, entityType, expectedVersion) => {
+    const result = await services.workflow.performAction(recordId, { action, comment, data, entityType, expectedVersion });
+    const { createdOrder, ...updated } = result;
+    if (updated.workflowType === 'order') {
+      setOrders(current => current.map(order => order.id === updated.id ? updated : order));
+    } else {
+      setEnquiries(current => current.map(enquiry => enquiry.id === updated.id ? updated : enquiry));
+    }
+    if (createdOrder) setOrders(current => [createdOrder, ...current.filter(order => order.id !== createdOrder.id)]);
+    services.notifications.list().then(setNotifications).catch(() => undefined);
+    notify(createdOrder ? `${updated.reference} converted to ${createdOrder.reference}` : `${updated.reference} updated to ${updated.status}`);
+    return result;
+  };
+
+  const markNotificationRead = async notificationId => {
+    const updated = await services.notifications.markRead(notificationId);
+    setNotifications(current => current.map(notification => notification.id === updated.id ? updated : notification));
     return updated;
   };
 
@@ -231,6 +259,8 @@ export default function App() {
       setAccount(null);
       setDraft([]);
       setEnquiries([]);
+      setOrders([]);
+      setNotifications([]);
       setCategoryId(null);
       setProductId(null);
       setView('home');
@@ -263,22 +293,24 @@ export default function App() {
         <main className="app-main">
           {isStaff ? (
             <>
-              {view === 'expeditor' && <ExpeditorDashboard account={account} enquiries={enquiries} onAction={performWorkflowAction} canUpdate={canPerformWorkflow} serviceMode={services.mode} />}
-              {view === 'account' && <Account account={account} enquiries={enquiries} onSignOut={signOut} serviceMode={services.mode} />}
+              {view === 'expeditor' && <ExpeditorDashboard account={account} enquiries={staffRecords} onAction={performWorkflowAction} canUpdate={canPerformWorkflow} serviceMode={services.mode} />}
+              {view === 'notifications' && <Notifications notifications={notifications} onMarkRead={markNotificationRead} serviceMode={services.mode} />}
+              {view === 'account' && <Account account={account} enquiries={staffRecords} onSignOut={signOut} serviceMode={services.mode} />}
             </>
           ) : (
             <>
-              {view === 'home' && <Home account={account} enquiries={accountEnquiries} categories={catalogue.categories} recommendedCategories={catalogue.recommendedCategories} onNavigate={navigate} onCategory={openCategory} />}
+              {view === 'home' && <Home account={account} enquiries={accountRecords} categories={catalogue.categories} recommendedCategories={catalogue.recommendedCategories} onNavigate={navigate} onCategory={openCategory} />}
               {view === 'catalogue' && <Catalogue categories={catalogue.categories} products={catalogue.products} categoryId={categoryId} onCategory={setCategoryId} onProduct={openProduct} />}
               {view === 'product' && selectedProduct && <ProductDetail product={selectedProduct} category={selectedCategory} onConfigure={() => startConfigurator(null, 'product')} />}
               {view === 'configurator' && selectedProduct && <Configurator product={selectedProduct} existingLine={editingLine} onSave={saveConfiguredLine} onCancel={backFromDetail} />}
               {view === 'enquiry' && <Enquiry account={account} lines={draft} registrationOptions={registrationOptions} deliverySettings={services.preview} onAddProducts={() => navigate('catalogue')} onEdit={line => startConfigurator(line, 'enquiry')} onRemove={removeLine} onQuantity={updateQuantity} onSubmit={submitEnquiry} success={success} onCloseSuccess={() => { setSuccess(null); navigate('tracking'); }} />}
-              {view === 'tracking' && <OrderTracking account={account} enquiries={accountEnquiries} onStartEnquiry={() => navigate('enquiry')} serviceMode={services.mode} />}
-              {view === 'account' && <Account account={account} enquiries={accountEnquiries} onSignOut={signOut} serviceMode={services.mode} />}
+              {view === 'tracking' && <OrderTracking account={account} enquiries={accountRecords} onStartEnquiry={() => navigate('enquiry')} serviceMode={services.mode} />}
+              {view === 'notifications' && <Notifications notifications={notifications} onMarkRead={markNotificationRead} serviceMode={services.mode} />}
+              {view === 'account' && <Account account={account} enquiries={accountRecords} onSignOut={signOut} serviceMode={services.mode} />}
             </>
           )}
         </main>
-        {!detailView && <BottomNav active={view} quantity={totalQuantity} role={account.role} onNavigate={navigate} />}
+        {!detailView && <BottomNav active={view} quantity={totalQuantity} role={account.role} unreadCount={unreadNotifications} onNavigate={navigate} />}
       </div>
       <Toast message={toast} />
     </div>

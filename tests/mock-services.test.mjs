@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { createApiServices } from '../src/services/api/createApiServices.js';
 import { createMockServices } from '../src/services/mock/createMockServices.js';
-import { STORE_KEYS } from '../src/services/mock/seedData.js';
+import { LEGACY_STORE_KEYS, STORE_KEYS } from '../src/services/mock/seedData.js';
 import { ServiceError, USER_ROLES } from '../src/services/contracts.js';
 import { optionsForField, shouldShowField } from '../src/domain/productConfiguration.js';
 import { representativesByBranch } from '../src/data/representatives.js';
@@ -69,14 +69,22 @@ assert.equal(customer.role, 'customer');
 assert.equal('password' in customer, false, 'passwords must not enter React-facing account state');
 
 const customerEnquiries = await services.enquiries.list();
-assert.ok(customerEnquiries.length >= 1);
 assert.ok(customerEnquiries.every(enquiry => enquiry.companyId === customer.companyId), 'customer list must be limited to the authorised company');
+assert.ok(customerEnquiries.every(enquiry => enquiry.workflowType === 'rfq'), 'the RFQ service must not return order records');
 assert.ok(customerEnquiries.every(enquiry => enquiry.trackingHistory.every(event => event.customerVisible !== false)), 'customer history must exclude internal-only events');
+const customerOrders = await services.orders.list();
+assert.ok(customerOrders.length >= 1, 'the customer should receive its demo orders from the separate order service');
+assert.ok(customerOrders.every(order => order.companyId === customer.companyId && order.workflowType === 'order'), 'customer orders must be isolated to the authorised company');
 
 await assert.rejects(
   () => services.enquiries.getById('enquiry-demo-cape-001'),
   error => error instanceof ServiceError && error.status === 404,
   'a customer must not retrieve another company RFQ by ID',
+);
+await assert.rejects(
+  () => services.orders.getById('enquiry-demo-kzn-001'),
+  error => error instanceof ServiceError && error.status === 404,
+  'a customer must not retrieve another company order by ID',
 );
 
 const pbb = catalogue.products.find(product => product.id === 'pbb');
@@ -133,27 +141,135 @@ assert.equal(emailCalls, 1, 'mock RFQ submission should use the injected deliver
 assert.deepEqual(await reopenedServices.enquiries.getDraft(), [], 'successful submission should clear the draft');
 
 await reopenedServices.auth.signOut();
-await reopenedServices.auth.signIn({ email: 'expeditor.test@rhom.co.za', password: 'Expedite123!' });
-const operationalQueue = await reopenedServices.enquiries.list();
-assert.ok(operationalQueue.some(enquiry => enquiry.companyId === 'company-demo-cape'), 'expeditor should see the authorised operational test queue');
-const productionOrder = operationalQueue.find(enquiry => enquiry.id === 'enquiry-demo-jhb-001');
-assert.equal(productionOrder.trackingStatus, 'expediting_in_progress', 'legacy demo status should migrate into the controlled workflow');
-assert.ok(productionOrder.allowedWorkflowActions.some(action => action.action === 'complete_expediting'), 'service should return only actions available for the current actor and stage');
+await reopenedServices.auth.signIn({ email: 'sales.workflow@example.invalid', password: 'Sales123!' });
+const assignedRfqs = await reopenedServices.enquiries.list();
+assert.ok(assignedRfqs.every(enquiry => enquiry.selectedRep?.id === 'C-27'), 'sales representatives must receive only their assigned RFQs');
+let salesRfq = assignedRfqs.find(enquiry => enquiry.id === 'enquiry-demo-cape-001');
+assert.equal(salesRfq.trackingStatus, 'under_rep_review');
+assert.ok(salesRfq.allowedWorkflowActions.some(action => action.action === 'mark_quoted'));
 
-const updated = await reopenedServices.workflow.performAction(productionOrder.id, {
+salesRfq = await reopenedServices.workflow.performAction(salesRfq.id, {
+  entityType: 'rfq',
+  action: 'mark_quoted',
+  comment: '',
+  data: { quotationSentAt: '2026-07-22T11:30:00.000Z', quotationReference: 'TEST-QUOTE-001' },
+  expectedVersion: salesRfq.version,
+});
+salesRfq = await reopenedServices.workflow.performAction(salesRfq.id, {
+  entityType: 'rfq',
+  action: 'await_customer_acceptance',
+  comment: '',
+  data: {},
+  expectedVersion: salesRfq.version,
+});
+salesRfq = await reopenedServices.workflow.performAction(salesRfq.id, {
+  entityType: 'rfq',
+  action: 'accept_rfq',
+  comment: 'Test Purchase Order confirmed outside the app.',
+  data: { acceptanceBasis: 'purchase_order' },
+  expectedVersion: salesRfq.version,
+});
+
+const workflowBeforeConversion = JSON.parse(storage.getItem(STORE_KEYS.workflowState));
+const conversion = await reopenedServices.workflow.performAction(salesRfq.id, {
+  entityType: 'rfq',
+  action: 'convert_to_order',
+  comment: '',
+  data: {},
+  expectedVersion: salesRfq.version,
+});
+assert.equal(conversion.trackingStatus, 'converted_to_order');
+assert.equal(conversion.createdOrder.workflowType, 'order');
+assert.equal(conversion.createdOrder.trackingStatus, 'awaiting_planning');
+assert.equal(conversion.orderId, conversion.createdOrder.id, 'converted RFQ must link to the generated order');
+assert.equal(conversion.createdOrder.sourceEnquiryId, conversion.id);
+assert.equal(conversion.createdOrder.items[0].sourceLineId, salesRfq.items[0].lineId);
+assert.deepEqual(conversion.createdOrder.items[0].configurationSnapshot, salesRfq.items[0].configuration);
+
+const workflowAfterConversion = JSON.parse(storage.getItem(STORE_KEYS.workflowState));
+assert.equal(workflowAfterConversion.orders.length, workflowBeforeConversion.orders.length + 1, 'RFQ conversion must create exactly one separate order');
+assert.ok(workflowAfterConversion.enquiries.some(enquiry => enquiry.id === conversion.id && enquiry.trackingStatus === 'converted_to_order'));
+assert.ok(workflowAfterConversion.orders.some(order => order.id === conversion.createdOrder.id && order.sourceEnquiryId === conversion.id));
+await assert.rejects(
+  () => reopenedServices.workflow.performAction(conversion.id, {
+    entityType: 'rfq', action: 'convert_to_order', comment: '', data: {}, expectedVersion: conversion.version,
+  }),
+  error => error instanceof ServiceError && error.code === 'INVALID_WORKFLOW_TRANSITION',
+  'an RFQ must never create a duplicate order',
+);
+
+const salesNotifications = await reopenedServices.notifications.list();
+const salesConversionNotice = salesNotifications.find(notification => notification.status === 'converted_to_order');
+assert.ok(salesConversionNotice, 'the assigned representative must receive the conversion notification');
+const readSalesNotice = await reopenedServices.notifications.markRead(salesConversionNotice.id);
+assert.ok(readSalesNotice.readAt, 'notification read state must be recorded per signed-in user');
+
+await reopenedServices.auth.signOut();
+await reopenedServices.auth.signIn({ email: 'planning.workflow@example.invalid', password: 'Planning123!' });
+assert.deepEqual(await reopenedServices.enquiries.list(), [], 'Planning must not receive RFQ records through the RFQ service');
+let plannedOrder = (await reopenedServices.orders.list()).find(order => order.id === conversion.createdOrder.id);
+plannedOrder = await reopenedServices.workflow.performAction(plannedOrder.id, {
+  entityType: 'order', action: 'start_planning', comment: '', data: {}, expectedVersion: plannedOrder.version,
+});
+plannedOrder = await reopenedServices.workflow.performAction(plannedOrder.id, {
+  entityType: 'order',
+  action: 'complete_planning',
+  comment: '',
+  data: { internalJobNumber: 'JOB-TEST-001', customerPoNumber: 'PO-TEST-001' },
+  expectedVersion: plannedOrder.version,
+});
+plannedOrder = await reopenedServices.workflow.performAction(plannedOrder.id, {
+  entityType: 'order', action: 'submit_to_expediting', comment: '', data: {}, expectedVersion: plannedOrder.version,
+});
+assert.equal(plannedOrder.trackingStatus, 'submitted_to_expediting');
+
+await reopenedServices.auth.signOut();
+await reopenedServices.auth.signIn({ email: 'expeditor.test@rhom.co.za', password: 'Expedite123!' });
+const operationalOrders = await reopenedServices.orders.list();
+const migratedProductionOrder = operationalOrders.find(order => order.id === 'enquiry-demo-jhb-001');
+assert.equal(migratedProductionOrder.trackingStatus, 'expediting_in_progress', 'legacy combined records should migrate into the separate order collection');
+let expeditedOrder = operationalOrders.find(order => order.id === conversion.createdOrder.id);
+expeditedOrder = await reopenedServices.workflow.performAction(expeditedOrder.id, {
+  entityType: 'order', action: 'start_expediting', comment: '', data: {}, expectedVersion: expeditedOrder.version,
+});
+expeditedOrder = await reopenedServices.workflow.performAction(expeditedOrder.id, {
   entityType: 'order',
   action: 'complete_expediting',
   comment: 'All controlled test checks are complete.',
   data: { completionCheckConfirmed: true },
-  expectedVersion: productionOrder.version,
+  expectedVersion: expeditedOrder.version,
 });
-assert.equal(updated.trackingStatus, 'awaiting_dispatch');
-assert.equal(updated.trackingHistory.at(-1).action, 'complete_expediting');
+assert.equal(expeditedOrder.trackingStatus, 'awaiting_dispatch');
+
+await reopenedServices.auth.signOut();
+await reopenedServices.auth.signIn({ email: 'dispatch.workflow@example.invalid', password: 'Dispatch123!' });
+let dispatchedOrder = (await reopenedServices.orders.list()).find(order => order.id === conversion.createdOrder.id);
+dispatchedOrder = await reopenedServices.workflow.performAction(dispatchedOrder.id, {
+  entityType: 'order', action: 'mark_ready_for_collection', comment: '', data: {}, expectedVersion: dispatchedOrder.version,
+});
+dispatchedOrder = await reopenedServices.workflow.performAction(dispatchedOrder.id, {
+  entityType: 'order', action: 'confirm_collection', comment: 'Collected by the authorised test contact.', data: {}, expectedVersion: dispatchedOrder.version,
+});
+dispatchedOrder = await reopenedServices.workflow.performAction(dispatchedOrder.id, {
+  entityType: 'order', action: 'complete_collection', comment: '', data: {}, expectedVersion: dispatchedOrder.version,
+});
+assert.equal(dispatchedOrder.trackingStatus, 'completed');
 
 const auditEvents = JSON.parse(storage.getItem(STORE_KEYS.audit));
+assert.ok(auditEvents.some(event => event.action === 'order.created_from_rfq' && event.entityId === conversion.createdOrder.id), 'atomic conversion must create a separate order-creation audit entry');
 assert.ok(auditEvents.some(event => event.action === 'workflow.complete_expediting' && event.outcome === 'success'), 'successful workflow actions must create audit entries');
-const notifications = JSON.parse(storage.getItem(STORE_KEYS.notifications));
-assert.ok(notifications.some(item => item.entityId === productionOrder.id && item.status === 'awaiting_dispatch'), 'notifiable transitions must queue a mock notification');
+const storedNotifications = JSON.parse(storage.getItem(STORE_KEYS.notifications));
+assert.ok(storedNotifications.some(item => item.entityId === conversion.createdOrder.id && item.status === 'awaiting_dispatch'), 'notifiable transitions must queue a mock notification');
+
+await reopenedServices.auth.signOut();
+await reopenedServices.auth.signIn({ email: 'cape.demo@client.test', password: 'Demo123!' });
+const capeRfqs = await reopenedServices.enquiries.list();
+const capeOrders = await reopenedServices.orders.list();
+assert.ok(capeRfqs.every(record => record.companyId === 'company-demo-cape'));
+assert.ok(capeOrders.every(record => record.companyId === 'company-demo-cape'));
+assert.equal(capeOrders.find(order => order.id === conversion.createdOrder.id).trackingStatus, 'completed', 'customer tracking must show the completed order from its own company');
+const customerNotifications = await reopenedServices.notifications.list();
+assert.ok(customerNotifications.length > 0 && customerNotifications.every(notification => notification.companyId === 'company-demo-cape'), 'customer notifications must remain company-isolated');
 
 await reopenedServices.auth.signOut();
 await reopenedServices.auth.signIn({ email: 'demo@client.co.za', password: 'Demo123!' });
@@ -170,6 +286,19 @@ await assert.rejects(
   error => error instanceof ServiceError && Object.keys(error.fieldErrors).length >= 6,
   'registration validation should return field-level errors',
 );
+
+const legacySessionStorage = new TestStorage();
+legacySessionStorage.setItem(LEGACY_STORE_KEYS.session, JSON.stringify({
+  accountId: 'staff-sales-preview',
+  signedInAt: '2026-07-21T08:00:00.000Z',
+}));
+const legacySessionServices = createMockServices({ storage: legacySessionStorage });
+await legacySessionServices.initialize();
+assert.equal((await legacySessionServices.auth.getSession())?.role, USER_ROLES.SALES_REPRESENTATIVE, 'a legacy session should migrate once');
+assert.equal(legacySessionStorage.getItem(LEGACY_STORE_KEYS.session), null, 'the migrated legacy session key should be retired');
+await legacySessionServices.auth.signOut();
+await legacySessionServices.initialize();
+assert.equal(await legacySessionServices.auth.getSession(), null, 'sign-out must not restore a retired legacy session');
 
 const apiRequests = [];
 const apiUser = { id: '00000000-0000-4000-8000-000000000001', companyId: '00000000-0000-4000-8000-000000000002', company: 'API Demo Company', contact: 'API Demo User', email: 'api@example.invalid', role: 'customer', permissions: [] };
@@ -192,6 +321,10 @@ const apiServices = createApiServices({ apiBaseUrl: '/api/v1', requestTimeoutMs:
 await apiServices.initialize();
 assert.equal((await apiServices.auth.getSession()).companyId, apiUser.companyId);
 await apiServices.auth.signIn({ email: 'api@example.invalid', password: 'Example123!' });
+await apiServices.enquiries.list();
+await apiServices.orders.list();
+assert.ok(apiRequests.some(request => request.path.endsWith('/enquiries') && request.options.method === 'GET'), 'API RFQ reads must use the RFQ collection endpoint');
+assert.ok(apiRequests.some(request => request.path.endsWith('/orders') && request.options.method === 'GET'), 'API order reads must use the separate order collection endpoint');
 const apiSubmission = await apiServices.enquiries.submit({
   application: 'API contract test application',
   area: 'Gauteng',

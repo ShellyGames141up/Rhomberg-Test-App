@@ -3,6 +3,50 @@ import { statusById, trackingStatuses } from '../domain/tracking.js';
 
 const TERMINAL_STATUSES = new Set(['completed', 'cancelled', 'expired', 'converted_to_order', 'archived']);
 const filterStatuses = [...new Map(trackingStatuses.map(status => [status.id, status])).values()];
+const WORKSPACE_COPY = Object.freeze({
+  sales_representative: {
+    eyebrow: 'Sales RFQ workspace',
+    headline: 'Assigned RFQs need attention.',
+    description: 'Review assigned RFQs, confirm externally sent quotations, record customer acceptance and convert accepted requests into orders.',
+    queue: 'Assigned sales queue',
+  },
+  planning: {
+    eyebrow: 'Planning workspace',
+    headline: 'Accepted orders need a plan.',
+    description: 'Add the internal job and customer PO references before handing each accepted order to Expediting.',
+    queue: 'Planning queue',
+  },
+  expeditor: {
+    eyebrow: 'Expediting workspace',
+    headline: 'Orders need an update.',
+    description: 'Keep production and fulfilment stages current, then hand completed work to Dispatch.',
+    queue: 'Daily expediting queue',
+  },
+  dispatch: {
+    eyebrow: 'Dispatch workspace',
+    headline: 'Ready orders need handover.',
+    description: 'Release collection or delivery orders and confirm the final customer handover.',
+    queue: 'Dispatch queue',
+  },
+  buyer: {
+    eyebrow: 'Buyer workspace',
+    headline: 'Orders in one clear view.',
+    description: 'Review authorised RFQ and order details without changing controlled workflow stages.',
+    queue: 'Authorised records',
+  },
+  manager: {
+    eyebrow: 'Management oversight',
+    headline: 'Workflow health at a glance.',
+    description: 'Review activity across RFQs and orders. Controlled overrides remain separately authorised and audited.',
+    queue: 'Operational oversight',
+  },
+  administrator: {
+    eyebrow: 'Administration workspace',
+    headline: 'Controlled workflow oversight.',
+    description: 'Review the complete test workflow with all important actions recorded in the audit history.',
+    queue: 'Administration queue',
+  },
+});
 
 const formatDate = value => new Date(value).toLocaleString('en-ZA', {
   day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -15,16 +59,20 @@ const searchableText = enquiry => [
 
 export function ExpeditorDashboard({ account, enquiries, onAction, canUpdate, serviceMode }) {
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('active');
+  const [filter, setFilter] = useState(canUpdate ? 'actionable' : 'active');
   const [openId, setOpenId] = useState(null);
   const active = enquiries.filter(enquiry => !TERMINAL_STATUSES.has(enquiry.trackingStatus));
   const emergency = active.filter(enquiry => enquiry.emergency === 'yes').length;
   const awaitingPo = active.filter(enquiry => !enquiry.poNumber && !enquiry.poFileName).length;
+  const copy = WORKSPACE_COPY[account.role] || WORKSPACE_COPY.expeditor;
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return [...enquiries]
-      .filter(enquiry => filter === 'all' || (filter === 'active' ? !TERMINAL_STATUSES.has(enquiry.trackingStatus) : enquiry.trackingStatus === filter))
+      .filter(enquiry => filter === 'all'
+        || (filter === 'active' && !TERMINAL_STATUSES.has(enquiry.trackingStatus))
+        || (filter === 'actionable' && (enquiry.allowedWorkflowActions || []).some(action => action.action !== 'override_workflow'))
+        || enquiry.trackingStatus === filter)
       .filter(enquiry => !term || searchableText(enquiry).includes(term))
       .sort((a, b) => {
         if (TERMINAL_STATUSES.has(a.trackingStatus) && !TERMINAL_STATUSES.has(b.trackingStatus)) return 1;
@@ -36,18 +84,18 @@ export function ExpeditorDashboard({ account, enquiries, onAction, canUpdate, se
   return (
     <section className="app-screen expeditor-screen" aria-labelledby="expeditor-title">
       <header className="expeditor-hero">
-        <span className="eyebrow">Internal {serviceMode === 'mock' ? 'test ' : ''}workspace</span>
-        <h1 id="expeditor-title">Good day, {account.contact.split(/\s+/)[0]}.<br /><em>{canUpdate ? 'Orders need an update.' : 'Orders in one clear view.'}</em></h1>
-        <p>Search by client, representative, RFQ or PO number. {canUpdate ? 'Only actions allowed for your role and the current stage are shown.' : 'Your role receives a read-only view of its authorised operational scope.'}</p>
+        <span className="eyebrow">{serviceMode === 'mock' ? 'Test · ' : ''}{copy.eyebrow}</span>
+        <h1 id="expeditor-title">Good day, {account.contact.split(/\s+/)[0]}.<br /><em>{copy.headline}</em></h1>
+        <p>{copy.description} Only actions allowed for this role and exact stage are shown.</p>
         <div className="expeditor-kpis"><span><strong>{active.length}</strong><small>Active</small></span><span><strong>{emergency}</strong><small>Emergency</small></span><span><strong>{awaitingPo}</strong><small>Awaiting PO</small></span></div>
       </header>
 
       <div className="expeditor-tools">
         <label className="expeditor-search"><span>⌕</span><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search client or representative…" /><button type="button" onClick={() => setSearch('')} aria-label="Clear search">×</button></label>
-        <label className="expeditor-filter"><span>Show</span><select value={filter} onChange={event => setFilter(event.target.value)}><option value="active">All active work</option><option value="all">Everything</option>{filterStatuses.map(status => <option key={status.id} value={status.id}>{status.label}</option>)}</select></label>
+        <label className="expeditor-filter"><span>Show</span><select value={filter} onChange={event => setFilter(event.target.value)}>{canUpdate && <option value="actionable">My actionable queue</option>}<option value="active">All active work</option><option value="all">Everything</option>{filterStatuses.map(status => <option key={status.id} value={status.id}>{status.label}</option>)}</select></label>
       </div>
 
-      <div className="expeditor-result-heading"><div><span className="eyebrow">Daily update queue</span><h2>{filtered.length} matching request{filtered.length === 1 ? '' : 's'}</h2></div><small>Oldest updates first</small></div>
+      <div className="expeditor-result-heading"><div><span className="eyebrow">{copy.queue}</span><h2>{filtered.length} matching record{filtered.length === 1 ? '' : 's'}</h2></div><small>Oldest updates first</small></div>
 
       <div className="expeditor-order-list">
         {filtered.map(enquiry => <ExpeditorOrderCard key={enquiry.id} enquiry={enquiry} expanded={openId === enquiry.id} onToggle={() => setOpenId(current => current === enquiry.id ? null : enquiry.id)} onAction={onAction} canUpdate={canUpdate} />)}
@@ -91,7 +139,7 @@ function ExpeditorOrderCard({ enquiry, expanded, onToggle, onAction, canUpdate }
   return (
     <article className={`expeditor-order-card ${enquiry.emergency === 'yes' ? 'is-emergency' : ''}`}>
       <button type="button" className="expeditor-order-summary" onClick={onToggle} aria-expanded={expanded}>
-        <span className="expeditor-order-id"><small>{enquiry.reference}{enquiry.isDemo ? ' · DEMO' : ''}</small><strong>{enquiry.company}</strong><em>{enquiry.contact}</em></span>
+        <span className="expeditor-order-id"><small>{enquiry.workflowType === 'order' ? 'ORDER' : 'RFQ'} · {enquiry.reference}{enquiry.isDemo ? ' · DEMO' : ''}</small><strong>{enquiry.company}</strong><em>{enquiry.contact}</em></span>
         <span className={`tracking-status status-${enquiry.trackingStatus}`}>{status.label}</span>
         <span className="expeditor-order-meta"><b>{enquiry.selectedRep?.name || 'Unassigned rep'}</b><small>{enquiry.selectedRep?.branchName || enquiry.area} · {quantity} unit{quantity === 1 ? '' : 's'}</small></span>
         <span className="expeditor-updated">Last update {formatDate(enquiry.updatedAt || enquiry.createdAt)} <b>{expanded ? '−' : '+'}</b></span>
@@ -131,9 +179,7 @@ function WorkflowActionFields({ action, data, onChange }) {
   if (action.action === 'accept_rfq') {
     return <label className="form-field"><span>Acceptance basis</span><select value={data.acceptanceBasis || ''} onChange={event => set('acceptanceBasis', event.target.value)}><option value="">Select evidence</option><option value="purchase_order">Purchase Order received externally</option><option value="payment">Payment confirmed externally</option><option value="authorised_confirmation">Authorised customer confirmation</option></select></label>;
   }
-  if (action.action === 'convert_to_order') {
-    return <label className="form-field"><span>Created order identifier</span><input value={data.orderId || ''} onChange={event => set('orderId', event.target.value)} /></label>;
-  }
+  if (action.action === 'convert_to_order') return <p className="workflow-helper">A new order number and immutable item snapshot will be created automatically.</p>;
   if (action.action === 'archive_order') {
     return <label className="form-field"><span>Retention policy identifier</span><input value={data.retentionPolicyId || ''} onChange={event => set('retentionPolicyId', event.target.value)} /></label>;
   }

@@ -5,10 +5,12 @@ export const STORE_KEYS = Object.freeze({
   session: 'rhombergPreviewSessionV2',
   draft: 'rhombergPreviewDraftV2',
   enquiries: 'rhombergPreviewEnquiriesV2',
+  orders: 'rhombergPreviewOrdersV1',
+  workflowState: 'rhombergPreviewWorkflowStateV1',
   audit: 'rhombergPreviewAuditV1',
   notifications: 'rhombergPreviewNotificationsV1',
   theme: THEME_PREFERENCE_KEY,
-  seedVersion: 'rhombergPreviewSeedV5',
+  seedVersion: 'rhombergPreviewSeedV6',
 });
 
 export const LEGACY_STORE_KEYS = Object.freeze({
@@ -45,6 +47,49 @@ export const EXPEDITOR_ACCOUNT = Object.freeze({
   createdAt: '2026-07-21T08:00:00.000Z',
 });
 
+export const SALES_ACCOUNT = Object.freeze({
+  id: 'staff-sales-preview',
+  companyId: 'company-rhomberg',
+  company: 'Rhomberg Instruments',
+  contact: 'Sales Workflow Test',
+  email: 'sales.workflow@example.invalid',
+  phone: 'Internal test account',
+  area: 'Cape Town',
+  industry: 'Internal sales',
+  role: 'sales_representative',
+  representativeId: 'C-27',
+  password: 'Sales123!',
+  createdAt: '2026-07-22T08:00:00.000Z',
+});
+
+export const PLANNING_ACCOUNT = Object.freeze({
+  id: 'staff-planning-preview',
+  companyId: 'company-rhomberg',
+  company: 'Rhomberg Instruments',
+  contact: 'Planning Workflow Test',
+  email: 'planning.workflow@example.invalid',
+  phone: 'Internal test account',
+  area: 'National',
+  industry: 'Internal planning',
+  role: 'planning',
+  password: 'Planning123!',
+  createdAt: '2026-07-22T08:05:00.000Z',
+});
+
+export const DISPATCH_ACCOUNT = Object.freeze({
+  id: 'staff-dispatch-preview',
+  companyId: 'company-rhomberg',
+  company: 'Rhomberg Instruments',
+  contact: 'Dispatch Workflow Test',
+  email: 'dispatch.workflow@example.invalid',
+  phone: 'Internal test account',
+  area: 'National',
+  industry: 'Internal dispatch',
+  role: 'dispatch',
+  password: 'Dispatch123!',
+  createdAt: '2026-07-22T08:10:00.000Z',
+});
+
 export const EXTRA_DEMO_ACCOUNTS = Object.freeze([
   {
     id: 'company-demo-cape', companyId: 'company-demo-cape', company: 'Cape Process Demo', contact: 'Lerato Test', email: 'cape.demo@client.test',
@@ -66,12 +111,44 @@ export const DEMO_LOGINS = Object.freeze([
     password: DEMO_ACCOUNT.password,
   },
   {
+    id: 'cape_customer',
+    label: 'Use Cape customer test login',
+    description: 'View the Sales-to-order test journey',
+    avatar: 'C',
+    email: EXTRA_DEMO_ACCOUNTS[0].email,
+    password: EXTRA_DEMO_ACCOUNTS[0].password,
+  },
+  {
+    id: 'sales_representative',
+    label: 'Use sales test login',
+    description: 'Review assigned RFQs and create orders',
+    avatar: 'S',
+    email: SALES_ACCOUNT.email,
+    password: SALES_ACCOUNT.password,
+  },
+  {
+    id: 'planning',
+    label: 'Use planning test login',
+    description: 'Plan accepted customer orders',
+    avatar: 'P',
+    email: PLANNING_ACCOUNT.email,
+    password: PLANNING_ACCOUNT.password,
+  },
+  {
     id: 'expeditor',
     label: 'Use expeditor test login',
     description: 'Search and update customer orders',
     avatar: 'E',
     email: EXPEDITOR_ACCOUNT.email,
     password: EXPEDITOR_ACCOUNT.password,
+  },
+  {
+    id: 'dispatch',
+    label: 'Use dispatch test login',
+    description: 'Release and complete ready orders',
+    avatar: 'D',
+    email: DISPATCH_ACCOUNT.email,
+    password: DISPATCH_ACCOUNT.password,
   },
 ]);
 
@@ -84,7 +161,8 @@ export const DEMO_ENQUIRIES = Object.freeze([
     poMode: 'number', poNumber: 'PO-DEMO-1042', poFileName: '',
     selectedRep: { id: 'J-21', code: '21', name: 'Danny', branchId: 'johannesburg', branchName: 'Johannesburg' },
     items: [{ lineId: 'demo-line-pbb', productId: 'pbb', code: 'PBB', name: 'Stainless steel process gauge', quantity: 6, image: 'assets/images/products/pbb.webp', configuration: { dialSize: '100 mm', material: '316L stainless steel system', range: '0 to 16 bar', connectionPosition: 'Bottom entry' } }],
-    trackingStatus: 'in-production', status: 'In production', createdAt: '2026-07-16T08:20:00.000Z', updatedAt: '2026-07-21T07:35:00.000Z', isDemo: true,
+    workflowType: 'order', sourceEnquiryId: 'enquiry-demo-jhb-source-001', sourceRfqStatus: 'converted_to_order', acceptedAt: '2026-07-18T09:10:00.000Z',
+    trackingStatus: 'expediting_in_progress', status: 'In production', createdAt: '2026-07-16T08:20:00.000Z', updatedAt: '2026-07-21T07:35:00.000Z', isDemo: true,
     trackingHistory: [
       { id: 'event-demo-1a', status: 'rfq-submitted', note: 'RFQ received from the customer.', actor: 'Customer', createdAt: '2026-07-16T08:20:00.000Z' },
       { id: 'event-demo-1b', status: 'po-received', note: 'Purchase Order checked and accepted.', actor: 'Expeditor Test', createdAt: '2026-07-18T09:10:00.000Z' },
@@ -99,7 +177,7 @@ export const DEMO_ENQUIRIES = Object.freeze([
     poMode: 'none', poNumber: '', poFileName: '',
     selectedRep: { id: 'C-27', code: '27', name: 'Ericu Vercuiel', branchId: 'cape-town', branchName: 'Cape Town' },
     items: [{ lineId: 'demo-line-tps', productId: 'tps', code: 'TPS', name: 'Bi-metal dial thermometer', quantity: 2, image: 'assets/images/products/tps.webp', configuration: { dialSize: '100 mm', range: '0 to 200 °C', mounting: 'Bottom entry', stemLength: '150 mm' } }],
-    trackingStatus: 'under-review', status: 'Under review', createdAt: '2026-07-20T10:10:00.000Z', updatedAt: '2026-07-21T06:55:00.000Z', isDemo: true,
+    workflowType: 'rfq', trackingStatus: 'under_rep_review', status: 'Under review', createdAt: '2026-07-20T10:10:00.000Z', updatedAt: '2026-07-21T06:55:00.000Z', isDemo: true,
     trackingHistory: [
       { id: 'event-demo-2a', status: 'rfq-submitted', note: 'Emergency RFQ received.', actor: 'Customer', createdAt: '2026-07-20T10:10:00.000Z' },
       { id: 'event-demo-2b', status: 'under-review', note: 'Checking range and emergency feasibility with production.', actor: 'Expeditor Test', createdAt: '2026-07-21T06:55:00.000Z' },
@@ -113,11 +191,27 @@ export const DEMO_ENQUIRIES = Object.freeze([
     poMode: 'number', poNumber: 'PO-DEMO-2099', poFileName: '',
     selectedRep: { id: 'J-21', code: '21', name: 'Danny', branchId: 'johannesburg', branchName: 'Johannesburg' },
     items: [{ lineId: 'demo-line-rpt', productId: 'rpt200-level', code: 'RPT200', name: 'Submersible level transmitter', quantity: 1, image: 'assets/images/products/rpt200-level.webp', configuration: { range: '0 to 10 mH2O', output: '4-20 mA', cableLength: '15 m' } }],
-    trackingStatus: 'ready', status: 'Ready for dispatch', createdAt: '2026-07-12T12:15:00.000Z', updatedAt: '2026-07-21T07:15:00.000Z', isDemo: true,
+    workflowType: 'order', sourceEnquiryId: 'enquiry-demo-kzn-source-001', sourceRfqStatus: 'converted_to_order', acceptedAt: '2026-07-14T09:40:00.000Z',
+    trackingStatus: 'awaiting_dispatch', status: 'Ready for dispatch', createdAt: '2026-07-12T12:15:00.000Z', updatedAt: '2026-07-21T07:15:00.000Z', isDemo: true,
     trackingHistory: [
       { id: 'event-demo-3a', status: 'rfq-submitted', note: 'RFQ received.', actor: 'Customer', createdAt: '2026-07-12T12:15:00.000Z' },
       { id: 'event-demo-3b', status: 'quotation-sent', note: 'Quotation sent to customer.', actor: 'Expeditor Test', createdAt: '2026-07-13T09:40:00.000Z' },
       { id: 'event-demo-3c', status: 'ready', note: 'Unit calibrated and ready for dispatch.', actor: 'Expeditor Test', createdAt: '2026-07-21T07:15:00.000Z' },
+    ],
+  },
+  {
+    id: 'order-demo-planning-001', reference: 'OR-TEST-0004', version: 1, accountId: DEMO_ACCOUNT.id, companyId: DEMO_ACCOUNT.companyId,
+    company: DEMO_ACCOUNT.company, contact: DEMO_ACCOUNT.contact, email: DEMO_ACCOUNT.email, phone: DEMO_ACCOUNT.phone,
+    area: 'Gauteng', application: 'Compressed-air receiver monitoring package.', medium: 'Compressed air', emergency: 'no',
+    fulfilment: 'collect', deliveryAddress: '', collectionBranch: 'Johannesburg test branch', notes: 'Public preview sample only.',
+    poMode: 'number', poNumber: 'PO-DEMO-PLANNING', poFileName: '',
+    selectedRep: { id: 'J-21', code: '21', name: 'Danny', branchId: 'johannesburg', branchName: 'Johannesburg' },
+    items: [{ lineId: 'demo-line-planning-pbg', productId: 'pbg', code: 'PBG', name: 'General purpose pressure gauge', quantity: 3, image: 'assets/images/products/pbg.webp', configuration: { dialSize: '100 mm', range: '0 to 10 bar', connectionPosition: 'Bottom entry' } }],
+    workflowType: 'order', sourceEnquiryId: 'enquiry-demo-planning-source-001', sourceRfqStatus: 'converted_to_order',
+    acceptedAt: '2026-07-21T10:00:00.000Z', trackingStatus: 'awaiting_planning', status: 'Awaiting planning',
+    createdAt: '2026-07-21T10:05:00.000Z', updatedAt: '2026-07-21T10:05:00.000Z', isDemo: true,
+    trackingHistory: [
+      { id: 'event-demo-4a', entityType: 'order', status: 'awaiting_planning', note: 'Accepted RFQ converted into an order for Planning.', actor: 'Sales Workflow Test', createdAt: '2026-07-21T10:05:00.000Z' },
     ],
   },
 ]);

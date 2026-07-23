@@ -8,29 +8,29 @@ Use this form as the checkpoint for continuing the project on another computer.
 |---|---|
 | Repository | `ShellyGames141up/Rhomberg-Test-App` |
 | Branch | `agent/improve-theme-readability-and-reps` |
-| App version | `2.5.0` |
-| Checkpoint date | 22 July 2026 |
-| Completed phase | Central RFQ and order workflow state machine |
-| Last stopping point | Phase 1 is complete. Phase 2 has not been started. |
+| App version | `2.6.0` |
+| Checkpoint date | 23 July 2026 |
+| Completed phase | Separate mock RFQ/order workflow and role-workspace integration |
+| Last stopping point | The mock happy path now runs from assigned RFQ through Planning, Expediting, Dispatch and completion. Production PDFs, durable notification delivery and retention are next. |
 | Preview mode | GitHub Pages browser mock remains enabled |
 | Production connection | Not connected; API and PostgreSQL material remain proposed contracts only |
 
 ## What changed in this checkpoint
 
-- Added one authoritative workflow module for RFQs and orders.
-- Added the required RFQ and order statuses, labels, customer/internal descriptions and visibility rules.
-- Defined each allowed action with its permitted roles, required fields, comment rule, notification rule and timestamp.
-- Prevented raw status selection in React; the interface now submits a named workflow action through the service layer.
-- Enforced representative assignment, accepted-order, Planning handoff, Expediting handoff, Dispatch and fulfilment rules.
-- Added optimistic version checking so an old screen cannot overwrite a newer workflow state.
-- Added manager/administrator override rules with mandatory reason and audit comment. The override is intentionally not exposed in the current UI.
-- Added mock audit-history and notification records for workflow actions.
-- Added a customer-safe timeline projection that hides internal-only workflow events.
-- Migrated old mock status values into the new controlled status model when the preview starts.
-- Added `planning` and `dispatch` to the production role model.
-- Updated the API adapter to use `/workflow-actions` endpoints instead of arbitrary status updates.
-- Updated the OpenAPI proposal, PostgreSQL proposal, role/security model, service architecture and deployment checklist.
-- Rebuilt the tracked GitHub Pages JavaScript bundle.
+- Separated RFQs and orders behind distinct `enquiries` and `orders` service contracts.
+- Replaced the legacy combined mock array with one versioned workflow aggregate containing separate RFQ/order collections.
+- Added automatic migration of existing version-2 combined browser records without clearing the user's demo data.
+- Implemented atomic mock conversion: the accepted RFQ is linked and completed while one separate `awaiting_planning` order is created in the same aggregate write.
+- Added immutable order-line and configuration snapshots plus a separate `order.created_from_rfq` audit event.
+- Removed the user-entered order identifier; the service generates the order ID/reference and rejects repeat conversion.
+- Added fabricated Sales, Planning and Dispatch test logins alongside Customer and Expeditor.
+- Reused the established internal-card design for role-specific Sales, Planning, Expediting and Dispatch workspace copy/actions.
+- Added a notification inbox accessed only through the service layer, including company/role/representative scoping and independent per-user read state.
+- Retired migrated legacy session keys and added a regression check so sign-out cannot restore an older staff session.
+- Kept customer tracking visually unchanged while feeding it separate RFQ and order records.
+- Removed Expeditor access to RFQs because Expediting now works only on orders handed over by Planning.
+- Expanded integration tests through quotation, acceptance, conversion, planning, expediting, collection dispatch and completion.
+- Updated the service, workflow, API, OpenAPI and proposed PostgreSQL documentation, including immutable `order_items`.
 
 ## Main files to review
 
@@ -41,7 +41,7 @@ Use this form as the checkpoint for continuing the project on another computer.
 | Mock service and persistence | `src/services/mock/createMockServices.js`, `src/services/mock/seedData.js` |
 | Future API adapter | `src/services/api/createApiServices.js` |
 | Roles and validation | `src/services/contracts.js`, `src/services/validation.js` |
-| React integration | `src/App.jsx`, `src/components/ExpeditorDashboard.jsx`, `src/components/OrderTracking.jsx` |
+| React integration | `src/App.jsx`, `src/components/ExpeditorDashboard.jsx`, `src/components/Notifications.jsx`, `src/components/OrderTracking.jsx`, `src/components/Layout.jsx` |
 | Automated tests | `tests/workflow.test.mjs`, `tests/mock-services.test.mjs`, `tests/run-tests.mjs` |
 | Workflow documentation | `docs/WORKFLOW_STATE_MACHINE.md`, `docs/ORDER_WORKFLOW_IMPLEMENTATION_PLAN.md` |
 | Production proposals | `docs/API-CONTRACT.md`, `docs/api/openapi.yaml`, `docs/database/postgresql-schema.sql`, `docs/SECURITY-AND-ROLES.md` |
@@ -56,28 +56,27 @@ Use this form as the checkpoint for continuing the project on another computer.
 | `npm run build` | Passed: GitHub Pages mock bundle rebuilt |
 | `npm run build:netlify` | Passed: public static deployment package staged successfully |
 | `npm run build:production` | Passed: API-only candidate built and secret-marker scan passed |
+| Mobile browser QA | Passed: Sales workflow action, customer notification/read state and sign-out migration verified at 390 × 844 with no console warnings or errors |
 
 ## Known limitations and risks
 
 - The browser mock still stores demo data on one device and is not production authentication or security.
-- Legacy preview data still uses one combined enquiry/order-shaped record internally. The controlled `workflowType` now distinguishes the workflow, but separate RFQ and order aggregates are a future phase.
 - The backend does not exist yet; the API, PostgreSQL, notification and audit structures are implementation proposals.
-- Sales, Planning and Dispatch do not yet have dedicated production workspaces or complete demo login journeys.
-- RFQ-to-order conversion is defined and guarded, but the future backend must create the order and convert the RFQ atomically.
+- The single browser aggregate makes conversion atomic for a same-device demo only; the backend must reproduce it as one database transaction with locking and idempotency.
+- The test workspaces demonstrate roles and transitions but are not production identity, authorisation or multi-device collaboration.
 - Customer email/in-app notification delivery remains a mock queue until IT supplies the approved backend and email service.
-- A full browser-based visual regression pass should be repeated when role-specific screens are introduced.
+- The current order stages are high-level; detailed production milestones still require owner approval before being added.
+- Generated order-summary PDFs, delivery retries and retention/archive jobs are not implemented yet.
 
 ## Recommended next phase
 
-Begin Phase 2 from `docs/ORDER_WORKFLOW_IMPLEMENTATION_PLAN.md`:
+Begin the controlled Phase 6 mock/API contract work from `docs/ORDER_WORKFLOW_IMPLEMENTATION_PLAN.md`:
 
-1. Separate RFQs and orders into distinct mock service records and contracts.
-2. Implement atomic mock RFQ-to-order conversion through the workflow service.
-3. Add role-specific Sales, Planning and Dispatch mock workspaces without changing the existing customer design.
-4. Add notification-inbox presentation through the notification service.
-5. Expand company/representative assignment and cross-role integration tests.
-
-Do not connect a production database during that phase.
+1. Agree the unpriced order-summary PDF fields and authorised internal recipients.
+2. Add PDF download/email actions through the service layer, with audit events.
+3. Model notification delivery attempts and retry states without connecting real email.
+4. Agree configurable retention periods, archive eligibility and legal-hold rules.
+5. Keep all implementation in mock mode until the owner and IT approve the contracts.
 
 ## Continue on the home PC
 
@@ -91,4 +90,4 @@ npm install
 npm test
 ```
 
-Then read this file and `docs/WORKFLOW_STATE_MACHINE.md` before starting Phase 2.
+Then read this file, `docs/WORKFLOW_STATE_MACHINE.md` and the Phase 6 section of `docs/ORDER_WORKFLOW_IMPLEMENTATION_PLAN.md`.

@@ -370,11 +370,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Enquiry'
+                $ref: '#/components/schemas/EnquiryWorkflowActionResponse'
         '403':
           $ref: '#/components/responses/ApiError'
         '409':
@@ -924,6 +920,23 @@ components:
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
       additionalProperties: true
+    EnquiryWorkflowActionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          allOf:
+            - $ref: '#/components/schemas/Enquiry'
+            - type: object
+              properties:
+                orderId:
+                  type: string
+                  format: uuid
+                  description: Present after atomic conversion.
+                createdOrder:
+                  allOf:
+                    - $ref: '#/components/schemas/Order'
+                  description: Present only when convert_to_order creates the linked order.
     DraftResponse:
       type: object
       required: [data]
@@ -952,20 +965,39 @@ components:
                 pricedPdfAttached: { type: boolean }
     Order:
       type: object
-      required: [id, companyId, workflowType, trackingStatus, version, createdAt, updatedAt]
+      required: [id, reference, sourceEnquiryId, companyId, workflowType, trackingStatus, sourceRfqStatus, acceptedAt, items, version, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
-        enquiryId: { type: string, format: uuid }
+        reference: { type: string }
+        sourceEnquiryId: { type: string, format: uuid }
+        sourceRfqReference: { type: string }
         companyId: { type: string, format: uuid }
-        orderNumber: { type: string }
+        selectedRep: { $ref: '#/components/schemas/Representative' }
         workflowType: { type: string, const: order }
         trackingStatus: { $ref: '#/components/schemas/OrderStatus' }
+        sourceRfqStatus: { type: string, const: converted_to_order }
+        acceptedAt: { type: string, format: date-time }
         status: { type: string, description: Human-readable status label. }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/OrderItemSnapshot' }
         version: { type: integer, minimum: 0 }
         allowedWorkflowActions: { type: array, items: { $ref: '#/components/schemas/WorkflowActionDescriptor' } }
         trackingHistory: { type: array, items: { $ref: '#/components/schemas/TrackingEvent' } }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    OrderItemSnapshot:
+      type: object
+      required: [id, sourceEnquiryItemId, productId, productCodeSnapshot, productNameSnapshot, quantity, configurationSnapshot]
+      properties:
+        id: { type: string, format: uuid }
+        sourceEnquiryItemId: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        productCodeSnapshot: { type: string }
+        productNameSnapshot: { type: string }
+        quantity: { type: integer, minimum: 1, maximum: 9999 }
+        configurationSnapshot: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
     Notification:
       type: object
       required: [id, entityType, entityId, message, createdAt]

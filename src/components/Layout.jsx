@@ -20,16 +20,25 @@ export function AppHeader({ account, onNavigate, onBack, backLabel, theme, onTog
   );
 }
 
-export function BottomNav({ active, quantity, role, onNavigate }) {
+export function BottomNav({ active, quantity, role, unreadCount = 0, onNavigate }) {
   const isStaff = role !== 'customer';
+  const workspaceLabel = {
+    sales_representative: 'RFQs',
+    planning: 'Planning',
+    expeditor: 'Orders',
+    dispatch: 'Dispatch',
+    buyer: 'Orders',
+    manager: 'Oversight',
+    administrator: 'Admin',
+  }[role] || 'Workspace';
   const items = isStaff
-    ? [['expeditor', '↻', 'Orders'], ['account', '○', 'Account']]
+    ? [['expeditor', '↻', workspaceLabel], ['notifications', '!', 'Alerts'], ['account', '○', 'Account']]
     : [
       ['home', '⌂', 'Home'],
       ['catalogue', '◇', 'Catalogue'],
       ['enquiry', '+', 'Enquire'],
       ['tracking', '◎', 'Orders'],
-      ['account', '○', 'Account'],
+      ['notifications', '!', 'Alerts'],
     ];
   return (
     <nav className={`bottom-nav ${isStaff ? 'expeditor-nav' : ''}`} aria-label="Main navigation">
@@ -37,6 +46,7 @@ export function BottomNav({ active, quantity, role, onNavigate }) {
         <button key={id} type="button" className={`${active === id ? 'active' : ''} ${id === 'enquiry' ? 'nav-primary' : ''}`} onClick={() => onNavigate(id)}>
           <span className="nav-icon">{glyph}</span><small>{label}</small>
           {id === 'enquiry' && quantity > 0 && <b className="nav-badge">{quantity}</b>}
+          {id === 'notifications' && unreadCount > 0 && <b className="nav-badge notification-nav-badge">{Math.min(unreadCount, 99)}</b>}
         </button>
       ))}
     </nav>

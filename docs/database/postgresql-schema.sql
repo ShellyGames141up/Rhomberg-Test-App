@@ -226,6 +226,25 @@ CREATE TABLE app.orders (
   row_version integer NOT NULL DEFAULT 1 CHECK (row_version > 0)
 );
 
+-- Immutable commercial/product snapshot created in the same transaction as
+-- enquiries.status = 'converted_to_order'. Later catalogue changes do not
+-- redefine what the customer accepted.
+CREATE TABLE app.order_items (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL REFERENCES app.orders(id) ON DELETE CASCADE,
+  source_enquiry_item_id uuid NOT NULL REFERENCES app.enquiry_items(id),
+  line_number integer NOT NULL CHECK (line_number > 0),
+  product_id uuid NOT NULL REFERENCES app.products(id),
+  product_code_snapshot text NOT NULL,
+  product_name_snapshot text NOT NULL,
+  quantity integer NOT NULL CHECK (quantity BETWEEN 1 AND 9999),
+  configuration_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb,
+  configuration_schema_version integer NOT NULL DEFAULT 1,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (order_id, line_number),
+  UNIQUE (order_id, source_enquiry_item_id)
+);
+
 CREATE TABLE app.workflow_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   enquiry_id uuid REFERENCES app.enquiries(id) ON DELETE CASCADE,
@@ -363,6 +382,7 @@ CREATE INDEX enquiry_items_enquiry_idx ON app.enquiry_items (enquiry_id, line_nu
 CREATE INDEX orders_company_updated_idx ON app.orders (company_id, updated_at DESC);
 CREATE INDEX orders_rep_updated_idx ON app.orders (representative_id, updated_at DESC);
 CREATE INDEX orders_status_updated_idx ON app.orders (status, updated_at DESC);
+CREATE INDEX order_items_order_idx ON app.order_items (order_id, line_number);
 CREATE INDEX workflow_events_enquiry_idx ON app.workflow_events (enquiry_id, created_at);
 CREATE INDEX workflow_events_order_idx ON app.workflow_events (order_id, created_at);
 CREATE INDEX notifications_recipient_unread_idx ON app.notifications (recipient_user_id, created_at DESC) WHERE read_at IS NULL;
@@ -416,6 +436,7 @@ ALTER TABLE app.enquiries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.enquiry_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.enquiry_drafts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.workflow_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.uploaded_documents ENABLE ROW LEVEL SECURITY;
@@ -444,6 +465,16 @@ CREATE POLICY enquiry_drafts_authorised_scope ON app.enquiry_drafts
 CREATE POLICY orders_authorised_scope ON app.orders
   USING (app.can_access_company(company_id))
   WITH CHECK (app.can_access_company(company_id));
+
+CREATE POLICY order_items_authorised_scope ON app.order_items
+  USING (EXISTS (
+    SELECT 1 FROM app.orders customer_order
+    WHERE customer_order.id = order_id AND app.can_access_company(customer_order.company_id)
+  ))
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM app.orders customer_order
+    WHERE customer_order.id = order_id AND app.can_access_company(customer_order.company_id)
+  ));
 
 CREATE POLICY workflow_events_authorised_scope ON app.workflow_events
   USING (

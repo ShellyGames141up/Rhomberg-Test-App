@@ -6,10 +6,29 @@ This repository contains a phone-first test preview of a future Rhomberg Instrum
 
 - Customer email: `demo@client.co.za`
 - Customer password: `Demo123!`
+- Cape journey customer: `cape.demo@client.test` / `Demo123!`
+- Sales email: `sales.workflow@example.invalid`
+- Sales password: `Sales123!`
+- Planning email: `planning.workflow@example.invalid`
+- Planning password: `Planning123!`
 - Expeditor email: `expeditor.test@rhom.co.za`
 - Expeditor password: `Expedite123!`
+- Dispatch email: `dispatch.workflow@example.invalid`
+- Dispatch password: `Dispatch123!`
 
-You can also create a test company account. Preview accounts, sessions, drafts, RFQs and expeditor updates are saved only in that browser on that device. Closing and reopening the site retains the data. This is not production authentication and it does not synchronise between devices.
+You can also create a test company account. Preview accounts, sessions, drafts, RFQs, orders, notifications and workflow updates are saved only in that browser on that device. Closing and reopening the site retains the data. This is not production authentication and it does not synchronise between devices.
+
+## Included in version 2.6
+
+- Separate RFQ and order service resources while preserving the existing customer tracking design
+- Versioned aggregate mock storage with automatic migration of legacy combined records
+- Atomic same-browser RFQ conversion that creates exactly one linked order and immutable order-line/configuration snapshots
+- Service-generated order IDs/references and duplicate-conversion protection
+- Dedicated Sales, Planning, Expediting and Dispatch test workspaces using role- and stage-allowed actions
+- Role-, company- and representative-scoped notification inbox with per-user read state
+- Complete tested mock path from quotation through acceptance, Planning, Expediting, Dispatch and completion
+- Separate API adapter methods for `/enquiries` and `/orders`
+- Updated API/OpenAPI/PostgreSQL proposals, including immutable `order_items`
 
 ## Included in version 2.5
 

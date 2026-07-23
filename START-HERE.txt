@@ -8,16 +8,33 @@ EXPEDITOR PREVIEW
 Email: expeditor.test@rhom.co.za
 Password: Expedite123!
 
+SALES PREVIEW
+Email: sales.workflow@example.invalid
+Password: Sales123!
+
+PLANNING PREVIEW
+Email: planning.workflow@example.invalid
+Password: Planning123!
+
+DISPATCH PREVIEW
+Email: dispatch.workflow@example.invalid
+Password: Dispatch123!
+
 WHAT TO TEST
-1. Sign in as the demo customer and submit an RFQ.
-2. Open Orders to confirm the RFQ remains in the customer timeline.
-3. Sign out and use the expeditor login.
-4. Search for the company or representative, then add a status update.
-5. Sign back in as the customer to see the update.
-6. Try the light/dark theme button in the top bar.
+1. Sign in as Sales and open the assigned Cape Process Demo RFQ.
+2. Mark the quotation sent, move it to customer acceptance, confirm acceptance,
+   then convert it. The order number is created automatically.
+3. Sign in as Planning, open the new order, add the test job/PO numbers and
+   submit it to Expediting.
+4. Sign in as Expeditor, start the order and hand it to Dispatch.
+5. Sign in as Dispatch, follow its collection path and complete the order.
+6. Sign in as the Cape customer (shown on the sign-in screen) to review the
+   RFQ, separate order timeline and notifications.
+7. Try the notification read state and light/dark theme.
 
 IMPORTANT
-Accounts, RFQs and updates persist in this browser only. They remain after the
-site is closed and reopened, but do not synchronise to another phone or browser.
-Use fabricated test information only. The production version needs secure
-authentication, a shared database and encrypted Purchase Order storage.
+Accounts, RFQs, orders, notifications and updates persist in this browser only.
+They remain after the site is closed and reopened, but do not synchronise to
+another phone or browser. Use fabricated test information only. The production
+version needs secure authentication, a shared database, server transactions,
+notification delivery and encrypted Purchase Order storage.

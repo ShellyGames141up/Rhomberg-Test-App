@@ -21,9 +21,12 @@ import {
   DEMO_ACCOUNT,
   DEMO_ENQUIRIES,
   DEMO_LOGINS,
+  DISPATCH_ACCOUNT,
   EXPEDITOR_ACCOUNT,
   EXTRA_DEMO_ACCOUNTS,
   LEGACY_STORE_KEYS,
+  PLANNING_ACCOUNT,
+  SALES_ACCOUNT,
   STORE_KEYS,
 } from './seedData.js';
 
@@ -158,8 +161,18 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
 
   const readAccounts = () => store.get(STORE_KEYS.accounts, []).map(normaliseAccount);
   const writeAccounts = accounts => store.set(STORE_KEYS.accounts, accounts.map(normaliseAccount));
-  const readAllEnquiries = () => store.get(STORE_KEYS.enquiries, []).map(normaliseEnquiry);
-  const writeAllEnquiries = enquiries => store.set(STORE_KEYS.enquiries, enquiries.map(normaliseEnquiry));
+  const normaliseWorkflowState = state => ({
+    enquiries: (state?.enquiries || []).map(record => normaliseEnquiry({ ...record, workflowType: 'rfq' })),
+    orders: (state?.orders || []).map(record => normaliseEnquiry({ ...record, workflowType: 'order' })),
+  });
+  const readWorkflowState = () => normaliseWorkflowState(store.get(STORE_KEYS.workflowState, { enquiries: [], orders: [] }));
+  const writeWorkflowState = state => store.set(STORE_KEYS.workflowState, normaliseWorkflowState(state));
+  const readAllEnquiries = () => readWorkflowState().enquiries;
+  const readAllOrders = () => readWorkflowState().orders;
+  const readAllRecords = () => {
+    const state = readWorkflowState();
+    return [...state.enquiries, ...state.orders];
+  };
   const readAuditEvents = () => store.get(STORE_KEYS.audit, []);
   const appendAuditEvent = event => store.set(STORE_KEYS.audit, [...readAuditEvents(), event]);
   const readNotifications = () => store.get(STORE_KEYS.notifications, []);
@@ -176,57 +189,111 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     return account;
   };
 
-  const canReadEnquiry = (account, enquiry) => {
-    const isOrder = inferWorkflowEntityType(enquiry) === 'order';
+  const canReadRecord = (account, record) => {
+    const isOrder = inferWorkflowEntityType(record) === 'order';
     if (isOrder && roleCan(account.role, PERMISSIONS.READ_ALL_ORDERS)) return true;
     if (!isOrder && roleCan(account.role, PERMISSIONS.READ_ALL_ENQUIRIES)) return true;
-    if (isOrder && roleCan(account.role, PERMISSIONS.READ_OWN_ORDERS)) return enquiry.companyId === account.companyId;
-    if (!isOrder && roleCan(account.role, PERMISSIONS.READ_OWN_ENQUIRIES)) return enquiry.companyId === account.companyId;
-    if (isOrder && roleCan(account.role, PERMISSIONS.READ_ASSIGNED_ORDERS)) return enquiry.selectedRep?.id === account.representativeId;
-    if (!isOrder && roleCan(account.role, PERMISSIONS.READ_ASSIGNED_ENQUIRIES)) return enquiry.selectedRep?.id === account.representativeId;
+    if (isOrder && roleCan(account.role, PERMISSIONS.READ_OWN_ORDERS)) return record.companyId === account.companyId;
+    if (!isOrder && roleCan(account.role, PERMISSIONS.READ_OWN_ENQUIRIES)) return record.companyId === account.companyId;
+    if (isOrder && roleCan(account.role, PERMISSIONS.READ_ASSIGNED_ORDERS)) return record.selectedRep?.id === account.representativeId;
+    if (!isOrder && roleCan(account.role, PERMISSIONS.READ_ASSIGNED_ENQUIRIES)) return record.selectedRep?.id === account.representativeId;
     return false;
   };
 
-  const presentEnquiry = (account, enquiry) => {
-    if (account.role === USER_ROLES.CUSTOMER) return toCustomerVisibleRecord(enquiry);
-    return { ...enquiry, allowedWorkflowActions: getAllowedWorkflowActions(enquiry, createWorkflowActor(account)) };
+  const presentRecord = (account, record) => {
+    if (account.role === USER_ROLES.CUSTOMER) return toCustomerVisibleRecord(record);
+    return { ...record, allowedWorkflowActions: getAllowedWorkflowActions(record, createWorkflowActor(account)) };
   };
 
   const saveEnquiry = enquiry => {
-    const enquiries = readAllEnquiries();
+    const state = readWorkflowState();
     const saved = normaliseEnquiry(enquiry);
-    const index = enquiries.findIndex(item => item.id === saved.id);
-    if (index >= 0) enquiries[index] = saved;
-    else enquiries.unshift(saved);
-    writeAllEnquiries(enquiries);
+    const index = state.enquiries.findIndex(item => item.id === saved.id);
+    if (index >= 0) state.enquiries[index] = saved;
+    else state.enquiries.unshift(saved);
+    writeWorkflowState(state);
     return saved;
+  };
+
+  const notificationForResult = (result, record) => ({
+    id: makeId('notification'),
+    entityId: record.id,
+    entityType: record.workflowType,
+    reference: record.reference,
+    companyId: record.companyId,
+    representativeId: record.selectedRep?.id || '',
+    status: result.entity.trackingStatus,
+    recipients: result.notification.recipients,
+    customerVisible: result.notification.customerVisible,
+    message: result.notification.message,
+    createdAt: now().toISOString(),
+    readBy: [],
+  });
+
+  const notificationMatchesAccount = (account, notification) => {
+    const recipients = notification.recipients || [];
+    if ([USER_ROLES.MANAGER, USER_ROLES.ADMINISTRATOR].includes(account.role)) return true;
+    if (account.role === USER_ROLES.CUSTOMER) {
+      return notification.customerVisible !== false
+        && notification.companyId === account.companyId
+        && recipients.includes('customer');
+    }
+    if (account.role === USER_ROLES.SALES_REPRESENTATIVE) {
+      return notification.representativeId === account.representativeId
+        && recipients.some(recipient => ['assigned_representative', 'selected_representative'].includes(recipient));
+    }
+    return recipients.includes(account.role);
   };
 
   const initialize = async () => {
     let accounts = store.get(STORE_KEYS.accounts, null);
     if (!accounts) accounts = store.get(LEGACY_STORE_KEYS.accounts, []);
     accounts = accounts.map(normaliseAccount);
-    for (const seed of [DEMO_ACCOUNT, EXPEDITOR_ACCOUNT, ...EXTRA_DEMO_ACCOUNTS]) {
+    for (const seed of [
+      DEMO_ACCOUNT,
+      SALES_ACCOUNT,
+      PLANNING_ACCOUNT,
+      EXPEDITOR_ACCOUNT,
+      DISPATCH_ACCOUNT,
+      ...EXTRA_DEMO_ACCOUNTS,
+    ]) {
       const index = accounts.findIndex(account => account.id === seed.id || account.email?.toLowerCase() === seed.email.toLowerCase());
       if (index >= 0) accounts[index] = normaliseAccount({ ...accounts[index], ...seed });
       else accounts.push(normaliseAccount(seed));
     }
     writeAccounts(accounts);
 
-    let enquiries = store.get(STORE_KEYS.enquiries, null);
-    if (!enquiries) enquiries = store.get(LEGACY_STORE_KEYS.enquiries, []);
-    enquiries = enquiries.map(normaliseEnquiry);
+    let workflowState;
+    if (store.has(STORE_KEYS.workflowState)) {
+      workflowState = readWorkflowState();
+    } else {
+      const currentRecords = store.get(STORE_KEYS.enquiries, null);
+      const legacyRecords = currentRecords || store.get(LEGACY_STORE_KEYS.enquiries, []);
+      const separatelyStoredOrders = store.get(STORE_KEYS.orders, []);
+      const migratedRecords = [...legacyRecords, ...separatelyStoredOrders].map(normaliseEnquiry);
+      workflowState = {
+        enquiries: migratedRecords.filter(record => record.workflowType === 'rfq'),
+        orders: migratedRecords.filter(record => record.workflowType === 'order'),
+      };
+    }
     if (!store.has(STORE_KEYS.seedVersion)) {
-      for (const demo of DEMO_ENQUIRIES) if (!enquiries.some(enquiry => enquiry.id === demo.id)) enquiries.push(normaliseEnquiry(demo));
+      for (const demo of DEMO_ENQUIRIES) {
+        const record = normaliseEnquiry(demo);
+        const collection = record.workflowType === 'order' ? workflowState.orders : workflowState.enquiries;
+        if (!collection.some(existing => existing.id === record.id)) collection.push(record);
+      }
       store.set(STORE_KEYS.seedVersion, true);
     }
-    writeAllEnquiries(enquiries);
+    writeWorkflowState(workflowState);
     if (!store.has(STORE_KEYS.audit)) store.set(STORE_KEYS.audit, []);
     if (!store.has(STORE_KEYS.notifications)) store.set(STORE_KEYS.notifications, []);
 
     if (!store.has(STORE_KEYS.session)) {
       const legacySession = store.get(LEGACY_STORE_KEYS.session, null);
-      if (legacySession) store.set(STORE_KEYS.session, legacySession);
+      if (legacySession) {
+        store.set(STORE_KEYS.session, legacySession);
+        store.remove(LEGACY_STORE_KEYS.session);
+      }
     }
   };
 
@@ -272,6 +339,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
 
     async signOut() {
       store.remove(STORE_KEYS.session);
+      store.remove(LEGACY_STORE_KEYS.session);
     },
 
     async getDemoLogins() {
@@ -326,14 +394,14 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   const enquiries = {
     async list() {
       const account = requireAccount();
-      return clone(readAllEnquiries().filter(enquiry => canReadEnquiry(account, enquiry)).map(enquiry => presentEnquiry(account, enquiry)));
+      return clone(readAllEnquiries().filter(enquiry => canReadRecord(account, enquiry)).map(enquiry => presentRecord(account, enquiry)));
     },
 
     async getById(enquiryId) {
       const account = requireAccount();
       const enquiry = readAllEnquiries().find(item => item.id === enquiryId);
-      if (!enquiry || !canReadEnquiry(account, enquiry)) throw new ServiceError('The RFQ was not found or is outside your authorised company account.', { code: 'ENQUIRY_NOT_FOUND', status: 404 });
-      return clone(presentEnquiry(account, enquiry));
+      if (!enquiry || !canReadRecord(account, enquiry)) throw new ServiceError('The RFQ was not found or is outside your authorised company account.', { code: 'ENQUIRY_NOT_FOUND', status: 404 });
+      return clone(presentRecord(account, enquiry));
     },
 
     async getDraft() {
@@ -401,17 +469,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       appendAuditEvent(assigned.auditEvent);
       for (const result of [submitted, assigned]) {
         if (!result.notification.required) continue;
-        appendNotification({
-          id: makeId('notification'),
-          entityId: baseEnquiry.id,
-          entityType: 'rfq',
-          companyId: account.companyId,
-          status: result.entity.trackingStatus,
-          recipients: result.notification.recipients,
-          message: result.notification.message,
-          createdAt: now().toISOString(),
-          readAt: '',
-        });
+        appendNotification(notificationForResult(result, result.entity));
       }
       let enquiry = saveEnquiry(assigned.entity);
 
@@ -444,43 +502,131 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         createdAt: now().toISOString(),
       });
       await enquiries.saveDraft([]);
-      return { enquiry: clone(presentEnquiry(account, enquiry)), delivery: clone(delivery) };
+      return { enquiry: clone(presentRecord(account, enquiry)), delivery: clone(delivery) };
     },
+  };
+
+  const orders = {
+    async list() {
+      const account = requireAccount();
+      return clone(readAllOrders().filter(order => canReadRecord(account, order)).map(order => presentRecord(account, order)));
+    },
+
+    async getById(orderId) {
+      const account = requireAccount();
+      const order = readAllOrders().find(item => item.id === orderId);
+      if (!order || !canReadRecord(account, order)) throw new ServiceError('The order was not found or is outside your authorised company account.', { code: 'ORDER_NOT_FOUND', status: 404 });
+      return clone(presentRecord(account, order));
+    },
+  };
+
+  const locateWorkflowRecord = (state, recordId, requestedType = '') => {
+    const types = requestedType === 'order' ? ['order'] : requestedType === 'rfq' ? ['rfq'] : ['rfq', 'order'];
+    for (const entityType of types) {
+      const collection = entityType === 'order' ? state.orders : state.enquiries;
+      const index = collection.findIndex(record => record.id === recordId);
+      if (index >= 0) return { entityType, collection, index, record: collection[index] };
+    }
+    return null;
+  };
+
+  const createOrderFromRfq = ({ rfq, convertedRfq, orderId, actor, existingOrderCount }) => {
+    const {
+      id: _rfqId,
+      reference: _rfqReference,
+      version: _rfqVersion,
+      workflowType: _rfqType,
+      trackingStatus: _rfqStatus,
+      status: _rfqStatusLabel,
+      trackingHistory: _rfqHistory,
+      orderId: _linkedOrderId,
+      ...customerSnapshot
+    } = rfq;
+    const occurredAt = now().toISOString();
+    const reference = `OR-PREVIEW-${String(existingOrderCount + 1).padStart(4, '0')}`;
+    const items = (rfq.items || []).map(item => {
+      const lineId = makeId('order-line');
+      return {
+        ...clone(item),
+        lineId,
+        orderItemId: lineId,
+        sourceLineId: item.lineId,
+        configurationSnapshot: clone(item.configuration || {}),
+      };
+    });
+    const creationEvent = {
+      id: makeId('workflow-event'),
+      entityType: 'order',
+      action: 'order_created_from_rfq',
+      fromStatus: '',
+      toStatus: 'awaiting_planning',
+      status: 'awaiting_planning',
+      label: 'Awaiting planning',
+      note: 'Accepted RFQ converted into an order and submitted to Planning.',
+      customerDescription: 'Your accepted RFQ has been converted into an order.',
+      internalDescription: 'The service created an immutable order snapshot from the accepted RFQ.',
+      customerVisible: true,
+      actorId: actor.id,
+      actorRole: actor.role,
+      actor: actor.displayName,
+      createdAt: occurredAt,
+    };
+    return normaliseEnquiry({
+      ...customerSnapshot,
+      id: orderId,
+      reference,
+      version: 0,
+      workflowType: 'order',
+      sourceEnquiryId: rfq.id,
+      sourceRfqReference: rfq.reference,
+      sourceRfqStatus: convertedRfq.trackingStatus,
+      acceptedAt: convertedRfq.acceptedAt || rfq.acceptedAt,
+      convertedFromRfqAt: occurredAt,
+      trackingStatus: 'awaiting_planning',
+      status: 'Awaiting planning',
+      items,
+      trackingHistory: [creationEvent],
+      createdAt: occurredAt,
+      updatedAt: occurredAt,
+    });
   };
 
   const workflow = {
     async list() {
-      return enquiries.list();
-    },
-
-    async getAllowedActions(enquiryId) {
       const account = requireAccount();
-      const enquiry = readAllEnquiries().find(item => item.id === enquiryId);
-      if (!enquiry || !canReadEnquiry(account, enquiry)) throw new ServiceError('The RFQ or order could not be found.', { code: 'ENQUIRY_NOT_FOUND', status: 404 });
-      return clone(getAllowedWorkflowActions(enquiry, createWorkflowActor(account)));
+      return clone(readAllRecords().filter(record => canReadRecord(account, record)).map(record => presentRecord(account, record)));
     },
 
-    async performAction(enquiryId, input) {
+    async getAllowedActions(recordId, { entityType = '' } = {}) {
+      const account = requireAccount();
+      const located = locateWorkflowRecord(readWorkflowState(), recordId, entityType);
+      if (!located || !canReadRecord(account, located.record)) throw new ServiceError('The RFQ or order could not be found.', { code: 'WORKFLOW_RECORD_NOT_FOUND', status: 404 });
+      return clone(getAllowedWorkflowActions(located.record, createWorkflowActor(account)));
+    },
+
+    async performAction(recordId, input) {
       const account = requireAccount();
       if (!roleCan(account.role, PERMISSIONS.PERFORM_WORKFLOW_ACTION)) throw new ServiceError('Your role cannot perform workflow actions.', { code: 'FORBIDDEN', status: 403 });
       const request = validateWorkflowActionRequest(input);
-      const all = readAllEnquiries();
-      const index = all.findIndex(enquiry => enquiry.id === enquiryId);
-      if (index < 0) throw new ServiceError('The RFQ or order could not be found.', { code: 'ENQUIRY_NOT_FOUND', status: 404 });
-      const existing = all[index];
+      const state = readWorkflowState();
+      const located = locateWorkflowRecord(state, recordId, input?.entityType || '');
+      if (!located) throw new ServiceError('The RFQ or order could not be found.', { code: 'WORKFLOW_RECORD_NOT_FOUND', status: 404 });
+      const existing = located.record;
       const actor = createWorkflowActor(account);
-      if (!canReadEnquiry(account, existing)) {
-        const error = new ServiceError('The RFQ or order could not be found.', { code: 'ENQUIRY_NOT_FOUND', status: 404 });
+      if (!canReadRecord(account, existing)) {
+        const error = new ServiceError('The RFQ or order could not be found.', { code: 'WORKFLOW_RECORD_NOT_FOUND', status: 404 });
         appendAuditEvent(createDeniedWorkflowAudit({ entity: existing, action: request.action, actor, error, now }));
         throw error;
       }
+      const isConversion = located.entityType === 'rfq' && request.action === 'convert_to_order';
+      const generatedOrderId = isConversion ? makeId('order') : '';
       let result;
       try {
         result = performWorkflowTransition({
           entity: existing,
           action: request.action,
           actor,
-          input: { ...request.data, comment: request.comment },
+          input: { ...request.data, ...(isConversion ? { orderId: generatedOrderId } : {}), comment: request.comment },
           expectedVersion: request.expectedVersion,
           now,
         });
@@ -489,23 +635,43 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         throw error;
       }
       const updated = normaliseEnquiry(result.entity);
-      all[index] = updated;
-      writeAllEnquiries(all);
+      located.collection[located.index] = updated;
+      let createdOrder = null;
+      if (isConversion) {
+        createdOrder = createOrderFromRfq({
+          rfq: existing,
+          convertedRfq: updated,
+          orderId: generatedOrderId,
+          actor,
+          existingOrderCount: state.orders.length,
+        });
+        state.orders.unshift(createdOrder);
+      }
+      writeWorkflowState(state);
       appendAuditEvent(result.auditEvent);
-      if (result.notification.required) {
-        appendNotification({
-          id: makeId('notification'),
-          entityId: updated.id,
-          entityType: updated.workflowType,
-          companyId: updated.companyId,
-          status: updated.trackingStatus,
-          recipients: result.notification.recipients,
-          message: result.notification.message,
+      if (createdOrder) {
+        appendAuditEvent({
+          id: makeId('audit'),
+          action: 'order.created_from_rfq',
+          outcome: 'success',
+          entityType: 'order',
+          entityId: createdOrder.id,
+          sourceEntityId: updated.id,
+          companyId: createdOrder.companyId,
+          actorId: actor.id,
+          actorRole: actor.role,
+          fromStatus: '',
+          toStatus: 'awaiting_planning',
           createdAt: now().toISOString(),
-          readAt: '',
         });
       }
-      return clone(presentEnquiry(account, updated));
+      if (result.notification.required) {
+        appendNotification(notificationForResult(result, updated));
+      }
+      return clone({
+        ...presentRecord(account, updated),
+        ...(createdOrder ? { createdOrder: presentRecord(account, createdOrder) } : {}),
+      });
     },
   };
 
@@ -520,20 +686,29 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   const notifications = {
     async list() {
       const account = requireAccount();
-      const readableIds = new Set(readAllEnquiries().filter(enquiry => canReadEnquiry(account, enquiry)).map(enquiry => enquiry.id));
-      const items = readNotifications().filter(item => readableIds.has(item.entityId));
+      const items = readNotifications()
+        .filter(item => notificationMatchesAccount(account, item))
+        .map(item => ({
+          ...item,
+          readAt: (item.readBy || []).includes(account.id) ? item.readAtBy?.[account.id] || item.createdAt : '',
+        }))
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
       return clone(items);
     },
 
     async markRead(notificationId) {
       const account = requireAccount();
-      const readableIds = new Set(readAllEnquiries().filter(enquiry => canReadEnquiry(account, enquiry)).map(enquiry => enquiry.id));
       const items = readNotifications();
-      const index = items.findIndex(item => item.id === notificationId && readableIds.has(item.entityId));
+      const index = items.findIndex(item => item.id === notificationId && notificationMatchesAccount(account, item));
       if (index < 0) throw new ServiceError('The notification could not be found.', { code: 'NOTIFICATION_NOT_FOUND', status: 404 });
-      items[index] = { ...items[index], readAt: now().toISOString() };
+      const readAt = now().toISOString();
+      items[index] = {
+        ...items[index],
+        readBy: [...new Set([...(items[index].readBy || []), account.id])],
+        readAtBy: { ...(items[index].readAtBy || {}), [account.id]: readAt },
+      };
       store.set(STORE_KEYS.notifications, items);
-      return clone(items[index]);
+      return clone({ ...items[index], readAt });
     },
   };
 
@@ -555,6 +730,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     auth,
     accounts,
     enquiries,
+    orders,
     workflow,
     tracking: workflow,
     audit,

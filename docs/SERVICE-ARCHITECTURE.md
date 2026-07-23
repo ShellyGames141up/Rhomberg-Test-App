@@ -8,7 +8,7 @@ The React interface is now separated from persistence, authentication and delive
 React screens and App orchestration
               |
               v
- auth | accounts | products | enquiries | workflow | audit | notifications
+ auth | accounts | products | enquiries | orders | workflow | audit | notifications
               |
        service implementation
           /             \
@@ -26,6 +26,7 @@ This boundary lets the company replace the demo implementation without redesigni
 | `accounts` | Current company context, registration reference data and authorised company access |
 | `products` | Categories, product catalogue, product detail and recommendations |
 | `enquiries` | Customer-scoped RFQ drafts, RFQ submission and RFQ retrieval |
+| `orders` | Separate authorised order retrieval; order records are never returned by `enquiries` |
 | `workflow` | Authorised RFQ/order timelines, permitted actions and controlled transitions |
 | `tracking` | Compatibility alias for `workflow` while existing tracking views are retained |
 | `audit` | Append-only workflow/security history within an authorised internal scope |
@@ -42,6 +43,7 @@ auth.getSession() | signIn(credentials) | register(account) | signOut()
 accounts.getCurrent() | getRegistrationOptions() | listCompanies()
 products.getCatalogue() | list(filters) | getById(productId)
 enquiries.list(filters) | getById(id) | getDraft() | saveDraft(items) | submit(details, items)
+orders.list(filters) | getById(id)
 workflow.list(filters) | getAllowedActions(recordId) | performAction(recordId, actionRequest)
 audit.list(filters)
 notifications.list(filters) | markRead(notificationId)
@@ -56,17 +58,28 @@ RFQ draft writes are serialised in API mode so rapid quantity/configuration chan
 
 ### Mock implementation
 
-`src/services/mock/createMockServices.js` is used by GitHub Pages. It preserves the existing same-browser demo accounts, drafts, RFQs and controlled workflow history. The only direct browser-storage adapter is `src/services/browserStore.js`; API mode uses it only for the non-sensitive theme preference.
+`src/services/mock/createMockServices.js` is used by GitHub Pages. It preserves the existing same-browser demo accounts, drafts, RFQs, orders and controlled workflow history. The only direct browser-storage adapter is `src/services/browserStore.js`; API mode uses it only for the non-sensitive theme preference.
+
+RFQs and orders are separate service resources and separate arrays inside one versioned mock workflow aggregate. One aggregate write is used when an accepted RFQ is converted: the RFQ becomes `converted_to_order` and a distinct `awaiting_planning` order is created together. This avoids the partial mock state that would be possible with two unrelated browser-storage writes. Existing combined version-2 records are migrated into the aggregate by `workflowType` when the preview first opens.
+
+The new order stores an item snapshot with a generated order-line ID, source RFQ line ID and configuration snapshot. Later edits to catalogue metadata or RFQ display data therefore do not redefine what was converted. This is a browser-demo approximation of the transaction and immutable `order_items` rows required in PostgreSQL.
+
+Legacy preview sessions are migrated only once and their old key is retired. Sign-out removes both the current and legacy session keys so an older browser profile cannot silently restore a staff session.
 
 The mock is not production security. It does, however, model important rules:
 
 - the password field is removed before an account enters React state;
 - a customer receives only RFQs whose `companyId` matches the signed-in account;
+- the separate order service applies the same company boundary and never returns another company's order;
+- sales representatives receive only records assigned to their authoritative `representativeId`;
+- Planning, Expediting and Dispatch receive order resources rather than the old combined RFQ/order list;
 - status changes require an action allowed for the exact state and signed-in role;
 - representatives are checked against the RFQ assignment before representative-only actions;
 - Planning, Expediting and Dispatch handoffs cannot be skipped;
 - every successful or denied workflow attempt creates a mock audit entry;
 - notifiable actions queue mock notification records;
+- notification inbox results are filtered by company, recipient role and representative assignment, with per-user read state;
+- RFQ-to-order conversion creates one linked order and a separate order-creation audit record, and a repeated conversion is rejected;
 - validation runs inside the service boundary, even when the UI has already validated the form;
 - an RFQ is persisted before the test email is attempted, so an email failure does not lose the request.
 

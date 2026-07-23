@@ -101,6 +101,42 @@ Passwords and password hashes are never returned.
 
 The API may include display snapshots such as company, product and representative names, while IDs remain the authoritative relationships.
 
+### Order summary
+
+An order is a separate resource. It is created only from an accepted RFQ and keeps immutable item/configuration snapshots:
+
+```json
+{
+  "id": "uuid",
+  "reference": "OR-2026-000123",
+  "sourceEnquiryId": "uuid",
+  "sourceRfqReference": "RQ-2026-000123",
+  "companyId": "uuid",
+  "selectedRep": { "id": "uuid", "name": "Assigned Representative" },
+  "workflowType": "order",
+  "trackingStatus": "awaiting_planning",
+  "sourceRfqStatus": "converted_to_order",
+  "acceptedAt": "2026-07-22T10:00:00.000Z",
+  "version": 0,
+  "items": [
+    {
+      "id": "uuid",
+      "sourceEnquiryItemId": "uuid",
+      "productId": "uuid",
+      "productCodeSnapshot": "PBB",
+      "productNameSnapshot": "Process gauge",
+      "quantity": 2,
+      "configurationSnapshot": { "dialSize": "100 mm", "range": "0 to 10 bar" }
+    }
+  ],
+  "trackingHistory": [],
+  "createdAt": "2026-07-22T10:05:00.000Z",
+  "updatedAt": "2026-07-22T10:05:00.000Z"
+}
+```
+
+The order response may carry customer-safe display fields copied at conversion time, but it must not expose internal pricing, margin, supplier terms or hidden catalogue rules.
+
 ## Endpoints
 
 ### Authentication
@@ -229,8 +265,10 @@ Scope is mandatory on the server:
 
 - customer: authorised company IDs only;
 - sales representative: actively assigned companies only;
-- expeditor/buyer: approved operational scope;
+- buyer: approved read-only operational scope;
 - manager/administrator: approved broad scope.
+
+Planning, Expediting and Dispatch consume the separate `/orders` resource. Expediting no longer receives RFQs merely because the earlier browser preview stored RFQs and orders in one array.
 
 #### `GET /enquiries/{enquiryId}`
 
@@ -313,6 +351,38 @@ Request example:
 
 The browser never sends actor, role, company ID, from-status or target status. The server locks/re-reads the record, validates the action through the central workflow rules and atomically writes the new state, workflow event, audit event and notification outbox record. Response `201` is the updated authorised enquiry with a new version and refreshed `allowedWorkflowActions`.
 
+For `action: "convert_to_order"`, the browser does not supply an order ID or order number. The server generates both and performs all of the following in one PostgreSQL transaction:
+
+1. lock and re-read the accepted RFQ;
+2. reject an existing conversion or stale version;
+3. create the order and immutable `order_items` snapshots;
+4. move the RFQ to `converted_to_order` and link the order;
+5. create RFQ and order workflow/audit events;
+6. queue the customer, assigned-representative and Planning notifications.
+
+Conversion response:
+
+```json
+{
+  "data": {
+    "id": "rfq-uuid",
+    "reference": "RQ-2026-000123",
+    "workflowType": "rfq",
+    "trackingStatus": "converted_to_order",
+    "orderId": "order-uuid",
+    "version": 8,
+    "createdOrder": {
+      "id": "order-uuid",
+      "reference": "OR-2026-000123",
+      "sourceEnquiryId": "rfq-uuid",
+      "workflowType": "order",
+      "trackingStatus": "awaiting_planning",
+      "version": 0
+    }
+  }
+}
+```
+
 ### Orders and tracking
 
 #### `GET /orders?page=1&pageSize=50&status=&search=&repId=&companyId=`
@@ -350,7 +420,7 @@ An arbitrary `{ "status": "..." }` update is not supported. See `WORKFLOW_STATE_
 
 #### `GET /notifications?unreadOnly=true&page=1&pageSize=50`
 
-Returns notifications within the caller's authorised company/role scope. Internal-only notification payloads are never returned to customers.
+Returns notifications within the caller's authorised company/role scope. Internal-only notification payloads are never returned to customers. A representative receives only notifications addressed to their authoritative representative identity. Each recipient has independent read state; one user marking a message read must not mark it read for another recipient.
 
 #### `POST /notifications/{notificationId}/read`
 

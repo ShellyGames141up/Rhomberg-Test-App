@@ -90,8 +90,16 @@ export function createApiServices(config = {}) {
     },
   };
 
-  const workflow = {
+  const orders = {
     list: filters => client.get('/orders', { query: filters }),
+    getById: orderId => client.get(`/orders/${encodeURIComponent(orderId)}`),
+  };
+
+  const workflow = {
+    async list(filters) {
+      const [rfqs, customerOrders] = await Promise.all([enquiries.list(filters), orders.list(filters)]);
+      return [...rfqs, ...customerOrders];
+    },
     getAllowedActions(recordId, { entityType = 'rfq' } = {}) {
       const resource = entityType === 'order' ? 'orders' : 'enquiries';
       return client.get(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`);
@@ -132,6 +140,7 @@ export function createApiServices(config = {}) {
     accounts,
     products,
     enquiries,
+    orders,
     workflow,
     tracking: workflow,
     audit,

@@ -73,10 +73,10 @@ export function Auth({ onSignIn, onCreateAccount, theme, onToggleTheme, registra
             <button className="primary-button full" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Sign in'} <span>{isSubmitting ? '•••' : '→'}</span></button>
             {demoLogins.map(login => (
               <div className="demo-login-wrap" key={login.id}>
-                <button className={`demo-account ${login.id === 'expeditor' ? 'expeditor-demo' : ''}`} type="button" disabled={isSubmitting} onClick={() => useDemo(login)}>
+                <button className={`demo-account ${!login.id.includes('customer') ? 'internal-demo' : ''}`} type="button" disabled={isSubmitting} onClick={() => useDemo(login)}>
                   <span className="demo-avatar">{login.avatar}</span><span><strong>{login.label}</strong><small>{login.description}</small></span><i>›</i>
                 </button>
-                <p className="demo-credentials">{login.id === 'expeditor' ? 'Expeditor' : 'Demo'}: {login.email} · {login.password}</p>
+                <p className="demo-credentials">{login.id.includes('customer') ? 'Customer demo' : 'Internal test'}: {login.email} · {login.password}</p>
               </div>
             ))}
           </form>

@@ -1,13 +1,15 @@
 # Order Workflow Implementation Plan
 
-- Status: analysis complete; Phase 1 state machine implemented
-- Application version reviewed: 2.4.0; workflow implementation updated for 2.5.0
+- Status: analysis and Phase 1 complete; mock integration slice for Phases 2-5 implemented
+- Application version reviewed: 2.4.0; workflow implementation updated through 2.6.0
 - Reviewed branch: `agent/improve-theme-readability-and-reps`
-- Reviewed commit: `d238196`
+- Last pushed workflow commit before this phase: `88b99f4`
 
 ## 1. Purpose and scope
 
-This document originally mapped the Rhomberg Test App before implementation. Phase 1 now implements the controlled state machine, service action boundary, audit/notification mock records and transition tests. Separate order creation, role-specific workspaces and the private-cloud backend remain future phases.
+This document originally mapped the Rhomberg Test App before implementation. Phase 1 implements the controlled state machine and action boundary. Version 2.6 adds the mock-preview integration slice: separate RFQ/order services, atomic same-browser conversion, immutable order-item snapshots, role-specific Sales/Planning/Expediting/Dispatch workspaces, recipient-scoped notifications and end-to-end integration tests. The private-cloud backend, durable delivery workers, PDFs and retention remain future phases.
+
+The browser mock is deliberately not a production transaction or security boundary. Its single aggregate workflow write exists to prove UI/service behaviour while PostgreSQL and the authoritative backend remain disconnected.
 
 Implementation details and the authoritative transition flow are documented in `WORKFLOW_STATE_MACHINE.md`.
 
@@ -28,19 +30,17 @@ The application already has a sound migration boundary. React calls asynchronous
 
 The catalogue, product configurator, RFQ submission screens, customer timeline, internal queue, validation framework, role constants, PDF styling, service error format and company-filtering tests can all be reused.
 
-The central workflow limitation is the current record model:
+At the initial analysis, the mock combined enquiries and orders, exposed loose status updates, lacked Sales/Planning/Dispatch journeys, could not convert atomically and had no notification inbox or audit model. Versions 2.5 and 2.6 resolve those issues in the browser mock through the central state machine, separate RFQ/order service resources, role workspaces, audit events and recipient-scoped notifications.
 
-- a mock "order" is still an enquiry record;
-- one `trackingStatus` field represents both RFQ and order progress;
-- an expeditor can choose any recognised status, including skipping or reversing stages;
-- sales representatives cannot currently mark a quotation as sent;
-- there are no Planning or Dispatch capabilities/workspaces;
-- there is no atomic RFQ-to-order conversion;
-- no notification inbox or delivery history exists;
-- `trackingHistory` is only a customer timeline, not a complete audit trail;
-- order-summary download/email and retention processing are not implemented.
+The important remaining limitations are:
 
-The safest approach is to define the state machine and audit contract first, then introduce separate enquiry and order services in mock mode, and only afterwards add role-specific screens. The private-cloud API and PostgreSQL implementation should follow after mock behaviour and company-isolation tests are stable.
+- the browser aggregate is a same-device demo, not production authentication, concurrency or durability;
+- notification delivery attempts, retries and real email remain unimplemented;
+- staff branch/team scope is not yet backed by authoritative production assignments;
+- order-summary download/email and retention processing are not implemented;
+- PostgreSQL/API code remains a reviewed proposal rather than a connected environment.
+
+The private-cloud API and PostgreSQL implementation should follow only after the PDF, notification-delivery and retention contracts are approved and the mock behaviour remains stable.
 
 ## 3. Current application architecture
 
@@ -236,11 +236,13 @@ Current mock keys are:
 | Accounts | `rhombergPreviewAccountsV2` |
 | Session | `rhombergPreviewSessionV2` |
 | Per-account RFQ drafts | `rhombergPreviewDraftV2` |
-| Enquiries plus combined tracking history | `rhombergPreviewEnquiriesV2` |
+| Atomic RFQ/order workflow aggregate | `rhombergPreviewWorkflowStateV1` |
+| Audit history | `rhombergPreviewAuditV1` |
+| Recipient notifications | `rhombergPreviewNotificationsV1` |
 | Theme preference | `rhombergPreviewThemeV1` |
-| Demo seed version | `rhombergPreviewSeedV4` |
+| Demo seed version | `rhombergPreviewSeedV6` |
 
-Legacy V1 account/session/enquiry keys are read during mock initialisation and migrated into the current store.
+Legacy V1 and combined V2 enquiry keys are read during mock initialisation. Combined records are normalised and partitioned into the aggregate's RFQ/order arrays without clearing existing demo records.
 
 ### 5.2 API-mode browser storage
 
@@ -262,11 +264,12 @@ Legacy V1 account/session/enquiry keys are read during mock initialisation and m
 
 ### 6.1 Existing safeguards
 
-- Customers receive enquiries only when `enquiry.companyId === account.companyId`.
-- Direct access to another mock company enquiry returns a not-found error.
+- Customers receive RFQs and orders only when the record `companyId` matches the authorised account.
+- Direct access to another mock company RFQ or order returns a not-found error.
 - Customer draft data is keyed by account.
-- Sales representatives are intended to read assigned-company records.
-- Expeditor, Buyer, Manager and Administrator permissions are represented.
+- Sales representatives receive only records matching their authoritative `representativeId`.
+- Planning, Expediting and Dispatch use separate order records and controlled action sets.
+- Notifications are filtered by company, role and representative recipient, with independent per-user read state.
 - The proposed PostgreSQL schema includes `user_company_access`, representative assignments and row-level security.
 - The API client uses cookies, CSRF, request IDs, idempotency keys and structured errors.
 
@@ -274,15 +277,15 @@ Legacy V1 account/session/enquiry keys are read during mock initialisation and m
 
 - Browser mock isolation is demonstrative, not security. Anyone controlling the browser can alter stored data.
 - The customer filter in `App.jsx` is only a display safeguard; production enforcement must occur in every server query.
-- Current staff mock visibility is broad. Expeditors can see all mock enquiries, without branch scope.
-- The proposed RLS helper currently grants Expeditor, Buyer, Manager and Administrator access to every company. This conflicts with the stated "authorised branch/scope" goal for some roles.
+- Planning, Expediting and Dispatch are national test roles in mock mode; production branch/team scope still needs an approved assignment model.
+- The proposed RLS helper grants several operational roles broad company access and must be narrowed to IT-approved scopes before implementation.
 - A sales representative cannot currently retrieve assigned companies through `accounts.listCompanies()` unless separately granted broad company-read permission.
-- The generic tracking endpoint accepts an actor display value from the browser. Production must ignore it and derive identity/role from the session.
+- The mock derives workflow actor identity from the signed-in service session. The production API must do the same and never trust browser-supplied actor/role fields.
 - Document and PDF authorisation are proposed but not wired into the interface or service layer.
 
 ## 7. Current statuses compared with the required workflow
 
-Current UI statuses:
+Legacy pre-2.5 UI statuses retained only for migration:
 
 ```text
 rfq-submitted -> under-review -> quotation-sent -> po-received -> scheduled
@@ -460,7 +463,7 @@ Mock and API implementations must return the same shapes. Mock services should g
 
 ## 10. Safe implementation phases
 
-### Phase 0 - Analysis and decisions (this phase)
+### Phase 0 - Analysis and decisions (analysis complete)
 
 - approve this architecture/gap analysis;
 - confirm roles, statuses, required identifiers, notification channels and retention rules;
@@ -468,7 +471,7 @@ Mock and API implementations must return the same shapes. Mock services should g
 
 Exit gate: business owner and IT agree on the state names, transition owners and data classification.
 
-### Phase 1 - Domain state machine, permissions and audit contract
+### Phase 1 - Domain state machine, permissions and audit contract (complete)
 
 - replace the loose status list with enquiry/order state definitions and allowed transitions;
 - add workflow action permissions without changing visible screens;
@@ -480,7 +483,7 @@ Exit gate: business owner and IT agree on the state names, transition owners and
 
 Exit gate: domain tests prove roles cannot skip or perform another role's transitions.
 
-### Phase 2 - Separate mock enquiries and orders
+### Phase 2 - Separate mock enquiries and orders (mock-preview core complete)
 
 - add interchangeable `orders`, `workflowHistory`, `notifications` and `audit` services;
 - migrate current combined mock records without losing the GitHub Pages demo;
@@ -490,7 +493,7 @@ Exit gate: domain tests prove roles cannot skip or perform another role's transi
 
 Exit gate: all existing customer demo paths work, while enquiry/order records are distinct internally.
 
-### Phase 3 - Sales representative quotation workflow
+### Phase 3 - Sales representative quotation workflow (mock happy path complete)
 
 - add assigned-representative queue using the existing internal-card design;
 - add start-review and mark-quoted actions;
@@ -501,7 +504,7 @@ Exit gate: all existing customer demo paths work, while enquiry/order records ar
 
 Exit gate: only the assigned/authorised representative can mark the RFQ quoted, and the customer sees a notification/timeline event.
 
-### Phase 4 - Acceptance, conversion and Planning
+### Phase 4 - Acceptance, conversion and Planning (mock happy path complete)
 
 - capture order-acceptance basis without storing payment secrets;
 - convert accepted RFQ to order atomically;
@@ -512,7 +515,7 @@ Exit gate: only the assigned/authorised representative can mark the RFQ quoted, 
 
 Exit gate: duplicate conversion is impossible and Expediting cannot receive an incomplete Planning record.
 
-### Phase 5 - Expediting and Dispatch
+### Phase 5 - Expediting and Dispatch (mock happy path complete)
 
 - replace the free status dropdown with server/mock-provided allowed actions;
 - add configured production/fulfilment stages;
