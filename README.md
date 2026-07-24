@@ -2,6 +2,12 @@
 
 This repository contains a phone-first test preview of a future Rhomberg Instruments catalogue, RFQ and order-tracking app. It is intentionally suitable for public source-code review while testing. No private price values, email API keys or real customer database records are committed.
 
+## Launch the Test App
+
+### [🚀 Open Rhomberg Test App](https://shellygames141up.github.io/Rhomberg-Test-App/)
+
+Opens the latest live demo in your browser.
+
 ## Preview login
 
 - Customer email: `demo@client.co.za`
