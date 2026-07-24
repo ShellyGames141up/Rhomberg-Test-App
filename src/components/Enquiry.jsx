@@ -197,7 +197,7 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
           <label className="consent-row"><input type="checkbox" required /><span>{deliverySettings?.emailRecipient ? 'I confirm this is an RFQ and agree that these details, the structured RFQ PDF and any PO attachment may be emailed to Rhomberg through the test delivery service.' : 'I confirm this is an RFQ and agree that these details and any PO attachment may be securely submitted to Rhomberg for processing.'}</span></label>
           {error && <p className="form-error submit-error" role="alert">{error}</p>}
           {fallbackUrl && <a className="email-fallback" href={fallbackUrl}>Open my email app with this RFQ summary <span>→</span></a>}
-          <button className="primary-button full submit-enquiry" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Sending RFQ email…' : 'Submit RFQ'} <span>{isSubmitting ? '•••' : '→'}</span></button>
+          <button className="primary-button full submit-enquiry" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Submitting RFQ…' : 'Submit RFQ'} <span>{isSubmitting ? '•••' : '→'}</span></button>
           <p className="preview-submit-note">{deliverySettings?.emailRecipient ? <>Test RFQs are sent to {deliverySettings.emailRecipient}. The protected service adds rep-only price-list estimates to the PDF; the public fallback never exposes pricing to the client.</> : <>RFQs are submitted to the private company service and routed according to the customer’s authorised company and representative assignment.</>}</p>
         </section>
       </form>
@@ -227,15 +227,16 @@ function SuccessDialog({ success, onClose, persistenceLabel }) {
     <div className="dialog-backdrop" role="presentation">
       <section className="success-dialog" role="dialog" aria-modal="true" aria-labelledby="success-title">
         <span className="success-icon">✓</span>
-        <small>{success.emailFailed ? 'RFQ saved to account' : 'RFQ email submitted'}</small>
+        <small>RFQ submitted successfully</small>
         <h2 id="success-title">Thank you, {success.firstName}.</h2>
-        <p>{success.emailFailed ? <>Your RFQ is safely stored in {persistenceLabel} and remains visible in Order Tracking. The email delivery still needs attention.</> : <>Your RFQ was accepted for <strong>{success.recipient}</strong> and saved in {persistenceLabel}.</>}</p>
+        <p>Your RFQ has been permanently saved in {persistenceLabel} and placed in <strong>{success.representative}</strong>’s representative inbox.{success.emailFailed ? ' The optional test email delivery still needs attention.' : ''}</p>
         <strong className="success-reference">{success.reference}</strong>
+        <p className="success-routing-note">Submitted {new Date(success.submittedAt).toLocaleString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} · You can track this reference from your account.</p>
         {success.pricedPdfAttached ? <p className="priced-pdf-note"><span>PDF</span> A protected rep-only PDF with internal price-list estimates was attached.</p> : !success.emailFailed && <p className="activation-note"><span>i</span> The public test fallback sent an unpriced RFQ PDF. Pricing remains private and must be added by the protected service.</p>}
         {success.warning && <p className="activation-note"><span>!</span>{success.warning}</p>}
         {success.fallbackUrl && <a className="email-fallback" href={success.fallbackUrl}>Open my email app with the saved RFQ <span>→</span></a>}
         {success.activationMayBeRequired && <p className="activation-note"><span>i</span> First test only: open the FormSubmit activation email in {success.recipient}. Once confirmed, the queued RFQ will be forwarded.</p>}
-        <button className="primary-button full" type="button" onClick={onClose}>View order tracking <span>→</span></button>
+        <button className="primary-button full" type="button" onClick={onClose}>Track this RFQ <span>→</span></button>
       </section>
     </div>
   );

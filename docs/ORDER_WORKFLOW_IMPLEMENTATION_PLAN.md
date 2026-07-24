@@ -1,13 +1,13 @@
 # Order Workflow Implementation Plan
 
-- Status: analysis and Phase 1 complete; mock integration slice for Phases 2-5 implemented
-- Application version reviewed: 2.4.0; workflow implementation updated through 2.6.0
+- Status: analysis plus mock workflow Phases 1-5 complete; centralized permissions, representative inbox, quotation, atomic order acceptance and the dedicated Planning workspace are implemented
+- Application version reviewed: 2.4.0; workflow implementation updated through 3.1.0
 - Reviewed branch: `agent/improve-theme-readability-and-reps`
-- Last pushed workflow commit before this phase: `88b99f4`
+- Last pushed workflow commit before this phase: `d276488`
 
 ## 1. Purpose and scope
 
-This document originally mapped the Rhomberg Test App before implementation. Phase 1 implements the controlled state machine and action boundary. Version 2.6 adds the mock-preview integration slice: separate RFQ/order services, atomic same-browser conversion, immutable order-item snapshots, role-specific Sales/Planning/Expediting/Dispatch workspaces, recipient-scoped notifications and end-to-end integration tests. The private-cloud backend, durable delivery workers, PDFs and retention remain future phases.
+This document originally mapped the Rhomberg Test App before implementation. Phase 1 implements the controlled state machine and action boundary. Version 2.6 adds the mock-preview integration slice: separate RFQ/order services, atomic same-browser conversion, immutable order-item snapshots, role-specific Sales/Planning/Expediting/Dispatch workspaces, recipient-scoped notifications and end-to-end integration tests. Version 2.7 centralizes all eight roles, named permissions, navigation metadata and exact operational queue scopes; Buyer remains deliberately inactive. Version 2.8 adds validated RFQ assignment, permanent references, submission snapshots, single-notification routing and a dedicated representative inbox. Version 2.9 adds assigned-representative quotation confirmation, protected evidence metadata, separate internal/customer notes, recipient-specific notifications and customer receipt acknowledgement. Version 3.0 completes the representative `Accept Order` command: validated external evidence, an atomic/idempotent RFQ conversion, permanent linked order and Planning notification. Version 3.1 adds the desktop-responsive Planning queue, complete Planning record, PO-exception control, actor/timestamp audit metadata and recipient-specific Expediting hand-off. The private-cloud backend, durable delivery workers, PDFs and retention remain future phases.
 
 The browser mock is deliberately not a production transaction or security boundary. Its single aggregate workflow write exists to prove UI/service behaviour while PostgreSQL and the authoritative backend remain disconnected.
 
@@ -30,7 +30,9 @@ The application already has a sound migration boundary. React calls asynchronous
 
 The catalogue, product configurator, RFQ submission screens, customer timeline, internal queue, validation framework, role constants, PDF styling, service error format and company-filtering tests can all be reused.
 
-At the initial analysis, the mock combined enquiries and orders, exposed loose status updates, lacked Sales/Planning/Dispatch journeys, could not convert atomically and had no notification inbox or audit model. Versions 2.5 and 2.6 resolve those issues in the browser mock through the central state machine, separate RFQ/order service resources, role workspaces, audit events and recipient-scoped notifications.
+At the initial analysis, the mock combined enquiries and orders, exposed loose status updates, lacked Sales/Planning/Dispatch journeys, could not convert atomically and had no notification inbox or audit model. Versions 2.5 and 2.6 resolve those issues in the browser mock through the central state machine, separate RFQ/order service resources, role workspaces, audit events and recipient-scoped notifications. Version 2.7 removes component-level role decisions and applies the reusable permission catalogue to workflow actions, service reads and queue navigation. Version 2.8 makes customer submission produce a validated, permanently referenced RFQ in the assigned representative’s dedicated inbox.
+
+Version 2.9 completes the mock quotation-confirmation detail and replaces the obsolete representative-owned acceptance-stage action with a customer receipt acknowledgement that has no commercial acceptance effect. Version 3.0 adds the separate representative confirmation of externally received acceptance and converts the RFQ to one linked order without exposing a direct conversion action. Version 3.1 replaces the small generic Planning card view with a dedicated desktop workspace while retaining the same service, permission, workflow and responsive application architecture. Version 3.2 adds the shared mobile/desktop Expeditor queue, configurable progress model, separate public/internal update content and controlled Dispatch hand-off validation.
 
 The important remaining limitations are:
 
@@ -86,9 +88,9 @@ The app does not use a URL router. `App.jsx` stores a `view` string and conditio
 | Customer | `enquiry` | `Enquiry` | RFQ details, representative, fulfilment and PO |
 | Customer | `tracking` | `OrderTracking` | Combined RFQ/order timeline |
 | Customer/staff | `account` | `Account` | Profile and visible record history |
-| All non-customer roles | `expeditor` | `ExpeditorDashboard` | Combined internal queue; read-only unless role may update tracking |
+| Internal roles | `expeditor` | `ExpeditorDashboard` | Reused internal-card design with service-scoped role queues and permission-filtered actions; Buyer is intentionally empty/read-only |
 
-There are no dedicated sales representative, Planning, Buyer, Manager, Administrator or Dispatch screens yet. All staff roles are routed to the expeditor-shaped workspace.
+The internal roles intentionally reuse one visual workspace. `src/domain/accessControl.js` supplies each role's label, copy, default destination and navigation, while the service supplies only authorised records/actions. This avoids duplicating screens without conflating permissions.
 
 ### 3.3 Reusable React components
 
@@ -99,9 +101,9 @@ There are no dedicated sales representative, Planning, Buyer, Manager, Administr
 | `Catalogue`, `ProductDetail`, `Configurator` | Reuse substantially. They are already service-fed and independent of persistence. |
 | `Enquiry` | Reuse for customer RFQ creation. PO timing needs business confirmation because the future workflow says payment/PO occurs after quotation outside the app. |
 | `OrderTracking` | Reuse its visual timeline and cards, but feed it separate enquiry/order view models and notification state. |
-| `ExpeditorDashboard` | Reuse card/search patterns. Split role actions from the current unrestricted status selector. |
+| `ExpeditorDashboard` | Reused for role-aware queues. Actions now come only from the controlled workflow/permission response. |
 | `Account` | Reuse. Later add notification preferences, authorised companies and archived records if approved. |
-| `Layout` | Reuse header, navigation, notices, toast and theme controls. Staff navigation will need role-specific destinations. |
+| `Layout` | Reused header, navigation, notices, toast and theme controls. Navigation now comes from centralized role profiles. |
 | `ErrorBoundary` | Reuse. Production monitoring should record only sanitised correlation data. |
 
 ### 3.4 Current service contracts
@@ -135,9 +137,21 @@ enquiries
   saveDraft(items)
   submit(details, items)
 
-tracking
+orders
   list(filters)
-  updateStatus(enquiryId, update)
+  getById(orderId)
+
+workflow / tracking compatibility alias
+  list(filters)
+  getAllowedActions(recordId, entityType)
+  performAction(recordId, actionRequest)
+
+audit
+  list(filters)
+
+notifications
+  list(filters)
+  markRead(notificationId)
 
 preferences
   getTheme()
@@ -153,7 +167,7 @@ The future workflow should extend this boundary rather than allowing new screens
 | Product rules | `src/domain/productConfiguration.js` | Reusable conditional-field and option logic |
 | Tracking statuses | `src/domain/tracking.js` | Reusable labels/progress concept; status list and free advancement need replacement |
 | Shared validation | `src/services/validation.js` | Reusable error format; needs workflow-specific validators |
-| Roles/permissions | `src/services/contracts.js` | Useful base; missing Planning/Dispatch decisions and workflow permissions |
+| Roles/permissions | `src/services/contracts.js`, `src/domain/accessControl.js` | Central named permission catalogue, role grants, navigation profiles and exact queue predicates |
 | Product catalogue | `src/data/catalogue.js` | 8 categories and 82 current product/product-family records |
 | Branch/rep fixtures | `src/data/branches.js`, `src/data/representatives.js` | Useful in mock mode only; production master data must come from approved sources |
 | RFQ PDF | `src/lib/rfqPdf.js` | Visual layout can seed an unpriced order-summary template |
@@ -167,7 +181,7 @@ The future workflow should extend this boundary rather than allowing new screens
 
 ```text
 id, companyId, company, contact, email, phone, area, industry,
-role, createdAt
+role, permissions, createdAt
 ```
 
 The mock persistence record also contains a fabricated plaintext demo password. `toPublicAccount()` removes it before the account reaches React state. Production must never store or return a plaintext password.
@@ -209,19 +223,16 @@ The event lacks actor ID, actor role, company ID, visibility, previous state, en
 
 Products contain stable IDs/codes, category, specification snapshots, configuration-field schemas, datasheets and business rules. The existing configuration engine supports choice, multi-choice, select, text, textarea and toggle inputs with conditional visibility and dependent options.
 
-### 4.6 Missing mock models
+### 4.6 Remaining mock-model gaps
 
-The mock implementation does not yet have dedicated structures for:
+The mock now models separate RFQs/orders/items, quotation confirmation, Planning and Expediting detail, Dispatch handoffs, in-app notifications and workflow/audit history. It intentionally does not yet model:
 
-- orders and order items;
-- quotation metadata;
-- Planning handoff data;
-- Dispatch data;
-- notifications and delivery attempts;
+- durable notification/email delivery attempts and retries;
+- protected quotation/document byte storage or malware scanning;
 - generated order summaries;
 - retention policies and archive jobs;
-- complete append-only audit events;
-- staff branch/queue scope beyond the current role checks.
+- production-grade append-only audit storage;
+- authoritative staff branch/team scope beyond the current role and assignment fixtures.
 
 ## 5. Browser-storage dependency audit
 
@@ -240,7 +251,7 @@ Current mock keys are:
 | Audit history | `rhombergPreviewAuditV1` |
 | Recipient notifications | `rhombergPreviewNotificationsV1` |
 | Theme preference | `rhombergPreviewThemeV1` |
-| Demo seed version | `rhombergPreviewSeedV6` |
+| Demo seed version | `rhombergPreviewSeedV11` |
 
 Legacy V1 and combined V2 enquiry keys are read during mock initialisation. Combined records are normalised and partitioned into the aggregate's RFQ/order arrays without clearing existing demo records.
 
@@ -277,8 +288,8 @@ Legacy V1 and combined V2 enquiry keys are read during mock initialisation. Comb
 
 - Browser mock isolation is demonstrative, not security. Anyone controlling the browser can alter stored data.
 - The customer filter in `App.jsx` is only a display safeguard; production enforcement must occur in every server query.
-- Planning, Expediting and Dispatch are national test roles in mock mode; production branch/team scope still needs an approved assignment model.
-- The proposed RLS helper grants several operational roles broad company access and must be narrowed to IT-approved scopes before implementation.
+- Planning, Expediting and Dispatch are national test roles in mock mode; exact stage queues are enforced, but production branch/team scope still needs an approved assignment model.
+- The proposed RLS helpers now mirror exact role queues and permission grants; IT must still review and test them before implementation.
 - A sales representative cannot currently retrieve assigned companies through `accounts.listCompanies()` unless separately granted broad company-read permission.
 - The mock derives workflow actor identity from the signed-in service session. The production API must do the same and never trust browser-supplied actor/role fields.
 - Document and PDF authorisation are proposed but not wired into the interface or service layer.
@@ -300,7 +311,7 @@ The current `nextTrackingStatus()` suggests a linear path, but the internal scre
 |---|---|---|
 | `rfq-submitted` | Direct match | No assigned-rep notification history |
 | `under-review` | Reusable | Ownership is not restricted to the assigned rep |
-| `quotation-sent` | Close to "Quoted" | Expeditor currently sets it; no rep action, quotation metadata or customer notification record |
+| `quotation-sent` | Legacy migration source for "Quoted" | Version 2.9 replaces this old capability with assigned-representative confirmation metadata, notifications and customer receipt acknowledgement |
 | `po-received` | Partial match | Conflates external customer commitment, rep acceptance, RFQ conversion and order creation |
 | `scheduled` | Partial match | Skips Planning, internal job number, customer PO capture and handoff to Expediting |
 | `in-production` | Reusable | No configured production-stage model or partial-line handling |
@@ -330,54 +341,45 @@ The server must own the state machine. The UI should receive allowed actions and
 
 ```mermaid
 stateDiagram-v2
-    [*] --> RFQDraft
-    RFQDraft --> RFQSubmitted: Customer submits RFQ
-    RFQSubmitted --> RFQUnderReview: Assigned representative reviews
-    RFQUnderReview --> Quoted: Representative confirms Outlook quotation sent
-    Quoted --> AwaitingCommitment: Customer notified
-    AwaitingCommitment --> OrderAccepted: Representative confirms payment or PO externally
-    OrderAccepted --> ConvertedToOrder: Atomic RFQ-to-order conversion
+    [*] --> draft
+    draft --> submitted: Customer submits RFQ
+    submitted --> assigned_to_rep: Service assigns representative
+    assigned_to_rep --> under_rep_review: Assigned representative starts review
+    under_rep_review --> quoted: Representative records external quotation
+    quoted --> awaiting_customer_acceptance: Customer acknowledges receipt only
+    awaiting_customer_acceptance --> accepted: Representative verifies external acceptance
+    accepted --> converted_to_order: Same service transaction creates order
 
-    RFQSubmitted --> RFQOnHold: Authorised hold
-    RFQUnderReview --> RFQOnHold: Authorised hold
-    Quoted --> RFQOnHold: Authorised hold
-    RFQOnHold --> RFQUnderReview: Resume with recorded target
-    RFQSubmitted --> RFQCancelled: Authorised cancellation
-    RFQUnderReview --> RFQCancelled: Authorised cancellation
-    Quoted --> RFQCancelled: Expired or cancelled
+    converted_to_order --> awaiting_planning
+    awaiting_planning --> planning_in_progress: Planning starts
+    planning_in_progress --> planned: Planning record validated
+    planned --> submitted_to_expediting: Planning submits hand-off
+    submitted_to_expediting --> expediting_in_progress: Expeditor starts
+    expediting_in_progress --> expediting_in_progress: Configured progress update
+    expediting_in_progress --> awaiting_dispatch: Required steps or authorised exception
 
-    ConvertedToOrder --> PlanningPending
-    PlanningPending --> PlanningInProgress: Planner opens work
-    PlanningInProgress --> ReadyForExpediting: Job number and PO number validated
-    ReadyForExpediting --> Expediting: Planning submits handoff
-    Expediting --> Scheduled: Expeditor schedules fulfilment
-    Scheduled --> InProduction: Work starts
-    InProduction --> QualityCheck: Production stages complete
-    QualityCheck --> ReadyForDispatch: Quality release
+    awaiting_dispatch --> out_for_delivery: Delivery route
+    out_for_delivery --> delivered: Dispatch confirms delivery
+    delivered --> completed
 
-    ReadyForDispatch --> Dispatched: Delivery route
-    Dispatched --> Delivered: Dispatch confirms delivery
-    Delivered --> Completed
+    awaiting_dispatch --> ready_for_collection: Collection route
+    ready_for_collection --> collected: Dispatch confirms collection
+    collected --> completed
 
-    ReadyForDispatch --> ReadyForCollection: Collection route
-    ReadyForCollection --> Collected: Dispatch confirms collection
-    Collected --> Completed
+    awaiting_planning --> on_hold: Planning hold
+    planning_in_progress --> on_hold: Planning hold
+    submitted_to_expediting --> on_hold: Expediting hold
+    expediting_in_progress --> on_hold: Expediting hold
+    awaiting_dispatch --> on_hold: Dispatch hold
+    on_hold --> planning_in_progress: Resume to stored Planning state
+    on_hold --> expediting_in_progress: Resume to stored Expediting state
+    on_hold --> awaiting_dispatch: Resume to stored Dispatch state
 
-    PlanningPending --> OrderOnHold: Authorised hold
-    PlanningInProgress --> OrderOnHold: Authorised hold
-    Expediting --> OrderOnHold: Authorised hold
-    Scheduled --> OrderOnHold: Authorised hold
-    InProduction --> OrderOnHold: Authorised hold
-    QualityCheck --> OrderOnHold: Authorised hold
-    OrderOnHold --> PlanningInProgress: Resume to recorded state
-    OrderOnHold --> Expediting: Resume to recorded state
-    OrderOnHold --> InProduction: Resume to recorded state
-
-    Completed --> Archived: Retention policy job
-    Archived --> [*]
+    completed --> archived: Retention policy job
+    archived --> [*]
 ```
 
-`AwaitingCommitment` may be represented as a display phase rather than a separately stored state if the business prefers `quoted` to remain active until acceptance. That decision should be made before coding.
+The top-level order status stays `expediting_in_progress` while configured production/fulfilment updates are appended. The separate progress-step record carries `materials_checked`, `production_started`, `quality_check` and the other approved milestones without multiplying the main order-state machine.
 
 ### 8.1 Transition invariants
 
@@ -399,8 +401,7 @@ Every transition request should include an idempotency key and expected entity v
 | Submit RFQ | Customer | Own authorised company; valid configuration; assigned active representative |
 | Start review | Assigned sales representative | Active representative-company assignment |
 | Mark quoted | Assigned sales representative | Current state under review; external send date/reference recorded |
-| Confirm order accepted | Assigned sales representative or approved manager | Current state quoted; acceptance basis recorded; no payment-card/bank details stored |
-| Convert RFQ to order | Server transaction initiated by authorised representative/manager | Accepted RFQ; no existing order; item snapshot fixed |
+| Accept order and convert | Assigned sales representative or approved manager through one service command | Current state awaiting customer acceptance; approved evidence recorded; no pricing/payment secrets; server creates one immutable linked order |
 | Add job/PO numbers | Planning capability | Order in Planning; required identifiers valid and unique according to policy |
 | Submit to Expediting | Planning capability | Required Planning fields complete |
 | Update production/fulfilment | Expeditor capability | Allowed transition from current state; scoped queue access |
@@ -427,8 +428,7 @@ enquiries
   getAllowedActions(enquiryId)
   startReview(enquiryId, expectedVersion)
   markQuoted(enquiryId, quotationMetadata, expectedVersion)
-  acceptOrder(enquiryId, acceptanceMetadata, expectedVersion)
-  convertToOrder(enquiryId, expectedVersion)
+  acceptOrder(enquiryId, acceptanceMetadata, expectedVersion) -> converted RFQ + linked order
   placeOnHold()/resume()/cancel()
 
 orders (new)
@@ -497,34 +497,88 @@ Exit gate: all existing customer demo paths work, while enquiry/order records ar
 
 - add assigned-representative queue using the existing internal-card design;
 - add start-review and mark-quoted actions;
+- require quotation number/date, an explicit expiry rule and optional Outlook-email confirmation;
+- keep optional internal and customer-facing notes separate;
+- record optional quotation evidence as metadata only in mock mode, private by default;
 - record only external Outlook metadata, not quotation pricing or message credentials;
 - create customer and representative notification entries;
+- allow the authorised company customer to acknowledge receipt without accepting price, confirming payment/PO or creating an order;
 - add visible timeline events and internal audit events;
-- test reassignment, unauthorised reps, retries and notification failures.
+- test assignment/company isolation, required fields, note projection, evidence visibility, invalid transitions and customer acknowledgement.
 
-Exit gate: only the assigned/authorised representative can mark the RFQ quoted, and the customer sees a notification/timeline event.
+Exit gate: only the assigned/authorised representative can mark the RFQ quoted, the customer sees only authorised quotation information, and receipt acknowledgement produces an audit/representative notification without creating an order.
 
-### Phase 4 - Acceptance, conversion and Planning (mock happy path complete)
+### Phase 4 - Acceptance, conversion and Planning (complete in mock/API contract)
 
-- capture order-acceptance basis without storing payment secrets;
-- convert accepted RFQ to order atomically;
-- add Planning queue/workspace;
-- capture internal job number and customer PO number;
-- validate required identifiers and submit the order to Expediting;
-- audit every change and notify required recipients.
+- capture the approved acceptance type, conditional PO/payment reference, date, internal verification note and optional private document metadata;
+- reject pricing, payment-card, banking and password fields;
+- expose only `accept_order` to the representative and keep `convert_to_order` internal;
+- convert the accepted RFQ to exactly one order through an atomic/idempotent service operation;
+- preserve the historical RFQ and link the permanent order reference;
+- copy company/customer/representative references and immutable configured line-item snapshots;
+- add a desktop-optimised, responsive Planning queue/workspace with search, stage/priority filters, sorting and complete order context;
+- capture internal job number, customer PO or authorised exception, Planning notes, schedule, assigned Planning user, production location, priority, submission date and document references;
+- validate the assigned representative, service-owned user/location, dates, priority, required identifiers and persisted Planning record before submitting the order to Expediting;
+- record Planning actors/timestamps and notify the customer, assigned representative and Expeditor with role-appropriate wording;
+- remove all internal Planning data from customer projections;
+- audit acceptance, conversion and order creation and notify the customer, assigned representative and Planning.
 
-Exit gate: duplicate conversion is impossible and Expediting cannot receive an incomplete Planning record.
+Exit gate: tests prove required/conditional evidence, assigned-representative scope, sensitive-data rejection, one-order idempotency, customer-safe projection and Planning routing; Expediting cannot receive an incomplete Planning record.
 
-### Phase 5 - Expediting and Dispatch (mock happy path complete)
+### Phase 5 - Expediting (version 3.2 complete in mock/API contract); Dispatch workspace remains next
 
-- replace the free status dropdown with server/mock-provided allowed actions;
-- add configured production/fulfilment stages;
-- add separate Dispatch queue/actions for delivery and collection;
-- distinguish internal notes from customer-visible notes;
+- provide one responsive Expeditor workspace with new/in-progress/hold/due-soon/awaiting-Dispatch/priority views;
+- default to oldest-update-first and search customer, representative, RFQ, order, job and PO references;
+- load configured production/fulfilment steps and Dispatch requirements through an interchangeable `expediting` service;
+- implement controlled Start, Progress Update, Hold, Resume and Dispatch Hand-off actions;
+- store the customer message separately from the optional internal note, estimate, delay reason and document/image reference metadata;
 - notify customer and assigned representative after every approved customer-visible update;
-- cover holds, resume, cancellation and concurrency conflicts.
+- place the same public update in customer and representative timelines while removing internal notes and exception evidence from customer projections;
+- require the configured completion steps before Dispatch, or capture a controlled authorised exception reason/reference;
+- keep handed-off orders visible read-only to Expediting while `awaiting_dispatch`;
+- retain the existing separate Dispatch queue/actions for delivery and collection until its dedicated workspace phase;
+- cover permission, visibility, holds, resume, transition order, required-step/exception and API normalisation behavior.
 
-Exit gate: the complete happy paths and exception paths pass role, state and company-isolation tests.
+Exit gate: the Expeditor happy path, hold/resume path, required-step and authorised-exception hand-offs pass role, state, company-isolation, notification, customer-projection and API-adapter tests.
+
+### Role and permission integration (version 2.7 complete)
+
+- define all requested capability codes once and grant them through one role matrix;
+- make every workflow transition require its named permission;
+- centralize role dashboards, default destinations and navigation metadata;
+- enforce own-company, assigned-record and exact operational queue scopes in the service;
+- prepare Buyer as authenticated but operationally inactive;
+- add Manager/Administrator oversight identities and permission/isolation/audit tests;
+- update API and PostgreSQL permission/RLS proposals.
+
+Exit gate: components contain no direct role equality decisions, Buyer cannot discover operational records, and every active queue is limited to its responsible stages.
+
+### RFQ assignment and representative inbox (version 2.8 complete)
+
+- validate the signed-in customer/company at the service boundary;
+- canonicalize the selected representative through the approved area directory;
+- allocate and preserve a permanent mock RFQ reference;
+- store submission/assignment times, configured items, notes, priority, customer/company snapshots and safe document metadata;
+- make submission the first audit/history entry and assignment the single representative notification;
+- expose assigned RFQs through a dedicated mock/API service method;
+- add the required Sales inbox groups, search, priority, age, emergency, last-activity and open-RFQ presentation;
+- expose `Start Review` only for an assigned representative while the RFQ is `assigned_to_rep`;
+- retain later quotation, acceptance and conversion actions through a reusable workflow panel.
+
+Exit gate: submission and inbox tests prove company/representative validation, one notification, assignment isolation, permanent reference retention and the controlled Start Review transition.
+
+### Quotation confirmation and receipt acknowledgement (version 2.9 complete)
+
+- expose `Mark as Quoted` only from `under_rep_review` to the assigned representative or an explicitly authorised management role;
+- validate quotation number/date/expiry and reject pricing keys;
+- record the representative/timestamp plus separate internal/customer notes;
+- store file metadata only in mock mode and require explicit customer-visibility authorisation;
+- create distinct customer and representative confirmation notifications;
+- expose `I received the quotation` only to an authorised company customer from `quoted`;
+- record acknowledgement actor/time, audit the action and notify the assigned representative;
+- preserve the later external acceptance as a separate representative action from customer receipt acknowledgement.
+
+Exit gate: tests prove metadata/assignment/company rules, note and document projection, recipient-specific notifications, and that acknowledgement neither confirms a commercial commitment nor creates an order.
 
 ### Phase 6 - PDFs, notification delivery and retention
 
@@ -580,8 +634,9 @@ The current SQL proposal already includes companies, branches, users, user-compa
 | Order statuses | Add Planning pending/in-progress, ready for Expediting, Expediting, ready for Dispatch, ready for collection, collected and delivered states. |
 | Transition rules | Add a versioned workflow-definition/transition table or enforce an equivalent versioned server policy. Do not rely only on database enums. |
 | Order items | Add immutable `order_items` snapshots. An order should not depend on mutable enquiry/product configuration after conversion. |
-| Quotation metadata | Add a small `quotation_events` or enquiry metadata structure: external send timestamp, reference, marked-by user and optional approved document link. Store no pricing in this project. |
-| Planning | Add internal job number, customer PO number, Planning owner, Planning timestamps and handoff metadata. Decide uniqueness/format constraints. |
+| Quotation metadata | Review the proposed `app.quotations` table: number/date/expiry rule, marked-by/time, separate notes, email confirmation, acknowledgement actor/time and customer-authorised evidence metadata. Store no pricing in this project. |
+| Planning | Proposed SQL now includes job/PO or authorised exception, notes, schedule, owner, branch, priority, document references and actor/timestamps. IT must still approve identifier uniqueness/format and who may authorise a PO exception. |
+| Expediting | Add server-owned progress-step configuration, structured update rows, public/internal message separation, estimate/delay fields, metadata references, updater/timestamp and controlled hand-off exception evidence. |
 | Assignment/scope | Add staff branch/team scope tables for Planning, Expediting, Buyer and Dispatch. Update RLS so broad roles do not automatically see every company. |
 | Workflow events | Replace/extend `tracking_events` with entity type, previous/new state, action code, actor ID/role, customer visibility, internal note, public note, request ID and event version. |
 | Notifications | Add notification records, recipients, channels, read state, outbox jobs, attempts and failure codes. Use user/company/representative IDs, not untrusted addresses from the client. |
@@ -601,16 +656,23 @@ Existing authentication, catalogue, draft, enquiry, order-read, document and gen
 
 | Endpoint | Purpose | Important request/response fields |
 |---|---|---|
+| `GET /enquiries/inbox` | Assigned representative RFQ inbox | Group, priority and search filters; server derives representative identity |
 | `GET /enquiries/{id}/allowed-actions` | Render only authorised rep/customer actions | Response: action codes, required fields, current version |
 | `POST /enquiries/{id}/actions/start-review` | Assigned rep starts review | Request: expected version; actor derived from session |
-| `POST /enquiries/{id}/actions/mark-quoted` | Rep confirms external Outlook send | Request: sent timestamp, optional external reference/note, expected version; no pricing |
-| `POST /enquiries/{id}/actions/accept-order` | Rep confirms external payment/PO acceptance | Request: acceptance basis, optional PO reference, expected version; no payment secrets |
-| `POST /enquiries/{id}/actions/convert-to-order` | Atomic conversion | Response: final enquiry plus new order/order items/events |
+| `POST /enquiries/{id}/actions/mark-quoted` | Rep confirms external Outlook send | Request: number, date, expiry rule/date, optional email confirmation, separate notes/evidence, expected version; no pricing |
+| `POST /enquiries/{id}/actions/acknowledge-quotation` | Customer confirms receipt only | Request: expected version; company/actor from session; response must not create an order |
+| `POST /enquiries/{id}/actions/accept-order` | Rep confirms external acceptance and atomically converts it | Request: acceptance type/date/note/verification, conditional PO/payment reference, optional private document, expected version; response: converted RFQ plus one linked `awaiting_planning` order; no pricing/payment secrets |
 | `POST /enquiries/{id}/actions/hold|resume|cancel` | Controlled exceptions | Reason code, note, resume target where applicable, expected version |
 | `GET /orders?queue=planning|expediting|dispatch` | Role/scoped queues | Server ignores unauthorised company/branch broadening filters |
+| `GET /planning/workspace-options` | Service-owned Planning users, locations and priorities | Requires `add_planning_information`; never accepts arbitrary browser-created identities |
+| `GET /expediting/workspace-options` | Server-owned progress steps, required hand-off subset, metadata types and due-soon policy | Requires Expediting queue or action permission; client labels and required flags are not authoritative |
 | `GET /orders/{id}/allowed-actions` | Role/state-aware actions | Action codes, guards and current version |
-| `PATCH /orders/{id}/planning` | Planning fields | Internal job number, customer PO number, expected version |
-| `POST /orders/{id}/actions/submit-to-expediting` | Planning handoff | Expected version and optional internal handoff note |
+| `POST /orders/{id}/workflow-actions` with `complete_planning` | Structured Planning record | Job, PO/exception, notes, dates, owner, location, priority, references, submission date and expected version |
+| `POST /orders/{id}/workflow-actions` with `submit_to_expediting` | Planning handoff | Revalidates persisted plan/rep; returns updated order and queues customer/rep/Expeditor notifications |
+| `POST /orders/{id}/workflow-actions` with `start_expediting` | Accept planned order into Expediting | Requires `planning_received`, public message and expected version |
+| `POST /orders/{id}/workflow-actions` with `add_expediting_update` | Append same-status progress | Configured step, public message, optional internal note/estimate/delay/reference metadata and expected version |
+| `POST /orders/{id}/workflow-actions` with `place_on_hold` or `resume_order` | Controlled Expediting pause/resume | Public message, required hold reason, resume step and expected version |
+| `POST /orders/{id}/workflow-actions` with `complete_expediting` | Dispatch hand-off | Requires `ready_for_dispatch`, completion check and all required steps, or authorised exception reason/reference |
 | `POST /orders/{id}/actions/{actionCode}` | Approved fulfilment transition | Public note, optional internal note, expected version; server validates action |
 | `POST /orders/{id}/actions/confirm-dispatch` | Dispatch route | Delivery/collection method, approved reference/evidence metadata, expected version |
 | `GET /enquiries/{id}/history` | Authorised RFQ business timeline | Visibility-filtered events |
@@ -669,9 +731,9 @@ Do not audit every draft keystroke. If draft history is required, use a separate
 | Mock data treated as secure | Browser users can inspect/change local records | Keep fabricated data and visible preview warnings; never use mock mode for production |
 | Plaintext demo passwords | Present only in mock seed/browser storage | Physically exclude mock modules from production build; hash production credentials server-side or use SSO |
 | Cross-company ID access | React filtering is not authorisation | Scope every server query by session-derived authorised company IDs; RLS as defence in depth |
-| Broad staff access | Current mock and proposed RLS give some roles all-company access | Add branch/team/portfolio scopes and explicit permissions |
-| Arbitrary status changes | Any recognised status is currently accepted for authorised updater | Server-owned transition matrix with role, state, fulfilment and data guards |
-| Client-supplied actor | Current adapter sends an actor display value | Ignore it on the server; derive actor ID/role from session |
+| Broad staff access | Mock exact-stage queues exist, but production branch/team/portfolio assignments are not authoritative yet | Add approved assignment tables in addition to the explicit permissions and queue RLS predicates |
+| Arbitrary status changes | Browser mock is controlled; the future backend is not implemented | Reproduce the server-owned action/permission/state/fulfilment guards transactionally |
+| Client-supplied actor | Current adapters derive the actor from the signed-in service/API session contract | Keep ignoring actor/role fields from request bodies and verify server session context |
 | Rep routing | Current test email is not routed from an authoritative rep email record | Resolve active rep assignment and notification recipient server-side |
 | Third-party public email fallback | Test RFQ data may pass through a public delivery service | Fabricated data only in preview; remove/disable fallback in private-cloud build |
 | PO/document access | Future files could be vulnerable to IDOR or malicious uploads | Private object storage, signature/MIME/size checks, malware scan, short-lived URLs and per-download scope check |
@@ -683,22 +745,22 @@ Do not audit every draft keystroke. If draft history is required, use a separate
 | Service-worker data cache | Authenticated data could be cached accidentally | Retain `/api/` bypass and `no-store` headers; add automated cache-policy tests |
 | Real data in public preview | Public repository/Pages could expose company or customer records | Synthetic fixtures only; automated secret/data-pattern scans before publish |
 
-## 15. Business clarifications required before implementation
+## 15. Business decisions and remaining clarifications
 
 1. Are Planning and Dispatch separate application roles, or permissions assigned to Buyer, Expeditor, Manager or other staff accounts?
 2. Can one staff member hold multiple operational capabilities?
 3. Which branches/companies may each internal role see, and who manages those assignments?
 4. Must the selected sales representative be fixed at RFQ submission, or may a manager reassign it?
-5. What exact evidence is required when a representative marks an RFQ as quoted: date, Outlook message ID, quotation number, attachment, or only confirmation?
+5. Decision recorded in version 2.9: quotation number and quotation date are required; expiry rule/date are validated; Outlook email confirmation, separate notes and document/reference evidence are optional.
 6. Should the app notify the customer by email, in-app notification, both, or a configurable preference?
-7. Does the customer need to acknowledge receipt of the quotation in the app?
-8. What qualifies as order acceptance: Purchase Order, cleared payment, account terms, manager approval, or another basis?
+7. Decision recorded in version 2.9: the customer may acknowledge receipt, but this is not price acceptance, payment/PO confirmation or order creation.
+8. Decision recorded in version 3.0: accepted evidence types are Purchase Order received, payment confirmed externally, written acceptance, account-customer authorisation or another approved instruction; the representative must verify it.
 9. Should the current customer PO-number/upload option remain at RFQ submission, become optional supporting data, or move entirely to the post-quotation process?
 10. May a representative correct PO details after acceptance, and who must approve the change?
-11. Is RFQ-to-order conversion immediate after acceptance, or should there be a separate approval gate?
+11. Decision recorded in version 3.0: representative acceptance immediately performs the internal conversion as one atomic command; there is no browser-visible conversion gate.
 12. What format and uniqueness rules apply to order number, internal job number and customer PO number? Which system is authoritative?
 13. Will an ERP or accounting system eventually create or own the order/job number?
-14. Which exact production/fulfilment stages must Expediting update? Are stages configurable by product family?
+14. Approve the proposed Expediting starting stages and required-for-Dispatch subset. Must future stage sets vary by product family, production location or fulfilment route?
 15. Must progress be tracked per order, per order item or per quantity batch?
 16. Are partial production, partial delivery and split collection required?
 17. Which notes are customer-visible, representative-visible or internal-only?
@@ -715,13 +777,11 @@ Do not audit every draft keystroke. If draft history is required, use a separate
 
 ## 16. Recommended next phase
 
-After the business clarifications are answered, begin Phase 1 only: define the workflow domain, permissions, transition guards, event shapes, audit contract and tests. Do not add role screens or change customer-visible behaviour in that phase.
+Continue with the next approved operational-workspace prompt, expected to be the dedicated Dispatch experience, using the same queue/action/service pattern. Do not begin production integration. Phase 6 PDFs, durable notification delivery and retention still require owner approval of summary fields, recipients, retry policy and legal-hold rules.
 
-The first implementation should replace knowledge of "the next status" with knowledge of "the allowed actions for this authenticated actor and current entity version." That decision will prevent later UI, API and database work from depending on an unsafe free-form status field.
+## 17. Current-phase verification
 
-## 17. Analysis-phase verification
-
-This phase changes documentation only. The existing test/build baseline should be run after the document is added:
+After every implementation slice run:
 
 - service/mock/API contract tests;
 - React compile check;

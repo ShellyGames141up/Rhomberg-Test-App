@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Rhomberg Instruments Private-Cloud API
-  version: 0.1.0-proposed
+  version: 0.2.0-proposed
   description: Proposed contract only. No production service is connected.
 servers:
   - url: /api/v1
@@ -318,6 +318,40 @@ paths:
                 $ref: '#/components/schemas/EnquirySubmissionResponse'
         '422':
           $ref: '#/components/responses/ApiError'
+  /enquiries/inbox:
+    get:
+      operationId: listRepresentativeRfqInbox
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - name: group
+          in: query
+          schema:
+            type: string
+            enum: [all, new, under_review, quoted, awaiting_acceptance, accepted, closed]
+        - name: priority
+          in: query
+          schema:
+            type: string
+            enum: [urgent, standard]
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: RFQs assigned to the representative identity in the verified session
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Enquiry'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+        '403':
+          $ref: '#/components/responses/ApiError'
   /enquiries/{enquiryId}:
     get:
       operationId: getAuthorisedEnquiry
@@ -364,6 +398,23 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/WorkflowActionRequest'
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [payload]
+              properties:
+                payload:
+                  type: string
+                  description: JSON-encoded WorkflowActionRequest for mark_quoted or accept_order.
+                quotationDocument:
+                  type: string
+                  format: binary
+                  description: Optional authorised quotation evidence; PDF, DOC, DOCX or image, maximum 4 MB.
+                acceptanceDocument:
+                  type: string
+                  format: binary
+                  description: Optional internal order-acceptance evidence for accept_order; PDF, DOC, DOCX or image, maximum 4 MB.
       responses:
         '201':
           description: Controlled RFQ action completed
@@ -376,6 +427,40 @@ paths:
         '409':
           $ref: '#/components/responses/ApiError'
         '422':
+          $ref: '#/components/responses/ApiError'
+  /planning/workspace-options:
+    get:
+      operationId: getPlanningWorkspaceOptions
+      description: Requires add_planning_information. Returns server-owned Planning users, production locations and priorities.
+      responses:
+        '200':
+          description: Authorised Planning reference data
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PlanningWorkspaceOptions'
+        '403':
+          $ref: '#/components/responses/ApiError'
+  /expediting/workspace-options:
+    get:
+      operationId: getExpeditingWorkspaceOptions
+      description: Requires view_expediting_queue or an authorised Expediting action permission. Returns server-owned progress steps, Dispatch requirements, controlled reference types and approaching-completion policy.
+      responses:
+        '200':
+          description: Authorised Expediting reference data
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ExpeditingWorkspaceOptions'
+        '403':
           $ref: '#/components/responses/ApiError'
   /orders:
     get:
@@ -571,7 +656,7 @@ paths:
               properties:
                 kind:
                   type: string
-                  enum: [purchase_order, datasheet, quotation, other]
+                  enum: [purchase_order, quotation, order_acceptance_evidence, datasheet, other]
                 file:
                   type: string
                   format: binary
@@ -678,6 +763,49 @@ components:
     Role:
       type: string
       enum: [customer, sales_representative, planning, expeditor, dispatch, buyer, manager, administrator]
+    Permission:
+      type: string
+      enum:
+        - access_customer_workspace
+        - access_internal_workspace
+        - read_catalogue
+        - view_own_company_account
+        - view_all_companies
+        - create_rfq
+        - view_own_company_rfqs
+        - view_assigned_rfqs
+        - view_all_rfqs
+        - assign_rfq
+        - mark_rfq_under_review
+        - mark_rfq_quoted
+        - acknowledge_quotation
+        - accept_customer_order
+        - convert_rfq_to_order
+        - cancel_rfq
+        - expire_rfq
+        - view_own_company_orders
+        - view_assigned_orders
+        - view_planning_queue
+        - add_planning_information
+        - submit_to_expediting
+        - view_expediting_queue
+        - update_order_progress
+        - move_to_dispatch
+        - view_dispatch_queue
+        - confirm_delivery
+        - confirm_collection
+        - manage_order_hold
+        - cancel_order
+        - view_all_orders
+        - export_order_pdf
+        - email_order_summary
+        - archive_orders
+        - restore_archived_orders
+        - administer_users
+        - override_workflow
+        - read_audit_history
+        - manage_products
+        - view_reports
     WorkflowActorRole:
       type: string
       enum: [customer, sales_representative, planning, expeditor, dispatch, buyer, manager, administrator, system]
@@ -721,7 +849,8 @@ components:
         role: { $ref: '#/components/schemas/Role' }
         permissions:
           type: array
-          items: { type: string }
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Permission' }
     UserResponse:
       type: object
       required: [data]
@@ -862,6 +991,9 @@ components:
         note: { type: string }
         actor: { type: string }
         actorRole: { $ref: '#/components/schemas/WorkflowActorRole' }
+        progressStep:
+          type: string
+          description: Configured Expediting progress-step code when the event records an Expeditor update.
         customerVisible: { type: boolean }
         isOverride: { type: boolean }
         createdAt: { type: string, format: date-time }
@@ -872,8 +1004,332 @@ components:
       properties:
         action: { type: string, minLength: 1, maxLength: 100 }
         comment: { type: string, maxLength: 1000 }
-        data: { type: object, additionalProperties: true }
+        data:
+          type: object
+          additionalProperties: true
+          description: Action-specific values. mark_quoted uses QuotationConfirmation under data.quotation; accept_order uses OrderAcceptance under data.acceptance; complete_planning uses PlanningRecord under data.planning; Expediting actions use ExpeditingUpdate under data.expeditingUpdate and complete_expediting also uses ExpeditingHandoff.
         expectedVersion: { type: integer, minimum: 0 }
+    QuotationDocumentMetadata:
+      type: object
+      additionalProperties: false
+      required: [id, fileName, mimeType, sizeBytes, uploadedAt, customerVisible]
+      properties:
+        id: { type: string, format: uuid }
+        fileName: { type: string, maxLength: 255 }
+        mimeType: { type: string, maxLength: 160 }
+        sizeBytes: { type: integer, minimum: 1, maximum: 4194304 }
+        uploadedAt: { type: string, format: date-time }
+        scanStatus: { type: string, enum: [pending, clean, rejected, failed] }
+        customerVisible: { type: boolean }
+        downloadUrl:
+          type: string
+          format: uri
+          description: Present only after the API has authorised customer access; never a permanent public object URL.
+    QuotationConfirmation:
+      type: object
+      additionalProperties: false
+      required: [number, date, expiryMode, emailed]
+      properties:
+        number: { type: string, minLength: 1, maxLength: 100 }
+        date: { type: string, format: date }
+        expiryMode: { type: string, enum: [dated, not_applicable] }
+        expiryDate:
+          type: [string, 'null']
+          format: date
+          description: Required when expiryMode is dated and cannot precede date.
+        emailed: { type: boolean }
+        internalNote:
+          type: string
+          maxLength: 1000
+          description: Internal-only; never serialised to a customer.
+        customerNote: { type: string, maxLength: 1000 }
+        documentReference: { type: string, maxLength: 255 }
+        documentCustomerVisible:
+          type: boolean
+          default: false
+          description: Explicit representative authorisation for the document/reference to appear in a customer projection.
+        document:
+          $ref: '#/components/schemas/QuotationDocumentMetadata'
+        markedAt: { type: string, format: date-time }
+        markedBy:
+          type: object
+          additionalProperties: false
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            role: { $ref: '#/components/schemas/WorkflowActorRole' }
+        acknowledgedAt: { type: string, format: date-time }
+        acknowledgedBy:
+          type: object
+          additionalProperties: false
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+    AcceptanceType:
+      type: string
+      enum: [purchase_order_received, payment_confirmed, written_acceptance_received, account_customer_authorisation, other]
+    AcceptanceDocumentMetadata:
+      type: object
+      additionalProperties: false
+      required: [id, fileName, mimeType, sizeBytes, uploadedAt]
+      properties:
+        id: { type: string, format: uuid }
+        fileName: { type: string, maxLength: 255 }
+        mimeType: { type: string, maxLength: 160 }
+        sizeBytes: { type: integer, minimum: 1, maximum: 4194304 }
+        uploadedAt: { type: string, format: date-time }
+        scanStatus: { type: string, enum: [pending, clean, rejected, failed] }
+        customerVisible:
+          type: boolean
+          const: false
+          description: Order-acceptance evidence is internal-only in this phase.
+    OrderAcceptance:
+      type: object
+      additionalProperties: false
+      required: [type, date, internalNote, verified]
+      properties:
+        type: { $ref: '#/components/schemas/AcceptanceType' }
+        purchaseOrderNumber:
+          type: string
+          maxLength: 100
+          description: Required when type is purchase_order_received.
+        paymentReference:
+          type: string
+          maxLength: 160
+          description: Required when type is payment_confirmed; external reference only, never card or banking credentials.
+        date: { type: string, format: date }
+        internalNote: { type: string, minLength: 1, maxLength: 2000 }
+        documentReference: { type: string, maxLength: 240 }
+        document: { $ref: '#/components/schemas/AcceptanceDocumentMetadata' }
+        verified: { type: boolean, const: true }
+      description: Internal-only evidence. Price, payment-card, banking, PIN and password fields are forbidden.
+      allOf:
+        - if:
+            properties:
+              type: { const: purchase_order_received }
+          then:
+            required: [purchaseOrderNumber]
+        - if:
+            properties:
+              type: { const: payment_confirmed }
+          then:
+            required: [paymentReference]
+    PlanningPriority:
+      type: string
+      enum: [standard, high, urgent]
+    PlanningWorkspaceOptions:
+      type: object
+      additionalProperties: false
+      required: [users, locations, priorities]
+      properties:
+        users:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, name]
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string, maxLength: 160 }
+        locations:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, name, role]
+            properties:
+              id: { type: string, maxLength: 100 }
+              name: { type: string, maxLength: 160 }
+              role: { type: string, maxLength: 200 }
+        priorities:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, label]
+            properties:
+              id: { $ref: '#/components/schemas/PlanningPriority' }
+              label: { type: string, maxLength: 80 }
+    PlanningRecord:
+      type: object
+      additionalProperties: false
+      required: [internalJobNumber, assignedPlanningUserId, priority, submissionDate]
+      properties:
+        internalJobNumber: { type: string, minLength: 1, maxLength: 100 }
+        customerPoNumber: { type: string, minLength: 1, maxLength: 100 }
+        customerPoException:
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [authorised, reason]
+              properties:
+                authorised: { type: boolean, const: true }
+                reason: { type: string, minLength: 8, maxLength: 1000 }
+          description: Required when customerPoNumber is empty. The backend records the authorised actor in audit history.
+        notes: { type: string, maxLength: 2000 }
+        plannedStartDate: { type: string, format: date }
+        estimatedCompletionDate:
+          type: string
+          format: date
+          description: Cannot precede plannedStartDate.
+        assignedPlanningUserId: { type: string, format: uuid }
+        assignedPlanningUserName: { type: string, readOnly: true }
+        productionLocationId: { type: string, maxLength: 100 }
+        productionLocationName: { type: string, readOnly: true }
+        priority: { $ref: '#/components/schemas/PlanningPriority' }
+        documentReferences:
+          type: array
+          maxItems: 10
+          items: { type: string, maxLength: 240 }
+        submissionDate: { type: string, format: date }
+      anyOf:
+        - required: [customerPoNumber]
+        - required: [customerPoException]
+    ExpeditingProgressStepCode:
+      type: string
+      enum:
+        - planning_received
+        - materials_checked
+        - materials_ordered
+        - awaiting_materials
+        - materials_received
+        - production_started
+        - assembly_in_progress
+        - calibration_or_testing
+        - quality_check
+        - paperwork_preparation
+        - ready_for_dispatch
+        - on_hold
+        - cancelled
+    ExpeditingProgressStep:
+      type: object
+      additionalProperties: false
+      required: [id, label, customerLabel, description, sequence, requiredForDispatch, selectableForUpdate, operational, terminal]
+      properties:
+        id: { $ref: '#/components/schemas/ExpeditingProgressStepCode' }
+        label: { type: string, maxLength: 100 }
+        customerLabel: { type: string, maxLength: 100 }
+        description: { type: string, maxLength: 500 }
+        sequence: { type: integer, minimum: 0 }
+        requiredForDispatch: { type: boolean }
+        selectableForUpdate: { type: boolean }
+        operational: { type: boolean }
+        terminal: { type: boolean }
+    ExpeditingDocumentReference:
+      type: object
+      additionalProperties: false
+      required: [type, reference]
+      properties:
+        type: { type: string, enum: [document, image, quality_record, other] }
+        reference: { type: string, minLength: 1, maxLength: 240 }
+        storageStatus:
+          type: string
+          enum: [metadata_only, pending, stored, rejected]
+          description: metadata_only is used by the public mock. Production file bytes, if approved, live in private object storage.
+    ExpeditingUpdateActor:
+      type: object
+      additionalProperties: false
+      required: [id, role, displayName]
+      properties:
+        id: { type: string, format: uuid }
+        role: { $ref: '#/components/schemas/WorkflowActorRole' }
+        displayName: { type: string, maxLength: 160 }
+    ExpeditingUpdate:
+      type: object
+      additionalProperties: false
+      required: [progressStep, customerMessage, customerVisible]
+      properties:
+        id: { type: string, format: uuid, readOnly: true }
+        progressStep: { $ref: '#/components/schemas/ExpeditingProgressStepCode' }
+        customerMessage: { type: string, minLength: 5, maxLength: 1000 }
+        internalNote:
+          type: string
+          maxLength: 2000
+          description: Internal-only and omitted from customer projections.
+        estimatedCompletionDate: { type: string, format: date }
+        delayReason:
+          type: string
+          maxLength: 1000
+          description: Internal operational context; omitted from customer projections.
+        document:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/ExpeditingDocumentReference'
+        customerVisible: { type: boolean, const: true }
+        updatedBy:
+          allOf:
+            - $ref: '#/components/schemas/ExpeditingUpdateActor'
+          readOnly: true
+        createdAt: { type: string, format: date-time, readOnly: true }
+    ExpeditingHandoff:
+      type: object
+      additionalProperties: false
+      required: [authorisedException]
+      properties:
+        authorisedException: { type: boolean, default: false }
+        exceptionReason:
+          type: string
+          minLength: 10
+          maxLength: 1000
+          description: Required and internal-only when authorisedException is true.
+        exceptionAuthorisationReference:
+          type: string
+          minLength: 3
+          maxLength: 160
+          description: Required and internal-only when authorisedException is true.
+      allOf:
+        - if:
+            properties:
+              authorisedException: { const: true }
+          then:
+            required: [exceptionReason, exceptionAuthorisationReference]
+    ExpeditingRecord:
+      type: object
+      additionalProperties: false
+      required: [currentStep, completedStepIds, updates]
+      properties:
+        currentStep: { $ref: '#/components/schemas/ExpeditingProgressStepCode' }
+        completedStepIds:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/ExpeditingProgressStepCode' }
+        estimatedCompletionDate: { type: string, format: date }
+        currentDelayReason:
+          type: string
+          maxLength: 1000
+          description: Internal-only and omitted from customer projections.
+        updates:
+          type: array
+          items: { $ref: '#/components/schemas/ExpeditingUpdate' }
+        handoffException:
+          allOf:
+            - $ref: '#/components/schemas/ExpeditingHandoff'
+          description: Internal-only and omitted from customer projections.
+        lastUpdatedAt: { type: string, format: date-time }
+        lastUpdatedBy: { $ref: '#/components/schemas/ExpeditingUpdateActor' }
+    ExpeditingWorkspaceOptions:
+      type: object
+      additionalProperties: false
+      required: [progressSteps, requiredStepIds, documentTypes, approachingCompletionDays]
+      properties:
+        progressSteps:
+          type: array
+          items: { $ref: '#/components/schemas/ExpeditingProgressStep' }
+        requiredStepIds:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/ExpeditingProgressStepCode' }
+        documentTypes:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, label]
+            properties:
+              id: { type: string, enum: [document, image, quality_record, other] }
+              label: { type: string, maxLength: 100 }
+        approachingCompletionDays: { type: integer, minimum: 1, maximum: 30 }
     WorkflowActionDescriptor:
       type: object
       required: [action, label, fromStatus, requiresComment, generatesNotification, customerVisible]
@@ -902,18 +1358,68 @@ components:
           items: { $ref: '#/components/schemas/WorkflowActionDescriptor' }
     Enquiry:
       type: object
-      required: [id, reference, companyId, workflowType, items, trackingStatus, version, createdAt, updatedAt]
+      required: [id, reference, companyId, submittingCustomerId, selectedRep, workflowType, items, trackingStatus, priority, submittedAt, version, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         reference: { type: string }
         companyId: { type: string, format: uuid }
         company: { type: string }
         contact: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
         application: { type: string }
+        customerNotes: { type: string }
+        emergency: { type: string, enum: ['yes', 'no'] }
+        priority: { type: string, enum: [urgent, standard] }
+        submittingCustomerId: { type: string, format: uuid }
+        submittingCustomer:
+          type: object
+          required: [id, name, email, phone]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            email: { type: string, format: email }
+            phone: { type: string }
+        companySnapshot:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            area: { type: string }
+            industry: { type: string }
         selectedRep: { $ref: '#/components/schemas/Representative' }
         items: { type: array, items: { $ref: '#/components/schemas/EnquiryItemInput' } }
+        documents:
+          type: array
+          items:
+            type: object
+            required: [id, documentType, fileName, mimeType, sizeBytes, uploadedAt]
+            properties:
+              id: { type: string, format: uuid }
+              documentType: { type: string }
+              fileName: { type: string }
+              mimeType: { type: string }
+              sizeBytes: { type: integer, minimum: 1, maximum: 4194304 }
+              uploadedAt: { type: string, format: date-time }
+              scanStatus: { type: string, enum: [pending, clean, rejected, failed] }
         workflowType: { type: string, const: rfq }
         trackingStatus: { $ref: '#/components/schemas/RfqStatus' }
+        submittedAt: { type: string, format: date-time }
+        assignedAt: { type: string, format: date-time }
+        quotedAt: { type: string, format: date-time }
+        quotationAcknowledgedAt: { type: string, format: date-time }
+        quotation:
+          allOf:
+            - $ref: '#/components/schemas/QuotationConfirmation'
+          description: Customer projections omit internalNote and all unauthorised document/reference fields.
+        acceptance:
+          allOf:
+            - $ref: '#/components/schemas/OrderAcceptance'
+          description: Internal roles only. This property must be omitted from customer projections.
+        acceptedAt: { type: string, format: date-time }
+        orderId: { type: string, format: uuid }
+        orderReference: { type: string }
         version: { type: integer, minimum: 0 }
         allowedWorkflowActions: { type: array, items: { $ref: '#/components/schemas/WorkflowActionDescriptor' } }
         trackingHistory: { type: array, items: { $ref: '#/components/schemas/TrackingEvent' } }
@@ -936,7 +1442,10 @@ components:
                 createdOrder:
                   allOf:
                     - $ref: '#/components/schemas/Order'
-                  description: Present only when convert_to_order creates the linked order.
+                  description: Present when accept_order creates or returns the linked order.
+                idempotent:
+                  type: boolean
+                  description: True when a repeated acceptance returns the existing linked order.
     DraftResponse:
       type: object
       required: [data]
@@ -978,6 +1487,26 @@ components:
         sourceRfqStatus: { type: string, const: converted_to_order }
         acceptedAt: { type: string, format: date-time }
         status: { type: string, description: Human-readable status label. }
+        planning:
+          allOf:
+            - $ref: '#/components/schemas/PlanningRecord'
+          description: Internal roles only. Omit the full property from customer projections.
+        internalJobNumber:
+          type: string
+          description: Temporary compatibility field; internal-only and omitted from customer projections.
+        customerPoNumber:
+          type: string
+          description: Temporary compatibility field; internal-only and omitted from customer projections.
+        planningStartedAt: { type: string, format: date-time }
+        plannedAt: { type: string, format: date-time }
+        submittedToExpeditingAt: { type: string, format: date-time }
+        expediting:
+          allOf:
+            - $ref: '#/components/schemas/ExpeditingRecord'
+          description: Internal roles receive the full record. Customer projections include only currentStep, estimatedCompletionDate and customer-visible updates with internal fields removed.
+        expeditingStartedAt: { type: string, format: date-time }
+        expeditingUpdatedAt: { type: string, format: date-time }
+        submittedToDispatchAt: { type: string, format: date-time }
         items:
           type: array
           items: { $ref: '#/components/schemas/OrderItemSnapshot' }
@@ -1015,7 +1544,7 @@ components:
       properties:
         id: { type: string }
         action: { type: string }
-        outcome: { type: string, enum: [success, failed, denied] }
+        outcome: { type: string, enum: [success, failed, denied, idempotent_replay] }
         entityType: { type: string, enum: [rfq, order] }
         entityId: { type: string, format: uuid }
         actorRole: { $ref: '#/components/schemas/WorkflowActorRole' }
@@ -1037,6 +1566,7 @@ components:
             mediaType: { type: string }
             sizeBytes: { type: integer }
             scanStatus: { type: string, enum: [pending, clean, rejected] }
+            customerVisible: { type: boolean }
     PageMeta:
       type: object
       required: [page, pageSize, total]

@@ -1,7 +1,9 @@
+import { isInternalAccount, roleProfileFor } from '../domain/accessControl.js';
+
 export function Account({ account, enquiries, onSignOut, serviceMode }) {
   const initials = account.contact.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
-  const isStaff = account.role !== 'customer';
-  const roleLabel = account.role.replaceAll('_', ' ').replace(/^./, character => character.toUpperCase());
+  const isStaff = isInternalAccount(account);
+  const roleLabel = roleProfileFor(account.role).label;
   return (
     <section className="app-screen account-screen" aria-labelledby="account-title">
       <div className="profile-hero"><span className="profile-avatar">{initials}</span><span className="eyebrow">{isStaff ? 'Internal role access' : 'Company account'}</span><h1 id="account-title">{isStaff ? <>{roleLabel} <em>workspace</em></> : <>Your <em>workspace</em></>}</h1><strong>{account.company}</strong><small>{account.industry}</small></div>

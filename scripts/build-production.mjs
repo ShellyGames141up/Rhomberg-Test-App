@@ -45,8 +45,10 @@ if ((await fs.readdir(output)).some(file => file.endsWith('.map'))) throw new Er
 for (const file of ['styles.css', 'runtime-config.js']) {
   await fs.copyFile(path.join(root, file), path.join(output, file));
 }
-const productionServiceWorker = (await fs.readFile(path.join(root, 'sw.js'), 'utf8'))
-  .replace('rhomberg-app-preview-v8', 'rhomberg-app-production-v8');
+const productionServiceWorkerSource = await fs.readFile(path.join(root, 'sw.js'), 'utf8');
+const productionServiceWorker = productionServiceWorkerSource
+  .replace(/rhomberg-app-preview-v(\d+)/, 'rhomberg-app-production-v$1');
+if (productionServiceWorker === productionServiceWorkerSource) throw new Error('Production service-worker cache name was not isolated from the preview cache.');
 await fs.writeFile(path.join(output, 'sw.js'), productionServiceWorker, 'utf8');
 const productionIndex = (await fs.readFile(path.join(root, 'index.html'), 'utf8'))
   .replace('Public test preview of the Rhomberg Instruments mobile product catalogue and quote-request app.', 'Rhomberg Instruments private-cloud product catalogue, RFQ and order-tracking application.')

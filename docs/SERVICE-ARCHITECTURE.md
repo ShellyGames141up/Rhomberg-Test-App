@@ -8,7 +8,10 @@ The React interface is now separated from persistence, authentication and delive
 React screens and App orchestration
               |
               v
- auth | accounts | products | enquiries | orders | workflow | audit | notifications
+ central role profiles + permission catalogue
+              |
+              v
+ auth | accounts | products | enquiries | orders | planning | expediting | workflow | audit | notifications
               |
        service implementation
           /             \
@@ -25,8 +28,10 @@ This boundary lets the company replace the demo implementation without redesigni
 | `auth` | Session lookup, sign-in, registration and sign-out |
 | `accounts` | Current company context, registration reference data and authorised company access |
 | `products` | Categories, product catalogue, product detail and recommendations |
-| `enquiries` | Customer-scoped RFQ drafts, RFQ submission and RFQ retrieval |
+| `enquiries` | Customer-scoped RFQ drafts/submission plus the assigned representative inbox |
 | `orders` | Separate authorised order retrieval; order records are never returned by `enquiries` |
+| `planning` | Authorised Planning users, approved production locations and controlled priority reference data |
+| `expediting` | Configured progress steps, Dispatch requirements, controlled metadata types and approaching-completion policy |
 | `workflow` | Authorised RFQ/order timelines, permitted actions and controlled transitions |
 | `tracking` | Compatibility alias for `workflow` while existing tracking views are retained |
 | `audit` | Append-only workflow/security history within an authorised internal scope |
@@ -42,8 +47,10 @@ initialize()
 auth.getSession() | signIn(credentials) | register(account) | signOut()
 accounts.getCurrent() | getRegistrationOptions() | listCompanies()
 products.getCatalogue() | list(filters) | getById(productId)
-enquiries.list(filters) | getById(id) | getDraft() | saveDraft(items) | submit(details, items)
+enquiries.list(filters) | listRepresentativeInbox(filters) | getById(id) | getDraft() | saveDraft(items) | submit(details, items)
 orders.list(filters) | getById(id)
+planning.getWorkspaceOptions()
+expediting.getWorkspaceOptions()
 workflow.list(filters) | getAllowedActions(recordId) | performAction(recordId, actionRequest)
 audit.list(filters)
 notifications.list(filters) | markRead(notificationId)
@@ -54,15 +61,45 @@ No service accepts an arbitrary target status. `performAction` accepts a stable 
 
 RFQ draft writes are serialised in API mode so rapid quantity/configuration changes cannot finish out of order.
 
+`src/services/contracts.js` is the single permission catalogue and role-to-permission matrix. `src/domain/accessControl.js` is the single UI/record-scope policy module: it supplies role profiles, default routes, navigation items, representative/company checks and Planning/Expediting/Dispatch queue predicates. React components consume these helpers rather than comparing role names.
+
+`src/domain/rfqInbox.js` owns the representative inbox groups, priority normalisation, age calculation, search filtering and sort order. `src/components/SalesRepresentativeDashboard.jsx` consumes those helpers and the service-returned assigned RFQs; it never reads browser storage or broadens the representative scope itself.
+
+`src/domain/planningQueue.js` owns the Planning queue stages, priority normalisation, order age/last-activity calculations, search, filtering, counts and sorting. `src/components/PlanningDashboard.jsx` is a desktop-optimised responsive consumer of those pure helpers. `src/components/PlanningFields.jsx` is shared with the generic management workflow panel, so management actions and the dedicated Planning workspace submit the same validated form structure.
+
+`src/domain/expediting.js` is the single configurable Expediting progress catalogue for mock mode. It defines the proposed steps, required-for-Dispatch subset, queue filters, sort choices, priority rules, estimated-completion warning window and pure search/count helpers. `expediting.getWorkspaceOptions()` exposes the same contract from both service implementations, allowing the production API to provide reviewed configuration without changing React.
+
+`src/components/ExpeditorDashboard.jsx` consumes only service-scoped orders and the returned workspace options. It provides one responsive mobile/desktop queue with oldest-update-first ordering, search across customer/representative/RFQ/order/job/PO references, due-soon/hold/priority views and read-only visibility after hand-off. `src/components/ExpeditingFields.jsx` is shared with the generic management workflow panel. It separates customer messages from internal notes and converts all Expediting interactions into the same validated workflow request.
+
 ## Implementations
 
 ### Mock implementation
 
 `src/services/mock/createMockServices.js` is used by GitHub Pages. It preserves the existing same-browser demo accounts, drafts, RFQs, orders and controlled workflow history. The only direct browser-storage adapter is `src/services/browserStore.js`; API mode uses it only for the non-sensitive theme preference.
 
-RFQs and orders are separate service resources and separate arrays inside one versioned mock workflow aggregate. One aggregate write is used when an accepted RFQ is converted: the RFQ becomes `converted_to_order` and a distinct `awaiting_planning` order is created together. This avoids the partial mock state that would be possible with two unrelated browser-storage writes. Existing combined version-2 records are migrated into the aggregate by `workflowType` when the preview first opens.
+RFQs and orders are separate service resources and separate arrays inside one versioned mock workflow aggregate. One aggregate write is used for `accept_order`: the acceptance is verified, the RFQ moves through the transient `accepted` state to `converted_to_order`, and a distinct `awaiting_planning` order is created together. This avoids the partial mock state that would be possible with unrelated browser-storage writes. Existing combined version-2 records are migrated into the aggregate by `workflowType` when the preview first opens.
 
-The new order stores an item snapshot with a generated order-line ID, source RFQ line ID and configuration snapshot. Later edits to catalogue metadata or RFQ display data therefore do not redefine what was converted. This is a browser-demo approximation of the transaction and immutable `order_items` rows required in PostgreSQL.
+RFQ submission validates the signed-in customer/company, reloads the selected representative from the approved area directory and then stores a permanent sequence-based reference, submission/assignment timestamps, configured lines, customer notes, priority, company/customer snapshots and safe uploaded-document metadata. The raw file object is never written to mock storage. Customer submission creates the first workflow/audit entry; the immediate assignment creates one representative notification and places the RFQ in `listRepresentativeInbox()`.
+
+Quotation confirmation follows the same boundary. The representative screen submits flat form values to `workflow.performAction`; the mock service validates and normalises those values into a nested quotation record before invoking the state machine. Internal and customer-facing notes remain separate. Any selected file is reduced to name, MIME type, size and upload-time metadata, while the raw file is discarded. Customer projection code removes the internal note and withholds the document/reference unless customer visibility was explicitly authorised.
+
+The customer receipt action also travels through `workflow.performAction`. It is exposed only to an authorised company customer while the RFQ is `quoted`, and the state machine records `quotationAcknowledgedAt` and `quotationAcknowledgedBy`. No component mutates the status or storage directly, and the action does not create an order.
+
+Order acceptance follows the same service boundary. Flat representative form values are validated and normalised into an internal acceptance record. The service requires a date, internal verification note and verification checkbox, plus a PO number or external transaction reference when its acceptance type requires one. It rejects pricing fields and card/banking/password data. Any supporting file is reduced to private metadata; raw bytes are discarded in mock mode.
+
+`accept_order` is the only representative-facing command. The internal `convert_to_order` transition cannot be invoked by a React component or ordinary API caller. The mock service generates the order ID/reference and applies both state transitions plus order creation in one aggregate update. Replaying the command after conversion returns the same linked order, so rapid repeated clicks cannot create duplicates.
+
+The new order stores an item snapshot with a generated order-line ID, source RFQ line ID and configuration snapshot. Later edits to catalogue metadata or RFQ display data therefore do not redefine what was converted. The RFQ remains in history and carries the linked order reference; the order appears immediately in the authorised customer's account. This is a browser-demo approximation of the transaction and immutable `order_items` rows required in PostgreSQL.
+
+Planning uses the same boundary. `planning.getWorkspaceOptions()` returns only fabricated authorised Planning users, recognised branch/location records and approved priority values. `complete_planning` accepts flat screen values, runs shared validation, resolves the selected Planning user/location from service-owned reference data and normalises them into one `planning` object. It also retains top-level job/PO fields only as a temporary compatibility aid for older preview consumers.
+
+The state machine independently revalidates the normalised Planning object. It requires an internal job number, assigned representative, authorised Planning user, Planning submission date and either a customer PO number or an explicit authorised exception with a reason. Dates, lengths, priorities and document-reference counts are constrained. The hand-off to Expediting revalidates the persisted record, records the actor and timestamp, appends audit/history events and creates distinct customer, representative and Expeditor messages.
+
+Customer projections remove the entire Planning object, compatibility job/PO fields and internal Planning actor metadata. Customers receive only the customer-visible stage description after submission to Expediting.
+
+Expediting follows the same boundary. `start_expediting`, `add_expediting_update`, Expediting-owned hold/resume and `complete_expediting` are normalised by `validateExpeditingAction()` before the central state machine runs. Each update stores a configured step, customer-facing message, optional internal note, estimate, delay reason and optional document/image reference metadata. Actor and timestamp come from the signed-in service session.
+
+The state machine keeps ordinary progress updates inside `expediting_in_progress`, appends structured progress and audit history, and creates notifications for the customer and assigned representative. Dispatch hand-off additionally notifies Dispatch and requires all configured required steps, or a recorded authorised exception with a meaningful reason and authorisation reference. Customer projections remove internal notes, delay/supplier context, controlled document references, internal actor IDs and exception evidence while preserving the customer message, step, public updater name and time.
 
 Legacy preview sessions are migrated only once and their old key is retired. Sign-out removes both the current and legacy session keys so an older browser profile cannot silently restore a staff session.
 
@@ -72,14 +109,22 @@ The mock is not production security. It does, however, model important rules:
 - a customer receives only RFQs whose `companyId` matches the signed-in account;
 - the separate order service applies the same company boundary and never returns another company's order;
 - sales representatives receive only records assigned to their authoritative `representativeId`;
-- Planning, Expediting and Dispatch receive order resources rather than the old combined RFQ/order list;
-- status changes require an action allowed for the exact state and signed-in role;
+- the representative inbox contains assigned RFQs only and exposes `Start Review` only while the RFQ is `assigned_to_rep`;
+- Planning receives only `awaiting_planning`, `planning_in_progress`, `planned` and Planning-owned holds;
+- Expediting receives `submitted_to_expediting`, `expediting_in_progress`, Expediting-owned holds and read-only `awaiting_dispatch` awareness;
+- Dispatch receives only its handover, delivery/collection and Dispatch-owned hold stages;
+- Buyer has an authenticated but deliberately empty operational scope until its workflow is approved;
+- Manager and Administrator receive wider operational reads; only Administrator receives user/retention administration permissions;
+- status changes require an action allowed for the exact state, signed-in role and named action permission;
 - representatives are checked against the RFQ assignment before representative-only actions;
 - Planning, Expediting and Dispatch handoffs cannot be skipped;
+- Expediting operational states cannot be selected through an ordinary progress update, and Dispatch hand-off cannot bypass the required-step or authorised-exception guard;
+- Expediting internal notes and controlled document/image references are removed from every customer projection;
 - every successful or denied workflow attempt creates a mock audit entry;
 - notifiable actions queue mock notification records;
 - notification inbox results are filtered by company, recipient role and representative assignment, with per-user read state;
-- RFQ-to-order conversion creates one linked order and a separate order-creation audit record, and a repeated conversion is rejected;
+- `accept_order` creates exactly one linked order, acceptance/conversion/order audit records and role-specific notifications; a repeated request returns the existing order;
+- customer projections hide representative-only acceptance evidence and supporting-document metadata;
 - validation runs inside the service boundary, even when the UI has already validated the form;
 - an RFQ is persisted before the test email is attempted, so an email failure does not lose the request.
 
@@ -97,9 +142,18 @@ The API client is designed for:
 - idempotency keys for RFQ submission and workflow actions;
 - structured validation errors;
 - multipart Purchase Order uploads;
+- JSON quotation confirmation requests, or multipart requests containing a JSON `payload` plus optional `quotationDocument`;
+- JSON order-acceptance requests, or multipart requests containing a JSON `payload` plus optional private `acceptanceDocument`;
+- JSON Planning action requests containing a validated nested `planning` object;
 - request timeouts and friendly network errors.
 
 Production access tokens must not be placed in Web Storage. The browser must never connect directly to PostgreSQL, SMTP or object storage with privileged credentials.
+
+When the representative includes a quotation file, the API adapter sends multipart data so the future backend can scan and store it in protected object storage. Without a file, it sends the same normalised action as JSON. The backend must independently revalidate the assignment, quotation metadata, file type/size and customer-visibility authorisation. Pricing is intentionally absent from both request variants.
+
+The acceptance adapter uses the same pattern. The backend must lock the RFQ, validate assignment/state/version and evidence, allocate the permanent order reference, insert the order and immutable items, update the RFQ, append audits/events and enqueue notifications in one database transaction. The unique `orders.enquiry_id` constraint and idempotency record provide duplicate protection even when different network retries carry different request IDs.
+
+The Planning adapter loads `/planning/workspace-options` and posts controlled `complete_planning` or `submit_to_expediting` actions through the existing order workflow endpoint. The backend must derive actor identity, validate staff scope, reload users/locations, reject customer access, and commit the order update, workflow/audit records and notification outbox in one transaction.
 
 The service worker bypasses `/api/` requests entirely, so authenticated responses cannot be written to the public offline cache. It fetches `runtime-config.js` network-first so a controlled mode or endpoint change is not hidden by an old cache entry.
 

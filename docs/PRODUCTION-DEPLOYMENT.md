@@ -74,7 +74,7 @@ The API must start each transaction with verified user/role context for row-leve
 
 ### 4. Uploaded documents
 
-Purchase Orders and other files require private object storage with:
+Purchase Orders, optional quotation evidence, internal order-acceptance evidence and other files require private object storage with:
 
 - server-side encryption;
 - blocked public access;
@@ -87,6 +87,12 @@ Purchase Orders and other files require private object storage with:
 - restore/export procedure linked to the database metadata backup.
 
 The database stores object keys, hashes and metadata—not document bytes.
+
+Quotation evidence must be internal by default. IT must support an explicit customer-visibility flag, role/company checks on every download, malware scan state, and short-lived authorised delivery. The Outlook quotation remains prepared and emailed outside this application; the app records confirmation metadata only. No quotation price values should enter the customer-facing API or browser bundle during this phase.
+
+Order-acceptance evidence is always internal-only in this phase. It may record a Purchase Order/payment reference and safe document metadata, but must never collect card data, bank-account credentials, PINs or passwords. Payment continues outside the app.
+
+Expediting document/image fields are metadata references only in the public preview. If production permits actual Expediting evidence uploads, they must use the same private object-storage, scanning and authorisation controls. Internal Expediting notes, delay/supplier context, references and hand-off exception evidence must never be exposed through a customer download or API projection.
 
 ### 5. Email delivery
 
@@ -154,7 +160,7 @@ Provide:
 
 - central structured logs with request/correlation IDs;
 - security/audit log retention separate from ordinary application logs;
-- dashboards for error rate, latency, login failures, RFQ volume, email queue, document-scan failures and database health;
+- dashboards for error rate, latency, login failures, RFQ volume, Expediting queue age, overdue estimates, orders on hold, email queue, document-scan failures and database health;
 - alerts with named owners and escalation paths;
 - application performance monitoring approved for customer-data handling;
 - a support runbook for sign-in, failed email, stuck order status, upload and restore incidents.
@@ -185,12 +191,38 @@ Use zero-downtime migrations where practical. Destructive schema changes require
 - Customer A cannot list, fetch, alter or download anything owned by Customer B.
 - Changing a company, enquiry, order or document ID in a URL does not cross the authorised scope.
 - A sales representative sees only actively assigned companies.
+- Client-supplied representative names/codes are ignored; an invalid representative/area pairing is rejected.
+- RFQ creation atomically stores the permanent reference, company/customer, line items, metadata, first audit event and one representative notification.
+- The representative inbox derives identity from the session and exposes Start Review only for an assigned `assigned_to_rep` RFQ.
+- Only the assigned representative (or explicitly authorised management role) can mark an under-review RFQ as quoted.
+- Quotation number/date/expiry rules are validated; pricing fields are rejected.
+- Marking an RFQ quoted atomically stores the representative/timestamp, separate internal/customer notes, workflow/audit entries and distinct customer/representative notifications.
+- Quotation file bytes are scanned and stored privately; unauthorised evidence and internal notes never appear in a customer response.
+- Only an authorised company customer can acknowledge receipt of its quoted RFQ, and doing so does not create an order or confirm payment, Purchase Order or price acceptance.
+- The assigned representative receives the customer acknowledgement notification.
+- Only the assigned representative or an explicitly authorised management role can run `accept_order`.
+- Acceptance type/date/internal note/verification and conditional PO/payment references are validated; card, banking, password and pricing fields are rejected.
+- Order acceptance and conversion are one transaction: one permanent order/reference, immutable line snapshots, the RFQ link, all workflow/audit events and notification-outbox records either commit together or all roll back.
+- Concurrent or repeated acceptance requests return the same linked order and cannot create a second order for one RFQ.
+- Customer responses retain the historical converted RFQ and linked order while omitting internal acceptance evidence and accepting-user details.
+- Planning sees only Planning stages (including Planning-owned holds).
+- Expediting sees only orders submitted by Planning, Expediting-owned holds and read-only awaiting-Dispatch hand-offs.
+- Dispatch sees only orders handed over by Expediting and Dispatch-owned holds.
 - A customer cannot invoke internal RFQ or order workflow actions.
 - An unassigned representative cannot review, quote, accept or convert another representative's RFQ.
 - Planning cannot start an order without accepted/conversion evidence and cannot skip its required references.
+- Planning completion requires a job number, Planning owner, submission date, assigned representative, and either a customer PO or an audited authorised exception.
+- Planning dates, priority, location and document-reference limits are validated server-side; browser display choices are not trusted.
+- Submitting to Expediting atomically records the Planning actor/time, workflow/audit entries and customer/representative/Expeditor notification-outbox records.
+- Customer API responses expose only the approved hand-off status and never the internal Planning record.
 - Expeditor cannot act until Planning submits the order and cannot administer users.
+- The Expediting step list, ordering and required-for-Dispatch subset come from approved server configuration; browser-supplied labels and flags are ignored.
+- Start, progress, hold, resume and Dispatch hand-off actions enforce the exact state, named permission and expected record version.
+- Every customer-visible Expediting update creates independent customer and assigned-representative timeline/notification records in the same transaction as the audit event.
+- Customer projections omit Expediting internal notes, delay/supplier context, controlled references, actor IDs and hand-off exception evidence.
+- Dispatch hand-off is rejected while required Expediting steps are incomplete unless the authorised exception reason and authorisation reference are complete and audited.
 - Dispatch cannot complete an order until the required collection or delivery stages occur.
-- Buyer cannot perform workflow actions unless an explicit approved permission is added.
+- Buyer receives no operational RFQ/order queue and cannot perform workflow actions until an approved procurement workflow and permission migration are deployed.
 - Only manager/administrator can override a mandatory step, and the reason/comment are audited.
 - Manager/admin actions are audited.
 - Session and CSRF attacks are rejected.

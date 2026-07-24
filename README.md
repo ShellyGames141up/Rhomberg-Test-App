@@ -15,8 +15,89 @@ This repository contains a phone-first test preview of a future Rhomberg Instrum
 - Expeditor password: `Expedite123!`
 - Dispatch email: `dispatch.workflow@example.invalid`
 - Dispatch password: `Dispatch123!`
+- Buyer email: `buyer.workflow@example.invalid`
+- Buyer password: `Buyer123!`
+- Manager email: `manager.workflow@example.invalid`
+- Manager password: `Manager123!`
+- Administrator email: `administrator.workflow@example.invalid`
+- Administrator password: `Admin123!`
 
 You can also create a test company account. Preview accounts, sessions, drafts, RFQs, orders, notifications and workflow updates are saved only in that browser on that device. Closing and reopening the site retains the data. This is not production authentication and it does not synchronise between devices.
+
+## Included in version 3.2
+
+- Shared Expeditor workspace designed for both desktop and mobile in the same React application
+- New, in-progress, on-hold, due-soon, awaiting-Dispatch and priority/emergency queue views
+- Oldest-update-first default sorting plus search by customer, representative, RFQ, order, internal job and Purchase Order reference
+- Configurable Expediting progress catalogue delivered through interchangeable mock/API services
+- Controlled Start, Progress Update, Hold, Resume and Dispatch Hand-off actions
+- Separate customer-facing message and internal note, with optional completion estimate, delay reason and document/image reference metadata
+- Immutable same-status progress events, audit entries and independent customer/representative notifications
+- Required-for-Dispatch completion rules with a controlled authorised-exception reason/reference
+- Customer-safe projections that retain public progress while omitting internal notes, delay/reference context, actor IDs and exception evidence
+- Read-only Expeditor awareness after an order has moved to `awaiting_dispatch`
+- Fabricated Expediting queue records and automated queue, workflow, permission, visibility, notification and API-adapter tests
+- Updated API/OpenAPI, PostgreSQL, security and private-cloud handover proposals
+
+## Included in version 3.1
+
+- Dedicated desktop-optimised Planning workspace in the same responsive React application
+- Planning queue for `awaiting_planning`, `planning_in_progress`, `planned` and Planning-owned holds, with stage/priority filters, full-text search and five sort modes
+- Order/RFQ references, customer and representative details, age, priority, emergency flag, line-item count, PO state and last activity in every queue row
+- Controlled `Start planning`, `Save planning details` and `Submit to expediting` actions through the existing service and workflow boundary
+- Structured Planning record with job number, customer PO or authorised exception, notes, schedule, assigned Planning user, location, priority and document references
+- Server-style validation of the Planning owner, recognised branch/location, dates, PO exception, assigned representative and required hand-off fields
+- Planning actor/timestamp metadata, immutable workflow/audit entries and recipient-specific customer, representative and Expeditor notifications
+- Customer-safe projection that removes job numbers, PO planning fields, schedules, notes, document references and internal Planning actors
+- Fabricated orders in all three Planning stages for immediate dashboard demonstration
+- Planning queue, state-machine, service, API-adapter, audit, notification and customer-projection tests
+
+## Included in version 3.0
+
+- Catalogue configuration corrections from the approved product notes, including gauge material/size/range/connection/feature restrictions, removal of PBT and addition of verified `RPTKZ`
+- Explicit `No optional feature required` choice on configurable gauge families, with mutually exclusive optional-feature selection
+- Utility/process-gauge separation so chemical-seal requests appear only where applicable
+- Assigned-representative `Accept Order` form for approved external acceptance types, conditional PO/payment references, acceptance date, internal verification note and optional private evidence metadata
+- Explicit rejection of pricing, payment-card, banking, PIN and password information; the app does not process payments
+- One atomic mock-service action that records acceptance, generates a permanent order reference, preserves immutable line snapshots, links the historical RFQ and routes the order to Planning
+- Idempotent duplicate protection so repeated acceptance cannot create a second order
+- Separate customer, assigned-representative and Planning notifications plus linked RFQ/order audit entries
+- Customer-safe projections that retain the converted RFQ and new order while hiding internal acceptance evidence
+- Fabricated `RQ-TEST-0006` seed record, already awaiting customer acceptance, for a quick Sales-to-Planning demonstration
+- Updated API, OpenAPI, PostgreSQL, security and private-cloud handover proposals
+
+## Included in version 2.9
+
+- Assigned-representative `Mark as Quoted` workflow with quotation number, quotation date, optional expiry, Outlook email confirmation and separate internal/customer-facing notes
+- Explicit rejection of quotation pricing fields in the customer-facing workflow
+- Optional quotation document reference or upload metadata, with a separate customer-visibility authorisation; the mock preview never stores file bytes or invents a download link
+- Recipient-specific in-app notifications for the customer and representative plus immutable workflow and audit-history entries
+- Customer-only `I received the quotation` acknowledgement, changing the RFQ to `awaiting_customer_acceptance` without confirming price, payment, Purchase Order acceptance or creating an order
+- Customer projections that omit internal notes and any quotation evidence not intentionally authorised for customer access
+- Mock-service, workflow, permission and future-API adapter tests for valid and invalid quotation actions
+
+## Included in version 2.8
+
+- Validated RFQ submission context using the signed-in customer and authorised company
+- Server-style representative validation that replaces client-supplied display details with the approved representative directory record
+- Persistent mock RFQ sequence, permanent RFQ references, submission/assignment timestamps and customer/company snapshots
+- Safe uploaded-document metadata, configured-line snapshots, customer notes, priority and submission audit history
+- Single representative assignment notification with a dedicated assigned-RFQ inbox service
+- Dedicated Sales Representative inbox with required status groups, search, priority filtering, RFQ age, emergency indicators and last activity
+- Reusable workflow action panel plus a prominent `Start Review` action for newly assigned RFQs
+- Clear customer success confirmation showing the permanent reference and assigned representative
+- Representative-inbox, submission, isolation, notification and Start Review tests
+
+## Included in version 2.7
+
+- One reusable permission catalogue for Customer, Sales Representative, Planning, Expeditor, Dispatch, Buyer, Manager and Administrator
+- Named workflow-action permissions enforced alongside the existing state, assignment, evidence and fulfilment guards
+- Central role profiles for dashboard wording, default destinations and mobile navigation
+- Strict service-level queues: Planning sees Planning stages, Expediting sees handed-over fulfilment stages, and Dispatch sees only handover stages
+- Assigned-record scoping for representatives, own-company scoping for customers and wider operational visibility for Manager/Administrator
+- Prepared but deliberately inactive Buyer workspace pending an approved procurement workflow
+- Fabricated Buyer, Manager and Administrator test identities
+- Permission, navigation, queue-isolation and denied-action audit tests
 
 ## Included in version 2.6
 
@@ -122,7 +203,7 @@ The two local price-book parts are generated from the supplied March 2026 workbo
 ## Build commands
 
 - `pnpm run check` - compile-check the React source
-- `pnpm test` - run state-machine, service, validation, audit and company-isolation tests
+- `pnpm test` - run permission, navigation, representative-inbox, queue-isolation, state-machine, service, validation and audit tests
 - `pnpm run build` - regenerate the GitHub Pages `app.js`
 - `pnpm run build:netlify` - build and stage only public static files in `dist/`
 - `pnpm run build:production` - generate an API-only candidate in ignored `dist-production/`

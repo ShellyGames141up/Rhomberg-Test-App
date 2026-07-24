@@ -1,4 +1,16 @@
-import { ServiceError, USER_ROLES } from '../services/contracts.js';
+import {
+  PLANNING_PRIORITY_VALUES,
+  roleCan,
+  RFQ_ACCEPTANCE_TYPES,
+  ServiceError,
+  USER_ROLES,
+  WORKFLOW_ACTION_PERMISSIONS,
+} from '../services/contracts.js';
+import {
+  EXPEDITOR_PROGRESS_STEP_IDS,
+  expeditorProgressStepById,
+  missingRequiredExpeditorSteps,
+} from './expediting.js';
 
 export const WORKFLOW_ENTITY_TYPES = Object.freeze({
   RFQ: 'rfq',
@@ -53,8 +65,8 @@ export const WORKFLOW_STATUS_DEFINITIONS = Object.freeze({
     submitted: status('submitted', 'rfq', 'RFQ submitted', 'Your RFQ has been received.', 'RFQ received and awaiting representative assignment.', true, 15),
     assigned_to_rep: status('assigned_to_rep', 'rfq', 'Assigned to representative', 'Your RFQ has been routed to the appropriate sales team.', 'RFQ has an assigned representative but review has not started.', false, 25),
     under_rep_review: status('under_rep_review', 'rfq', 'Under representative review', 'Your representative is reviewing the application and configuration.', 'Assigned representative is preparing the external quotation.', true, 40),
-    quoted: status('quoted', 'rfq', 'Quotation sent', 'Your quotation has been sent using the agreed contact channel.', 'Representative confirmed that the external quotation was sent.', true, 60),
-    awaiting_customer_acceptance: status('awaiting_customer_acceptance', 'rfq', 'Awaiting customer acceptance', 'Rhomberg is waiting for your acceptance, payment or Purchase Order.', 'Quotation is awaiting external acceptance evidence.', true, 70),
+    quoted: status('quoted', 'rfq', 'Quoted', 'Your quotation was emailed separately. Please acknowledge when you have received it.', 'Representative recorded the external Outlook quotation and notified the customer.', true, 60),
+    awaiting_customer_acceptance: status('awaiting_customer_acceptance', 'rfq', 'Awaiting customer acceptance', 'You acknowledged receiving the quotation. This does not confirm payment, a Purchase Order or order acceptance.', 'Customer acknowledged receipt; external acceptance evidence is still required.', true, 70),
     accepted: status('accepted', 'rfq', 'RFQ accepted', 'Your acceptance has been confirmed and the order can now be created.', 'Representative confirmed acceptance evidence.', true, 85),
     cancelled: status('cancelled', 'rfq', 'RFQ cancelled', 'This RFQ has been cancelled.', 'RFQ is terminal and cannot be processed without an authorised override.', true, 100),
     expired: status('expired', 'rfq', 'RFQ expired', 'This RFQ has expired. Please contact your representative if it is still required.', 'RFQ expired under the configured validity policy.', true, 100),
@@ -97,17 +109,26 @@ const transition = ({
   internalDescription,
   generatesNotification = false,
   notificationRecipients = [],
+  notificationMessages = {},
   requiresComment = false,
   timestampField = '',
   customerVisible,
   requiresAssignedRepresentative = false,
   guard = '',
   persistInputFields = [],
+  customerNotePath = '',
+  auditNotePath = '',
+  actorField = '',
+  internalOnly = false,
+  displayToStatus = '',
+  allowsSameStatus = false,
+  permission = WORKFLOW_ACTION_PERMISSIONS[action],
 }) => Object.freeze({
   action,
   entityType,
   from,
   to,
+  permission,
   roles: Object.freeze([...roles]),
   requiredFields: Object.freeze([...requiredFields]),
   label,
@@ -115,6 +136,7 @@ const transition = ({
   internalDescription,
   generatesNotification,
   notificationRecipients: Object.freeze([...notificationRecipients]),
+  notificationMessages: Object.freeze({ ...notificationMessages }),
   requiresComment,
   recordsTimestamp: Boolean(timestampField),
   timestampField,
@@ -122,6 +144,12 @@ const transition = ({
   requiresAssignedRepresentative,
   guard,
   persistInputFields: Object.freeze([...persistInputFields]),
+  customerNotePath,
+  auditNotePath,
+  actorField,
+  internalOnly,
+  displayToStatus,
+  allowsSameStatus,
 });
 
 const rfqTransition = config => transition({ entityType: WORKFLOW_ENTITY_TYPES.RFQ, ...config });
@@ -132,7 +160,7 @@ const transitions = [
     action: 'submit_rfq', from: 'draft', to: 'submitted', roles: [USER_ROLES.CUSTOMER], label: 'Submit RFQ',
     requiredFields: [required('entity.companyId', 'Authorised company account'), required('entity.application', 'Application'), required('entity.items', 'Configured units')],
     customerDescription: 'Your RFQ was submitted successfully.', internalDescription: 'Customer submitted the RFQ.',
-    generatesNotification: true, notificationRecipients: ['selected_representative'], timestampField: 'submittedAt', customerVisible: true,
+    generatesNotification: false, timestampField: 'submittedAt', customerVisible: true,
   }),
   rfqTransition({
     action: 'assign_representative', from: 'submitted', to: 'assigned_to_rep', roles: [SYSTEM_ACTOR_ROLE, ...INTERNAL_MANAGEMENT], label: 'Assign representative',
@@ -141,35 +169,82 @@ const transitions = [
     generatesNotification: true, notificationRecipients: ['assigned_representative'], timestampField: 'assignedAt', customerVisible: false,
   }),
   rfqTransition({
-    action: 'start_rep_review', from: 'assigned_to_rep', to: 'under_rep_review', roles: REP_ACTION_ROLES, label: 'Start representative review',
+    action: 'start_rep_review', from: 'assigned_to_rep', to: 'under_rep_review', roles: REP_ACTION_ROLES, label: 'Start Review',
     customerDescription: 'Your representative started reviewing the RFQ.', internalDescription: 'Assigned representative accepted the RFQ into their review queue.',
     requiresAssignedRepresentative: true, timestampField: 'reviewStartedAt', customerVisible: true,
   }),
   rfqTransition({
-    action: 'mark_quoted', from: 'under_rep_review', to: 'quoted', roles: REP_ACTION_ROLES, label: 'Mark quotation as sent',
-    requiredFields: [required('input.quotationSentAt', 'Quotation sent date and time')],
-    customerDescription: 'Your quotation has been sent.', internalDescription: 'Representative confirmed external quotation delivery.',
-    generatesNotification: true, notificationRecipients: ['customer'], requiresAssignedRepresentative: true, timestampField: 'quotedAt', customerVisible: true,
-    persistInputFields: ['quotationSentAt', 'quotationReference'],
+    action: 'mark_quoted', from: 'under_rep_review', to: 'quoted', roles: REP_ACTION_ROLES, label: 'Mark as Quoted',
+    requiredFields: [
+      required('input.quotation.number', 'Quotation number'),
+      required('input.quotation.date', 'Quotation date'),
+      required('input.quotation.expiryMode', 'Quotation expiry selection'),
+    ],
+    customerDescription: 'Your quotation was emailed separately. Please acknowledge when you have received it.',
+    internalDescription: 'Assigned representative recorded the external Outlook quotation.',
+    generatesNotification: true,
+    notificationRecipients: ['customer', 'assigned_representative'],
+    notificationMessages: {
+      customer: 'Your quotation was emailed separately. Open the RFQ to acknowledge that you received it.',
+      assigned_representative: 'The quotation confirmation was saved and the customer was notified to acknowledge receipt.',
+    },
+    requiresAssignedRepresentative: true,
+    guard: 'quotation_confirmation',
+    timestampField: 'quotedAt',
+    customerVisible: true,
+    persistInputFields: ['quotation'],
+    customerNotePath: 'input.quotation.customerNote',
+    auditNotePath: 'input.quotation.internalNote',
+    actorField: 'quotedBy',
   }),
   rfqTransition({
-    action: 'await_customer_acceptance', from: 'quoted', to: 'awaiting_customer_acceptance', roles: [SYSTEM_ACTOR_ROLE, ...REP_ACTION_ROLES], label: 'Await customer acceptance',
-    customerDescription: 'Rhomberg is waiting for your acceptance, payment or Purchase Order.', internalDescription: 'Quotation moved to the external acceptance stage.',
-    requiresAssignedRepresentative: true, timestampField: 'awaitingAcceptanceAt', customerVisible: true,
+    action: 'acknowledge_quotation', from: 'quoted', to: 'awaiting_customer_acceptance', roles: [USER_ROLES.CUSTOMER], label: 'I received the quotation',
+    customerDescription: 'You acknowledged receiving the quotation. This does not confirm payment, a Purchase Order or order acceptance.',
+    internalDescription: 'Customer acknowledged receipt of the external quotation; commercial acceptance remains outstanding.',
+    generatesNotification: true,
+    notificationRecipients: ['assigned_representative'],
+    notificationMessages: {
+      assigned_representative: 'The customer acknowledged receiving the quotation. This acknowledgement is not order acceptance.',
+    },
+    timestampField: 'quotationAcknowledgedAt',
+    customerVisible: true,
+    actorField: 'quotationAcknowledgedBy',
   }),
   rfqTransition({
-    action: 'accept_rfq', from: 'awaiting_customer_acceptance', to: 'accepted', roles: REP_ACTION_ROLES, label: 'Confirm acceptance',
-    requiredFields: [required('input.acceptanceBasis', 'Acceptance basis')],
-    customerDescription: 'Your acceptance has been confirmed.', internalDescription: 'Representative confirmed external payment or Purchase Order evidence.',
-    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'], requiresComment: true,
-    requiresAssignedRepresentative: true, timestampField: 'acceptedAt', customerVisible: true, persistInputFields: ['acceptanceBasis'],
+    action: 'accept_order', from: 'awaiting_customer_acceptance', to: 'accepted', roles: REP_ACTION_ROLES, label: 'Accept Order',
+    requiredFields: [
+      required('input.acceptance.type', 'Acceptance type'),
+      required('input.acceptance.date', 'Acceptance date'),
+      required('input.acceptance.internalNote', 'Internal note'),
+      required('input.acceptance.verified', 'Representative verification'),
+    ],
+    customerDescription: 'Rhomberg confirmed your external acceptance and created an order for Planning.',
+    internalDescription: 'Assigned representative verified external acceptance evidence before conversion.',
+    requiresAssignedRepresentative: true,
+    guard: 'order_acceptance',
+    timestampField: 'acceptedAt',
+    customerVisible: true,
+    persistInputFields: ['acceptance'],
+    auditNotePath: 'input.acceptance.internalNote',
+    actorField: 'acceptedBy',
+    displayToStatus: 'converted_to_order',
   }),
   rfqTransition({
     action: 'convert_to_order', from: 'accepted', to: 'converted_to_order', roles: [SYSTEM_ACTOR_ROLE, ...REP_ACTION_ROLES], label: 'Convert to order',
-    requiredFields: [required('input.orderId', 'Created order identifier')],
+    requiredFields: [required('input.orderId', 'Created order identifier'), required('input.orderReference', 'Permanent order reference')],
     customerDescription: 'Your accepted RFQ was converted into an order.', internalDescription: 'The RFQ was linked to the newly created order.',
-    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative', 'planning'], requiresAssignedRepresentative: true,
-    timestampField: 'convertedToOrderAt', customerVisible: true, persistInputFields: ['orderId'],
+    generatesNotification: true,
+    notificationRecipients: ['customer', 'assigned_representative', 'planning'],
+    notificationMessages: {
+      customer: 'Your acceptance was confirmed and your RFQ was converted into an order for Planning.',
+      assigned_representative: 'The verified RFQ acceptance was converted into an order and routed to Planning.',
+      planning: 'A newly accepted customer order is waiting for Planning.',
+    },
+    requiresAssignedRepresentative: true,
+    timestampField: 'convertedToOrderAt',
+    customerVisible: true,
+    persistInputFields: ['orderId', 'orderReference'],
+    internalOnly: true,
   }),
   ...['draft', 'submitted', 'assigned_to_rep', 'under_rep_review', 'quoted', 'awaiting_customer_acceptance'].map(from => rfqTransition({
     action: 'cancel_rfq', from, to: 'cancelled',
@@ -187,31 +262,92 @@ const transitions = [
   orderTransition({
     action: 'start_planning', from: 'awaiting_planning', to: 'planning_in_progress', roles: PLANNING_ACTION_ROLES, label: 'Start planning',
     customerDescription: 'Planning has started for your order.', internalDescription: 'Planning accepted the order into its work queue.',
-    guard: 'accepted_order', timestampField: 'planningStartedAt', customerVisible: true,
+    guard: 'accepted_order', timestampField: 'planningStartedAt', actorField: 'planningStartedBy', customerVisible: true,
   }),
   orderTransition({
-    action: 'complete_planning', from: 'planning_in_progress', to: 'planned', roles: PLANNING_ACTION_ROLES, label: 'Complete planning',
-    requiredFields: [required('input.internalJobNumber', 'Internal job number'), required('input.customerPoNumber', 'Customer Purchase Order number')],
-    customerDescription: 'Planning for your order is complete.', internalDescription: 'Planning recorded the job and customer PO references.',
-    timestampField: 'plannedAt', customerVisible: false, persistInputFields: ['internalJobNumber', 'customerPoNumber'],
+    action: 'complete_planning', from: 'planning_in_progress', to: 'planned', roles: PLANNING_ACTION_ROLES, label: 'Save planning details',
+    requiredFields: [
+      required('input.planning.internalJobNumber', 'Internal job number'),
+      required('input.planning.assignedPlanningUserId', 'Assigned Planning user'),
+      required('input.planning.submissionDate', 'Planning submission date'),
+      required('entity.selectedRep.id', 'Assigned representative'),
+    ],
+    customerDescription: 'Planning for your order is complete.',
+    internalDescription: 'Planning recorded the job, customer instruction, schedule, owner and production location.',
+    guard: 'planning_submission',
+    timestampField: 'plannedAt',
+    actorField: 'plannedBy',
+    auditNotePath: 'input.planning.notes',
+    customerVisible: false,
+    persistInputFields: ['planning', 'internalJobNumber', 'customerPoNumber'],
   }),
   orderTransition({
     action: 'submit_to_expediting', from: 'planned', to: 'submitted_to_expediting', roles: PLANNING_ACTION_ROLES, label: 'Submit to expediting',
-    requiredFields: [required('entity.internalJobNumber', 'Internal job number'), required('entity.customerPoNumber', 'Customer Purchase Order number')],
+    requiredFields: [
+      required('entity.planning.internalJobNumber', 'Internal job number'),
+      required('entity.planning.assignedPlanningUserId', 'Assigned Planning user'),
+      required('entity.planning.submissionDate', 'Planning submission date'),
+      required('entity.selectedRep.id', 'Assigned representative'),
+    ],
     customerDescription: 'Your order entered the fulfilment queue.', internalDescription: 'Planning handed the completed order plan to Expediting.',
-    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative', 'expeditor'], timestampField: 'submittedToExpeditingAt', customerVisible: true,
+    guard: 'planning_handoff',
+    generatesNotification: true,
+    notificationRecipients: ['customer', 'assigned_representative', 'expeditor'],
+    notificationMessages: {
+      customer: 'Planning has processed your order and it has entered the fulfilment queue.',
+      assigned_representative: 'Planning has processed the order and submitted it to Expediting.',
+      expeditor: 'A planned order is ready in the Expediting queue.',
+    },
+    timestampField: 'submittedToExpeditingAt',
+    actorField: 'submittedToExpeditingBy',
+    customerVisible: true,
   }),
   orderTransition({
     action: 'start_expediting', from: 'submitted_to_expediting', to: 'expediting_in_progress', roles: EXPEDITING_ACTION_ROLES, label: 'Start expediting',
+    requiredFields: [
+      required('input.expeditingUpdate.progressStep', 'Initial Expediting step'),
+      required('input.expeditingUpdate.customerMessage', 'Customer-facing update'),
+    ],
     customerDescription: 'Work has started on your instruments.', internalDescription: 'Expeditor accepted the planned order into the daily update queue.',
-    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'], timestampField: 'expeditingStartedAt', customerVisible: true,
+    guard: 'expediting_start',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'],
+    timestampField: 'expeditingStartedAt', actorField: 'expeditingStartedBy', customerVisible: true,
+    customerNotePath: 'input.expeditingUpdate.customerMessage',
+    auditNotePath: 'input.expeditingUpdate.internalNote',
+  }),
+  orderTransition({
+    action: 'add_expediting_update', from: 'expediting_in_progress', to: '__same__', roles: EXPEDITING_ACTION_ROLES, label: 'Add progress update',
+    requiredFields: [
+      required('input.expeditingUpdate.progressStep', 'Progress step'),
+      required('input.expeditingUpdate.customerMessage', 'Customer-facing update'),
+    ],
+    customerDescription: 'Progress on your order was updated.', internalDescription: 'Expeditor recorded a controlled production or fulfilment update.',
+    guard: 'expediting_progress_update',
+    generatesNotification: true,
+    notificationRecipients: ['customer', 'assigned_representative'],
+    timestampField: 'expeditingUpdatedAt',
+    actorField: 'lastExpeditingUpdatedBy',
+    customerVisible: true,
+    customerNotePath: 'input.expeditingUpdate.customerMessage',
+    auditNotePath: 'input.expeditingUpdate.internalNote',
+    allowsSameStatus: true,
   }),
   orderTransition({
     action: 'complete_expediting', from: 'expediting_in_progress', to: 'awaiting_dispatch', roles: EXPEDITING_ACTION_ROLES, label: 'Send to dispatch',
-    requiredFields: [required('input.completionCheckConfirmed', 'Completion check confirmation')],
+    requiredFields: [
+      required('input.completionCheckConfirmed', 'Completion check confirmation'),
+      required('input.expeditingUpdate.progressStep', 'Dispatch-ready progress step'),
+      required('input.expeditingUpdate.customerMessage', 'Customer-facing update'),
+    ],
     customerDescription: 'Your order is being prepared for handover.', internalDescription: 'Expeditor completed fulfilment and handed the order to Dispatch.',
-    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative', 'dispatch'], requiresComment: true,
-    timestampField: 'submittedToDispatchAt', customerVisible: true,
+    guard: 'expediting_dispatch_handoff',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative', 'dispatch'],
+    notificationMessages: {
+      dispatch: 'An Expedited order is ready in the Dispatch queue.',
+    },
+    timestampField: 'submittedToDispatchAt', actorField: 'submittedToDispatchBy', customerVisible: true,
+    customerNotePath: 'input.expeditingUpdate.customerMessage',
+    auditNotePath: 'input.expeditingUpdate.internalNote',
   }),
   orderTransition({
     action: 'mark_ready_for_collection', from: 'awaiting_dispatch', to: 'ready_for_collection', roles: DISPATCH_ACTION_ROLES, label: 'Mark ready for collection',
@@ -277,6 +413,7 @@ const OVERRIDE_TRANSITION = Object.freeze({
   action: 'override_workflow',
   from: '*',
   to: '__input__',
+  permission: WORKFLOW_ACTION_PERMISSIONS.override_workflow,
   roles: Object.freeze([USER_ROLES.MANAGER, USER_ROLES.ADMINISTRATOR]),
   requiredFields: Object.freeze([required('input.targetStatus', 'Target status'), required('input.overrideReason', 'Override reason')]),
   label: 'Authorised workflow override',
@@ -321,6 +458,16 @@ export const progressForWorkflowStatus = (statusId, entityType) => workflowStatu
 
 const representativeIdFor = entity => entity?.representativeId || entity?.selectedRep?.id || '';
 
+const assertActionPermission = (actor, transitionDefinition) => {
+  if (actor.role === SYSTEM_ACTOR_ROLE) return;
+  if (!transitionDefinition.permission || !roleCan(actor.role, transitionDefinition.permission)) {
+    throw new ServiceError('Your account does not have permission to perform that workflow action.', {
+      code: 'WORKFLOW_PERMISSION_FORBIDDEN',
+      status: 403,
+    });
+  }
+};
+
 const assertCompanyBoundary = (entity, actor) => {
   if (actor.role !== USER_ROLES.CUSTOMER) return;
   if (!actor.companyId || actor.companyId !== entity.companyId) {
@@ -336,7 +483,217 @@ const assertAssignedRepresentative = (entity, actor, transitionDefinition) => {
   }
 };
 
-const assertGuard = (entity, actor, transitionDefinition) => {
+const validDateOnly = value => {
+  const text = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+  const parsed = new Date(`${text}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === text;
+};
+
+const assertQuotationConfirmation = input => {
+  const quotation = input.quotation || {};
+  const fieldErrors = {};
+  const quotationNumber = String(quotation.number || '').trim();
+  const internalNote = String(quotation.internalNote || '');
+  const customerNote = String(quotation.customerNote || '');
+  const documentReference = String(quotation.documentReference || '');
+
+  if (quotationNumber.length > 80) fieldErrors.quotationNumber = 'Keep the quotation number below 80 characters.';
+  if (quotation.date && !validDateOnly(quotation.date)) fieldErrors.quotationDate = 'Enter a valid quotation date.';
+  if (quotation.expiryMode && !['dated', 'not_applicable'].includes(quotation.expiryMode)) fieldErrors.quotationExpiryMode = 'Select whether the quotation has an expiry date.';
+  if (quotation.expiryMode === 'dated') {
+    if (!validDateOnly(quotation.expiryDate)) fieldErrors.quotationExpiryDate = 'Enter a valid quotation expiry date.';
+    else if (validDateOnly(quotation.date) && quotation.expiryDate < quotation.date) fieldErrors.quotationExpiryDate = 'The expiry date cannot be before the quotation date.';
+  }
+  if (internalNote.length > 2000) fieldErrors.quotationInternalNote = 'Keep the internal note below 2,000 characters.';
+  if (customerNote.length > 1000) fieldErrors.quotationCustomerNote = 'Keep the customer-facing note below 1,000 characters.';
+  if (documentReference.length > 240) fieldErrors.quotationDocumentReference = 'Keep the document reference below 240 characters.';
+  if (['price', 'pricing', 'total', 'linePrices'].some(field => quotation[field] !== undefined)) {
+    throw new ServiceError('Pricing data is not permitted in this quotation-confirmation phase.', {
+      code: 'QUOTATION_PRICING_NOT_ALLOWED',
+      status: 422,
+      fieldErrors: { quotation: 'Remove pricing fields before confirming the quotation.' },
+    });
+  }
+  if (Object.keys(fieldErrors).length) {
+    throw new ServiceError(Object.values(fieldErrors)[0], {
+      code: 'QUOTATION_CONFIRMATION_INVALID',
+      status: 422,
+      fieldErrors,
+    });
+  }
+};
+
+const assertOrderAcceptance = input => {
+  const acceptance = input.acceptance || {};
+  const fieldErrors = {};
+  const type = String(acceptance.type || '').trim();
+  const purchaseOrderNumber = String(acceptance.purchaseOrderNumber || '').trim();
+  const paymentReference = String(acceptance.paymentReference || '').trim();
+  const internalNote = String(acceptance.internalNote || '').trim();
+  const documentReference = String(acceptance.documentReference || '').trim();
+
+  if (type && !RFQ_ACCEPTANCE_TYPES.includes(type)) fieldErrors.acceptanceType = 'Select a recognised acceptance type.';
+  if (acceptance.date && !validDateOnly(acceptance.date)) fieldErrors.acceptanceDate = 'Enter a valid acceptance date.';
+  if (type === 'purchase_order_received' && !purchaseOrderNumber) fieldErrors.acceptancePurchaseOrderNumber = 'Enter the received Purchase Order number.';
+  if (type === 'payment_confirmed' && !paymentReference) fieldErrors.acceptancePaymentReference = 'Enter the external payment or transaction reference.';
+  if (purchaseOrderNumber.length > 100) fieldErrors.acceptancePurchaseOrderNumber = 'Keep the Purchase Order number below 100 characters.';
+  if (paymentReference.length > 160) fieldErrors.acceptancePaymentReference = 'Keep the payment reference below 160 characters.';
+  if (internalNote.length > 2000) fieldErrors.acceptanceInternalNote = 'Keep the internal note below 2,000 characters.';
+  if (documentReference.length > 240) fieldErrors.acceptanceDocumentReference = 'Keep the supporting-document reference below 240 characters.';
+  if (acceptance.verified !== true) fieldErrors.acceptanceVerified = 'Confirm that the acceptance evidence was verified.';
+  if (['price', 'pricing', 'total', 'linePrices'].some(field => acceptance[field] !== undefined)) {
+    fieldErrors.acceptance = 'Remove pricing fields before accepting the order.';
+  }
+  const prohibitedCredentialFields = ['cardNumber', 'cvv', 'pin', 'password', 'bankAccount', 'bankingCredentials', 'routingNumber'];
+  if (prohibitedCredentialFields.some(field => acceptance[field] !== undefined)) {
+    throw new ServiceError('Payment cards, banking credentials and passwords must never be stored in the app.', {
+      code: 'SENSITIVE_PAYMENT_DATA_NOT_ALLOWED',
+      status: 422,
+      fieldErrors: { acceptance: 'Remove card, banking or password information.' },
+    });
+  }
+  if (Object.keys(fieldErrors).length) {
+    throw new ServiceError(Object.values(fieldErrors)[0], {
+      code: 'ORDER_ACCEPTANCE_INVALID',
+      status: 422,
+      fieldErrors,
+    });
+  }
+};
+
+const assertPlanningDetails = planning => {
+  const details = planning || {};
+  const fieldErrors = {};
+  const internalJobNumber = String(details.internalJobNumber || '').trim();
+  const customerPoNumber = String(details.customerPoNumber || '').trim();
+  const poException = details.customerPoException;
+  const poExceptionReason = String(poException?.reason || '').trim();
+  const notes = String(details.notes || '');
+  const documentReferences = Array.isArray(details.documentReferences) ? details.documentReferences : [];
+
+  if (!internalJobNumber) fieldErrors.planningInternalJobNumber = 'Enter the internal job number.';
+  if (internalJobNumber.length > 100) fieldErrors.planningInternalJobNumber = 'Keep the internal job number below 100 characters.';
+  if (customerPoNumber.length > 100) fieldErrors.planningCustomerPoNumber = 'Keep the customer Purchase Order number below 100 characters.';
+  if (!customerPoNumber && poException?.authorised !== true) {
+    fieldErrors.planningPoExceptionAuthorised = 'Enter the customer Purchase Order number or record an authorised exception.';
+  }
+  if (!customerPoNumber && poException?.authorised === true && poExceptionReason.length < 8) {
+    fieldErrors.planningPoExceptionReason = 'Explain the authorised Purchase Order exception in at least 8 characters.';
+  }
+  if (poExceptionReason.length > 1000) fieldErrors.planningPoExceptionReason = 'Keep the Purchase Order exception reason below 1,000 characters.';
+  if (!String(details.assignedPlanningUserId || '').trim()) fieldErrors.planningAssignedUserId = 'Select the Planning user responsible for this order.';
+  if (!validDateOnly(details.submissionDate)) fieldErrors.planningSubmissionDate = 'Enter the Planning submission date.';
+  if (details.plannedStartDate && !validDateOnly(details.plannedStartDate)) fieldErrors.planningStartDate = 'Enter a valid planned start date.';
+  if (details.estimatedCompletionDate && !validDateOnly(details.estimatedCompletionDate)) {
+    fieldErrors.planningEstimatedCompletionDate = 'Enter a valid estimated completion date.';
+  }
+  if (
+    validDateOnly(details.plannedStartDate)
+    && validDateOnly(details.estimatedCompletionDate)
+    && details.estimatedCompletionDate < details.plannedStartDate
+  ) {
+    fieldErrors.planningEstimatedCompletionDate = 'The estimated completion date cannot be before the planned start date.';
+  }
+  if (!PLANNING_PRIORITY_VALUES.includes(details.priority)) fieldErrors.planningPriority = 'Select a valid Planning priority.';
+  if (notes.length > 2000) fieldErrors.planningNotes = 'Keep Planning notes below 2,000 characters.';
+  if (documentReferences.length > 10) fieldErrors.planningDocumentReferences = 'Add no more than 10 document references.';
+  if (documentReferences.some(reference => String(reference).length > 240)) {
+    fieldErrors.planningDocumentReferences = 'Keep each document reference below 240 characters.';
+  }
+  if (Object.keys(fieldErrors).length) {
+    throw new ServiceError(Object.values(fieldErrors)[0], {
+      code: 'PLANNING_DETAILS_INVALID',
+      status: 422,
+      fieldErrors,
+    });
+  }
+};
+
+const assertExpeditingUpdate = (update, { expectedStep = '', requireSelectable = false } = {}) => {
+  const value = update || {};
+  const fieldErrors = {};
+  const progressStep = String(value.progressStep || '').trim();
+  const customerMessage = String(value.customerMessage || '').trim();
+  const internalNote = String(value.internalNote || '');
+  const estimatedCompletionDate = String(value.estimatedCompletionDate || '').trim();
+  const delayReason = String(value.delayReason || '');
+  const documentReference = String(value.document?.reference || '').trim();
+  const stepDefinition = expeditorProgressStepById(progressStep);
+
+  if (!EXPEDITOR_PROGRESS_STEP_IDS.includes(progressStep)) {
+    fieldErrors.expeditingProgressStep = 'Select a recognised Expediting progress step.';
+  } else if (expectedStep && progressStep !== expectedStep) {
+    fieldErrors.expeditingProgressStep = `This action must record the ${expeditorProgressStepById(expectedStep).label} step.`;
+  } else if (requireSelectable && !stepDefinition.selectableForUpdate) {
+    fieldErrors.expeditingProgressStep = 'Use the controlled workflow action for this progress step.';
+  }
+  if (customerMessage.length < 5) fieldErrors.expeditingCustomerMessage = 'Add a clear customer-facing progress message.';
+  if (customerMessage.length > 1000) fieldErrors.expeditingCustomerMessage = 'Keep the customer-facing message below 1,000 characters.';
+  if (internalNote.length > 2000) fieldErrors.expeditingInternalNote = 'Keep the internal note below 2,000 characters.';
+  if (estimatedCompletionDate && !validDateOnly(estimatedCompletionDate)) {
+    fieldErrors.expeditingEstimatedCompletionDate = 'Enter a valid estimated completion date.';
+  }
+  if (delayReason.length > 1000) fieldErrors.expeditingDelayReason = 'Keep the delay reason below 1,000 characters.';
+  if (documentReference.length > 240) fieldErrors.expeditingDocumentReference = 'Keep the controlled reference below 240 characters.';
+  if (Object.keys(fieldErrors).length) {
+    throw new ServiceError(Object.values(fieldErrors)[0], {
+      code: 'EXPEDITING_UPDATE_INVALID',
+      status: 422,
+      fieldErrors,
+    });
+  }
+};
+
+const assertExpeditingHandoff = (entity, input) => {
+  assertExpeditingUpdate(input?.expeditingUpdate, { expectedStep: 'ready_for_dispatch' });
+  const fieldErrors = {};
+  if (input?.completionCheckConfirmed !== true) {
+    fieldErrors.expeditingCompletionCheckConfirmed = 'Confirm that the Expeditor hand-off checks are complete.';
+  }
+  const projectedOrder = {
+    ...entity,
+    expediting: {
+      ...(entity.expediting || {}),
+      updates: [...(entity.expediting?.updates || []), input.expeditingUpdate],
+    },
+  };
+  const missingSteps = missingRequiredExpeditorSteps(projectedOrder);
+  const exception = input?.expeditingHandoff || {};
+  if (missingSteps.length && exception.authorisedException !== true) {
+    fieldErrors.expeditingReadyExceptionAuthorised = `Complete the required steps or record an authorised exception: ${missingSteps.map(id => expeditorProgressStepById(id).label).join(', ')}.`;
+  }
+  if (missingSteps.length && exception.authorisedException === true) {
+    if (String(exception.exceptionReason || '').trim().length < 10) {
+      fieldErrors.expeditingReadyExceptionReason = 'Explain the authorised exception in at least 10 characters.';
+    }
+    if (String(exception.exceptionAuthorisationReference || '').trim().length < 3) {
+      fieldErrors.expeditingReadyExceptionReference = 'Record the manager or controlled authorisation reference.';
+    }
+  }
+  if (Object.keys(fieldErrors).length) {
+    throw new ServiceError(Object.values(fieldErrors)[0], {
+      code: 'EXPEDITING_HANDOFF_INVALID',
+      status: 422,
+      fieldErrors,
+    });
+  }
+};
+
+const assertGuard = (entity, actor, transitionDefinition, input) => {
+  if (transitionDefinition.guard === 'quotation_confirmation' && input !== undefined) assertQuotationConfirmation(input);
+  if (transitionDefinition.guard === 'order_acceptance' && input !== undefined) assertOrderAcceptance(input);
+  if (transitionDefinition.guard === 'planning_submission' && input !== undefined) assertPlanningDetails(input.planning);
+  if (transitionDefinition.guard === 'planning_handoff') assertPlanningDetails(entity.planning);
+  if (transitionDefinition.guard === 'expediting_start' && input !== undefined) {
+    assertExpeditingUpdate(input.expeditingUpdate, { expectedStep: 'planning_received' });
+  }
+  if (transitionDefinition.guard === 'expediting_progress_update' && input !== undefined) {
+    assertExpeditingUpdate(input.expeditingUpdate, { requireSelectable: true });
+  }
+  if (transitionDefinition.guard === 'expediting_dispatch_handoff' && input !== undefined) {
+    assertExpeditingHandoff(entity, input);
+  }
   if (transitionDefinition.guard === 'accepted_order' && !(entity.sourceRfqStatus === 'converted_to_order' && entity.acceptedAt)) {
     throw new ServiceError('Planning cannot start until the source RFQ has been accepted and converted to an order.', { code: 'ORDER_NOT_ACCEPTED', status: 409 });
   }
@@ -357,12 +714,37 @@ const assertGuard = (entity, actor, transitionDefinition) => {
     if (!INTERNAL_MANAGEMENT.includes(actor.role) && !allowedOwnerRoles.includes(actor.role)) {
       throw new ServiceError('This role cannot resume the order at its previous workflow stage.', { code: 'WORKFLOW_ROLE_FORBIDDEN', status: 403 });
     }
+    if (['submitted_to_expediting', 'expediting_in_progress'].includes(resumeStatus) && input !== undefined) {
+      assertExpeditingUpdate(input.expeditingUpdate);
+      if (expeditorProgressStepById(input.expeditingUpdate?.progressStep).operational) {
+        throw new ServiceError('Resume the order at a normal Expediting progress step.', {
+          code: 'EXPEDITING_UPDATE_INVALID',
+          status: 422,
+          fieldErrors: { expeditingProgressStep: 'Select the production or fulfilment step where work will resume.' },
+        });
+      }
+    }
+  }
+  if (
+    transitionDefinition.action === 'place_on_hold'
+    && ['submitted_to_expediting', 'expediting_in_progress'].includes(entity.trackingStatus)
+    && input !== undefined
+  ) {
+    assertExpeditingUpdate(input.expeditingUpdate, { expectedStep: 'on_hold' });
+    if (String(input.expeditingUpdate?.delayReason || '').trim().length < 5) {
+      throw new ServiceError('Record why the order is being placed on hold.', {
+        code: 'EXPEDITING_UPDATE_INVALID',
+        status: 422,
+        fieldErrors: { expeditingDelayReason: 'Record why the order is being placed on hold.' },
+      });
+    }
   }
 };
 
 const resolveTargetStatus = (entity, transitionDefinition, input) => {
   if (transitionDefinition.to === '__resume__') return entity.workflowContext?.resumeStatus || '';
   if (transitionDefinition.to === '__input__') return String(input.targetStatus || '').trim();
+  if (transitionDefinition.to === '__same__') return entity.trackingStatus || '';
   return transitionDefinition.to;
 };
 
@@ -373,7 +755,7 @@ const findTransition = (entityType, fromStatus, action) => {
 
 const makeId = (prefix, idFactory) => `${prefix}-${idFactory?.() || globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
 
-const validateTransition = ({ entity, action, actor, input = {}, expectedVersion }) => {
+const validateTransition = ({ entity, action, actor, input = {}, expectedVersion, internal = false }) => {
   if (!entity?.id) throw new ServiceError('The RFQ or order could not be found.', { code: 'WORKFLOW_ENTITY_NOT_FOUND', status: 404 });
   if (!actor?.id || !actor?.role) throw new ServiceError('A signed-in workflow actor is required.', { code: 'WORKFLOW_ACTOR_REQUIRED', status: 401 });
   const entityType = inferWorkflowEntityType(entity);
@@ -386,13 +768,21 @@ const validateTransition = ({ entity, action, actor, input = {}, expectedVersion
   if (!transitionDefinition.roles.includes(actor.role)) {
     throw new ServiceError('Your role is not permitted to perform that workflow action.', { code: 'WORKFLOW_ROLE_FORBIDDEN', status: 403 });
   }
+  if (transitionDefinition.internalOnly && !internal) {
+    throw new ServiceError('That workflow step can only be completed by the order-conversion service.', { code: 'WORKFLOW_ACTION_INTERNAL_ONLY', status: 403 });
+  }
+  assertActionPermission(actor, transitionDefinition);
   assertCompanyBoundary(entity, actor);
   assertAssignedRepresentative(entity, actor, transitionDefinition);
-  assertGuard(entity, actor, transitionDefinition);
+  assertGuard(entity, actor, transitionDefinition, input);
   if (expectedVersion !== undefined && Number(expectedVersion) !== Number(entity.version || 0)) {
     throw new ServiceError('This record changed after it was opened. Refresh it before trying again.', { code: 'WORKFLOW_VERSION_CONFLICT', status: 409 });
   }
-  if (transitionDefinition.requiresComment && !String(input.comment || '').trim()) {
+  if (
+    transitionDefinition.requiresComment
+    && !String(input.comment || '').trim()
+    && !String(input.expeditingUpdate?.customerMessage || '').trim()
+  ) {
     throw new ServiceError('Add a comment explaining this workflow action.', { code: 'WORKFLOW_COMMENT_REQUIRED', status: 422, fieldErrors: { comment: 'A comment is required.' } });
   }
   const context = { entity, input };
@@ -405,7 +795,7 @@ const validateTransition = ({ entity, action, actor, input = {}, expectedVersion
   }
   const targetStatus = resolveTargetStatus(entity, transitionDefinition, input);
   const validTargets = entityType === WORKFLOW_ENTITY_TYPES.RFQ ? RFQ_STATUSES : ORDER_STATUSES;
-  if (!validTargets.includes(targetStatus) || targetStatus === currentStatus) {
+  if (!validTargets.includes(targetStatus) || (targetStatus === currentStatus && !transitionDefinition.allowsSameStatus)) {
     throw new ServiceError('Select a different valid status for this workflow.', { code: 'INVALID_WORKFLOW_TARGET', status: 422, fieldErrors: { targetStatus: 'Choose a valid target status.' } });
   }
   if (action === 'override_workflow' && currentStatus === 'archived') {
@@ -414,15 +804,28 @@ const validateTransition = ({ entity, action, actor, input = {}, expectedVersion
   return { entityType, currentStatus, targetStatus, transitionDefinition };
 };
 
-export function performWorkflowTransition({ entity, action, actor, input = {}, expectedVersion, now = () => new Date(), idFactory } = {}) {
-  const validated = validateTransition({ entity, action, actor, input, expectedVersion });
+export function performWorkflowTransition({ entity, action, actor, input = {}, expectedVersion, internal = false, now = () => new Date(), idFactory } = {}) {
+  const validated = validateTransition({ entity, action, actor, input, expectedVersion, internal });
   const occurredAt = now().toISOString();
   const targetDefinition = workflowStatusById(validated.targetStatus, validated.entityType);
   const isOverride = action === 'override_workflow';
-  const description = String(input.comment || validated.transitionDefinition.customerDescription || targetDefinition.customerDescription).trim();
+  const context = { entity, input };
+  const customerNote = input.expeditingUpdate?.customerMessage || (validated.transitionDefinition.customerNotePath
+    ? getPath(context, validated.transitionDefinition.customerNotePath)
+    : input.comment);
+  const auditNote = input.expeditingUpdate?.internalNote || (validated.transitionDefinition.auditNotePath
+    ? getPath(context, validated.transitionDefinition.auditNotePath)
+    : input.comment);
+  const description = String(customerNote || validated.transitionDefinition.customerDescription || targetDefinition.customerDescription).trim();
   const workflowContext = { ...(entity.workflowContext || {}) };
-  if (action === 'place_on_hold') workflowContext.resumeStatus = validated.currentStatus;
-  if (action === 'resume_order') delete workflowContext.resumeStatus;
+  if (action === 'place_on_hold') {
+    workflowContext.resumeStatus = validated.currentStatus;
+    if (input.expeditingUpdate) workflowContext.expeditingResumeStep = entity.expediting?.currentStep || 'planning_received';
+  }
+  if (action === 'resume_order') {
+    delete workflowContext.resumeStatus;
+    delete workflowContext.expeditingResumeStep;
+  }
 
   const updatedEntity = {
     ...entity,
@@ -437,6 +840,55 @@ export function performWorkflowTransition({ entity, action, actor, input = {}, e
     if (input[field] !== undefined) updatedEntity[field] = input[field];
   }
   if (validated.transitionDefinition.timestampField) updatedEntity[validated.transitionDefinition.timestampField] = occurredAt;
+  if (validated.transitionDefinition.actorField) {
+    updatedEntity[validated.transitionDefinition.actorField] = {
+      id: actor.id,
+      role: actor.role,
+      representativeId: actor.representativeId || '',
+      displayName: actor.displayName || actor.contact || actor.role,
+    };
+  }
+  if (input.expeditingUpdate) {
+    const previousExpediting = entity.expediting || {};
+    const progressStep = String(input.expeditingUpdate.progressStep || '').trim();
+    const completedStepIds = new Set(previousExpediting.completedStepIds || []);
+    if (!['on_hold', 'cancelled'].includes(progressStep)) completedStepIds.add(progressStep);
+    const progressUpdate = {
+      id: makeId('expediting-update', idFactory),
+      progressStep,
+      customerMessage: description,
+      internalNote: String(input.expeditingUpdate.internalNote || '').trim(),
+      estimatedCompletionDate: String(input.expeditingUpdate.estimatedCompletionDate || '').trim(),
+      delayReason: String(input.expeditingUpdate.delayReason || '').trim(),
+      document: input.expeditingUpdate.document ? { ...input.expeditingUpdate.document } : null,
+      customerVisible: input.expeditingUpdate.customerVisible !== false,
+      updatedBy: {
+        id: actor.id,
+        role: actor.role,
+        displayName: actor.displayName || actor.contact || actor.role,
+      },
+      createdAt: occurredAt,
+    };
+    updatedEntity.expediting = {
+      ...previousExpediting,
+      currentStep: progressStep,
+      completedStepIds: [...completedStepIds],
+      estimatedCompletionDate: progressUpdate.estimatedCompletionDate || previousExpediting.estimatedCompletionDate || entity.planning?.estimatedCompletionDate || '',
+      currentDelayReason: progressUpdate.delayReason || (action === 'resume_order' ? '' : previousExpediting.currentDelayReason || ''),
+      updates: [...(previousExpediting.updates || []), progressUpdate],
+      lastUpdatedAt: occurredAt,
+      lastUpdatedBy: progressUpdate.updatedBy,
+      ...(action === 'complete_expediting' && input.expeditingHandoff?.authorisedException ? {
+        handoffException: {
+          authorised: true,
+          reason: String(input.expeditingHandoff.exceptionReason || '').trim(),
+          authorisationReference: String(input.expeditingHandoff.exceptionAuthorisationReference || '').trim(),
+          recordedBy: progressUpdate.updatedBy,
+          recordedAt: occurredAt,
+        },
+      } : {}),
+    };
+  }
 
   const workflowEvent = {
     id: makeId('workflow-event', idFactory),
@@ -453,6 +905,7 @@ export function performWorkflowTransition({ entity, action, actor, input = {}, e
     actorId: actor.id,
     actorRole: actor.role,
     actor: actor.displayName || actor.contact || actor.role,
+    progressStep: input.expeditingUpdate?.progressStep || '',
     isOverride,
     overrideReason: isOverride ? String(input.overrideReason || '').trim() : '',
     createdAt: occurredAt,
@@ -470,7 +923,8 @@ export function performWorkflowTransition({ entity, action, actor, input = {}, e
     actorRole: actor.role,
     fromStatus: validated.currentStatus,
     toStatus: validated.targetStatus,
-    comment: String(input.comment || '').trim(),
+    comment: String(auditNote || '').trim(),
+    progressStep: input.expeditingUpdate?.progressStep || '',
     isOverride,
     createdAt: occurredAt,
   };
@@ -484,7 +938,8 @@ export function performWorkflowTransition({ entity, action, actor, input = {}, e
       recipients: [...validated.transitionDefinition.notificationRecipients],
       customerVisible: validated.transitionDefinition.customerVisible,
       status: validated.targetStatus,
-      message: validated.transitionDefinition.customerDescription,
+      message: description,
+      messages: { ...validated.transitionDefinition.notificationMessages },
     } : { required: false, recipients: [] },
     transition: { ...validated.transitionDefinition, to: validated.targetStatus },
   };
@@ -500,7 +955,9 @@ export function getAllowedWorkflowActions(entity, actor) {
   ];
   return candidates.filter(candidate => {
     try {
+      if (candidate.internalOnly) return false;
       if (!candidate.roles.includes(actor.role)) return false;
+      assertActionPermission(actor, candidate);
       assertCompanyBoundary(entity, actor);
       assertAssignedRepresentative(entity, actor, candidate);
       assertGuard(entity, actor, candidate);
@@ -511,9 +968,10 @@ export function getAllowedWorkflowActions(entity, actor) {
     }
   }).map(candidate => ({
     action: candidate.action,
+    permission: candidate.permission,
     label: candidate.label,
     fromStatus: entity.trackingStatus,
-    toStatus: candidate.action === 'override_workflow' ? '' : resolveTargetStatus(entity, candidate, { targetStatus: candidate.to }),
+    toStatus: candidate.action === 'override_workflow' ? '' : candidate.displayToStatus || resolveTargetStatus(entity, candidate, { targetStatus: candidate.to }),
     requiredFields: candidate.requiredFields.map(field => ({ ...field })),
     requiresComment: candidate.requiresComment,
     generatesNotification: candidate.generatesNotification,

@@ -2,6 +2,17 @@ import { areas, branches } from '../../data/branches.js';
 import { categories, industries, products, recommendedCategories } from '../../data/catalogue.js';
 import { representativesForArea } from '../../data/representatives.js';
 import {
+  canAccessNotification,
+  canAccessRecord,
+  isInternalRole,
+} from '../../domain/accessControl.js';
+import {
+  EXPEDITOR_DOCUMENT_TYPES,
+  EXPEDITOR_PROGRESS_STEPS,
+  REQUIRED_EXPEDITOR_STEP_IDS,
+} from '../../domain/expediting.js';
+import { PLANNING_PRIORITIES } from '../../domain/planningQueue.js';
+import {
   createDeniedWorkflowAudit,
   createWorkflowActor,
   getAllowedWorkflowActions,
@@ -14,10 +25,26 @@ import {
 } from '../../domain/workflow.js';
 import { optionsForField, shouldShowField } from '../../domain/productConfiguration.js';
 import { RFQ_EMAIL_RECIPIENT, sendRfqEmail } from '../../lib/rfqEmail.js';
-import { PERMISSIONS, ServiceError, USER_ROLES, roleCan, toPublicAccount } from '../contracts.js';
-import { MAX_PO_FILE_BYTES, validateEnquiry, validateRegistration, validateSignIn, validateWorkflowActionRequest } from '../validation.js';
+import { accountCan, PERMISSIONS, ServiceError, USER_ROLES, roleCan, toPublicAccount } from '../contracts.js';
+import {
+  MAX_ACCEPTANCE_DOCUMENT_BYTES,
+  MAX_PO_FILE_BYTES,
+  MAX_QUOTATION_DOCUMENT_BYTES,
+  validateOrderAcceptance,
+  validatePlanningSubmission,
+  validateCustomerAccountForRfq,
+  validateEnquiry,
+  validateExpeditingAction,
+  validateQuotationConfirmation,
+  validateRegistration,
+  validateRepresentativeAssignment,
+  validateSignIn,
+  validateWorkflowActionRequest,
+} from '../validation.js';
 import { createBrowserStore } from '../browserStore.js';
 import {
+  ADMINISTRATOR_ACCOUNT,
+  BUYER_ACCOUNT,
   DEMO_ACCOUNT,
   DEMO_ENQUIRIES,
   DEMO_LOGINS,
@@ -25,6 +52,7 @@ import {
   EXPEDITOR_ACCOUNT,
   EXTRA_DEMO_ACCOUNTS,
   LEGACY_STORE_KEYS,
+  MANAGER_ACCOUNT,
   PLANNING_ACCOUNT,
   SALES_ACCOUNT,
   STORE_KEYS,
@@ -42,7 +70,7 @@ const normaliseAccount = account => {
   return {
     ...account,
     role,
-    companyId: account.companyId || (role === USER_ROLES.CUSTOMER ? account.id : 'company-rhomberg'),
+    companyId: account.companyId || (roleCan(role, PERMISSIONS.ACCESS_CUSTOMER_WORKSPACE) ? account.id : 'company-rhomberg'),
   };
 };
 
@@ -105,6 +133,39 @@ const normaliseEnquiry = enquiry => {
 const isCustomerVisibleEvent = event => event.customerVisible !== false
   && workflowStatusById(event.toStatus || event.status, event.entityType)?.customerVisible !== false;
 
+const toCustomerVisibleQuotation = quotation => {
+  if (!quotation) return undefined;
+  const documentIsVisible = Boolean(quotation.documentCustomerVisible);
+  return {
+    number: quotation.number,
+    date: quotation.date,
+    expiryMode: quotation.expiryMode,
+    expiryDate: quotation.expiryDate,
+    customerNote: quotation.customerNote,
+    emailed: quotation.emailed,
+    documentReference: documentIsVisible ? quotation.documentReference : '',
+    document: documentIsVisible && quotation.document ? { ...quotation.document } : undefined,
+  };
+};
+
+const toCustomerVisibleExpediting = expediting => {
+  if (!expediting) return undefined;
+  return {
+    currentStep: expediting.currentStep,
+    estimatedCompletionDate: expediting.estimatedCompletionDate,
+    updates: (expediting.updates || [])
+      .filter(update => update.customerVisible !== false)
+      .map(update => ({
+        id: update.id,
+        progressStep: update.progressStep,
+        customerMessage: update.customerMessage,
+        estimatedCompletionDate: update.estimatedCompletionDate,
+        updatedBy: update.updatedBy ? { displayName: update.updatedBy.displayName } : undefined,
+        createdAt: update.createdAt,
+      })),
+  };
+};
+
 const toCustomerVisibleRecord = enquiry => {
   const history = (enquiry.trackingHistory || []).filter(isCustomerVisibleEvent);
   const lastVisible = history.at(-1);
@@ -115,6 +176,22 @@ const toCustomerVisibleRecord = enquiry => {
     trackingStatus: visibleStatus,
     status: definition?.label || enquiry.status,
     trackingHistory: history,
+    quotation: toCustomerVisibleQuotation(enquiry.quotation),
+    quotedBy: enquiry.quotedBy ? { displayName: enquiry.quotedBy.displayName } : undefined,
+    quotationAcknowledgedBy: undefined,
+    acceptance: undefined,
+    acceptedBy: undefined,
+    planning: undefined,
+    expediting: toCustomerVisibleExpediting(enquiry.expediting),
+    internalJobNumber: undefined,
+    customerPoNumber: undefined,
+    workflowContext: undefined,
+    planningStartedBy: undefined,
+    plannedBy: undefined,
+    submittedToExpeditingBy: undefined,
+    expeditingStartedBy: undefined,
+    lastExpeditingUpdatedBy: undefined,
+    submittedToDispatchBy: undefined,
     allowedWorkflowActions: [],
   };
 };
@@ -146,6 +223,8 @@ const validateConfiguredProducts = lines => {
       const selections = Array.isArray(value) ? value : [value];
       if (selections.some(selection => !allowed.includes(selection))) {
         fieldErrors[`items.${lineIndex}.configuration.${field.key}`] = `Review “${field.label}” for ${product.code}; one selection is not available.`;
+      } else if (field.exclusiveOption && selections.includes(field.exclusiveOption) && selections.length > 1) {
+        fieldErrors[`items.${lineIndex}.configuration.${field.key}`] = `Choose either “${field.exclusiveOption}” or specific options for ${product.code}, not both.`;
       }
     }
     if (configuration.sanas && product.category !== 'pressure') fieldErrors[`items.${lineIndex}.configuration.sanas`] = 'SANAS calibration is available only for Pressure instruments.';
@@ -177,6 +256,22 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   const appendAuditEvent = event => store.set(STORE_KEYS.audit, [...readAuditEvents(), event]);
   const readNotifications = () => store.get(STORE_KEYS.notifications, []);
   const appendNotification = notification => store.set(STORE_KEYS.notifications, [...readNotifications(), notification]);
+  const nextRfqReference = () => {
+    const highestStoredReference = readAllEnquiries().reduce((highest, enquiry) => {
+      const match = /^RQ-PREVIEW-(\d+)$/.exec(enquiry.reference || '');
+      return Math.max(highest, Number(match?.[1] || 0));
+    }, 0);
+    const nextSequence = Math.max(Number(store.get(STORE_KEYS.rfqSequence, 0)) || 0, highestStoredReference) + 1;
+    store.set(STORE_KEYS.rfqSequence, nextSequence);
+    return `RQ-PREVIEW-${String(nextSequence).padStart(4, '0')}`;
+  };
+  const nextOrderReference = existingOrders => {
+    const highestReference = existingOrders.reduce((highest, order) => {
+      const match = /^OR-PREVIEW-(\d+)$/.exec(order.reference || '');
+      return Math.max(highest, Number(match?.[1] || 0));
+    }, 0);
+    return `OR-PREVIEW-${String(highestReference + 1).padStart(4, '0')}`;
+  };
 
   const currentStoredAccount = () => {
     const session = store.get(STORE_KEYS.session, null);
@@ -189,19 +284,15 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     return account;
   };
 
-  const canReadRecord = (account, record) => {
-    const isOrder = inferWorkflowEntityType(record) === 'order';
-    if (isOrder && roleCan(account.role, PERMISSIONS.READ_ALL_ORDERS)) return true;
-    if (!isOrder && roleCan(account.role, PERMISSIONS.READ_ALL_ENQUIRIES)) return true;
-    if (isOrder && roleCan(account.role, PERMISSIONS.READ_OWN_ORDERS)) return record.companyId === account.companyId;
-    if (!isOrder && roleCan(account.role, PERMISSIONS.READ_OWN_ENQUIRIES)) return record.companyId === account.companyId;
-    if (isOrder && roleCan(account.role, PERMISSIONS.READ_ASSIGNED_ORDERS)) return record.selectedRep?.id === account.representativeId;
-    if (!isOrder && roleCan(account.role, PERMISSIONS.READ_ASSIGNED_ENQUIRIES)) return record.selectedRep?.id === account.representativeId;
-    return false;
-  };
+  const canReadRecord = (account, record) => canAccessRecord(account, record);
 
   const presentRecord = (account, record) => {
-    if (account.role === USER_ROLES.CUSTOMER) return toCustomerVisibleRecord(record);
+    if (!isInternalRole(account.role)) {
+      return {
+        ...toCustomerVisibleRecord(record),
+        allowedWorkflowActions: getAllowedWorkflowActions(record, createWorkflowActor(account)),
+      };
+    }
     return { ...record, allowedWorkflowActions: getAllowedWorkflowActions(record, createWorkflowActor(account)) };
   };
 
@@ -225,24 +316,133 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     status: result.entity.trackingStatus,
     recipients: result.notification.recipients,
     customerVisible: result.notification.customerVisible,
-    message: result.notification.message,
+    messages: result.notification.messages || {},
+    message: result.transition?.action === 'assign_representative'
+      ? `New RFQ ${record.reference} from ${record.company} is ready in your representative inbox.`
+      : result.notification.messages?.customer || result.notification.message,
     createdAt: now().toISOString(),
     readBy: [],
   });
 
-  const notificationMatchesAccount = (account, notification) => {
-    const recipients = notification.recipients || [];
-    if ([USER_ROLES.MANAGER, USER_ROLES.ADMINISTRATOR].includes(account.role)) return true;
-    if (account.role === USER_ROLES.CUSTOMER) {
-      return notification.customerVisible !== false
-        && notification.companyId === account.companyId
-        && recipients.includes('customer');
+  const planningUsers = () => readAccounts()
+    .filter(account => (
+      accountCan(account, PERMISSIONS.VIEW_PLANNING_QUEUE)
+      && accountCan(account, PERMISSIONS.ADD_PLANNING_INFORMATION)
+      && !accountCan(account, PERMISSIONS.VIEW_ALL_ORDERS)
+    ))
+    .map(account => ({
+      id: account.id,
+      name: account.contact || account.company || 'Planning user',
+      email: account.email,
+    }));
+
+  const prepareWorkflowRequest = (input, account) => {
+    const request = validateWorkflowActionRequest(input);
+    if (request.action === 'mark_quoted') {
+      const { quotation, quotationDocumentFile } = validateQuotationConfirmation(request.data);
+      const document = quotationDocumentFile ? {
+        id: makeId('quotation-document'),
+        documentType: 'quotation',
+        fileName: String(quotationDocumentFile.name || 'quotation-document'),
+        mimeType: String(quotationDocumentFile.type || 'application/octet-stream'),
+        sizeBytes: Number(quotationDocumentFile.size || 0),
+        uploadedAt: now().toISOString(),
+        storageStatus: 'metadata_only',
+        customerVisible: quotation.documentCustomerVisible,
+      } : undefined;
+      return {
+        ...request,
+        data: {
+          quotation: {
+            ...quotation,
+            document,
+          },
+        },
+      };
     }
-    if (account.role === USER_ROLES.SALES_REPRESENTATIVE) {
-      return notification.representativeId === account.representativeId
-        && recipients.some(recipient => ['assigned_representative', 'selected_representative'].includes(recipient));
+    if (request.action === 'accept_order') {
+      const { acceptance, acceptanceDocumentFile } = validateOrderAcceptance(request.data);
+      const document = acceptanceDocumentFile ? {
+        id: makeId('acceptance-document'),
+        documentType: 'order_acceptance_evidence',
+        fileName: String(acceptanceDocumentFile.name || 'acceptance-document'),
+        mimeType: String(acceptanceDocumentFile.type || 'application/octet-stream'),
+        sizeBytes: Number(acceptanceDocumentFile.size || 0),
+        uploadedAt: now().toISOString(),
+        storageStatus: 'metadata_only',
+        customerVisible: false,
+      } : undefined;
+      return {
+        ...request,
+        data: {
+          acceptance: {
+            ...acceptance,
+            document,
+          },
+        },
+      };
     }
-    return recipients.includes(account.role);
+    if (request.action === 'complete_planning') {
+      const validated = validatePlanningSubmission(request.data);
+      const assignedPlanningUser = planningUsers().find(user => user.id === validated.planning.assignedPlanningUserId);
+      if (!assignedPlanningUser) {
+        throw new ServiceError('Select an authorised Planning user.', {
+          code: 'INVALID_PLANNING_USER',
+          status: 422,
+          fieldErrors: { planningAssignedUserId: 'Select an authorised Planning user.' },
+        });
+      }
+      const productionLocation = validated.planning.productionLocationId
+        ? branches.find(branch => branch.id === validated.planning.productionLocationId)
+        : null;
+      if (validated.planning.productionLocationId && !productionLocation) {
+        throw new ServiceError('Select a recognised production location or branch.', {
+          code: 'INVALID_PRODUCTION_LOCATION',
+          status: 422,
+          fieldErrors: { planningProductionLocationId: 'Select a recognised production location or branch.' },
+        });
+      }
+      if (!accountCan(account, PERMISSIONS.ADD_PLANNING_INFORMATION)) {
+        throw new ServiceError('Your account cannot add Planning information.', { code: 'FORBIDDEN', status: 403 });
+      }
+      return {
+        ...request,
+        data: {
+          ...validated,
+          planning: {
+            ...validated.planning,
+            assignedPlanningUserName: assignedPlanningUser.name,
+            productionLocationName: productionLocation?.name || '',
+          },
+        },
+      };
+    }
+    const hasExpeditingPayload = Boolean(
+      request.data?.expeditingUpdate
+      || request.data?.expeditingCustomerMessage
+      || request.data?.expeditingProgressStep
+      || request.data?.expeditingReadyExceptionAuthorised,
+    );
+    if (
+      ['start_expediting', 'add_expediting_update', 'complete_expediting'].includes(request.action)
+      || (['place_on_hold', 'resume_order'].includes(request.action) && hasExpeditingPayload)
+    ) {
+      if (!accountCan(account, PERMISSIONS.UPDATE_ORDER_PROGRESS) && !accountCan(account, PERMISSIONS.MOVE_TO_DISPATCH)) {
+        throw new ServiceError('Your account cannot update Expediting progress.', { code: 'FORBIDDEN', status: 403 });
+      }
+      return {
+        ...request,
+        data: validateExpeditingAction(request.action, request.data),
+      };
+    }
+    return request;
+  };
+
+  const notificationMatchesAccount = (account, notification) => canAccessNotification(account, notification);
+  const notificationMessageForAccount = (account, notification) => {
+    if (account.role === USER_ROLES.CUSTOMER) return notification.messages?.customer || notification.message;
+    if (account.role === USER_ROLES.SALES_REPRESENTATIVE) return notification.messages?.assigned_representative || notification.message;
+    return notification.messages?.[account.role] || notification.messages?.internal || notification.message;
   };
 
   const initialize = async () => {
@@ -255,6 +455,9 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       PLANNING_ACCOUNT,
       EXPEDITOR_ACCOUNT,
       DISPATCH_ACCOUNT,
+      BUYER_ACCOUNT,
+      MANAGER_ACCOUNT,
+      ADMINISTRATOR_ACCOUNT,
       ...EXTRA_DEMO_ACCOUNTS,
     ]) {
       const index = accounts.findIndex(account => account.id === seed.id || account.email?.toLowerCase() === seed.email.toLowerCase());
@@ -362,15 +565,15 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
 
     async listCompanies() {
       const account = requireAccount();
-      if (account.role === USER_ROLES.CUSTOMER) {
+      if (roleCan(account.role, PERMISSIONS.VIEW_ALL_COMPANIES)) {
+        return readAccounts()
+          .filter(item => roleCan(item.role, PERMISSIONS.VIEW_OWN_COMPANY_ACCOUNT))
+          .map(item => ({ id: item.companyId, name: item.company, area: item.area, industry: item.industry }));
+      }
+      if (roleCan(account.role, PERMISSIONS.VIEW_OWN_COMPANY_ACCOUNT)) {
         return [{ id: account.companyId, name: account.company, area: account.area, industry: account.industry }];
       }
-      if (!roleCan(account.role, PERMISSIONS.READ_ALL_COMPANIES)) {
-        throw new ServiceError('Your role is not permitted to view company accounts.', { code: 'FORBIDDEN', status: 403 });
-      }
-      return readAccounts()
-        .filter(item => item.role === USER_ROLES.CUSTOMER)
-        .map(item => ({ id: item.companyId, name: item.company, area: item.area, industry: item.industry }));
+      throw new ServiceError('Your role is not permitted to view company accounts.', { code: 'FORBIDDEN', status: 403 });
     },
   };
 
@@ -404,16 +607,26 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       return clone(presentRecord(account, enquiry));
     },
 
+    async listRepresentativeInbox() {
+      const account = requireAccount();
+      if (!roleCan(account.role, PERMISSIONS.VIEW_ASSIGNED_RFQS) || !account.representativeId) {
+        throw new ServiceError('Your account does not have a representative RFQ inbox.', { code: 'FORBIDDEN', status: 403 });
+      }
+      return clone(readAllEnquiries()
+        .filter(enquiry => canReadRecord(account, enquiry))
+        .map(enquiry => presentRecord(account, enquiry)));
+    },
+
     async getDraft() {
       const account = requireAccount();
-      if (account.role !== USER_ROLES.CUSTOMER) return [];
+      if (!roleCan(account.role, PERMISSIONS.CREATE_RFQ)) return [];
       const drafts = store.get(STORE_KEYS.draft, {});
       return clone(Array.isArray(drafts) ? drafts : drafts[account.id] || []);
     },
 
     async saveDraft(lines) {
       const account = requireAccount();
-      if (account.role !== USER_ROLES.CUSTOMER) throw new ServiceError('Only customer accounts can save an RFQ draft.', { code: 'FORBIDDEN', status: 403 });
+      if (!roleCan(account.role, PERMISSIONS.CREATE_RFQ)) throw new ServiceError('This account cannot save an RFQ draft.', { code: 'FORBIDDEN', status: 403 });
       const stored = store.get(STORE_KEYS.draft, {});
       const drafts = Array.isArray(stored) ? {} : stored;
       drafts[account.id] = clone(lines);
@@ -423,13 +636,28 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
 
     async submit(details, lines) {
       const account = requireAccount();
-      if (!roleCan(account.role, PERMISSIONS.CREATE_ENQUIRY)) throw new ServiceError('This account cannot submit customer RFQs.', { code: 'FORBIDDEN', status: 403 });
+      if (!roleCan(account.role, PERMISSIONS.CREATE_RFQ)) throw new ServiceError('This account cannot submit customer RFQs.', { code: 'FORBIDDEN', status: 403 });
+      validateCustomerAccountForRfq(account);
       validateEnquiry(details, lines);
       validateConfiguredProducts(lines);
+      const representativeDirectory = representativesForArea(details.area);
+      const selectedRepresentative = validateRepresentativeAssignment(details.selectedRep, representativeDirectory.representatives);
       const { poFile, ...serialisableDetails } = details;
-      const existing = readAllEnquiries();
-      const reference = `RQ-PREVIEW-${String(existing.length + 1).padStart(4, '0')}`;
+      const reference = nextRfqReference();
       const createdAt = now().toISOString();
+      const assignedRepresentative = {
+        ...clone(selectedRepresentative),
+        branchName: representativeDirectory.branch.name,
+      };
+      const documentMetadata = poFile ? [{
+        id: makeId('document'),
+        documentType: 'purchase_order',
+        fileName: poFile.name,
+        mimeType: poFile.type || 'application/octet-stream',
+        sizeBytes: Number(poFile.size || 0),
+        uploadedAt: createdAt,
+        storageStatus: 'metadata_only',
+      }] : [];
       const baseEnquiry = {
         id: makeId('enquiry'),
         reference,
@@ -441,6 +669,24 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         email: account.email,
         phone: account.phone,
         ...serialisableDetails,
+        selectedRep: assignedRepresentative,
+        representativeId: assignedRepresentative.id,
+        submittingCustomerId: account.id,
+        submittingCustomer: {
+          id: account.id,
+          name: account.contact,
+          email: account.email,
+          phone: account.phone,
+        },
+        companySnapshot: {
+          id: account.companyId,
+          name: account.company,
+          area: account.area,
+          industry: account.industry,
+        },
+        customerNotes: serialisableDetails.notes || '',
+        priority: serialisableDetails.emergency === 'yes' ? 'urgent' : 'standard',
+        documents: documentMetadata,
         items: clone(lines),
         workflowType: 'rfq',
         trackingStatus: 'draft',
@@ -530,7 +776,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     return null;
   };
 
-  const createOrderFromRfq = ({ rfq, convertedRfq, orderId, actor, existingOrderCount }) => {
+  const createOrderFromRfq = ({ rfq, convertedRfq, orderId, orderReference, actor }) => {
     const {
       id: _rfqId,
       reference: _rfqReference,
@@ -541,9 +787,9 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       trackingHistory: _rfqHistory,
       orderId: _linkedOrderId,
       ...customerSnapshot
-    } = rfq;
+    } = convertedRfq;
     const occurredAt = now().toISOString();
-    const reference = `OR-PREVIEW-${String(existingOrderCount + 1).padStart(4, '0')}`;
+    const reference = orderReference;
     const items = (rfq.items || []).map(item => {
       const lineId = makeId('order-line');
       return {
@@ -606,8 +852,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
 
     async performAction(recordId, input) {
       const account = requireAccount();
-      if (!roleCan(account.role, PERMISSIONS.PERFORM_WORKFLOW_ACTION)) throw new ServiceError('Your role cannot perform workflow actions.', { code: 'FORBIDDEN', status: 403 });
-      const request = validateWorkflowActionRequest(input);
+      const request = prepareWorkflowRequest(input, account);
       const state = readWorkflowState();
       const located = locateWorkflowRecord(state, recordId, input?.entityType || '');
       if (!located) throw new ServiceError('The RFQ or order could not be found.', { code: 'WORKFLOW_RECORD_NOT_FOUND', status: 404 });
@@ -618,18 +863,67 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         appendAuditEvent(createDeniedWorkflowAudit({ entity: existing, action: request.action, actor, error, now }));
         throw error;
       }
-      const isConversion = located.entityType === 'rfq' && request.action === 'convert_to_order';
-      const generatedOrderId = isConversion ? makeId('order') : '';
-      let result;
-      try {
-        result = performWorkflowTransition({
-          entity: existing,
-          action: request.action,
-          actor,
-          input: { ...request.data, ...(isConversion ? { orderId: generatedOrderId } : {}), comment: request.comment },
-          expectedVersion: request.expectedVersion,
-          now,
+      const isAcceptanceConversion = located.entityType === 'rfq' && request.action === 'accept_order';
+      if (isAcceptanceConversion && existing.trackingStatus === 'converted_to_order') {
+        const existingOrder = state.orders.find(order => order.id === existing.orderId || order.sourceEnquiryId === existing.id);
+        if (!existingOrder) {
+          const error = new ServiceError('This RFQ is marked as converted, but its linked order could not be found.', { code: 'ORDER_CONVERSION_INCONSISTENT', status: 409 });
+          appendAuditEvent(createDeniedWorkflowAudit({ entity: existing, action: request.action, actor, error, now }));
+          throw error;
+        }
+        appendAuditEvent({
+          id: makeId('audit'),
+          action: 'workflow.accept_order',
+          outcome: 'idempotent_replay',
+          entityType: 'rfq',
+          entityId: existing.id,
+          linkedOrderId: existingOrder.id,
+          companyId: existing.companyId,
+          actorId: actor.id,
+          actorRole: actor.role,
+          fromStatus: existing.trackingStatus,
+          toStatus: existing.trackingStatus,
+          createdAt: now().toISOString(),
         });
+        return clone({
+          ...presentRecord(account, existing),
+          createdOrder: presentRecord(account, existingOrder),
+          idempotent: true,
+        });
+      }
+      const generatedOrderId = isAcceptanceConversion ? makeId('order') : '';
+      const generatedOrderReference = isAcceptanceConversion ? nextOrderReference(state.orders) : '';
+      let result;
+      let acceptanceResult = null;
+      try {
+        if (isAcceptanceConversion) {
+          acceptanceResult = performWorkflowTransition({
+            entity: existing,
+            action: 'accept_order',
+            actor,
+            input: { ...request.data, comment: request.comment },
+            expectedVersion: request.expectedVersion,
+            now,
+          });
+          result = performWorkflowTransition({
+            entity: acceptanceResult.entity,
+            action: 'convert_to_order',
+            actor,
+            input: { orderId: generatedOrderId, orderReference: generatedOrderReference },
+            expectedVersion: acceptanceResult.entity.version,
+            internal: true,
+            now,
+          });
+        } else {
+          result = performWorkflowTransition({
+            entity: existing,
+            action: request.action,
+            actor,
+            input: { ...request.data, comment: request.comment },
+            expectedVersion: request.expectedVersion,
+            now,
+          });
+        }
       } catch (error) {
         appendAuditEvent(createDeniedWorkflowAudit({ entity: existing, action: request.action, actor, error, now }));
         throw error;
@@ -637,17 +931,18 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const updated = normaliseEnquiry(result.entity);
       located.collection[located.index] = updated;
       let createdOrder = null;
-      if (isConversion) {
+      if (isAcceptanceConversion) {
         createdOrder = createOrderFromRfq({
           rfq: existing,
           convertedRfq: updated,
           orderId: generatedOrderId,
+          orderReference: generatedOrderReference,
           actor,
-          existingOrderCount: state.orders.length,
         });
         state.orders.unshift(createdOrder);
       }
       writeWorkflowState(state);
+      if (acceptanceResult) appendAuditEvent(acceptanceResult.auditEvent);
       appendAuditEvent(result.auditEvent);
       if (createdOrder) {
         appendAuditEvent({
@@ -690,6 +985,8 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         .filter(item => notificationMatchesAccount(account, item))
         .map(item => ({
           ...item,
+          message: notificationMessageForAccount(account, item),
+          messages: undefined,
           readAt: (item.readBy || []).includes(account.id) ? item.readAtBy?.[account.id] || item.createdAt : '',
         }))
         .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
@@ -709,6 +1006,39 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       };
       store.set(STORE_KEYS.notifications, items);
       return clone({ ...items[index], readAt });
+    },
+  };
+
+  const planning = {
+    async getWorkspaceOptions() {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.ADD_PLANNING_INFORMATION)) {
+        throw new ServiceError('Your account cannot access Planning reference data.', { code: 'FORBIDDEN', status: 403 });
+      }
+      return clone({
+        users: planningUsers(),
+        locations: branches.map(branch => ({ id: branch.id, name: branch.name, role: branch.role })),
+        priorities: PLANNING_PRIORITIES,
+      });
+    },
+  };
+
+  const expediting = {
+    async getWorkspaceOptions() {
+      const account = requireAccount();
+      if (
+        !accountCan(account, PERMISSIONS.VIEW_EXPEDITING_QUEUE)
+        && !accountCan(account, PERMISSIONS.UPDATE_ORDER_PROGRESS)
+        && !accountCan(account, PERMISSIONS.MOVE_TO_DISPATCH)
+      ) {
+        throw new ServiceError('Your account cannot access Expediting reference data.', { code: 'FORBIDDEN', status: 403 });
+      }
+      return clone({
+        progressSteps: EXPEDITOR_PROGRESS_STEPS,
+        requiredStepIds: REQUIRED_EXPEDITOR_STEP_IDS,
+        documentTypes: EXPEDITOR_DOCUMENT_TYPES,
+        approachingCompletionDays: 3,
+      });
     },
   };
 
@@ -735,11 +1065,15 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     tracking: workflow,
     audit,
     notifications,
+    planning,
+    expediting,
     products: productService,
     preferences,
     preview: {
       emailRecipient: RFQ_EMAIL_RECIPIENT,
       maxPoFileBytes: MAX_PO_FILE_BYTES,
+      maxQuotationDocumentBytes: MAX_QUOTATION_DOCUMENT_BYTES,
+      maxAcceptanceDocumentBytes: MAX_ACCEPTANCE_DOCUMENT_BYTES,
       persistenceLabel: 'this browser',
     },
   };
