@@ -1,3 +1,9 @@
+import {
+  defaultViewForRole,
+  isInternalRole,
+  navigationItemsForRole,
+} from '../domain/accessControl.js';
+
 export function AppHeader({ account, onNavigate, onBack, backLabel, theme, onToggleTheme, serviceMode }) {
   const initials = account.contact.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
   return (
@@ -5,7 +11,7 @@ export function AppHeader({ account, onNavigate, onBack, backLabel, theme, onTog
       {onBack ? (
         <button className="header-back" type="button" onClick={onBack} aria-label={backLabel || 'Go back'}><span>←</span></button>
       ) : (
-        <button className="mini-brand" type="button" onClick={() => onNavigate(account.role === 'customer' ? 'home' : 'expeditor')} aria-label="Rhomberg home">
+        <button className="mini-brand" type="button" onClick={() => onNavigate(defaultViewForRole(account.role))} aria-label="Rhomberg home">
           <img src="assets/images/rhomberg-gauge-mark.svg" alt="" />
           <span><strong>RHOMBERG</strong><small>INSTRUMENTS</small></span>
         </button>
@@ -20,23 +26,16 @@ export function AppHeader({ account, onNavigate, onBack, backLabel, theme, onTog
   );
 }
 
-export function BottomNav({ active, quantity, role, onNavigate }) {
-  const isStaff = role !== 'customer';
-  const items = isStaff
-    ? [['expeditor', '↻', 'Orders'], ['account', '○', 'Account']]
-    : [
-      ['home', '⌂', 'Home'],
-      ['catalogue', '◇', 'Catalogue'],
-      ['enquiry', '+', 'Enquire'],
-      ['tracking', '◎', 'Orders'],
-      ['account', '○', 'Account'],
-    ];
+export function BottomNav({ active, quantity, role, unreadCount = 0, onNavigate }) {
+  const isStaff = isInternalRole(role);
+  const items = navigationItemsForRole(role);
   return (
     <nav className={`bottom-nav ${isStaff ? 'expeditor-nav' : ''}`} aria-label="Main navigation">
-      {items.map(([id, glyph, label]) => (
+      {items.map(({ id, glyph, label }) => (
         <button key={id} type="button" className={`${active === id ? 'active' : ''} ${id === 'enquiry' ? 'nav-primary' : ''}`} onClick={() => onNavigate(id)}>
           <span className="nav-icon">{glyph}</span><small>{label}</small>
           {id === 'enquiry' && quantity > 0 && <b className="nav-badge">{quantity}</b>}
+          {id === 'notifications' && unreadCount > 0 && <b className="nav-badge notification-nav-badge">{Math.min(unreadCount, 99)}</b>}
         </button>
       ))}
     </nav>

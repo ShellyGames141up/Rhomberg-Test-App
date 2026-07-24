@@ -8,16 +8,94 @@ EXPEDITOR PREVIEW
 Email: expeditor.test@rhom.co.za
 Password: Expedite123!
 
+SALES PREVIEW
+Email: sales.workflow@example.invalid
+Password: Sales123!
+
+PLANNING PREVIEW
+Email: planning.workflow@example.invalid
+Password: Planning123!
+
+DISPATCH PREVIEW
+Email: dispatch.workflow@example.invalid
+Password: Dispatch123!
+
+BUYER PREVIEW (PREPARED, INACTIVE)
+Email: buyer.workflow@example.invalid
+Password: Buyer123!
+
+MANAGER PREVIEW
+Email: manager.workflow@example.invalid
+Password: Manager123!
+
+ADMINISTRATOR PREVIEW
+Email: administrator.workflow@example.invalid
+Password: Admin123!
+
 WHAT TO TEST
-1. Sign in as the demo customer and submit an RFQ.
-2. Open Orders to confirm the RFQ remains in the customer timeline.
-3. Sign out and use the expeditor login.
-4. Search for the company or representative, then add a status update.
-5. Sign back in as the customer to see the update.
-6. Try the light/dark theme button in the top bar.
+1. Sign in as the Cape customer and submit an RFQ to Ericu Vercuiel using
+   fabricated information. Confirm the permanent reference and routing message.
+2. Sign in as Sales. Find the RFQ in New RFQs, open it and select Start Review.
+3. Use the Sales inbox groups, search and priority filters. Confirm RFQ age,
+   company/customer information, emergency priority and last activity are clear.
+4. Open the assigned Cape Process Demo RFQ and select Mark as Quoted. Enter a
+   fabricated quotation number/date, optionally record its expiry and Outlook
+   email confirmation, and use separate internal and customer-facing notes.
+5. Sign in as the Cape customer, open that RFQ in Order Tracking and select
+   I received the quotation. Confirm this only records receipt and does not
+   create an order, confirm payment or accept pricing.
+6. Sign back in as Sales. Confirm the acknowledgement notification, record the
+   separate external customer-order acceptance evidence and select Accept Order.
+   Try a fabricated PO acceptance with a test PO number, date, internal note and
+   verification checkbox. The RFQ and one permanent order number are linked
+   automatically and the order is routed to Planning. For a quicker demo, open
+   the pre-seeded RQ-TEST-0006, which is already awaiting customer acceptance.
+7. Sign in as Planning. The desktop workspace has fabricated orders in Awaiting,
+   In Progress and Planned stages. Search/filter/sort the queue, open an Awaiting
+   order and select Start Planning. Open the In Progress order, enter a fabricated
+   internal job number, customer PO (or an authorised test exception), owner,
+   submission date, location and schedule, then Save planning details. Open the
+   Planned order and select Submit to Expediting. Confirm the customer sees only
+   the safe hand-off update while Expediting receives its queue notification.
+8. Sign in as Expeditor. Use the New, In Progress, Due Soon, On Hold and
+   Awaiting Dispatch views, then search by customer, rep, RFQ, order, job or PO.
+   Open a newly submitted order and select Start Expediting. Add configured
+   progress updates with a customer message and a separate fabricated internal
+   note. Change the estimate, record a delay, place it on hold and resume it.
+   Complete the required hand-off steps, then Submit to Dispatch. Confirm the
+   handed-off order stays visible but read-only in Awaiting Dispatch.
+9. Sign in as Dispatch, follow its collection path and complete the order.
+10. Sign in as the Cape customer (shown on the sign-in screen) to review the
+   RFQ, separate order timeline and notifications.
+11. Try the notification read state and light/dark theme.
+12. Sign in as Buyer and confirm that no operational queue or update action is
+   exposed while the procurement workflow remains inactive.
+13. Sign in as Manager and Administrator to confirm their wider oversight
+   queues. Workflow actions remain constrained by the current stage and the
+   central permission catalogue.
+
+EXPECTED QUEUE ISOLATION
+- Customer: only the authorised company.
+- Sales inbox: only RFQs assigned to that representative; assigned orders remain
+  visible from the representative account summary.
+- Planning: awaiting planning, planning in progress, planned, or a Planning hold.
+- Expeditor: submitted to expediting, expediting in progress, an Expediting hold,
+  or read-only awaiting-Dispatch hand-off awareness.
+- Dispatch: awaiting dispatch through delivery/collection, or a Dispatch hold.
+- Buyer: no operational records until its workflow is approved.
+- Manager/Administrator: wider authorised operational oversight.
 
 IMPORTANT
-Accounts, RFQs and updates persist in this browser only. They remain after the
-site is closed and reopened, but do not synchronise to another phone or browser.
-Use fabricated test information only. The production version needs secure
-authentication, a shared database and encrypted Purchase Order storage.
+Accounts, RFQs, orders, notifications and updates persist in this browser only.
+They remain after the site is closed and reopened, but do not synchronise to
+another phone or browser. Use fabricated test information only. The production
+version needs secure authentication, a shared database, server transactions,
+notification delivery and encrypted Purchase Order storage.
+
+SAFETY
+Accept Order records only evidence already received through the approved external
+sales process. Do not enter real prices, payment-card details, bank credentials,
+PINs or passwords. Supporting-file bytes are not retained in this mock preview.
+Planning notes, job numbers, schedules, locations and document references are
+internal-only. Expediting internal notes, delay/reference context and exception
+evidence are also internal-only. Use fabricated values in the public test preview.

@@ -8,12 +8,39 @@ import { ExpeditorDashboard } from './components/ExpeditorDashboard.jsx';
 import { Home } from './components/Home.jsx';
 import { Intro } from './components/Intro.jsx';
 import { AppHeader, BottomNav, Toast } from './components/Layout.jsx';
+import { Notifications } from './components/Notifications.jsx';
+import { OperationalDashboard } from './components/OperationalDashboard.jsx';
 import { OrderTracking } from './components/OrderTracking.jsx';
+import { PlanningDashboard } from './components/PlanningDashboard.jsx';
 import { ProductDetail } from './components/ProductDetail.jsx';
-import { friendlyServiceError, PERMISSIONS, roleCan, services, USER_ROLES } from './services/index.js';
+import { SalesRepresentativeDashboard } from './components/SalesRepresentativeDashboard.jsx';
+import {
+  accountCan,
+  accountCanPerformWorkflow,
+  defaultViewForRole,
+  friendlyServiceError,
+  isInternalAccount,
+  normaliseViewForRole,
+  PERMISSIONS,
+  services,
+  usesExpeditorWorkspace,
+  usesPlanningWorkspace,
+} from './services/index.js';
 
 const EMPTY_CATALOGUE = { categories: [], products: [], recommendedCategories: {} };
 const EMPTY_REGISTRATION = { areas: [], industries: [], branches: [], areaDirectory: {} };
+const EMPTY_PLANNING_OPTIONS = { users: [], locations: [], priorities: [] };
+const EMPTY_EXPEDITING_OPTIONS = { progressSteps: [], requiredStepIds: [], documentTypes: [], approachingCompletionDays: 3 };
+const listEnquiriesForAccount = signedInAccount => (
+  accountCan(signedInAccount, PERMISSIONS.VIEW_ASSIGNED_RFQS)
+    ? services.enquiries.listRepresentativeInbox()
+    : services.enquiries.list()
+);
+const canLoadExpeditingOptions = signedInAccount => (
+  accountCan(signedInAccount, PERMISSIONS.VIEW_EXPEDITING_QUEUE)
+  || accountCan(signedInAccount, PERMISSIONS.UPDATE_ORDER_PROGRESS)
+  || accountCan(signedInAccount, PERMISSIONS.MOVE_TO_DISPATCH)
+);
 
 export default function App() {
   const [introComplete, setIntroComplete] = useState(false);
@@ -32,6 +59,10 @@ export default function App() {
   const [editingLine, setEditingLine] = useState(null);
   const [draft, setDraft] = useState([]);
   const [enquiries, setEnquiries] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [planningOptions, setPlanningOptions] = useState(EMPTY_PLANNING_OPTIONS);
+  const [expeditingOptions, setExpeditingOptions] = useState(EMPTY_EXPEDITING_OPTIONS);
   const [success, setSuccess] = useState(null);
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
@@ -55,10 +86,22 @@ export default function App() {
 
         let loadedDraft = [];
         let loadedEnquiries = [];
+        let loadedOrders = [];
+        let loadedNotifications = [];
+        let loadedPlanningOptions = EMPTY_PLANNING_OPTIONS;
+        let loadedExpeditingOptions = EMPTY_EXPEDITING_OPTIONS;
         if (session) {
-          [loadedDraft, loadedEnquiries] = await Promise.all([
-            session.role === USER_ROLES.CUSTOMER ? services.enquiries.getDraft() : Promise.resolve([]),
-            services.enquiries.list(),
+          [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedPlanningOptions, loadedExpeditingOptions] = await Promise.all([
+            accountCan(session, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
+            listEnquiriesForAccount(session),
+            services.orders.list(),
+            services.notifications.list(),
+            accountCan(session, PERMISSIONS.ADD_PLANNING_INFORMATION)
+              ? services.planning.getWorkspaceOptions()
+              : Promise.resolve(EMPTY_PLANNING_OPTIONS),
+            canLoadExpeditingOptions(session)
+              ? services.expediting.getWorkspaceOptions()
+              : Promise.resolve(EMPTY_EXPEDITING_OPTIONS),
           ]);
         }
         if (!active) return;
@@ -70,7 +113,11 @@ export default function App() {
         setAccount(session);
         setDraft(loadedDraft);
         setEnquiries(loadedEnquiries);
-        setView(session && session.role !== USER_ROLES.CUSTOMER ? 'expeditor' : 'home');
+        setOrders(loadedOrders);
+        setNotifications(loadedNotifications);
+        setPlanningOptions(loadedPlanningOptions);
+        setExpeditingOptions(loadedExpeditingOptions);
+        setView(session ? defaultViewForRole(session.role) : 'home');
         setAppStatus('ready');
       } catch (error) {
         if (!active) return;
@@ -100,26 +147,42 @@ export default function App() {
     services.preferences.setTheme(next).catch(error => notify(friendlyServiceError(error, 'The theme changed, but the preference could not be saved.')));
   };
 
-  const isStaff = Boolean(account && account.role !== USER_ROLES.CUSTOMER);
-  const canUpdateTracking = Boolean(account && roleCan(account.role, PERMISSIONS.UPDATE_TRACKING));
+  const isStaff = isInternalAccount(account);
+  const isPlanningWorkspace = usesPlanningWorkspace(account);
+  const isExpeditorWorkspace = usesExpeditorWorkspace(account);
+  const canPerformWorkflow = accountCanPerformWorkflow(account);
   const selectedProduct = catalogue.products.find(product => product.id === productId) || null;
   const selectedCategory = selectedProduct ? catalogue.categories.find(category => category.id === selectedProduct.category) || null : null;
-  const accountEnquiries = useMemo(() => {
+  const accountRecords = useMemo(() => {
     if (!account || isStaff) return [];
-    return enquiries.filter(enquiry => enquiry.companyId === account.companyId || enquiry.accountId === account.id);
-  }, [account, enquiries, isStaff]);
+    return [...enquiries, ...orders].filter(record => record.companyId === account.companyId || record.accountId === account.id);
+  }, [account, enquiries, isStaff, orders]);
+  const staffRecords = useMemo(() => [...enquiries, ...orders], [enquiries, orders]);
+  const unreadNotifications = notifications.filter(notification => !notification.readAt).length;
   const totalQuantity = draft.reduce((sum, line) => sum + line.quantity, 0);
   const detailView = !isStaff && (view === 'product' || view === 'configurator');
 
   const loadAccountWorkspace = async signedInAccount => {
-    const [loadedDraft, loadedEnquiries] = await Promise.all([
-      signedInAccount.role === USER_ROLES.CUSTOMER ? services.enquiries.getDraft() : Promise.resolve([]),
-      services.enquiries.list(),
+    const [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedPlanningOptions, loadedExpeditingOptions] = await Promise.all([
+      accountCan(signedInAccount, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
+      listEnquiriesForAccount(signedInAccount),
+      services.orders.list(),
+      services.notifications.list(),
+      accountCan(signedInAccount, PERMISSIONS.ADD_PLANNING_INFORMATION)
+        ? services.planning.getWorkspaceOptions()
+        : Promise.resolve(EMPTY_PLANNING_OPTIONS),
+      canLoadExpeditingOptions(signedInAccount)
+        ? services.expediting.getWorkspaceOptions()
+        : Promise.resolve(EMPTY_EXPEDITING_OPTIONS),
     ]);
     setAccount(signedInAccount);
     setDraft(loadedDraft);
     setEnquiries(loadedEnquiries);
-    setView(signedInAccount.role !== USER_ROLES.CUSTOMER ? 'expeditor' : 'home');
+    setOrders(loadedOrders);
+    setNotifications(loadedNotifications);
+    setPlanningOptions(loadedPlanningOptions);
+    setExpeditingOptions(loadedExpeditingOptions);
+    setView(defaultViewForRole(signedInAccount.role));
   };
 
   const login = async (email, password) => {
@@ -143,7 +206,7 @@ export default function App() {
   };
 
   const navigate = target => {
-    const destination = isStaff && !['expeditor', 'account'].includes(target) ? 'expeditor' : target;
+    const destination = account ? normaliseViewForRole(account.role, target) : 'home';
     if (destination === 'catalogue') setCategoryId(null);
     setView(destination);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -193,13 +256,15 @@ export default function App() {
   const submitEnquiry = async details => {
     try {
       const result = await services.enquiries.submit(details, draft);
-      const updatedEnquiries = await services.enquiries.list();
+      const updatedEnquiries = await listEnquiriesForAccount(account);
       setEnquiries(updatedEnquiries);
       setDraft([]);
       const delivery = result.delivery || { ok: true };
       setSuccess({
         reference: result.enquiry.reference,
         firstName: account.contact.split(/\s+/)[0],
+        representative: result.enquiry.selectedRep?.name || 'your Rhomberg representative',
+        submittedAt: result.enquiry.submittedAt || result.enquiry.createdAt,
         recipient: delivery.recipient || 'Rhomberg sales',
         activationMayBeRequired: delivery.activationMayBeRequired,
         pricedPdfAttached: delivery.pricedPdfAttached,
@@ -218,10 +283,23 @@ export default function App() {
     }
   };
 
-  const updateTracking = async (enquiryId, status, note, actor) => {
-    const updated = await services.tracking.updateStatus(enquiryId, { status, note, actor });
-    setEnquiries(current => current.map(enquiry => enquiry.id === updated.id ? updated : enquiry));
-    notify(`${updated.reference} updated to ${updated.status}`);
+  const performWorkflowAction = async (recordId, action, comment, data, entityType, expectedVersion) => {
+    const result = await services.workflow.performAction(recordId, { action, comment, data, entityType, expectedVersion });
+    const { createdOrder, ...updated } = result;
+    if (updated.workflowType === 'order') {
+      setOrders(current => current.map(order => order.id === updated.id ? updated : order));
+    } else {
+      setEnquiries(current => current.map(enquiry => enquiry.id === updated.id ? updated : enquiry));
+    }
+    if (createdOrder) setOrders(current => [createdOrder, ...current.filter(order => order.id !== createdOrder.id)]);
+    services.notifications.list().then(setNotifications).catch(() => undefined);
+    notify(createdOrder ? `${updated.reference} converted to ${createdOrder.reference}` : `${updated.reference} updated to ${updated.status}`);
+    return result;
+  };
+
+  const markNotificationRead = async notificationId => {
+    const updated = await services.notifications.markRead(notificationId);
+    setNotifications(current => current.map(notification => notification.id === updated.id ? updated : notification));
     return updated;
   };
 
@@ -231,6 +309,10 @@ export default function App() {
       setAccount(null);
       setDraft([]);
       setEnquiries([]);
+      setOrders([]);
+      setNotifications([]);
+      setPlanningOptions(EMPTY_PLANNING_OPTIONS);
+      setExpeditingOptions(EMPTY_EXPEDITING_OPTIONS);
       setCategoryId(null);
       setProductId(null);
       setView('home');
@@ -258,27 +340,35 @@ export default function App() {
   return (
     <div className="app-canvas">
       <span className="desktop-caption">RHOMBERG INSTRUMENTS · {services.mode === 'mock' ? 'CONNECTED APP TEST' : 'PRIVATE CLOUD'}</span>
-      <div className={`app-shell ${isStaff ? 'expeditor-shell' : ''}`}>
+      <div className={`app-shell ${isStaff ? 'expeditor-shell' : ''} ${isPlanningWorkspace ? 'planning-shell' : ''} ${isExpeditorWorkspace ? 'expediting-workspace-shell' : ''}`}>
         <AppHeader account={account} onNavigate={navigate} onBack={detailView ? backFromDetail : null} backLabel={view === 'configurator' ? 'Product configuration' : selectedProduct?.code || 'Catalogue'} theme={theme} onToggleTheme={toggleTheme} serviceMode={services.mode} />
         <main className="app-main">
           {isStaff ? (
             <>
-              {view === 'expeditor' && <ExpeditorDashboard account={account} enquiries={enquiries} onUpdate={updateTracking} canUpdate={canUpdateTracking} serviceMode={services.mode} />}
-              {view === 'account' && <Account account={account} enquiries={enquiries} onSignOut={signOut} serviceMode={services.mode} />}
+              {view === 'expeditor' && (accountCan(account, PERMISSIONS.VIEW_ASSIGNED_RFQS)
+                ? <SalesRepresentativeDashboard account={account} rfqs={enquiries} onAction={performWorkflowAction} serviceMode={services.mode} />
+                : isPlanningWorkspace
+                  ? <PlanningDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} planningOptions={planningOptions} />
+                  : isExpeditorWorkspace
+                    ? <ExpeditorDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} expeditingOptions={expeditingOptions} />
+                    : <OperationalDashboard account={account} enquiries={staffRecords} onAction={performWorkflowAction} canUpdate={canPerformWorkflow} serviceMode={services.mode} planningOptions={planningOptions} expeditingOptions={expeditingOptions} />)}
+              {view === 'notifications' && <Notifications notifications={notifications} onMarkRead={markNotificationRead} serviceMode={services.mode} />}
+              {view === 'account' && <Account account={account} enquiries={staffRecords} onSignOut={signOut} serviceMode={services.mode} />}
             </>
           ) : (
             <>
-              {view === 'home' && <Home account={account} enquiries={accountEnquiries} categories={catalogue.categories} recommendedCategories={catalogue.recommendedCategories} onNavigate={navigate} onCategory={openCategory} />}
+              {view === 'home' && <Home account={account} enquiries={accountRecords} categories={catalogue.categories} recommendedCategories={catalogue.recommendedCategories} onNavigate={navigate} onCategory={openCategory} />}
               {view === 'catalogue' && <Catalogue categories={catalogue.categories} products={catalogue.products} categoryId={categoryId} onCategory={setCategoryId} onProduct={openProduct} />}
               {view === 'product' && selectedProduct && <ProductDetail product={selectedProduct} category={selectedCategory} onConfigure={() => startConfigurator(null, 'product')} />}
               {view === 'configurator' && selectedProduct && <Configurator product={selectedProduct} existingLine={editingLine} onSave={saveConfiguredLine} onCancel={backFromDetail} />}
               {view === 'enquiry' && <Enquiry account={account} lines={draft} registrationOptions={registrationOptions} deliverySettings={services.preview} onAddProducts={() => navigate('catalogue')} onEdit={line => startConfigurator(line, 'enquiry')} onRemove={removeLine} onQuantity={updateQuantity} onSubmit={submitEnquiry} success={success} onCloseSuccess={() => { setSuccess(null); navigate('tracking'); }} />}
-              {view === 'tracking' && <OrderTracking account={account} enquiries={accountEnquiries} onStartEnquiry={() => navigate('enquiry')} serviceMode={services.mode} />}
-              {view === 'account' && <Account account={account} enquiries={accountEnquiries} onSignOut={signOut} serviceMode={services.mode} />}
+              {view === 'tracking' && <OrderTracking account={account} enquiries={accountRecords} onStartEnquiry={() => navigate('enquiry')} onAction={performWorkflowAction} serviceMode={services.mode} />}
+              {view === 'notifications' && <Notifications notifications={notifications} onMarkRead={markNotificationRead} serviceMode={services.mode} />}
+              {view === 'account' && <Account account={account} enquiries={accountRecords} onSignOut={signOut} serviceMode={services.mode} />}
             </>
           )}
         </main>
-        {!detailView && <BottomNav active={view} quantity={totalQuantity} role={account.role} onNavigate={navigate} />}
+        {!detailView && <BottomNav active={view} quantity={totalQuantity} role={account.role} unreadCount={unreadNotifications} onNavigate={navigate} />}
       </div>
       <Toast message={toast} />
     </div>
