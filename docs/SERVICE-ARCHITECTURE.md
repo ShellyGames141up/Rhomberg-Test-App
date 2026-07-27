@@ -36,7 +36,8 @@ This boundary lets the company replace the demo implementation without redesigni
 | `tracking` | Compatibility alias for `workflow` while existing tracking views are retained |
 | `audit` | Append-only workflow/security history within an authorised internal scope |
 | `notifications` | Customer/staff notification inbox operations; mock mode queues local test records |
-| `preferences` | Non-sensitive display preferences such as theme |
+| `personalisation` | Customer-only onboarding, theme, typography/density, notification preferences and image metadata |
+| `preferences` | Internal/non-sensitive light and dark display preference |
 
 Every method is asynchronous, including the browser mock. This is intentional: moving to the API implementation will not require UI event handlers to change from synchronous to asynchronous later.
 
@@ -54,6 +55,7 @@ expediting.getWorkspaceOptions()
 workflow.list(filters) | getAllowedActions(recordId) | performAction(recordId, actionRequest)
 audit.list(filters)
 notifications.list(filters) | markRead(notificationId)
+personalisation.get() | save(settings) | complete(settings) | reset(options) | uploadImage(file, kind, position) | removeImage(imageId)
 preferences.getTheme() | setTheme(theme)
 ```
 

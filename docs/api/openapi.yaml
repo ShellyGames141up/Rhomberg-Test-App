@@ -566,6 +566,106 @@ paths:
                     $ref: '#/components/schemas/Order'
         '404':
           $ref: '#/components/responses/ApiError'
+  /users/me/personalisation:
+    get:
+      operationId: getCustomerPersonalisation
+      responses:
+        '200':
+          description: Complete personalisation for the signed-in customer
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerPersonalisationResponse' }
+        '403':
+          $ref: '#/components/responses/ApiError'
+    put:
+      operationId: saveCustomerPersonalisation
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerPersonalisation' }
+      responses:
+        '200':
+          description: Complete validated preference set saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerPersonalisationResponse' }
+        '403':
+          $ref: '#/components/responses/ApiError'
+        '422':
+          $ref: '#/components/responses/ApiError'
+  /users/me/personalisation/reset:
+    post:
+      operationId: resetCustomerPersonalisation
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reopenSetup: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Approved Rhomberg defaults restored
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerPersonalisationResponse' }
+        '403':
+          $ref: '#/components/responses/ApiError'
+  /users/me/personalisation/images:
+    post:
+      operationId: uploadCustomerIdentityImage
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [kind, image]
+              properties:
+                kind: { type: string, enum: [profileImage, companyLogo] }
+                position: { type: string, description: JSON object containing integer x/y percentages from 0 to 100. }
+                image: { type: string, format: binary }
+      responses:
+        '201':
+          description: Scanned private image metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/CustomerIdentityImage' }
+        '413':
+          $ref: '#/components/responses/ApiError'
+        '415':
+          $ref: '#/components/responses/ApiError'
+        '422':
+          $ref: '#/components/responses/ApiError'
+  /users/me/personalisation/images/{imageId}:
+    delete:
+      operationId: removeCustomerIdentityImage
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      parameters:
+        - name: imageId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Image removed from the signed-in customer account
+        '404':
+          $ref: '#/components/responses/ApiError'
   /notifications:
     get:
       operationId: listAuthorisedNotifications
@@ -1527,6 +1627,62 @@ components:
         quantity: { type: integer, minimum: 1, maximum: 9999 }
         configurationSnapshot: { type: object, additionalProperties: true }
         createdAt: { type: string, format: date-time }
+    CustomerPersonalisation:
+      type: object
+      required: [schemaVersion, setupCompleted, themePreset, customColours, fontSize, density, appearanceMode, notificationPreferences]
+      properties:
+        schemaVersion: { type: integer, minimum: 1 }
+        setupCompleted: { type: boolean }
+        themePreset:
+          type: string
+          enum: [rhomberg-default, industrial-professional, modern, funky, dark, high-contrast, custom]
+        customColours:
+          type: object
+          required: [primary, secondary, accent, success, warning]
+          properties:
+            primary: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
+            secondary: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
+            accent: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
+            success: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
+            warning: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
+        fontSize: { type: string, enum: [small, medium, large, extra-large] }
+        density: { type: string, enum: [comfortable, standard, compact] }
+        appearanceMode: { type: string, enum: [light, dark, system] }
+        notificationPreferences:
+          type: object
+          additionalProperties: { type: boolean }
+        profileImage:
+          oneOf:
+            - $ref: '#/components/schemas/CustomerIdentityImage'
+            - type: 'null'
+        companyLogo:
+          oneOf:
+            - $ref: '#/components/schemas/CustomerIdentityImage'
+            - type: 'null'
+        updatedAt: { type: string, format: date-time }
+    CustomerIdentityImage:
+      type: object
+      required: [id, kind, fileName, mimeType, sizeBytes, position]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [profileImage, companyLogo] }
+        fileName: { type: string }
+        mimeType: { type: string, enum: [image/jpeg, image/png, image/webp] }
+        sizeBytes: { type: integer, minimum: 1, maximum: 1048576 }
+        position:
+          type: object
+          required: [x, y]
+          properties:
+            x: { type: integer, minimum: 0, maximum: 100 }
+            y: { type: integer, minimum: 0, maximum: 100 }
+        previewUrl:
+          type: string
+          description: Optional short-lived authorised URL. Never a permanent public object URL.
+    CustomerPersonalisationResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/CustomerPersonalisation' }
     Notification:
       type: object
       required: [id, entityType, entityId, message, createdAt]

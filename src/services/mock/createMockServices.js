@@ -25,12 +25,18 @@ import {
 } from '../../domain/workflow.js';
 import { optionsForField, shouldShowField } from '../../domain/productConfiguration.js';
 import { RFQ_EMAIL_RECIPIENT, sendRfqEmail } from '../../lib/rfqEmail.js';
+import {
+  createDefaultCustomerPersonalisation,
+  normaliseCustomerPersonalisation,
+} from '../../shared/personalisation/personalisation.js';
 import { accountCan, PERMISSIONS, ServiceError, USER_ROLES, roleCan, toPublicAccount } from '../contracts.js';
 import {
   MAX_ACCEPTANCE_DOCUMENT_BYTES,
   MAX_PO_FILE_BYTES,
   MAX_QUOTATION_DOCUMENT_BYTES,
   validateOrderAcceptance,
+  validatePersonalisation,
+  validatePersonalisationImage,
   validatePlanningSubmission,
   validateCustomerAccountForRfq,
   validateEnquiry,
@@ -64,6 +70,24 @@ const makeId = prefix => {
   const token = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   return `${prefix}-${token}`;
 };
+
+const fileToDataUrl = file => new Promise((resolve, reject) => {
+  if (typeof FileReader === 'function') {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new ServiceError('The image could not be read. Please choose it again.', { code: 'IMAGE_READ_FAILED', status: 422 }));
+    reader.readAsDataURL(file);
+    return;
+  }
+  file.arrayBuffer()
+    .then(buffer => {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      for (const byte of bytes) binary += String.fromCharCode(byte);
+      resolve(`data:${file.type};base64,${globalThis.btoa(binary)}`);
+    })
+    .catch(() => reject(new ServiceError('The image could not be read. Please choose it again.', { code: 'IMAGE_READ_FAILED', status: 422 })));
+});
 
 const normaliseAccount = account => {
   const role = account.role || USER_ROLES.CUSTOMER;
@@ -256,6 +280,20 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   const appendAuditEvent = event => store.set(STORE_KEYS.audit, [...readAuditEvents(), event]);
   const readNotifications = () => store.get(STORE_KEYS.notifications, []);
   const appendNotification = notification => store.set(STORE_KEYS.notifications, [...readNotifications(), notification]);
+  const readPersonalisation = () => store.get(STORE_KEYS.personalisation, {});
+  const writePersonalisation = records => store.set(STORE_KEYS.personalisation, records);
+  const readMockImages = () => store.get(STORE_KEYS.mockImages, {});
+  const writeMockImages = records => store.set(STORE_KEYS.mockImages, records);
+  const presentPersonalisation = record => {
+    const images = readMockImages();
+    const hydrate = image => image ? { ...image, previewUrl: images[image.id]?.dataUrl || '' } : null;
+    const normalised = normaliseCustomerPersonalisation(record);
+    return {
+      ...normalised,
+      profileImage: hydrate(normalised.profileImage),
+      companyLogo: hydrate(normalised.companyLogo),
+    };
+  };
   const nextRfqReference = () => {
     const highestStoredReference = readAllEnquiries().reduce((highest, enquiry) => {
       const match = /^RQ-PREVIEW-(\d+)$/.exec(enquiry.reference || '');
@@ -490,6 +528,8 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     writeWorkflowState(workflowState);
     if (!store.has(STORE_KEYS.audit)) store.set(STORE_KEYS.audit, []);
     if (!store.has(STORE_KEYS.notifications)) store.set(STORE_KEYS.notifications, []);
+    if (!store.has(STORE_KEYS.personalisation)) store.set(STORE_KEYS.personalisation, {});
+    if (!store.has(STORE_KEYS.mockImages)) store.set(STORE_KEYS.mockImages, {});
 
     if (!store.has(STORE_KEYS.session)) {
       const legacySession = store.get(LEGACY_STORE_KEYS.session, null);
@@ -1042,6 +1082,172 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     },
   };
 
+  const personalisation = {
+    async get() {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.ACCESS_CUSTOMER_WORKSPACE)) {
+        throw new ServiceError('Customer personalisation is available only in Rhomberg Connect.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const records = readPersonalisation();
+      return clone(presentPersonalisation(records[account.id] || createDefaultCustomerPersonalisation()));
+    },
+
+    async save(candidate) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.ACCESS_CUSTOMER_WORKSPACE)) {
+        throw new ServiceError('Customer personalisation is available only in Rhomberg Connect.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const normalised = normaliseCustomerPersonalisation(candidate);
+      validatePersonalisation(normalised);
+      const stripPreview = image => image ? (({ previewUrl: _previewUrl, ...metadata }) => metadata)(image) : null;
+      const saved = {
+        ...normalised,
+        profileImage: stripPreview(normalised.profileImage),
+        companyLogo: stripPreview(normalised.companyLogo),
+        updatedAt: now().toISOString(),
+      };
+      const records = readPersonalisation();
+      const previous = normaliseCustomerPersonalisation(records[account.id]);
+      records[account.id] = saved;
+      writePersonalisation(records);
+      const retainedImageIds = new Set([saved.profileImage?.id, saved.companyLogo?.id].filter(Boolean));
+      const removedImageIds = [previous.profileImage?.id, previous.companyLogo?.id]
+        .filter((id, index, values) => id && values.indexOf(id) === index && !retainedImageIds.has(id));
+      if (removedImageIds.length) {
+        const images = readMockImages();
+        for (const imageId of removedImageIds) {
+          if (images[imageId]?.ownerAccountId === account.id && images[imageId]?.companyId === account.companyId) {
+            delete images[imageId];
+          }
+        }
+        writeMockImages(images);
+      }
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'customer.personalisation_saved',
+        outcome: 'success',
+        entityType: 'user_preference',
+        entityId: account.id,
+        companyId: account.companyId,
+        actorId: account.id,
+        actorRole: account.role,
+        createdAt: saved.updatedAt,
+      });
+      for (const imageId of removedImageIds) {
+        appendAuditEvent({
+          id: makeId('audit'),
+          action: 'customer.personalisation_image_removed',
+          outcome: 'success',
+          entityType: 'user_preference',
+          entityId: account.id,
+          companyId: account.companyId,
+          actorId: account.id,
+          actorRole: account.role,
+          details: { imageId, reason: 'preference_replaced' },
+          createdAt: saved.updatedAt,
+        });
+      }
+      return clone(presentPersonalisation(saved));
+    },
+
+    async complete(candidate) {
+      return this.save({ ...candidate, setupCompleted: true });
+    },
+
+    async reset({ reopenSetup = false } = {}) {
+      const account = requireAccount();
+      const current = createDefaultCustomerPersonalisation();
+      const saved = await this.save({ ...current, setupCompleted: !reopenSetup });
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'customer.personalisation_reset',
+        outcome: 'success',
+        entityType: 'user_preference',
+        entityId: account.id,
+        companyId: account.companyId,
+        actorId: account.id,
+        actorRole: account.role,
+        details: { reopenSetup: Boolean(reopenSetup) },
+        createdAt: now().toISOString(),
+      });
+      return saved;
+    },
+
+    async uploadImage(file, kind, position = { x: 50, y: 50 }) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.ACCESS_CUSTOMER_WORKSPACE)) {
+        throw new ServiceError('Customer image upload is available only in Rhomberg Connect.', { code: 'FORBIDDEN', status: 403 });
+      }
+      if (!['profileImage', 'companyLogo'].includes(kind)) {
+        throw new ServiceError('Choose a profile image or company logo.', { code: 'INVALID_IMAGE_KIND', status: 422, fieldErrors: { image: 'Choose a supported image type.' } });
+      }
+      validatePersonalisationImage(file);
+      const id = makeId('customer-image');
+      const uploadedAt = now().toISOString();
+      const dataUrl = await fileToDataUrl(file);
+      const images = readMockImages();
+      images[id] = {
+        id,
+        ownerAccountId: account.id,
+        companyId: account.companyId,
+        dataUrl,
+        createdAt: uploadedAt,
+      };
+      writeMockImages(images);
+      const metadata = {
+        id,
+        kind,
+        fileName: String(file.name || 'customer-image'),
+        mimeType: String(file.type || ''),
+        sizeBytes: Number(file.size || 0),
+        position: {
+          x: Math.min(100, Math.max(0, Number(position?.x) || 50)),
+          y: Math.min(100, Math.max(0, Number(position?.y) || 50)),
+        },
+        storageStatus: 'browser_mock',
+        uploadedAt,
+        previewUrl: dataUrl,
+      };
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'customer.personalisation_image_uploaded',
+        outcome: 'success',
+        entityType: 'user_preference',
+        entityId: account.id,
+        companyId: account.companyId,
+        actorId: account.id,
+        actorRole: account.role,
+        details: { kind, imageId: id, mimeType: metadata.mimeType, sizeBytes: metadata.sizeBytes },
+        createdAt: uploadedAt,
+      });
+      return clone(metadata);
+    },
+
+    async removeImage(imageId) {
+      const account = requireAccount();
+      const images = readMockImages();
+      const image = images[imageId];
+      if (!image || image.ownerAccountId !== account.id || image.companyId !== account.companyId) {
+        throw new ServiceError('The image was not found for this customer account.', { code: 'IMAGE_NOT_FOUND', status: 404 });
+      }
+      delete images[imageId];
+      writeMockImages(images);
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'customer.personalisation_image_removed',
+        outcome: 'success',
+        entityType: 'user_preference',
+        entityId: account.id,
+        companyId: account.companyId,
+        actorId: account.id,
+        actorRole: account.role,
+        details: { imageId },
+        createdAt: now().toISOString(),
+      });
+      return { removed: true };
+    },
+  };
+
   const preferences = {
     async getTheme() {
       return store.get(STORE_KEYS.theme, null) || (globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -1067,6 +1273,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     notifications,
     planning,
     expediting,
+    personalisation,
     products: productService,
     preferences,
     preview: {

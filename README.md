@@ -1,34 +1,58 @@
-# Rhomberg Instruments App - Public Test Preview
+# Rhomberg Connect and Rhomberg Operations - Public Test Platform
 
-This repository contains a phone-first test preview of a future Rhomberg Instruments catalogue, RFQ and order-tracking app. It is intentionally suitable for public source-code review while testing. No private price values, email API keys or real customer database records are committed.
+This repository contains four focused interfaces backed by one shared React domain, permission model, workflow state machine and interchangeable service layer. The public GitHub Pages deployment is a fabricated browser-only demonstration: it contains no production database connection, private price values, API keys or real customer accounts.
 
-## Launch the Test App
+# Launch a Test Preview
 
-### [🚀 Open Rhomberg Test App](https://shellygames141up.github.io/Rhomberg-Test-App/)
+### [1. Rhomberg Connect — Customer Desktop](https://shellygames141up.github.io/Rhomberg-Test-App/preview/customer-desktop/)
 
-Opens the latest live demo in your browser.
+Desktop customer experience for catalogue browsing, RFQs, quotations, tracking, documents and account settings.
 
-## Preview login
+### [2. Rhomberg Connect — Customer Mobile](https://shellygames141up.github.io/Rhomberg-Test-App/preview/customer-mobile/)
 
-- Customer email: `demo@client.co.za`
-- Customer password: `Demo123!`
-- Cape journey customer: `cape.demo@client.test` / `Demo123!`
-- Sales email: `sales.workflow@example.invalid`
-- Sales password: `Sales123!`
-- Planning email: `planning.workflow@example.invalid`
-- Planning password: `Planning123!`
-- Expeditor email: `expeditor.test@rhom.co.za`
-- Expeditor password: `Expedite123!`
-- Dispatch email: `dispatch.workflow@example.invalid`
-- Dispatch password: `Dispatch123!`
-- Buyer email: `buyer.workflow@example.invalid`
-- Buyer password: `Buyer123!`
-- Manager email: `manager.workflow@example.invalid`
-- Manager password: `Manager123!`
-- Administrator email: `administrator.workflow@example.invalid`
-- Administrator password: `Admin123!`
+Mobile-first customer experience for fast RFQ creation, quotation responses, order tracking and notifications.
 
-You can also create a test company account. Preview accounts, sessions, drafts, RFQs, orders, notifications and workflow updates are saved only in that browser on that device. Closing and reopening the site retains the data. This is not production authentication and it does not synchronise between devices.
+### [3. Rhomberg Operations — Rep & Expeditor Mobile](https://shellygames141up.github.io/Rhomberg-Test-App/preview/internal-mobile/)
+
+Mobile workflow for representatives, managers, authorised company leadership and Expeditors. Planning and Dispatch are intentionally unavailable.
+
+### [4. Rhomberg Operations — Internal Desktop](https://shellygames141up.github.io/Rhomberg-Test-App/preview/internal-desktop/)
+
+Desktop operational workspace for representatives, managers, Expeditors, Planning and Dispatch.
+
+### [Open the visual preview centre](https://shellygames141up.github.io/Rhomberg-Test-App/)
+
+The preview centre contains the same four launch cards, intended-user details and filtered demonstration logins.
+
+## Demonstration-only accounts
+
+| Role | Email | Password | Supported preview |
+| --- | --- | --- | --- |
+| Customer | `customer.demo@example.invalid` | `Demo123!` | Connect desktop and mobile |
+| Cape customer journey | `cape.demo@client.test` | `Demo123!` | Connect desktop and mobile |
+| Sales representative | `sales.workflow@example.invalid` | `Sales123!` | Operations mobile and desktop |
+| Expeditor | `expeditor.workflow@example.invalid` | `Expedite123!` | Operations mobile and desktop |
+| Manager | `manager.workflow@example.invalid` | `Manager123!` | Operations mobile and desktop |
+| Planning | `planning.workflow@example.invalid` | `Planning123!` | Operations desktop only |
+| Dispatch | `dispatch.workflow@example.invalid` | `Dispatch123!` | Operations desktop only |
+| Buyer (prepared/inactive) | `buyer.workflow@example.invalid` | `Buyer123!` | Operations desktop only |
+| Administrator | `administrator.workflow@example.invalid` | `Admin123!` | Operations desktop only |
+
+All credentials above are fabricated and demonstration-only. GitHub Pages runs in mock mode: no real customer accounts are synchronised, no production authentication is used, and unrelated browsers or devices do not share changes. The four interfaces use the same mock service contracts and same-browser logical data. Future production versions will use one secure backend on Rhomberg’s private infrastructure.
+
+## Included in version 4.0
+
+- Separate Rhomberg Connect customer desktop/mobile and Rhomberg Operations internal mobile/desktop routes
+- Responsive preview centre and role-filtered demonstration logins
+- Strict preview-entry role controls in addition to the existing shared permission service
+- Customer-only ten-step welcome and personalisation setup
+- Validated theme presets, protected custom colours, font scaling, display density and light/dark/system appearance
+- Mock profile/company image storage with file validation, repositioning and removal
+- Customer notification preferences with protected transactional/security categories
+- Reusable customer Settings screen with preview, cancellation, section reset and full default restoration
+- Shared mock/API personalisation contracts, company/account isolation and audit events
+- Separate development/build commands for every preview plus one combined GitHub Pages build
+- Production-candidate safety scan that rejects demonstration accounts and public-preview features
 
 ## Included in version 3.2
 
@@ -141,6 +165,14 @@ You can also create a test company account. Preview accounts, sessions, drafts, 
 
 ### Architecture and IT handover
 
+- [Multi-interface architecture](docs/ARCHITECTURE.md)
+- [Preview guide and demo accounts](docs/PREVIEW_GUIDE.md)
+- [Product/platform matrix](docs/PLATFORM_MATRIX.md)
+- [Role and preview permission matrix](docs/ROLE_PERMISSION_MATRIX.md)
+- [Customer personalisation model](docs/CUSTOMER_PERSONALISATION.md)
+- [Responsive testing checklist](docs/RESPONSIVE_TESTING.md)
+- [Build, deployment and future packaging](docs/BUILD_AND_DEPLOYMENT.md)
+- [Mock-mode limitations](docs/MOCK_MODE_LIMITATIONS.md)
 - [Service architecture](docs/SERVICE-ARCHITECTURE.md)
 - [Workflow state machine and transition flow](docs/WORKFLOW_STATE_MACHINE.md)
 - [Order workflow phased implementation plan](docs/ORDER_WORKFLOW_IMPLEMENTATION_PLAN.md)
@@ -208,11 +240,15 @@ The two local price-book parts are generated from the supplied March 2026 workbo
 
 ## Build commands
 
-- `pnpm run check` - compile-check the React source
-- `pnpm test` - run permission, navigation, representative-inbox, queue-isolation, state-machine, service, validation and audit tests
-- `pnpm run build` - regenerate the GitHub Pages `app.js`
-- `pnpm run build:netlify` - build and stage only public static files in `dist/`
-- `pnpm run build:production` - generate an API-only candidate in ignored `dist-production/`
+- `npm run dev:customer-desktop` - serve the Connect desktop route with source watching
+- `npm run dev:customer-mobile` - serve the Connect touch-first route with source watching
+- `npm run dev:internal-mobile` - serve the supported Operations mobile roles
+- `npm run dev:internal-desktop` - serve the full Operations desktop role set
+- `npm run build:customer-desktop`, `build:customer-mobile`, `build:internal-mobile`, or `build:internal-desktop` - build one self-contained preview artifact
+- `npm run build:previews` - build all four variants and stage the complete GitHub Pages artifact
+- `npm run check` - compile-check the shared React source
+- `npm test` - run existing and platform-split tests
+- `npm run build:production` - generate and scan an API-only candidate in ignored `dist-production/`
 
 ## Important test limitations
 

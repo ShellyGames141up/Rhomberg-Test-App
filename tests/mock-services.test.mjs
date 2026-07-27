@@ -7,6 +7,7 @@ import { LEGACY_STORE_KEYS, STORE_KEYS } from '../src/services/mock/seedData.js'
 import { ServiceError, USER_ROLES } from '../src/services/contracts.js';
 import { optionsForField, shouldShowField } from '../src/domain/productConfiguration.js';
 import { representativesByBranch } from '../src/data/representatives.js';
+import { createDefaultCustomerPersonalisation } from '../src/shared/personalisation/personalisation.js';
 
 class TestStorage {
   constructor() {
@@ -71,7 +72,7 @@ assert.deepEqual(
 );
 assert.ok(catalogue.products.every(product => product.configurations.every(field => !field.options?.includes('No logo'))), 'logo removal must not be offered');
 
-const customer = await services.auth.signIn({ email: 'demo@client.co.za', password: 'Demo123!' });
+const customer = await services.auth.signIn({ email: 'customer.demo@example.invalid', password: 'Demo123!' });
 assert.equal(customer.role, 'customer');
 assert.equal('password' in customer, false, 'passwords must not enter React-facing account state');
 
@@ -529,7 +530,7 @@ assert.equal(customerPlannedOrder.plannedBy, undefined, 'internal Planning actor
 assert.equal(customerPlannedOrder.trackingStatus, 'submitted_to_expediting', 'customers must receive the approved Planning hand-off update');
 
 await reopenedServices.auth.signOut();
-await reopenedServices.auth.signIn({ email: 'expeditor.test@rhom.co.za', password: 'Expedite123!' });
+await reopenedServices.auth.signIn({ email: 'expeditor.workflow@example.invalid', password: 'Expedite123!' });
 const expeditorPlanningNotice = (await reopenedServices.notifications.list()).find(notification => notification.reference === plannedOrder.reference && notification.status === 'submitted_to_expediting');
 assert.ok(expeditorPlanningNotice?.message.includes('Expediting queue'), 'the Expeditor queue must be notified of the Planning hand-off');
 const expeditingOptions = await reopenedServices.expediting.getWorkspaceOptions();
@@ -700,7 +701,7 @@ const customerNotifications = await reopenedServices.notifications.list();
 assert.ok(customerNotifications.length > 0 && customerNotifications.every(notification => notification.companyId === 'company-demo-cape'), 'customer notifications must remain company-isolated');
 
 await reopenedServices.auth.signOut();
-await reopenedServices.auth.signIn({ email: 'demo@client.co.za', password: 'Demo123!' });
+await reopenedServices.auth.signIn({ email: 'customer.demo@example.invalid', password: 'Demo123!' });
 const auditsAfterDenial = JSON.parse(storage.getItem(STORE_KEYS.audit));
 assert.ok(auditsAfterDenial.some(event => event.action === 'workflow.start_rep_review' && event.outcome === 'denied'), 'denied workflow attempts must create audit entries');
 
@@ -792,9 +793,17 @@ const apiPlanningOptions = await apiServices.planning.getWorkspaceOptions();
 assert.equal(apiPlanningOptions.priorities[0].id, 'standard');
 const apiExpeditingOptions = await apiServices.expediting.getWorkspaceOptions();
 assert.equal(apiExpeditingOptions.progressSteps.at(-1).id, 'ready_for_dispatch');
+await apiServices.personalisation.get();
+await apiServices.personalisation.complete({ ...createDefaultCustomerPersonalisation(), setupCompleted: true });
+const apiIdentityImage = new File([new Uint8Array([1, 2, 3])], 'api-logo.png', { type: 'image/png' });
+await apiServices.personalisation.uploadImage(apiIdentityImage, 'companyLogo', { x: 45, y: 55 });
+await apiServices.personalisation.removeImage('00000000-0000-4000-8000-000000000099');
 assert.ok(apiRequests.some(request => request.path.endsWith('/enquiries') && request.options.method === 'GET'), 'API RFQ reads must use the RFQ collection endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/enquiries/inbox') && request.options.method === 'GET'), 'API representative inbox reads must use the dedicated inbox endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/orders') && request.options.method === 'GET'), 'API order reads must use the separate order collection endpoint');
+assert.ok(apiRequests.some(request => request.path.endsWith('/users/me/personalisation') && request.options.method === 'PUT'), 'API personalisation saves must use the current-user endpoint');
+assert.ok(apiRequests.some(request => request.path.endsWith('/users/me/personalisation/images') && request.options.method === 'POST' && request.options.body instanceof FormData), 'API identity image uploads must use multipart current-user storage');
+assert.ok(apiRequests.some(request => request.path.endsWith('/users/me/personalisation/images/00000000-0000-4000-8000-000000000099') && request.options.method === 'DELETE'), 'API image deletion must be current-user scoped');
 const apiSubmission = await apiServices.enquiries.submit({
   application: 'API contract test application',
   area: 'Gauteng',

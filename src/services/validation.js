@@ -3,6 +3,10 @@ import {
   EXPEDITOR_PROGRESS_STEPS,
   expeditorProgressStepById,
 } from '../domain/expediting.js';
+import {
+  validateCustomerImage,
+  validateCustomerPersonalisation,
+} from '../shared/personalisation/personalisation.js';
 import { PLANNING_PRIORITY_VALUES, RFQ_ACCEPTANCE_TYPES, ServiceError } from './contracts.js';
 
 export const MAX_PO_FILE_BYTES = 4 * 1024 * 1024;
@@ -35,6 +39,18 @@ export function validateRegistration(data) {
   if (!present(data.industry)) errors.industry = 'Select the company’s industry.';
   if (String(data.password || '').length < 8) errors.password = 'Create a password with at least eight characters.';
   if (Object.keys(errors).length) throwValidation(errors, 'Check the account details.');
+}
+
+export function validatePersonalisation(candidate) {
+  const errors = validateCustomerPersonalisation(candidate);
+  if (Object.keys(errors).length) throwValidation(errors, 'Check the personalisation settings.');
+  return candidate;
+}
+
+export function validatePersonalisationImage(file) {
+  const message = validateCustomerImage(file);
+  if (message) throwValidation({ image: message }, message);
+  return file;
 }
 
 export function validatePoFile(file) {

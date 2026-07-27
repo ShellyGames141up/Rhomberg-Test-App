@@ -16,7 +16,7 @@ const internalNavigation = workspaceLabel => Object.freeze([
   navItem('account', '○', 'Account'),
 ]);
 
-const CUSTOMER_VIEWS = Object.freeze(['home', 'catalogue', 'product', 'configurator', 'enquiry', 'tracking', 'notifications', 'account']);
+const CUSTOMER_VIEWS = Object.freeze(['home', 'catalogue', 'product', 'configurator', 'enquiry', 'tracking', 'notifications', 'account', 'settings']);
 const INTERNAL_VIEWS = Object.freeze(['expeditor', 'notifications', 'account']);
 
 const profile = ({

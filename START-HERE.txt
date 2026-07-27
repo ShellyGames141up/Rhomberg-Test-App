@@ -1,11 +1,11 @@
 RHOMBERG INSTRUMENTS APP - PUBLIC TEST PREVIEW
 
 CUSTOMER PREVIEW
-Email: demo@client.co.za
+Email: customer.demo@example.invalid
 Password: Demo123!
 
 EXPEDITOR PREVIEW
-Email: expeditor.test@rhom.co.za
+Email: expeditor.workflow@example.invalid
 Password: Expedite123!
 
 SALES PREVIEW

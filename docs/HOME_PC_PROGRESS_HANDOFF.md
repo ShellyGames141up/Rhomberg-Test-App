@@ -8,14 +8,24 @@ Use this form as the checkpoint for continuing the project on another computer.
 |---|---|
 | Repository | `ShellyGames141up/Rhomberg-Test-App` |
 | Branch | `agent/improve-theme-readability-and-reps` |
-| App version | `3.2.0` |
-| Checkpoint date | 24 July 2026 |
-| Completed phase | Prompt 8 - shared Expeditor workflow and controlled Dispatch hand-off |
-| Last stopping point | Expediting can start, append configured progress, hold/resume, update estimates/delays and hand complete orders to Dispatch, with customer/internal separation, audit history and recipient-specific notifications. |
+| App version | `4.0.0` |
+| Checkpoint date | 27 July 2026 |
+| Completed phase | Rhomberg Connect/Operations platform split and customer personalisation |
+| Last stopping point | Four public preview interfaces share the existing Prompt 8 workflow. Customer onboarding/settings are complete; the next numbered RFQ-to-order phase has not been started. |
 | Preview mode | GitHub Pages browser mock remains enabled |
 | Production connection | Not connected; API and PostgreSQL material remain proposed contracts only |
 
 ## What changed in this checkpoint
+
+- Split the public experience into Connect customer desktop/mobile and Operations internal mobile/desktop routes without copying business logic.
+- Added a responsive preview centre, role-filtered demo accounts and strict route-entry role gates.
+- Added a ten-step customer-only personalisation wizard plus editable account settings.
+- Added protected presets/custom colour validation, scalable font and density choices, appearance mode, mock identity images and notification preferences.
+- Staged image removal with the settings draft so Cancel preserves saved identity images and unused mock uploads are cleaned safely.
+- Added interchangeable mock/API personalisation services, account/company isolation and audit entries.
+- Added four development/build commands, combined GitHub Pages staging and production-preview exclusion scans.
+- Added platform, role, preview, personalisation, responsive, packaging and mock-limit documentation.
+- Preserved the complete Prompt 8 Expediting workflow and existing automated coverage.
 
 - Added one dedicated responsive Expeditor workspace for desktop and mobile without creating a separate app.
 - Added new/in-progress/on-hold/due-soon/awaiting-Dispatch/priority queue views, oldest-update-first default sorting and search across customer, representative, RFQ, order, job and PO references.
@@ -62,6 +72,9 @@ Use this form as the checkpoint for continuing the project on another computer.
 
 | Area | Files |
 |---|---|
+| Preview split and routes | `src/shared/platform/previewConfig.js`, `src/apps/PreviewLanding.jsx`, `preview/*/index.html` |
+| Customer personalisation | `src/apps/customer/CustomerPersonalisation.jsx`, `src/shared/personalisation/personalisation.js` |
+| Preview build tooling | `scripts/build-tools.mjs`, `scripts/build-preview.mjs`, `scripts/build-previews.mjs`, `scripts/dev-preview.mjs`, `scripts/build-production.mjs` |
 | Catalogue rules | `src/data/catalogue.js`, `src/domain/productConfiguration.js`, `src/components/Configurator.jsx` |
 | Workflow source of truth | `src/domain/workflow.js` |
 | Mock service and persistence | `src/services/mock/createMockServices.js`, `src/services/mock/seedData.js` |
@@ -72,22 +85,23 @@ Use this form as the checkpoint for continuing the project on another computer.
 | Planning workspace | `src/components/PlanningDashboard.jsx`, `src/components/PlanningFields.jsx`, `src/domain/planningQueue.js` |
 | Expeditor workspace | `src/components/ExpeditorDashboard.jsx`, `src/components/ExpeditingFields.jsx`, `src/domain/expediting.js` |
 | Shared operational fallback | `src/components/OperationalDashboard.jsx` |
-| Automated tests | `tests/catalogue-rules.test.mjs`, `tests/rfq-inbox.test.mjs`, `tests/planning-queue.test.mjs`, `tests/expediting.test.mjs`, `tests/permissions.test.mjs`, `tests/workflow.test.mjs`, `tests/mock-services.test.mjs`, `tests/run-tests.mjs` |
+| Automated tests | `tests/catalogue-rules.test.mjs`, `tests/rfq-inbox.test.mjs`, `tests/planning-queue.test.mjs`, `tests/expediting.test.mjs`, `tests/permissions.test.mjs`, `tests/workflow.test.mjs`, `tests/mock-services.test.mjs`, `tests/platform-previews.test.mjs`, `tests/run-tests.mjs` |
 | Workflow documentation | `docs/WORKFLOW_STATE_MACHINE.md`, `docs/ORDER_WORKFLOW_IMPLEMENTATION_PLAN.md` |
+| Platform and deployment documentation | `docs/ARCHITECTURE.md`, `docs/PREVIEW_GUIDE.md`, `docs/PLATFORM_MATRIX.md`, `docs/ROLE_PERMISSION_MATRIX.md`, `docs/CUSTOMER_PERSONALISATION.md`, `docs/RESPONSIVE_TESTING.md`, `docs/BUILD_AND_DEPLOYMENT.md`, `docs/MOCK_MODE_LIMITATIONS.md` |
 | Production proposals | `docs/API-CONTRACT.md`, `docs/api/openapi.yaml`, `docs/database/postgresql-schema.sql`, `docs/SECURITY-AND-ROLES.md`, `docs/PRODUCTION-DEPLOYMENT.md` |
 
 ## Validation completed at this checkpoint
 
 | Check | Result |
 |---|---|
-| `npm test` | Passed for version 3.2, including Expediting configuration, search/filter/sort, workflow, visibility, notification and API-adapter coverage |
-| `npm run check` | Passed for version 3.2 |
-| `npm run check:css` | Passed for version 3.2 |
-| `npm run build` | Passed; version 3.2 GitHub Pages bundle regenerated |
-| `npm run build:netlify` | Passed; version 3.2 deployable static preview staged in `dist/` |
-| `npm run build:production` | Passed; API-only version 3.2 candidate built and scanned for forbidden mock markers/source maps |
+| `npm test` | Passed for version 4.0: eight suites covering the existing workflow through Expediting plus preview routing, role separation, customer personalisation, validation and responsive guards |
+| `npm run check` | Passed for 50 React/source modules and relative imports |
+| `npm run check:css` | Passed |
+| `npm run build:previews` | Passed; four standalone preview artifacts and the combined GitHub Pages artifact were generated |
+| `npm run build:netlify` | Passed; the backward-compatible static preview was staged in `dist/` |
+| `npm run build:production` | Passed; the API-only candidate was built without source maps and scanned for forbidden demo accounts, passwords and preview-only markers |
 | Repository checks | `git diff --check` passed; React/App source contains no direct `localStorage` or `sessionStorage` calls |
-| Browser interaction QA | Not rerun in this phase; automated JSX/CSS builds and responsive breakpoints passed, but the next demo review should exercise the Expeditor forms on one desktop and one phone viewport |
+| Browser interaction QA | Passed representative customer mobile/desktop, internal mobile/desktop, tablet and preview-centre checks; no console errors or document overflow were found. Full results are in `docs/RESPONSIVE_TESTING.md` |
 
 ## Known limitations and risks
 
@@ -106,7 +120,7 @@ Use this form as the checkpoint for continuing the project on another computer.
 
 ## Recommended next phase
 
-Build the dedicated Dispatch workspace with the same service, queue, validation and audit pattern. Keep the browser mock active. PDF/email delivery and retention remain later phases pending owner and IT policy decisions.
+After owner review of the four previews and customer setup, continue the next approved RFQ-to-order prompt. Do not start another numbered workflow phase automatically. Dispatch, PDF/email delivery and retention remain later controlled phases.
 
 ## Continue on the home PC
 

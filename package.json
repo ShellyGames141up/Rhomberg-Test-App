@@ -1,14 +1,23 @@
 {
   "name": "rhomberg-instruments-app-preview",
-  "version": "3.2.0",
+  "version": "4.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild ./src/main.jsx --bundle --minify --sourcemap --jsx=automatic --target=es2020 --outfile=app.js",
+    "build": "node ./scripts/build-app.mjs",
+    "dev:customer-desktop": "node ./scripts/dev-preview.mjs customer-desktop",
+    "dev:customer-mobile": "node ./scripts/dev-preview.mjs customer-mobile",
+    "dev:internal-mobile": "node ./scripts/dev-preview.mjs internal-mobile",
+    "dev:internal-desktop": "node ./scripts/dev-preview.mjs internal-desktop",
+    "build:customer-desktop": "node ./scripts/build-preview.mjs customer-desktop",
+    "build:customer-mobile": "node ./scripts/build-preview.mjs customer-mobile",
+    "build:internal-mobile": "node ./scripts/build-preview.mjs internal-mobile",
+    "build:internal-desktop": "node ./scripts/build-preview.mjs internal-desktop",
+    "build:previews": "node ./scripts/build-previews.mjs",
     "build:production": "node ./scripts/build-production.mjs",
     "build:netlify": "npm run build && node ./scripts/stage-static.mjs",
-    "check": "esbuild ./src/main.jsx --bundle --jsx=automatic --target=es2020 --outfile=work-check.js",
-    "check:css": "esbuild ./styles.css --minify --outfile=work-check.css",
+    "check": "node ./scripts/check-app.mjs",
+    "check:css": "node ./scripts/check-css.mjs",
     "test": "node ./tests/run-tests.mjs"
   },
   "dependencies": {

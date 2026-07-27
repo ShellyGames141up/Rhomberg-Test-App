@@ -6,6 +6,8 @@ import {
   validateEnquiry,
   validateExpeditingAction,
   validateOrderAcceptance,
+  validatePersonalisation,
+  validatePersonalisationImage,
   validatePlanningSubmission,
   validateQuotationConfirmation,
   validateRegistration,
@@ -190,6 +192,28 @@ export function createApiServices(config = {}) {
     },
   };
 
+  const personalisation = {
+    get: () => client.get('/users/me/personalisation'),
+    save(candidate) {
+      validatePersonalisation(candidate);
+      return client.put('/users/me/personalisation', candidate);
+    },
+    complete(candidate) {
+      validatePersonalisation({ ...candidate, setupCompleted: true });
+      return client.put('/users/me/personalisation', { ...candidate, setupCompleted: true });
+    },
+    reset: options => client.post('/users/me/personalisation/reset', options || {}),
+    uploadImage(file, kind, position = { x: 50, y: 50 }) {
+      validatePersonalisationImage(file);
+      const form = new FormData();
+      form.append('kind', kind);
+      form.append('position', JSON.stringify(position));
+      form.append('image', file, file.name);
+      return client.post('/users/me/personalisation/images', form);
+    },
+    removeImage: imageId => client.delete(`/users/me/personalisation/images/${encodeURIComponent(imageId)}`),
+  };
+
   const preferences = {
     async getTheme() {
       return preferenceStore.get(THEME_PREFERENCE_KEY, null) || (globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -215,6 +239,7 @@ export function createApiServices(config = {}) {
     notifications,
     planning,
     expediting,
+    personalisation,
     preferences,
     preview: {
       emailRecipient: '',

@@ -69,4 +69,8 @@ export class HttpClient {
   put(path, body, options) {
     return this.request(path, { ...options, method: 'PUT', body });
   }
+
+  delete(path, options) {
+    return this.request(path, { ...options, method: 'DELETE' });
+  }
 }

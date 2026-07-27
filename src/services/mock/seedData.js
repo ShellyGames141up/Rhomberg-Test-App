@@ -9,9 +9,11 @@ export const STORE_KEYS = Object.freeze({
   workflowState: 'rhombergPreviewWorkflowStateV1',
   audit: 'rhombergPreviewAuditV1',
   notifications: 'rhombergPreviewNotificationsV1',
+  personalisation: 'rhombergPreviewPersonalisationV1',
+  mockImages: 'rhombergPreviewCustomerImagesV1',
   rfqSequence: 'rhombergPreviewRfqSequenceV1',
   theme: THEME_PREFERENCE_KEY,
-  seedVersion: 'rhombergPreviewSeedV11',
+  seedVersion: 'rhombergPreviewSeedV12',
 });
 
 export const LEGACY_STORE_KEYS = Object.freeze({
@@ -25,7 +27,7 @@ export const DEMO_ACCOUNT = Object.freeze({
   companyId: 'company-demo-mining',
   company: 'Demo Mining Solutions',
   contact: 'Thabo Client',
-  email: 'demo@client.co.za',
+  email: 'customer.demo@example.invalid',
   phone: '+27 82 000 0000',
   area: 'Gauteng',
   industry: 'Mining',
@@ -39,7 +41,7 @@ export const EXPEDITOR_ACCOUNT = Object.freeze({
   companyId: 'company-rhomberg',
   company: 'Rhomberg Instruments',
   contact: 'Expeditor Test',
-  email: 'expeditor.test@rhom.co.za',
+  email: 'expeditor.workflow@example.invalid',
   phone: 'Internal test account',
   area: 'National',
   industry: 'Internal operations',
@@ -147,6 +149,7 @@ export const EXTRA_DEMO_ACCOUNTS = Object.freeze([
 export const DEMO_LOGINS = Object.freeze([
   {
     id: 'customer',
+    role: 'customer',
     label: 'Use demo company',
     description: DEMO_ACCOUNT.company,
     avatar: 'D',
@@ -155,6 +158,7 @@ export const DEMO_LOGINS = Object.freeze([
   },
   {
     id: 'cape_customer',
+    role: 'customer',
     label: 'Use Cape customer test login',
     description: 'View the Sales-to-order test journey',
     avatar: 'C',
@@ -163,6 +167,7 @@ export const DEMO_LOGINS = Object.freeze([
   },
   {
     id: 'sales_representative',
+    role: 'sales_representative',
     label: 'Use sales test login',
     description: 'Review assigned RFQs and create orders',
     avatar: 'S',
@@ -171,6 +176,7 @@ export const DEMO_LOGINS = Object.freeze([
   },
   {
     id: 'planning',
+    role: 'planning',
     label: 'Use planning test login',
     description: 'Plan accepted customer orders',
     avatar: 'P',
@@ -179,6 +185,7 @@ export const DEMO_LOGINS = Object.freeze([
   },
   {
     id: 'expeditor',
+    role: 'expeditor',
     label: 'Use expeditor test login',
     description: 'Search and update customer orders',
     avatar: 'E',
@@ -187,6 +194,7 @@ export const DEMO_LOGINS = Object.freeze([
   },
   {
     id: 'dispatch',
+    role: 'dispatch',
     label: 'Use dispatch test login',
     description: 'Release and complete ready orders',
     avatar: 'D',
@@ -195,6 +203,7 @@ export const DEMO_LOGINS = Object.freeze([
   },
   {
     id: 'buyer',
+    role: 'buyer',
     label: 'Use buyer test login',
     description: 'Preview the prepared inactive Buyer role',
     avatar: 'B',
@@ -203,6 +212,7 @@ export const DEMO_LOGINS = Object.freeze([
   },
   {
     id: 'manager',
+    role: 'manager',
     label: 'Use manager test login',
     description: 'Review all authorised operational records',
     avatar: 'M',
@@ -211,6 +221,7 @@ export const DEMO_LOGINS = Object.freeze([
   },
   {
     id: 'administrator',
+    role: 'administrator',
     label: 'Use administrator test login',
     description: 'Preview full administrative permissions',
     avatar: 'A',

@@ -495,6 +495,50 @@ CREATE TABLE app.uploaded_documents (
   )
 );
 
+CREATE TABLE app.customer_personalisations (
+  user_id uuid PRIMARY KEY REFERENCES app.users(id) ON DELETE CASCADE,
+  company_id uuid NOT NULL REFERENCES app.companies(id) ON DELETE CASCADE,
+  schema_version integer NOT NULL DEFAULT 1 CHECK (schema_version >= 1),
+  setup_completed boolean NOT NULL DEFAULT false,
+  theme_preset text NOT NULL DEFAULT 'rhomberg-default'
+    CHECK (theme_preset IN ('rhomberg-default', 'industrial-professional', 'modern', 'funky', 'dark', 'high-contrast', 'custom')),
+  custom_colours jsonb NOT NULL DEFAULT '{}'::jsonb,
+  font_size text NOT NULL DEFAULT 'medium' CHECK (font_size IN ('small', 'medium', 'large', 'extra-large')),
+  display_density text NOT NULL DEFAULT 'standard' CHECK (display_density IN ('comfortable', 'standard', 'compact')),
+  appearance_mode text NOT NULL DEFAULT 'system' CHECK (appearance_mode IN ('light', 'dark', 'system')),
+  notification_preferences jsonb NOT NULL DEFAULT '{}'::jsonb,
+  profile_image_id uuid,
+  company_logo_id uuid,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (jsonb_typeof(custom_colours) = 'object'),
+  CHECK (jsonb_typeof(notification_preferences) = 'object')
+);
+
+CREATE TABLE app.customer_identity_images (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES app.users(id) ON DELETE CASCADE,
+  company_id uuid NOT NULL REFERENCES app.companies(id) ON DELETE CASCADE,
+  kind text NOT NULL CHECK (kind IN ('profileImage', 'companyLogo')),
+  original_name text NOT NULL,
+  object_key text NOT NULL UNIQUE,
+  media_type text NOT NULL CHECK (media_type IN ('image/jpeg', 'image/png', 'image/webp')),
+  size_bytes bigint NOT NULL CHECK (size_bytes BETWEEN 1 AND 1048576),
+  sha256_hex text NOT NULL CHECK (sha256_hex ~ '^[0-9a-f]{64}$'),
+  scan_status app.scan_status NOT NULL DEFAULT 'pending',
+  position_x smallint NOT NULL DEFAULT 50 CHECK (position_x BETWEEN 0 AND 100),
+  position_y smallint NOT NULL DEFAULT 50 CHECK (position_y BETWEEN 0 AND 100),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  deleted_at timestamptz
+);
+
+ALTER TABLE app.customer_personalisations
+  ADD CONSTRAINT customer_personalisation_profile_image_fk
+  FOREIGN KEY (profile_image_id) REFERENCES app.customer_identity_images(id);
+ALTER TABLE app.customer_personalisations
+  ADD CONSTRAINT customer_personalisation_company_logo_fk
+  FOREIGN KEY (company_logo_id) REFERENCES app.customer_identity_images(id);
+
 CREATE TABLE app.enquiry_drafts (
   user_id uuid PRIMARY KEY REFERENCES app.users(id) ON DELETE CASCADE,
   company_id uuid NOT NULL REFERENCES app.companies(id) ON DELETE CASCADE,
@@ -598,6 +642,9 @@ CREATE INDEX workflow_events_order_idx ON app.workflow_events (order_id, created
 CREATE INDEX notifications_recipient_unread_idx ON app.notifications (recipient_user_id, created_at DESC) WHERE read_at IS NULL;
 CREATE INDEX notifications_company_idx ON app.notifications (company_id, created_at DESC);
 CREATE INDEX documents_company_idx ON app.uploaded_documents (company_id, created_at DESC) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX customer_identity_images_active_kind_idx
+  ON app.customer_identity_images (user_id, kind) WHERE deleted_at IS NULL;
+CREATE INDEX customer_personalisations_company_idx ON app.customer_personalisations (company_id, updated_at DESC);
 CREATE INDEX email_outbox_work_idx ON app.email_outbox (status, next_attempt_at) WHERE status IN ('pending', 'failed');
 CREATE INDEX audit_events_actor_time_idx ON app.audit_events (actor_user_id, created_at DESC);
 CREATE INDEX audit_events_entity_idx ON app.audit_events (entity_type, entity_id, created_at DESC);
@@ -796,6 +843,8 @@ ALTER TABLE app.expediting_updates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.workflow_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.uploaded_documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.customer_personalisations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.customer_identity_images ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY companies_authorised_scope ON app.companies
   USING (app.can_access_company(id));
@@ -917,6 +966,26 @@ CREATE POLICY documents_authorised_scope ON app.uploaded_documents
     (enquiry_id IS NOT NULL AND app.can_access_enquiry(enquiry_id))
     OR (order_id IS NOT NULL AND app.can_access_order(order_id))
     OR app.current_user_has_permission('manage_products')
+  );
+
+CREATE POLICY customer_personalisations_own_scope ON app.customer_personalisations
+  USING (user_id = app.current_user_id() AND app.can_access_company(company_id))
+  WITH CHECK (
+    user_id = app.current_user_id()
+    AND app.current_user_role() = 'customer'
+    AND app.can_access_company(company_id)
+  );
+
+CREATE POLICY customer_identity_images_own_scope ON app.customer_identity_images
+  USING (
+    deleted_at IS NULL
+    AND user_id = app.current_user_id()
+    AND app.can_access_company(company_id)
+  )
+  WITH CHECK (
+    user_id = app.current_user_id()
+    AND app.current_user_role() = 'customer'
+    AND app.can_access_company(company_id)
   );
 
 -- RLS limits row scope; database grants must separately limit operations by the API role.
