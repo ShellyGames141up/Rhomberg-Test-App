@@ -17,6 +17,7 @@ import {
   validateSignIn,
   validateWorkflowActionRequest,
 } from '../validation.js';
+import { validateWorkflowDocument } from '../../domain/quotationWorkflow.js';
 import { createBrowserStore } from '../browserStore.js';
 import { THEME_PREFERENCE_KEY } from '../serviceKeys.js';
 import { HttpClient } from './HttpClient.js';
@@ -102,10 +103,8 @@ export function createApiServices(config = {}) {
     async submit(details, lines) {
       validateEnquiry(details, lines);
       await draftSaveQueue.catch(() => undefined);
-      const { poFile, ...serialisableDetails } = details;
       const form = new FormData();
-      form.append('payload', JSON.stringify({ details: serialisableDetails, items: lines }));
-      if (poFile) form.append('purchaseOrder', poFile, poFile.name);
+      form.append('payload', JSON.stringify({ details, items: lines }));
       return client.post('/enquiries', form, { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `rfq-${Date.now()}` } });
     },
   };
@@ -128,6 +127,19 @@ export function createApiServices(config = {}) {
       let request = validateWorkflowActionRequest(input);
       const resource = input?.entityType === 'order' ? 'orders' : 'enquiries';
       const idempotencyKey = globalThis.crypto?.randomUUID?.() || `workflow-${Date.now()}`;
+      if (['send_quotation', 'amend_quotation', 'accept_quotation'].includes(request.action)) {
+        const category = request.action === 'accept_quotation' ? 'customer_purchase_order' : 'representative_quotation';
+        const documentFile = request.data.documentFile;
+        validateWorkflowDocument(documentFile, category);
+        const { documentFile: _documentFile, ...metadata } = request.data;
+        request = { ...request, data: metadata };
+        const form = new FormData();
+        form.append('payload', JSON.stringify(request));
+        form.append('document', documentFile, documentFile.name);
+        return client.post(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`, form, {
+          headers: { 'Idempotency-Key': idempotencyKey },
+        });
+      }
       if (request.action === 'mark_quoted') {
         const { quotation, quotationDocumentFile } = validateQuotationConfirmation(request.data);
         request = { ...request, data: { quotation } };

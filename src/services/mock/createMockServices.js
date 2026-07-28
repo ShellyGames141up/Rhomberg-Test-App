@@ -27,6 +27,14 @@ import {
 } from '../../domain/notifications.js';
 import { PLANNING_PRIORITIES } from '../../domain/planningQueue.js';
 import {
+  acceptQuotation,
+  canDownloadDocument,
+  closeRejectedRfq,
+  rejectQuotation,
+  sendQuotation,
+  verifyAndCreateOrder,
+} from '../../domain/quotationWorkflow.js';
+import {
   createDeniedWorkflowAudit,
   createWorkflowActor,
   getAllowedWorkflowActions,
@@ -398,13 +406,36 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   const canReadRecord = (account, record) => canAccessRecord(account, record);
 
   const presentRecord = (account, record) => {
+    const actor = createWorkflowActor(account);
+    const quotationActions = [];
+    const currentQuotation = (record.quotationVersions || []).find(version => version.isCurrent);
+    const repCanAct = [USER_ROLES.MANAGER, USER_ROLES.ADMINISTRATOR].includes(account.role)
+      || (account.role === USER_ROLES.SALES_REPRESENTATIVE && record.selectedRep?.id === account.representativeId);
+    if (repCanAct && ['under_rep_review', 'quotation_rejected'].includes(record.trackingStatus)) {
+      quotationActions.push({ action: record.trackingStatus === 'quotation_rejected' ? 'amend_quotation' : 'send_quotation', label: record.trackingStatus === 'quotation_rejected' ? 'Submit Amended Quotation' : 'Prepare and Send Quotation', fromStatus: record.trackingStatus, toStatus: 'awaiting_customer_response' });
+    }
+    if (repCanAct && record.trackingStatus === 'quotation_rejected') quotationActions.push({ action: 'close_rejected_rfq', label: 'Acknowledge Rejection and Close RFQ', fromStatus: record.trackingStatus, toStatus: 'closed_rejected' });
+    if (repCanAct && record.trackingStatus === 'customer_accepted_pending_rep_verification') quotationActions.push({ action: 'verify_po_create_order', label: 'Approve and Create Order', fromStatus: record.trackingStatus, toStatus: 'converted_to_order' });
+    if (account.role === USER_ROLES.CUSTOMER && account.companyId === record.companyId && currentQuotation?.status === 'awaiting_customer_response') {
+      quotationActions.push(
+        { action: 'accept_quotation', label: 'Accept Quotation', fromStatus: record.trackingStatus, toStatus: 'customer_accepted_pending_rep_verification' },
+        { action: 'reject_quotation', label: 'Reject Quotation', fromStatus: record.trackingStatus, toStatus: 'quotation_rejected' },
+      );
+    }
     if (!isInternalRole(account.role)) {
       return {
         ...toCustomerVisibleRecord(record),
-        allowedWorkflowActions: getAllowedWorkflowActions(record, createWorkflowActor(account)),
+        quotationVersions: (record.quotationVersions || []).map(version => ({
+          ...version,
+          internalNote: undefined,
+          document: version.document?.customerVisible ? version.document : undefined,
+        })),
+        purchaseOrders: (record.purchaseOrders || []).filter(po => po.companyId === account.companyId),
+        documents: (record.documents || []).filter(document => canDownloadDocument({ actor, record, document })),
+        allowedWorkflowActions: [...getAllowedWorkflowActions(record, actor), ...quotationActions],
       };
     }
-    return { ...record, allowedWorkflowActions: getAllowedWorkflowActions(record, createWorkflowActor(account)) };
+    return { ...record, allowedWorkflowActions: [...getAllowedWorkflowActions(record, actor), ...quotationActions] };
   };
 
   const saveEnquiry = enquiry => {
@@ -868,22 +899,14 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       validateConfiguredProducts(lines);
       const representativeDirectory = representativesForArea(details.area);
       const selectedRepresentative = validateRepresentativeAssignment(details.selectedRep, representativeDirectory.representatives);
-      const { poFile, ...serialisableDetails } = details;
+      const serialisableDetails = { ...details };
       const reference = nextRfqReference();
       const createdAt = now().toISOString();
       const assignedRepresentative = {
         ...clone(selectedRepresentative),
         branchName: representativeDirectory.branch.name,
       };
-      const documentMetadata = poFile ? [{
-        id: makeId('document'),
-        documentType: 'purchase_order',
-        fileName: poFile.name,
-        mimeType: poFile.type || 'application/octet-stream',
-        sizeBytes: Number(poFile.size || 0),
-        uploadedAt: createdAt,
-        storageStatus: 'metadata_only',
-      }] : [];
+      const documentMetadata = [];
       const baseEnquiry = {
         id: makeId('enquiry'),
         reference,
@@ -953,7 +976,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
 
       let delivery;
       try {
-        delivery = await emailSender(enquiry, poFile);
+        delivery = await emailSender(enquiry, null);
       } catch (error) {
         delivery = { ok: false, message: 'The RFQ is saved, but the test email could not be sent. Please use the email fallback or try again later.', warning: error?.message || '' };
       }
@@ -1095,6 +1118,56 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         appendAuditEvent(createDeniedWorkflowAudit({ entity: existing, action: request.action, actor, error, now }));
         throw error;
       }
+      const quotationAction = ['send_quotation', 'amend_quotation', 'accept_quotation', 'reject_quotation', 'close_rejected_rfq', 'verify_po_create_order'].includes(request.action);
+      if (quotationAction) {
+        if (request.expectedVersion !== existing.version) throw new ServiceError('This RFQ changed. Refresh it before continuing.', { code: 'VERSION_CONFLICT', status: 409 });
+        let updated;
+        let createdOrder = null;
+        let idempotent = false;
+        if (['send_quotation', 'amend_quotation'].includes(request.action)) updated = sendQuotation({ rfq: existing, actor, input: request.data, now: now() });
+        if (request.action === 'accept_quotation') updated = acceptQuotation({ rfq: existing, actor, input: request.data, now: now() });
+        if (request.action === 'reject_quotation') updated = rejectQuotation({ rfq: existing, actor, input: request.data, now: now() });
+        if (request.action === 'close_rejected_rfq') updated = closeRejectedRfq({ rfq: existing, actor, input: request.data, now: now() });
+        if (request.action === 'verify_po_create_order') {
+          const conversion = verifyAndCreateOrder({
+            rfq: existing, actor, input: request.data, now: now(), orderId: makeId('order'), orderReference: nextOrderReference(state.orders),
+          });
+          updated = conversion.rfq;
+          createdOrder = conversion.order ? normaliseEnquiry(conversion.order) : state.orders.find(order => order.id === existing.orderId);
+          idempotent = conversion.idempotent;
+          if (conversion.order) state.orders.unshift(createdOrder);
+        }
+        if (!idempotent) {
+          const definition = workflowStatusById(updated.trackingStatus, 'rfq');
+          updated = {
+            ...updated,
+            trackingHistory: [...(existing.trackingHistory || []), {
+              id: makeId('workflow-event'), entityType: 'rfq', action: request.action,
+              fromStatus: existing.trackingStatus, toStatus: updated.trackingStatus, status: updated.trackingStatus,
+              label: definition?.label || request.action.replaceAll('_', ' '),
+              note: definition?.customerDescription || request.action.replaceAll('_', ' '),
+              customerVisible: true, actorId: actor.id, actorRole: actor.role,
+              actor: actor.displayName, createdAt: now().toISOString(),
+            }],
+          };
+        }
+        updated = normaliseEnquiry({ ...updated, version: existing.version + (idempotent ? 0 : 1) });
+        located.collection[located.index] = updated;
+        writeWorkflowState(state);
+        appendAuditEvent({
+          id: makeId('audit'), action: `workflow.${request.action}`, outcome: idempotent ? 'idempotent_replay' : 'success',
+          entityType: 'rfq', entityId: updated.id, linkedOrderId: createdOrder?.id || '',
+          companyId: updated.companyId, actorId: actor.id, actorRole: actor.role,
+          fromStatus: existing.trackingStatus, toStatus: updated.trackingStatus, createdAt: now().toISOString(),
+        });
+        appendNotification({
+          id: makeId('notification'), eventType: request.action, entityType: 'rfq', entityId: updated.id,
+          companyId: updated.companyId, reference: updated.reference, status: updated.trackingStatus,
+          message: request.action.replaceAll('_', ' '), recipients: account.role === USER_ROLES.CUSTOMER ? ['assigned_representative'] : ['customer'],
+          recipientAccountIds: [], readBy: [], createdAt: now().toISOString(),
+        });
+        return clone({ ...presentRecord(account, updated), ...(createdOrder ? { createdOrder: presentRecord(account, createdOrder) } : {}), idempotent });
+      }
       const isAcceptanceConversion = located.entityType === 'rfq' && request.action === 'accept_order';
       if (isAcceptanceConversion && existing.trackingStatus === 'converted_to_order') {
         const existingOrder = state.orders.find(order => order.id === existing.orderId || order.sourceEnquiryId === existing.id);
@@ -1211,6 +1284,26 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const account = requireAccount();
       if (!roleCan(account.role, PERMISSIONS.READ_AUDIT_HISTORY)) throw new ServiceError('Your role cannot view audit history.', { code: 'FORBIDDEN', status: 403 });
       return clone(readAuditEvents().filter(event => !entityId || event.entityId === entityId));
+    },
+  };
+
+  const documents = {
+    async list({ recordId } = {}) {
+      const account = requireAccount();
+      const located = locateWorkflowRecord(readWorkflowState(), recordId);
+      if (!located || !canReadRecord(account, located.record)) throw new ServiceError('The record was not found.', { code: 'DOCUMENT_RECORD_NOT_FOUND', status: 404 });
+      const actor = createWorkflowActor(account);
+      return clone((located.record.documents || []).filter(document => canDownloadDocument({ actor, record: located.record, document })));
+    },
+    async download(documentId) {
+      const account = requireAccount();
+      const located = readAllRecords().map(record => ({ record, document: (record.documents || []).find(item => item.id === documentId) })).find(item => item.document);
+      if (!located || !canReadRecord(account, located.record) || !canDownloadDocument({ actor: createWorkflowActor(account), record: located.record, document: located.document })) {
+        appendAuditEvent({ id: makeId('audit'), action: 'document.download', outcome: 'denied', entityType: 'document', entityId: documentId, actorId: account.id, actorRole: account.role, companyId: account.companyId, createdAt: now().toISOString() });
+        throw new ServiceError('The document was not found or you are not permitted to download it.', { code: 'DOCUMENT_NOT_FOUND', status: 404 });
+      }
+      appendAuditEvent({ id: makeId('audit'), action: account.role === USER_ROLES.CUSTOMER ? 'document.customer_download' : 'document.internal_download', outcome: 'success', entityType: 'document', entityId: documentId, sourceEntityId: located.record.id, actorId: account.id, actorRole: account.role, companyId: located.record.companyId, createdAt: now().toISOString() });
+      return clone({ document: located.document, downloadUrl: `data:text/plain;charset=utf-8,${encodeURIComponent(`DEMONSTRATION DOCUMENT ONLY\n${located.document.originalFilename}`)}`, expiresAt: new Date(now().getTime() + 5 * 60 * 1000).toISOString() });
     },
   };
 
@@ -1618,6 +1711,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     tracking: workflow,
     audit,
     notifications,
+    documents,
     planning,
     expediting,
     dispatch,

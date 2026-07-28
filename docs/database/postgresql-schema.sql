@@ -259,7 +259,7 @@ CREATE TABLE app.enquiry_items (
 
 -- External Outlook quotation confirmation only. Pricing is deliberately absent.
 -- The API, not a direct database client, decides which projection each role receives.
-CREATE TABLE app.quotations (
+CREATE TABLE app.legacy_quotation_confirmations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   enquiry_id uuid NOT NULL UNIQUE REFERENCES app.enquiries(id) ON DELETE CASCADE,
   quotation_number text NOT NULL CHECK (length(trim(quotation_number)) BETWEEN 1 AND 100),
@@ -773,8 +773,8 @@ CREATE INDEX enquiries_rep_updated_idx ON app.enquiries (representative_id, upda
 CREATE INDEX enquiries_rep_inbox_idx ON app.enquiries (representative_id, status, submitted_at, updated_at DESC);
 CREATE INDEX enquiries_status_updated_idx ON app.enquiries (status, updated_at DESC);
 CREATE INDEX enquiry_items_enquiry_idx ON app.enquiry_items (enquiry_id, line_number);
-CREATE UNIQUE INDEX quotations_number_idx ON app.quotations (quotation_number);
-CREATE INDEX quotations_acknowledgement_idx ON app.quotations (enquiry_id, acknowledged_at);
+CREATE UNIQUE INDEX legacy_quotation_confirmations_number_idx ON app.legacy_quotation_confirmations (quotation_number);
+CREATE INDEX legacy_quotation_confirmations_ack_idx ON app.legacy_quotation_confirmations (enquiry_id, acknowledged_at);
 CREATE INDEX rfq_acceptances_verified_idx ON app.rfq_acceptances (verified_by_user_id, verified_at DESC);
 CREATE INDEX orders_company_updated_idx ON app.orders (company_id, updated_at DESC);
 CREATE INDEX orders_rep_updated_idx ON app.orders (representative_id, updated_at DESC);
@@ -1005,7 +1005,7 @@ $$;
 ALTER TABLE app.companies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.enquiries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.enquiry_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE app.quotations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.legacy_quotation_confirmations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.rfq_acceptances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.enquiry_drafts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.orders ENABLE ROW LEVEL SECURITY;
@@ -1038,7 +1038,7 @@ CREATE POLICY enquiry_items_authorised_scope ON app.enquiry_items
     WHERE enquiry.id = enquiry_id AND app.can_access_enquiry(enquiry.id)
   ));
 
-CREATE POLICY quotations_authorised_scope ON app.quotations
+CREATE POLICY legacy_quotation_confirmations_scope ON app.legacy_quotation_confirmations
   USING (app.can_access_enquiry(enquiry_id))
   WITH CHECK (app.can_access_enquiry(enquiry_id));
 
@@ -1204,6 +1204,64 @@ CREATE POLICY customer_identity_images_own_scope ON app.customer_identity_images
     AND app.current_user_role() = 'customer'
     AND app.can_access_company(company_id)
   );
+
+-- Quotation/document phase entities. The production migration must add matching
+-- company-scoped foreign keys and RLS policies before these tables are enabled.
+CREATE TABLE app.quotations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL,
+  rfq_id uuid NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (company_id, rfq_id)
+);
+CREATE TABLE app.quotation_versions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL,
+  quotation_id uuid NOT NULL REFERENCES app.quotations(id), version_number integer NOT NULL CHECK (version_number > 0),
+  quotation_number text NOT NULL, quotation_date date NOT NULL, expiry_date date NOT NULL,
+  document_id uuid, customer_message text NOT NULL, internal_note text, status text NOT NULL,
+  is_current boolean NOT NULL DEFAULT false, supersedes_version_id uuid REFERENCES app.quotation_versions(id),
+  sent_by uuid, sent_at timestamptz, UNIQUE (quotation_id, version_number)
+);
+CREATE UNIQUE INDEX quotation_one_current_version ON app.quotation_versions (quotation_id) WHERE is_current;
+CREATE TABLE app.quotation_responses (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL,
+  quotation_version_id uuid NOT NULL UNIQUE REFERENCES app.quotation_versions(id),
+  response_type text NOT NULL CHECK (response_type IN ('accepted','rejected')),
+  responded_by uuid NOT NULL, responded_at timestamptz NOT NULL, customer_message text
+);
+CREATE TABLE app.quotation_rejections (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL,
+  quotation_response_id uuid NOT NULL REFERENCES app.quotation_responses(id),
+  category text NOT NULL, explanation text NOT NULL
+);
+CREATE TABLE app.purchase_orders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL, rfq_id uuid NOT NULL,
+  quotation_version_id uuid NOT NULL REFERENCES app.quotation_versions(id), po_number text NOT NULL,
+  active boolean NOT NULL DEFAULT true, status text NOT NULL, uploaded_by uuid NOT NULL, uploaded_at timestamptz NOT NULL
+);
+CREATE UNIQUE INDEX purchase_order_one_active_per_quote ON app.purchase_orders (quotation_version_id) WHERE active;
+CREATE TABLE app.purchase_order_versions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL,
+  purchase_order_id uuid NOT NULL REFERENCES app.purchase_orders(id), version_number integer NOT NULL,
+  document_id uuid NOT NULL, created_at timestamptz NOT NULL, UNIQUE (purchase_order_id, version_number)
+);
+CREATE TABLE app.documents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL, rfq_id uuid,
+  quotation_version_id uuid, order_id uuid, category text NOT NULL, original_filename text NOT NULL,
+  storage_key text NOT NULL, mime_type text NOT NULL, file_size bigint NOT NULL CHECK (file_size > 0),
+  uploaded_by uuid NOT NULL, uploaded_role text NOT NULL, uploaded_at timestamptz NOT NULL,
+  customer_visible boolean NOT NULL DEFAULT false, internal_visible boolean NOT NULL DEFAULT true,
+  integrity_algorithm text, integrity_digest text, version integer NOT NULL DEFAULT 1,
+  active boolean NOT NULL DEFAULT true, superseded_at timestamptz
+);
+CREATE TABLE app.document_permissions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL,
+  document_id uuid NOT NULL REFERENCES app.documents(id), role text NOT NULL,
+  permission text NOT NULL CHECK (permission IN ('view','download','supersede'))
+);
+CREATE TABLE app.document_download_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL,
+  document_id uuid NOT NULL REFERENCES app.documents(id), actor_id uuid NOT NULL,
+  actor_role text NOT NULL, outcome text NOT NULL, downloaded_at timestamptz NOT NULL
+);
 
 -- RLS limits row scope; database grants must separately limit operations by the API role.
 -- In particular, customers must not receive UPDATE/DELETE rights on workflow events,
