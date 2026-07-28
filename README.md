@@ -44,6 +44,7 @@ All credentials above are fabricated and demonstration-only. GitHub Pages runs i
 
 - **Checkpoint date:** 28 July 2026
 - **Current version:** 4.5.0
+- **Latest main commit:** `b817dd3` - `feat: add retention management and delivery preparation`
 - **Last completed steps:** Prompt 13 - archive and retention management; Prompt 14 - desktop and mobile delivery preparation.
 
 This checkpoint adds manager/administrator retention controls, an Archived Orders workspace, legal holds, protected pre-deletion exports and a shared PWA/Capacitor/Windows delivery strategy. Permanent deletion remains disabled in browser mock mode.
@@ -51,6 +52,17 @@ This checkpoint adds manager/administrator retention controls, an Archived Order
 All automated tests, source checks, stylesheet checks, static preview builds and the API-only production-candidate safety build passed before this checkpoint was committed. The GitHub Pages preview remains browser-local and uses fabricated data only.
 
 The separately attached quotation, PO, rejection and Document Centre prompt was reviewed and is not complete; see [the gap review](docs/QUOTATION_WORKFLOW_GAP_REVIEW.md). No real database, email provider, push provider, courier integration or document-storage service has been connected. Continue from [the progress handoff](docs/HOME_PC_PROGRESS_HANDOFF.md), [retention policy](docs/RETENTION_POLICY.md) and [delivery strategy](docs/DELIVERY_STRATEGY.md).
+
+## Latest changes committed to `main`
+
+The latest fast-forward update to `main` includes the completed Prompt 11-14 work:
+
+- **Prompt 11:** Separate customer-visible order timelines and immutable internal audit history, with management viewing permissions and customer-data leakage tests.
+- **Prompt 12:** Customer-safe and internal operational order-summary PDFs, preview/download controls, simulated email sharing, recipient validation and audited document actions.
+- **Prompt 13:** Configurable archiving and retention management, archive eligibility, Archived Orders search, restore/export controls, legal holds and deletion safeguards.
+- **Prompt 14:** One responsive Progressive Web App codebase, role-specific mobile and desktop navigation, Capacitor preparation and documented Windows/mobile delivery requirements.
+
+The public GitHub Pages build remains a fabricated mock demonstration. Email and push delivery are simulated, browser code cannot permanently delete orders, and no production credentials or customer data were added.
 
 ## Included in version 4.5
 
