@@ -1063,6 +1063,132 @@ paths:
                 $ref: '#/components/schemas/DocumentResponse'
         '404':
           $ref: '#/components/responses/ApiError'
+  /admin/retention-policy:
+    get:
+      summary: Read the approved retention-policy projection
+      security: [{ cookieSession: [] }]
+      responses:
+        '200':
+          description: Retention policy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RetentionPolicy' }
+    put:
+      summary: Update retention settings (Administrator only; always audited)
+      security: [{ cookieSession: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RetentionPolicy' }
+      responses:
+        '200':
+          description: Updated policy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RetentionPolicy' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /archived-orders:
+    get:
+      summary: Search archive-eligible and archived orders
+      security: [{ cookieSession: [] }]
+      parameters:
+        - { in: query, name: search, schema: { type: string } }
+        - { in: query, name: state, schema: { type: string, enum: [all, archive_eligible, archived] } }
+        - { in: query, name: legalHold, schema: { type: string, enum: [all, held, clear] } }
+      responses:
+        '200':
+          description: Authorised archive records
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ArchivedOrder' }
+  /orders/{orderId}/archive:
+    post:
+      summary: Archive an eligible completed order
+      security: [{ cookieSession: [], csrfToken: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/OrderId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArchiveCommand' }
+      responses:
+        '200':
+          description: Archived order
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArchivedOrder' }
+        '409': { description: Order is not archive eligible }
+  /orders/{orderId}/restore:
+    post:
+      summary: Restore an archived order to completed-order history
+      security: [{ cookieSession: [], csrfToken: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/OrderId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArchiveCommand' }
+      responses:
+        '200':
+          description: Restored order
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArchivedOrder' }
+  /orders/{orderId}/legal-hold:
+    put:
+      summary: Apply or release a legal/investigation hold
+      security: [{ cookieSession: [], csrfToken: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/OrderId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LegalHoldCommand' }
+      responses:
+        '200':
+          description: Order with updated hold
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArchivedOrder' }
+  /orders/{orderId}/retention-exports:
+    post:
+      summary: Generate the protected export required before deletion
+      security: [{ cookieSession: [], csrfToken: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/OrderId' }
+      responses:
+        '201':
+          description: Protected export metadata and authorised download
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RetentionExport' }
+  /orders/{orderId}/deletion-requests:
+    post:
+      summary: Start the backend-only deletion approval workflow
+      description: Never deletes inline. The backend re-checks policy, retention age, legal holds, export evidence and independent approvals.
+      security: [{ cookieSession: [], csrfToken: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/OrderId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [retentionExportId, reason]
+              properties:
+                retentionExportId: { type: string, format: uuid }
+                reason: { type: string, minLength: 10 }
+      responses:
+        '202': { description: Deletion approval request accepted; no record deleted yet }
+        '409': { description: Deletion disabled, retention incomplete, export missing or legal hold active }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -2204,7 +2330,7 @@ components:
         eventType: { type: string }
         action: { type: string }
         outcome: { type: string, enum: [success, failed, denied, idempotent_replay] }
-        entityType: { type: string, enum: [rfq, order] }
+        entityType: { type: string, enum: [rfq, order, retention_policy] }
         entityId: { type: string, format: uuid }
         previousStatus: { type: string }
         newStatus: { type: string }
@@ -2259,6 +2385,67 @@ components:
             sizeBytes: { type: integer }
             scanStatus: { type: string, enum: [pending, clean, rejected] }
             customerVisible: { type: boolean }
+    RetentionPolicy:
+      type: object
+      required:
+        - id
+        - archive_completed_orders_after_days
+        - retain_archived_orders_for_days
+        - allow_permanent_deletion
+        - deletion_requires_manager_approval
+        - deletion_requires_administrator_approval
+      properties:
+        id: { type: string }
+        name: { type: string }
+        archive_completed_orders_after_days: { type: integer, minimum: 1, maximum: 3650 }
+        retain_archived_orders_for_days: { type: integer, minimum: 1, maximum: 36500 }
+        allow_permanent_deletion: { type: boolean }
+        deletion_requires_manager_approval: { type: boolean }
+        deletion_requires_administrator_approval: { type: boolean }
+        approvedForProduction: { type: boolean, readOnly: true }
+        policyNotice: { type: string, readOnly: true }
+    ArchivedOrder:
+      type: object
+      required: [id, reference, companyId, retentionStatus]
+      properties:
+        id: { type: string }
+        reference: { type: string }
+        sourceRfqReference: { type: string }
+        internalJobNumber: { type: string }
+        customerPoNumber: { type: string }
+        companyId: { type: string }
+        company: { type: string }
+        retentionStatus: { type: string, enum: [archive_eligible, archived] }
+        archiveEligibleAt: { type: string, format: date-time }
+        archivedAt: { type: string, format: date-time, nullable: true }
+        archiveReason: { type: string }
+        legalHold:
+          type: object
+          properties:
+            active: { type: boolean }
+            reason: { type: string }
+            placedAt: { type: string, format: date-time }
+    ArchiveCommand:
+      type: object
+      properties:
+        reason: { type: string, maxLength: 2000 }
+    LegalHoldCommand:
+      type: object
+      required: [active]
+      properties:
+        active: { type: boolean }
+        reason: { type: string, minLength: 5, maxLength: 2000 }
+    RetentionExport:
+      type: object
+      required: [id, orderId, fileName, classification, generatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        orderId: { type: string }
+        fileName: { type: string }
+        classification: { type: string, const: INTERNAL - RETENTION EXPORT }
+        sizeBytes: { type: integer }
+        generatedAt: { type: string, format: date-time }
+        downloadUrl: { type: string, format: uri, description: Short-lived authenticated URL }
     PageMeta:
       type: object
       required: [page, pageSize, total]

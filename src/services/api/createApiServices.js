@@ -218,6 +218,29 @@ export function createApiServices(config = {}) {
     ),
   };
 
+  const archive = {
+    getPolicy: () => client.get('/admin/retention-policy'),
+    savePolicy: input => client.put('/admin/retention-policy', input),
+    list: filters => client.get('/archived-orders', { query: filters }),
+    archiveOrder: (orderId, input) => client.post(
+      `/orders/${encodeURIComponent(orderId)}/archive`,
+      input,
+      { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `archive-${Date.now()}` } },
+    ),
+    restoreOrder: (orderId, input) => client.post(
+      `/orders/${encodeURIComponent(orderId)}/restore`,
+      input,
+      { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `restore-${Date.now()}` } },
+    ),
+    setLegalHold: (orderId, input) => client.put(`/orders/${encodeURIComponent(orderId)}/legal-hold`, input),
+    exportBeforeDeletion: orderId => client.post(
+      `/orders/${encodeURIComponent(orderId)}/retention-exports`,
+      {},
+      { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `retention-export-${Date.now()}` } },
+    ),
+    requestPermanentDeletion: (orderId, input) => client.post(`/orders/${encodeURIComponent(orderId)}/deletion-requests`, input),
+  };
+
   const notifications = {
     list: filters => client.get('/notifications', { query: filters }),
     markRead: notificationId => client.post(`/notifications/${encodeURIComponent(notificationId)}/read`, {}),
@@ -295,6 +318,7 @@ export function createApiServices(config = {}) {
     tracking: workflow,
     audit,
     orderDocuments,
+    archive,
     notifications,
     planning,
     expediting,

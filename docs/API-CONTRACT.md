@@ -785,6 +785,27 @@ Returns the assigned representative and an allow-listed set of active internal r
 
 Generation stores private document metadata and appends `order_summary.pdf_generated` with the copy type and generated document metadata. Object storage must use encryption, malware scanning where applicable, short retention for regenerated copies and no public bucket access.
 
+## Archive, retention and backend deletion
+
+The mock and future API expose the same archive boundary:
+
+- `GET /admin/retention-policy`
+- `PUT /admin/retention-policy` — Administrator only; creates an audited policy version
+- `GET /archived-orders?search=&state=&legalHold=`
+- `POST /orders/{orderId}/archive`
+- `POST /orders/{orderId}/restore`
+- `PUT /orders/{orderId}/legal-hold`
+- `POST /orders/{orderId}/retention-exports`
+- `POST /orders/{orderId}/deletion-requests`
+
+Eligibility is based on `completed_at` plus the active policy’s `archive_completed_orders_after_days`. Reading or not reading an order is never a retention input. The scheduled backend job marks records `archive_eligible`; it does not archive or delete them.
+
+Archive and restore commands require explicit Manager/Administrator permissions, an idempotency key and a meaningful audit event. The archive query returns only authorised internal records and must remove archived orders from normal active queues. The complete order aggregate, RFQ/order/PO/job references, private document links, generated-PDF metadata, customer timeline, internal audit history and legal-hold state remain preserved.
+
+The browser mock can generate an internal PDF retention export but has no deletion implementation. `POST /orders/{orderId}/deletion-requests` starts a backend approval workflow and never deletes synchronously. Before executing a deletion, the backend must lock and re-read the record, verify the policy version and archived age, reject active legal holds, verify the protected export/hash, collect every configured independent approval and append the result to a tamper-evident deletion log. Ordinary API/browser roles receive no direct `DELETE /orders/{id}` endpoint or database permission.
+
+The demonstration defaults are 90 days before archive eligibility, 2555 days archived retention, deletion disabled, and both Manager and Administrator approvals required. They are not production approval; Rhomberg and IT must approve the production policy.
+
 #### `POST /orders/{orderId}/summary-emails`
 
 ```json

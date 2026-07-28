@@ -1,5 +1,7 @@
 # Role and preview access matrix
 
+Retention controls are internal-only. Managers and Administrators can search archive records, archive eligible completed orders, restore, export and manage legal holds. Only Administrators can alter demonstration retention settings. No browser role can permanently delete an order.
+
 The canonical permission catalogue remains `src/services/contracts.js`. This document summarises preview access; it does not replace the code or server policy.
 
 | Role | Connect | Operations mobile | Operations desktop | Record scope |

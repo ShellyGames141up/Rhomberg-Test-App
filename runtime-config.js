@@ -2,4 +2,6 @@
 window.__RHOMBERG_APP_CONFIG__ = Object.freeze({
   apiBaseUrl: '/api/v1',
   requestTimeoutMs: 15000,
+  environmentName: 'preview',
+  notificationTransport: 'mock',
 });

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Account } from './components/Account.jsx';
+import { ArchivedOrders } from './components/ArchivedOrders.jsx';
 import { AuditTrail } from './components/AuditTrail.jsx';
 import { Auth } from './components/Auth.jsx';
 import { Catalogue } from './components/Catalogue.jsx';
@@ -465,6 +466,15 @@ export default function App() {
     },
   }), [account]);
 
+  const refreshAfterRetentionAction = async () => {
+    const [loadedOrders, loadedAuditEvents] = await Promise.all([
+      services.orders.list(),
+      accountCan(account, PERMISSIONS.READ_AUDIT_HISTORY) ? services.audit.list() : Promise.resolve([]),
+    ]);
+    setOrders(loadedOrders);
+    setAuditEvents(loadedAuditEvents);
+  };
+
   const openNotificationRecord = notification => {
     setNotificationTarget({
       entityId: notification.entityId,
@@ -579,6 +589,7 @@ export default function App() {
                       ? <DispatchDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} documentActions={orderDocumentActions} />
                       : <OperationalDashboard account={account} enquiries={staffRecords} onAction={performWorkflowAction} canUpdate={canPerformWorkflow} serviceMode={services.mode} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} documentActions={orderDocumentActions} />)}
               {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
+              {view === 'archive' && <ArchivedOrders account={account} archiveActions={services.archive} serviceMode={services.mode} onRecordsChanged={refreshAfterRetentionAction} />}
               {view === 'audit' && <AuditTrail events={auditEvents} serviceMode={services.mode} />}
               {view === 'account' && <Account account={account} enquiries={staffRecords} onSignOut={signOut} serviceMode={services.mode} />}
             </>

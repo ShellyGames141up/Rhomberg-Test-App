@@ -2,18 +2,44 @@
   "name": "Rhomberg Platform Preview Centre",
   "short_name": "Rhomberg Preview",
   "description": "Four mock Rhomberg Connect and Rhomberg Operations interface previews.",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "orientation": "any",
   "background_color": "#f4f7f8",
   "theme_color": "#073b53",
+  "categories": ["business", "productivity"],
+  "launch_handler": {
+    "client_mode": ["navigate-existing", "auto"]
+  },
   "icons": [
     {
       "src": "assets/images/rhomberg-gauge-mark.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Customer mobile",
+      "short_name": "Connect",
+      "url": "./preview/customer-mobile/",
+      "icons": [{ "src": "assets/images/rhomberg-gauge-mark.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Operations mobile",
+      "short_name": "Operations",
+      "url": "./preview/internal-mobile/",
+      "icons": [{ "src": "assets/images/rhomberg-gauge-mark.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Internal desktop",
+      "short_name": "Desktop",
+      "url": "./preview/internal-desktop/",
+      "icons": [{ "src": "assets/images/rhomberg-gauge-mark.svg", "sizes": "any", "type": "image/svg+xml" }]
     }
   ]
 }

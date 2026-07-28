@@ -62,6 +62,19 @@ for (const previewId of ['customer-desktop', 'customer-mobile', 'internal-mobile
   assert.ok(packageScripts[`build:${previewId}`], `build command missing for ${previewId}`);
 }
 assert.ok(packageScripts['build:previews']);
+const manifest = JSON.parse(readFileSync(path.resolve('manifest.webmanifest'), 'utf8'));
+assert.equal(manifest.display, 'standalone');
+assert.ok(manifest.display_override.includes('standalone'));
+assert.equal(manifest.start_url, './');
+assert.ok(manifest.shortcuts.some(shortcut => shortcut.url === './preview/customer-mobile/'));
+assert.ok(manifest.shortcuts.some(shortcut => shortcut.url === './preview/internal-desktop/'));
+const capacitorConfig = JSON.parse(readFileSync(path.resolve('capacitor.config.json'), 'utf8'));
+assert.equal(capacitorConfig.webDir, 'dist-production');
+assert.match(capacitorConfig.appId, /^[a-z][a-z0-9]*(\.[a-z0-9]+)+$/);
+const deliveryStrategy = readFileSync(path.resolve('docs', 'DELIVERY_STRATEGY.md'), 'utf8');
+for (const requirement of ['Capacitor', 'Offline', 'APNs/FCM', 'Windows', 'signing', 'GitHub Pages']) {
+  assert.ok(deliveryStrategy.toLowerCase().includes(requirement.toLowerCase()), `delivery strategy must document ${requirement}`);
+}
 assert.equal(previewIdFromPath('/preview/unsupported-interface/'), 'unsupported');
 assert.equal(previewContextForPath('/preview/unsupported-interface/').unsupported, true);
 assert.equal(previewContextForPath('/Rhomberg-Test-App/').landing, true);

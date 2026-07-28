@@ -30,7 +30,7 @@ export function BottomNav({ active, quantity, role, unreadCount = 0, onNavigate 
   const isStaff = isInternalRole(role);
   const items = navigationItemsForRole(role);
   return (
-    <nav className={`bottom-nav ${isStaff ? 'expeditor-nav' : ''}`} aria-label="Main navigation">
+    <nav className={`bottom-nav ${isStaff ? 'expeditor-nav' : ''}`} aria-label="Main navigation" style={{ '--nav-item-count': items.length }}>
       {items.map(({ id, glyph, label }) => (
         <button key={id} type="button" className={`${active === id ? 'active' : ''} ${id === 'enquiry' ? 'nav-primary' : ''}`} onClick={() => onNavigate(id)}>
           <span className="nav-icon">{glyph}</span><small>{label}</small>

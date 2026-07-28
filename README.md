@@ -43,14 +43,29 @@ All credentials above are fabricated and demonstration-only. GitHub Pages runs i
 ## Current development checkpoint
 
 - **Checkpoint date:** 28 July 2026
-- **Current version:** 4.4.0
-- **Last completed step:** Prompt 12 - PDF download and email sharing.
+- **Current version:** 4.5.0
+- **Last completed steps:** Prompt 13 - archive and retention management; Prompt 14 - desktop and mobile delivery preparation.
 
-This checkpoint adds branded customer-safe and internal operational order-summary PDFs, browser preview/download, simulated email sharing, external-recipient confirmation, internal-copy protection and immutable audit events for every generation and send.
+This checkpoint adds manager/administrator retention controls, an Archived Orders workspace, legal holds, protected pre-deletion exports and a shared PWA/Capacitor/Windows delivery strategy. Permanent deletion remains disabled in browser mock mode.
 
 All automated tests, source checks, stylesheet checks, static preview builds and the API-only production-candidate safety build passed before this checkpoint was committed. The GitHub Pages preview remains browser-local and uses fabricated data only.
 
-Development stopped after completing and validating Prompt 12. The next workflow phase has not been started, and no real database, email provider, push provider, courier integration or document-storage service has been connected. Continue from [the progress handoff](docs/HOME_PC_PROGRESS_HANDOFF.md) and [order-summary PDF documentation](docs/ORDER_SUMMARY_PDF.md).
+The separately attached quotation, PO, rejection and Document Centre prompt was reviewed and is not complete; see [the gap review](docs/QUOTATION_WORKFLOW_GAP_REVIEW.md). No real database, email provider, push provider, courier integration or document-storage service has been connected. Continue from [the progress handoff](docs/HOME_PC_PROGRESS_HANDOFF.md), [retention policy](docs/RETENTION_POLICY.md) and [delivery strategy](docs/DELIVERY_STRATEGY.md).
+
+## Included in version 4.5
+
+- Configurable safe demonstration retention settings with explicit production-approval warning
+- Automatic `archive_eligible` marking based only on completed date and policy threshold
+- Manager/Administrator Archived Orders workspace with search and filters
+- Explicit archive and restore actions that preserve records, references, PDFs, timeline and audit evidence
+- Legal/investigation holds with audited apply/release events
+- Internal PDF retention export before any future deletion workflow
+- Permanent deletion disabled in mock/browser code and reserved for an approved backend workflow
+- API/OpenAPI and PostgreSQL proposals for policy versions, exports, approvals and deletion logs
+- Shared responsive PWA delivery across customer, representative, Expeditor, Planning, Dispatch and management roles
+- Capacitor packaging configuration for future Android/iOS work and PWA-first Windows strategy
+- Environment-specific public runtime configuration, offline limitations, push, signing, store and update requirements
+- Automated archive, permission, legal-hold, export, policy and deletion-boundary tests
 
 ## Included in version 4.4
 

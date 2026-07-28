@@ -40,6 +40,8 @@ Deploy the repository root or the combined staged artifact. The four route folde
 
 Production mobile builds require Apple/Google organisation accounts, signing certificates/keys, bundle identifiers, privacy disclosures, review assets and managed release ownership. Windows distribution requires a trusted HTTPS origin, manifest/icons, signing where packaged and an enterprise update path.
 
+`capacitor.config.json` prepares the shared `dist-production` artifact for a future approved Capacitor phase; it does not add native projects or submit a store build. The installed PWA remains the first Windows option. See `DELIVERY_STRATEGY.md` for role-specific navigation, offline limits, push requirements, signing, store submission and updates.
+
 The private-cloud API URL is public configuration, not a secret. Credentials, signing keys, SMTP/Microsoft 365 secrets and push-service keys must live in managed secrets. Production updates require versioned API compatibility, staged environments, database migrations, backup verification, rollback artifacts and monitoring.
 
 Mobile push requires APNs/FCM registration tokens and a secure delivery worker. Desktop notification permission must be requested contextually and must not replace in-app notifications. See `PRODUCTION-DEPLOYMENT.md`.

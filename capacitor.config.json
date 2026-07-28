@@ -1,0 +1,17 @@
+{
+  "appId": "za.co.rhomberg.platform",
+  "appName": "Rhomberg Platform",
+  "webDir": "dist-production",
+  "bundledWebRuntime": false,
+  "backgroundColor": "#f4f7f8",
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "backgroundColor": "#073b53",
+      "showSpinner": false
+    }
+  }
+}

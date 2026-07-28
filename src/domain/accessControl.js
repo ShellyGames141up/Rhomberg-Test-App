@@ -10,16 +10,17 @@ const CUSTOMER_NAVIGATION = Object.freeze([
   navItem('notifications', '!', 'Alerts'),
 ]);
 
-const internalNavigation = (workspaceLabel, includeAudit = false) => Object.freeze([
+const internalNavigation = (workspaceLabel, includeAudit = false, includeArchive = false) => Object.freeze([
   navItem('expeditor', '↻', workspaceLabel),
   navItem('notifications', '!', 'Alerts'),
+  ...(includeArchive ? [navItem('archive', '□', 'Archive')] : []),
   ...(includeAudit ? [navItem('audit', '≡', 'Audit')] : []),
   navItem('account', '○', 'Account'),
 ]);
 
 const CUSTOMER_VIEWS = Object.freeze(['home', 'catalogue', 'product', 'configurator', 'enquiry', 'tracking', 'notifications', 'account', 'settings']);
 const INTERNAL_VIEWS = Object.freeze(['expeditor', 'notifications', 'account']);
-const OVERSIGHT_VIEWS = Object.freeze([...INTERNAL_VIEWS, 'audit']);
+const OVERSIGHT_VIEWS = Object.freeze([...INTERNAL_VIEWS, 'archive', 'audit']);
 
 const profile = ({
   role,
@@ -107,7 +108,7 @@ export const ROLE_PROFILES = Object.freeze({
     role: USER_ROLES.MANAGER,
     label: 'Manager',
     workspaceLabel: 'Oversight',
-    navigation: internalNavigation('Oversight', true),
+    navigation: internalNavigation('Oversight', true, true),
     allowedViews: OVERSIGHT_VIEWS,
     dashboard: {
       eyebrow: 'Management oversight',
@@ -120,7 +121,7 @@ export const ROLE_PROFILES = Object.freeze({
     role: USER_ROLES.ADMINISTRATOR,
     label: 'Administrator',
     workspaceLabel: 'Admin',
-    navigation: internalNavigation('Admin', true),
+    navigation: internalNavigation('Admin', true, true),
     allowedViews: OVERSIGHT_VIEWS,
     dashboard: {
       eyebrow: 'Administration workspace',

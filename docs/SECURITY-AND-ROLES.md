@@ -45,10 +45,10 @@ The reusable source of truth is `src/services/contracts.js`. `src/domain/accessC
 | Expeditor | `view_expediting_queue`, `update_order_progress`, `move_to_dispatch`, `manage_order_hold`, `export_order_pdf` |
 | Dispatch | `view_dispatch_queue`, `confirm_delivery`, `confirm_collection`, `manage_order_hold`, `export_order_pdf` |
 | Buyer | `access_internal_workspace`, `read_catalogue`; no operational permission yet |
-| Manager | `view_all_rfqs`, `view_all_orders`, operational action permissions, `export_order_pdf`, `email_order_summary`, `override_workflow`, audit/report reads |
-| Administrator | Every defined permission, including `archive_orders`, `restore_archived_orders` and `administer_users` |
+| Manager | `view_all_rfqs`, `view_all_orders`, operational action permissions, PDF/email, archive/restore/export, legal hold, override and audit/report reads |
+| Administrator | Every defined permission, including `manage_retention_policy` and `administer_users` |
 
-`export_order_pdf`, `email_order_summary`, `restore_archived_orders` and `administer_users` are permission-ready but their user journeys remain future phases. A permission grant never bypasses state, assignment, company, evidence or fulfilment guards.
+PDF/email, archive/restore/export and legal-hold journeys are implemented in mock mode. `manage_retention_policy` is Administrator-only. No browser permission authorises permanent deletion, and a grant never bypasses state, eligibility, legal hold, assignment, company, evidence or fulfilment guards.
 
 Exact operational queue scopes:
 

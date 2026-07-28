@@ -7,15 +7,20 @@ Use this form as the checkpoint for continuing the project on another computer.
 | Field | Value |
 |---|---|
 | Repository | `ShellyGames141up/Rhomberg-Test-App` |
-| Branch | `feature/prompt-12-pdf-sharing` |
-| App version | `4.4.0` |
+| Branch | `main` |
+| App version | `4.5.0` |
 | Checkpoint date | 28 July 2026 |
-| Completed phase | Prompt 12 PDF download and email sharing |
-| Last stopping point | Branded customer-safe and internal operational PDFs, preview/download, simulated email sharing, recipient confirmation and audit events are complete in mock mode. Stop before the next approved prompt. |
+| Completed phase | Prompts 13 and 14: retention management and shared desktop/mobile delivery preparation |
+| Last stopping point | Archive/restore, legal hold, protected retention export, responsive PWA and delivery strategy are complete in mock mode. The attached quotation/PO/rejection workflow remains incomplete and is documented separately. |
 | Preview mode | GitHub Pages browser mock remains enabled |
 | Production connection | Not connected; API and PostgreSQL material remain proposed contracts only |
 
 ## What changed in this checkpoint
+
+- Added archive eligibility, searchable Archived Orders, archive/restore, legal holds and internal retention exports.
+- Added safe configurable mock retention settings and a backend-only permanent-deletion contract.
+- Prepared the one shared application for responsive PWA, future Capacitor Android/iOS packaging and PWA-first Windows installation.
+- Added `RETENTION_POLICY.md`, `DELIVERY_STRATEGY.md` and `QUOTATION_WORKFLOW_GAP_REVIEW.md`.
 
 - Added real multi-page Rhomberg order-summary PDF generation using `pdf-lib`.
 - Added separate allow-listed customer-safe and internal operational document models.

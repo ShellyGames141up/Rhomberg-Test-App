@@ -83,9 +83,12 @@ const productionIndex = (await fs.readFile(path.join(root, 'index.html'), 'utf8'
   .replace('Rhomberg Platform Preview Centre', 'Rhomberg Instruments Private Cloud App');
 await fs.writeFile(path.join(output, 'index.html'), productionIndex, 'utf8');
 
-const productionManifest = (await fs.readFile(path.join(root, 'manifest.webmanifest'), 'utf8'))
-  .replace('A mobile catalogue, RFQ and order-tracking preview for Rhomberg Instruments.', 'Rhomberg Instruments private-cloud catalogue, RFQ and order-tracking application.');
-await fs.writeFile(path.join(output, 'manifest.webmanifest'), productionManifest, 'utf8');
+const productionManifest = JSON.parse(await fs.readFile(path.join(root, 'manifest.webmanifest'), 'utf8'));
+productionManifest.name = 'Rhomberg Platform';
+productionManifest.short_name = 'Rhomberg';
+productionManifest.description = 'Rhomberg Instruments private-cloud catalogue, RFQ and order workflow application.';
+delete productionManifest.shortcuts;
+await fs.writeFile(path.join(output, 'manifest.webmanifest'), `${JSON.stringify(productionManifest, null, 2)}\n`, 'utf8');
 await fs.cp(path.join(root, 'assets'), path.join(output, 'assets'), { recursive: true });
 
 console.log(`Prepared and scanned API-only production candidate in ${output}`);

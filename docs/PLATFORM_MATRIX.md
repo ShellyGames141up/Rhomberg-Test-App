@@ -13,9 +13,12 @@
 | Dispatch queue | No | No | No | Yes |
 | Buyer role | No | No | No | Prepared/inactive |
 | Administrator role | No | No | No | Yes |
+| Archive/retention workspace | No | No | Manager responsive fallback | Manager/Administrator |
 | Touch-first navigation | Responsive | Primary | Primary | Responsive fallback |
 | Tables/search/sorting | Customer-safe | Simplified cards | Simplified cards | Desktop-optimised |
 | Current delivery format | Browser/PWA preview | Browser/PWA preview | Browser/PWA preview | Browser/PWA preview |
+
+All columns use the same application bundle, services and API contracts. Delivery profiles control routes, responsive navigation and permitted roles; they are not separate codebases. See `DELIVERY_STRATEGY.md`.
 
 ## Product naming
 

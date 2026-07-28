@@ -314,6 +314,23 @@ CREATE TABLE app.rfq_acceptances (
   )
 );
 
+CREATE TABLE app.retention_policies (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  policy_name text NOT NULL,
+  archive_completed_orders_after_days integer NOT NULL CHECK (archive_completed_orders_after_days BETWEEN 1 AND 3650),
+  retain_archived_orders_for_days integer NOT NULL CHECK (retain_archived_orders_for_days BETWEEN 1 AND 36500),
+  allow_permanent_deletion boolean NOT NULL DEFAULT false,
+  deletion_requires_manager_approval boolean NOT NULL DEFAULT true,
+  deletion_requires_administrator_approval boolean NOT NULL DEFAULT true,
+  is_active boolean NOT NULL DEFAULT false,
+  approved_by_business_user_id uuid REFERENCES app.users(id),
+  approved_by_it_user_id uuid REFERENCES app.users(id),
+  approved_at timestamptz,
+  created_by_user_id uuid NOT NULL REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  superseded_at timestamptz
+);
+
 CREATE TABLE app.orders (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   enquiry_id uuid UNIQUE REFERENCES app.enquiries(id),
@@ -367,6 +384,14 @@ CREATE TABLE app.orders (
   completed_at timestamptz,
   cancelled_at timestamptz,
   archived_at timestamptz,
+  archive_eligible_at timestamptz,
+  archive_reason text,
+  archived_by_user_id uuid REFERENCES app.users(id),
+  retention_policy_id uuid REFERENCES app.retention_policies(id),
+  legal_hold_active boolean NOT NULL DEFAULT false,
+  legal_hold_reason text,
+  legal_hold_placed_at timestamptz,
+  legal_hold_placed_by_user_id uuid REFERENCES app.users(id),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   row_version integer NOT NULL DEFAULT 1 CHECK (row_version > 0),
@@ -792,6 +817,59 @@ CREATE TRIGGER audit_events_immutable
 BEFORE UPDATE OR DELETE ON app.audit_events
 FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
 
+CREATE TABLE app.order_retention_exports (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL REFERENCES app.orders(id),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  document_id uuid NOT NULL REFERENCES app.uploaded_documents(id),
+  policy_id uuid NOT NULL REFERENCES app.retention_policies(id),
+  content_sha256 text NOT NULL,
+  generated_by_user_id uuid NOT NULL REFERENCES app.users(id),
+  generated_at timestamptz NOT NULL DEFAULT now(),
+  protected_until timestamptz NOT NULL
+);
+
+CREATE TABLE app.order_deletion_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL REFERENCES app.orders(id),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  retention_export_id uuid NOT NULL REFERENCES app.order_retention_exports(id),
+  policy_id uuid NOT NULL REFERENCES app.retention_policies(id),
+  requested_by_user_id uuid NOT NULL REFERENCES app.users(id),
+  reason text NOT NULL CHECK (length(trim(reason)) >= 10),
+  manager_approved_by_user_id uuid REFERENCES app.users(id),
+  manager_approved_at timestamptz,
+  administrator_approved_by_user_id uuid REFERENCES app.users(id),
+  administrator_approved_at timestamptz,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'executing', 'completed', 'failed', 'blocked_legal_hold')),
+  request_id text NOT NULL,
+  correlation_id text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz
+);
+
+CREATE TABLE app.order_deletion_log (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  deletion_request_id uuid NOT NULL UNIQUE REFERENCES app.order_deletion_requests(id),
+  former_order_id uuid NOT NULL,
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  order_reference text NOT NULL,
+  rfq_reference text,
+  retention_export_id uuid NOT NULL REFERENCES app.order_retention_exports(id),
+  policy_id uuid NOT NULL REFERENCES app.retention_policies(id),
+  approval_evidence jsonb NOT NULL,
+  deleted_document_metadata jsonb NOT NULL DEFAULT '[]'::jsonb,
+  outcome text NOT NULL CHECK (outcome IN ('completed', 'failed', 'partially_completed')),
+  request_id text NOT NULL,
+  correlation_id text NOT NULL,
+  executed_by_service text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Browser/application roles never receive DELETE on app.orders. A dedicated
+-- backend retention function must lock/re-read the order, verify policy age,
+-- legal hold, export and approvals, then write order_deletion_log atomically.
+
 CREATE INDEX user_company_access_company_idx ON app.user_company_access (company_id, user_id) WHERE revoked_at IS NULL;
 CREATE UNIQUE INDEX users_external_identity_unique ON app.users (identity_provider, external_subject) WHERE identity_provider IS NOT NULL AND external_subject IS NOT NULL;
 CREATE INDEX representative_assignment_company_idx ON app.representative_company_assignments (company_id, representative_id) WHERE ends_at IS NULL;
@@ -800,6 +878,9 @@ CREATE INDEX enquiries_company_updated_idx ON app.enquiries (company_id, updated
 CREATE INDEX enquiries_rep_updated_idx ON app.enquiries (representative_id, updated_at DESC);
 CREATE INDEX enquiries_rep_inbox_idx ON app.enquiries (representative_id, status, submitted_at, updated_at DESC);
 CREATE INDEX enquiries_status_updated_idx ON app.enquiries (status, updated_at DESC);
+CREATE INDEX orders_archive_eligibility_idx ON app.orders (archive_eligible_at, completed_at) WHERE archived_at IS NULL AND status = 'completed';
+CREATE INDEX orders_archive_search_idx ON app.orders (archived_at DESC, company_id) WHERE archived_at IS NOT NULL;
+CREATE INDEX orders_legal_hold_idx ON app.orders (company_id, legal_hold_placed_at) WHERE legal_hold_active;
 CREATE INDEX enquiry_items_enquiry_idx ON app.enquiry_items (enquiry_id, line_number);
 CREATE UNIQUE INDEX quotations_number_idx ON app.quotations (quotation_number);
 CREATE INDEX quotations_acknowledgement_idx ON app.quotations (enquiry_id, acknowledged_at);

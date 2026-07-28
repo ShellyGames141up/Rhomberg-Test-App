@@ -31,6 +31,12 @@ import {
   ORDER_COPY_TYPES,
   validateOrderEmailRequest,
 } from '../../domain/orderDocuments.js';
+import {
+  applyRetentionState,
+  assertArchiveAllowed,
+  DEFAULT_RETENTION_POLICY,
+  normaliseRetentionPolicy,
+} from '../../domain/retention.js';
 import { PLANNING_PRIORITIES } from '../../domain/planningQueue.js';
 import {
   createDeniedWorkflowAudit,
@@ -376,6 +382,10 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   const appendAuditEvent = event => store.set(STORE_KEYS.audit, [...readAuditEvents(), event]);
   const readOrderDocuments = () => store.get(STORE_KEYS.orderDocuments, []);
   const writeOrderDocuments = documents => store.set(STORE_KEYS.orderDocuments, documents);
+  const readRetentionPolicy = () => normaliseRetentionPolicy(store.get(STORE_KEYS.retentionPolicy, DEFAULT_RETENTION_POLICY));
+  const writeRetentionPolicy = policy => store.set(STORE_KEYS.retentionPolicy, normaliseRetentionPolicy(policy));
+  const readRetentionExports = () => store.get(STORE_KEYS.retentionExports, []);
+  const writeRetentionExports = exports => store.set(STORE_KEYS.retentionExports, exports);
   const presentAuditEvent = event => {
     const record = readAllRecords().find(item => item.id === event.entityId);
     const actor = readAccounts().find(item => item.id === event.actorId);
@@ -480,6 +490,16 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     const index = state.enquiries.findIndex(item => item.id === saved.id);
     if (index >= 0) state.enquiries[index] = saved;
     else state.enquiries.unshift(saved);
+    writeWorkflowState(state);
+    return saved;
+  };
+
+  const saveOrder = order => {
+    const state = readWorkflowState();
+    const saved = normaliseEnquiry({ ...order, workflowType: 'order' });
+    const index = state.orders.findIndex(item => item.id === saved.id);
+    if (index >= 0) state.orders[index] = saved;
+    else state.orders.unshift(saved);
     writeWorkflowState(state);
     return saved;
   };
@@ -797,6 +817,9 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     writeWorkflowState(workflowState);
     if (!store.has(STORE_KEYS.audit)) store.set(STORE_KEYS.audit, []);
     if (!store.has(STORE_KEYS.orderDocuments)) store.set(STORE_KEYS.orderDocuments, []);
+    if (!store.has(STORE_KEYS.retentionPolicy)) writeRetentionPolicy(DEFAULT_RETENTION_POLICY);
+    if (!store.has(STORE_KEYS.retentionExports)) store.set(STORE_KEYS.retentionExports, []);
+    if (!store.has(STORE_KEYS.deletionLog)) store.set(STORE_KEYS.deletionLog, []);
     if (!store.has(STORE_KEYS.notifications)) store.set(STORE_KEYS.notifications, []);
     if (!store.has(STORE_KEYS.notificationPreferences)) store.set(STORE_KEYS.notificationPreferences, {});
     if (!store.has(STORE_KEYS.personalisation)) store.set(STORE_KEYS.personalisation, {});
@@ -1069,15 +1092,50 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     },
   };
 
+  const refreshRetentionStates = () => {
+    const state = readWorkflowState();
+    const policy = readRetentionPolicy();
+    let changed = false;
+    state.orders = state.orders.map(order => {
+      const updated = applyRetentionState(order, policy, now());
+      if (updated.retentionStatus !== order.retentionStatus || updated.archiveEligibleAt !== order.archiveEligibleAt) {
+        changed = true;
+        if (updated.retentionStatus === 'archive_eligible' && order.retentionStatus !== 'archive_eligible') {
+          appendAuditEvent({
+            id: makeId('audit'),
+            eventType: 'order_archive_eligible',
+            action: 'retention.archive_eligible',
+            outcome: 'success',
+            entityType: 'order',
+            entityId: order.id,
+            companyId: order.companyId,
+            companyName: order.company,
+            reference: order.reference,
+            actorRole: SYSTEM_ACTOR_ROLE,
+            fieldsChanged: ['retentionStatus', 'archiveEligibleAt'],
+            details: { retentionPolicyId: policy.id },
+            createdAt: now().toISOString(),
+          });
+        }
+      }
+      return updated;
+    });
+    if (changed) writeWorkflowState(state);
+    return state.orders;
+  };
+
   const orders = {
     async list() {
       const account = requireAccount();
-      return clone(readAllOrders().filter(order => canReadRecord(account, order)).map(order => presentRecord(account, order)));
+      return clone(refreshRetentionStates()
+        .filter(order => order.retentionStatus !== 'archived')
+        .filter(order => canReadRecord(account, order))
+        .map(order => presentRecord(account, order)));
     },
 
     async getById(orderId) {
       const account = requireAccount();
-      const order = readAllOrders().find(item => item.id === orderId);
+      const order = refreshRetentionStates().find(item => item.id === orderId && item.retentionStatus !== 'archived');
       if (!order || !canReadRecord(account, order)) throw new ServiceError('The order was not found or is outside your authorised company account.', { code: 'ORDER_NOT_FOUND', status: 404 });
       return clone(presentRecord(account, order));
     },
@@ -1468,6 +1526,239 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         createdAt: sentAt,
       });
       return clone(delivery);
+    },
+  };
+
+  const archive = {
+    async getPolicy() {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.ARCHIVE_ORDERS) && !accountCan(account, PERMISSIONS.RESTORE_ARCHIVED_ORDERS)) {
+        throw new ServiceError('Your role cannot access retention management.', { code: 'FORBIDDEN', status: 403 });
+      }
+      return clone(readRetentionPolicy());
+    },
+
+    async savePolicy(candidate) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.MANAGE_RETENTION_POLICY)) {
+        throw new ServiceError('Only an administrator may change the demonstration retention settings.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const previous = readRetentionPolicy();
+      const policy = normaliseRetentionPolicy(candidate);
+      writeRetentionPolicy(policy);
+      appendAuditEvent({
+        id: makeId('audit'),
+        eventType: 'retention_policy_updated',
+        action: 'retention.policy_updated',
+        outcome: 'success',
+        entityType: 'retention_policy',
+        entityId: policy.id,
+        actorId: account.id,
+        actorDisplayName: account.contact,
+        actorRole: account.role,
+        fieldsChanged: Object.keys(policy).filter(key => policy[key] !== previous[key]),
+        reason: 'Demonstration policy settings updated. Production approval remains outstanding.',
+        createdAt: now().toISOString(),
+      });
+      refreshRetentionStates();
+      return clone(policy);
+    },
+
+    async list(filters = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.ARCHIVE_ORDERS) && !accountCan(account, PERMISSIONS.RESTORE_ARCHIVED_ORDERS)) {
+        throw new ServiceError('Your role cannot access archived orders.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const term = String(filters.search || '').trim().toLowerCase();
+      const stateFilter = String(filters.state || 'all');
+      const legalHoldFilter = String(filters.legalHold || 'all');
+      const records = refreshRetentionStates()
+        .filter(order => ['archive_eligible', 'archived'].includes(order.retentionStatus))
+        .filter(order => stateFilter === 'all' || order.retentionStatus === stateFilter)
+        .filter(order => legalHoldFilter === 'all' || Boolean(order.legalHold?.active) === (legalHoldFilter === 'held'))
+        .filter(order => !term || [
+          order.reference, order.sourceRfqReference, order.internalJobNumber, order.customerPoNumber,
+          order.poNumber, order.company, order.contact, order.selectedRep?.name, order.archiveReason,
+          order.legalHold?.reason,
+        ].some(value => String(value || '').toLowerCase().includes(term)));
+      return clone(records.map(order => ({
+        ...order,
+        allowedArchiveActions: {
+          archive: order.retentionStatus === 'archive_eligible' && accountCan(account, PERMISSIONS.ARCHIVE_ORDERS),
+          restore: order.retentionStatus === 'archived' && accountCan(account, PERMISSIONS.RESTORE_ARCHIVED_ORDERS),
+          export: accountCan(account, PERMISSIONS.EXPORT_ARCHIVED_ORDERS),
+          legalHold: accountCan(account, PERMISSIONS.MANAGE_LEGAL_HOLD),
+          permanentDeletion: false,
+        },
+      })));
+    },
+
+    async archiveOrder(orderId, { reason = '' } = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.ARCHIVE_ORDERS)) throw new ServiceError('Your role cannot archive orders.', { code: 'FORBIDDEN', status: 403 });
+      const order = refreshRetentionStates().find(item => item.id === orderId);
+      if (!order) throw new ServiceError('The order was not found.', { code: 'ORDER_NOT_FOUND', status: 404 });
+      try {
+        assertArchiveAllowed(order);
+      } catch (error) {
+        throw new ServiceError(error.message, { code: 'ORDER_NOT_ARCHIVE_ELIGIBLE', status: 409 });
+      }
+      const archivedAt = now().toISOString();
+      const updated = saveOrder({
+        ...order,
+        retentionStatus: 'archived',
+        archivedAt,
+        archiveReason: String(reason || '').trim() || 'Archived under the demonstration retention policy.',
+        archivedBy: { id: account.id, displayName: account.contact, role: account.role },
+        retentionPolicyId: readRetentionPolicy().id,
+        updatedAt: archivedAt,
+      });
+      appendAuditEvent({
+        id: makeId('audit'),
+        eventType: 'order_archived',
+        action: 'retention.order_archived',
+        outcome: 'success',
+        entityType: 'order',
+        entityId: updated.id,
+        companyId: updated.companyId,
+        companyName: updated.company,
+        reference: updated.reference,
+        actorId: account.id,
+        actorDisplayName: account.contact,
+        actorRole: account.role,
+        fieldsChanged: ['retentionStatus', 'archivedAt', 'archiveReason'],
+        reason: updated.archiveReason,
+        details: { retentionPolicyId: updated.retentionPolicyId },
+        createdAt: archivedAt,
+      });
+      return clone(updated);
+    },
+
+    async restoreOrder(orderId, { reason = '' } = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.RESTORE_ARCHIVED_ORDERS)) throw new ServiceError('Your role cannot restore archived orders.', { code: 'FORBIDDEN', status: 403 });
+      const order = refreshRetentionStates().find(item => item.id === orderId && item.retentionStatus === 'archived');
+      if (!order) throw new ServiceError('The archived order was not found.', { code: 'ARCHIVED_ORDER_NOT_FOUND', status: 404 });
+      const restoredAt = now().toISOString();
+      const updated = saveOrder({
+        ...order,
+        retentionStatus: 'active',
+        archivedAt: '',
+        archiveReason: '',
+        restoredAt,
+        restoredBy: { id: account.id, displayName: account.contact, role: account.role },
+        updatedAt: restoredAt,
+      });
+      appendAuditEvent({
+        id: makeId('audit'),
+        eventType: 'order_restored',
+        action: 'retention.order_restored',
+        outcome: 'success',
+        entityType: 'order',
+        entityId: updated.id,
+        companyId: updated.companyId,
+        companyName: updated.company,
+        reference: updated.reference,
+        actorId: account.id,
+        actorDisplayName: account.contact,
+        actorRole: account.role,
+        fieldsChanged: ['retentionStatus', 'archivedAt', 'restoredAt'],
+        reason: String(reason || '').trim() || 'Restored to the completed-order history.',
+        createdAt: restoredAt,
+      });
+      return clone(updated);
+    },
+
+    async setLegalHold(orderId, { active, reason = '' } = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.MANAGE_LEGAL_HOLD)) throw new ServiceError('Your role cannot manage legal holds.', { code: 'FORBIDDEN', status: 403 });
+      const order = refreshRetentionStates().find(item => item.id === orderId);
+      if (!order) throw new ServiceError('The order was not found.', { code: 'ORDER_NOT_FOUND', status: 404 });
+      const holdReason = String(reason || '').trim();
+      if (active === true && holdReason.length < 5) {
+        throw new ServiceError('Enter a meaningful legal-hold or investigation reason.', { code: 'LEGAL_HOLD_REASON_REQUIRED', status: 422, fieldErrors: { reason: 'Enter at least 5 characters.' } });
+      }
+      const occurredAt = now().toISOString();
+      const updated = saveOrder({
+        ...order,
+        legalHold: active === true
+          ? { active: true, reason: holdReason, placedAt: occurredAt, placedBy: { id: account.id, displayName: account.contact, role: account.role } }
+          : { active: false, reason: '', releasedAt: occurredAt, releasedBy: { id: account.id, displayName: account.contact, role: account.role } },
+        updatedAt: occurredAt,
+      });
+      appendAuditEvent({
+        id: makeId('audit'),
+        eventType: active === true ? 'order_legal_hold_applied' : 'order_legal_hold_released',
+        action: active === true ? 'retention.legal_hold_applied' : 'retention.legal_hold_released',
+        outcome: 'success',
+        entityType: 'order',
+        entityId: updated.id,
+        companyId: updated.companyId,
+        companyName: updated.company,
+        reference: updated.reference,
+        actorId: account.id,
+        actorDisplayName: account.contact,
+        actorRole: account.role,
+        fieldsChanged: ['legalHold'],
+        reason: active === true ? holdReason : (holdReason || 'Legal hold released.'),
+        createdAt: occurredAt,
+      });
+      return clone(updated);
+    },
+
+    async exportBeforeDeletion(orderId) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.EXPORT_ARCHIVED_ORDERS)) throw new ServiceError('Your role cannot export archived orders.', { code: 'FORBIDDEN', status: 403 });
+      const order = refreshRetentionStates().find(item => item.id === orderId);
+      if (!order || !['archive_eligible', 'archived'].includes(order.retentionStatus)) {
+        throw new ServiceError('The archive record was not found.', { code: 'ARCHIVED_ORDER_NOT_FOUND', status: 404 });
+      }
+      const generatedAt = now().toISOString();
+      const model = buildOrderSummaryModel({
+        order,
+        copyType: ORDER_COPY_TYPES.INTERNAL,
+        generatedAt,
+        generatedBy: account.contact || account.email,
+      });
+      const bytesBase64 = await generateOrderSummaryPdf(model);
+      const record = {
+        id: makeId('retention-export'),
+        orderId: order.id,
+        orderReference: order.reference,
+        companyId: order.companyId,
+        fileName: `${order.reference}-retention-export.pdf`,
+        mimeType: 'application/pdf',
+        sizeBytes: Math.ceil(bytesBase64.length * 0.75),
+        classification: 'INTERNAL - RETENTION EXPORT',
+        includesTimeline: true,
+        includesAuditReference: true,
+        generatedAt,
+        generatedBy: { id: account.id, displayName: account.contact, role: account.role },
+      };
+      writeRetentionExports([...readRetentionExports(), record]);
+      appendAuditEvent({
+        id: makeId('audit'),
+        eventType: 'order_retention_exported',
+        action: 'retention.export_created',
+        outcome: 'success',
+        entityType: 'order',
+        entityId: order.id,
+        companyId: order.companyId,
+        companyName: order.company,
+        reference: order.reference,
+        actorId: account.id,
+        actorDisplayName: account.contact,
+        actorRole: account.role,
+        documentMetadata: [record],
+        details: { requiredBeforePermanentDeletion: true },
+        createdAt: generatedAt,
+      });
+      return clone({ ...record, bytesBase64 });
+    },
+
+    async requestPermanentDeletion() {
+      requireAccount();
+      throw new ServiceError('Permanent deletion is disabled in mock mode and must be performed by an approved backend workflow.', { code: 'BACKEND_DELETION_REQUIRED', status: 501 });
     },
   };
 
@@ -1897,6 +2188,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     workflow,
     tracking: workflow,
     orderDocuments,
+    archive,
     audit,
     notifications,
     planning,
