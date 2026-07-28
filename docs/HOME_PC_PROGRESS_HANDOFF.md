@@ -8,14 +8,22 @@ Use this form as the checkpoint for continuing the project on another computer.
 |---|---|
 | Repository | `ShellyGames141up/Rhomberg-Test-App` |
 | Branch | `main` |
-| App version | `4.5.0` |
+| App version | `4.6.0` |
 | Checkpoint date | 28 July 2026 |
-| Completed phase | Prompts 13 and 14: retention management and shared desktop/mobile delivery preparation |
-| Last stopping point | Archive/restore, legal hold, protected retention export, responsive PWA and delivery strategy are complete in mock mode. The attached quotation/PO/rejection workflow remains incomplete and is documented separately. |
+| Completed phase | Prompts 15 and 16: management oversight and workflow-wide validation/error strengthening |
+| Last stopping point | Management metrics/actions/reports, restricted-company oversight, RFQ idempotency, safe GET retry and strengthened validation are complete in mock mode. The attached quotation/PO/rejection workflow remains incomplete and is documented separately. |
 | Preview mode | GitHub Pages browser mock remains enabled |
 | Production connection | Not connected; API and PostgreSQL material remain proposed contracts only |
 
 ## What changed in this checkpoint
+
+- Added the Manager/Administrator oversight dashboard with all requested RFQ/order KPIs, stage averages, breakdowns, ageing and recent activity.
+- Added authorised search, timeline/audit review, representative reassignment, override approval, archival approval and operational CSV export.
+- Added explicit protected-pricing exclusion and optional authorised-company restrictions for management projections.
+- Added stable RFQ submission idempotency, duplicate replay protection, safe GET retry and public-safe error mapping.
+- Strengthened customer/company, representative, reference, document metadata, date-order and past-estimate validation.
+- Added management, permission, company-isolation, duplicate-submission, retry and validation tests.
+- Added `MANAGEMENT_OVERSIGHT_AND_VALIDATION.md` plus API/database/security proposals.
 
 - Added archive eligibility, searchable Archived Orders, archive/restore, legal holds and internal retention exports.
 - Added safe configurable mock retention settings and a backend-only permanent-deletion contract.

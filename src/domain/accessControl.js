@@ -188,6 +188,11 @@ export const orderMatchesQueuePermission = (record, permission) => {
 export const canAccessRecord = (account, record) => {
   if (!account || !record) return false;
   const isOrder = record.workflowType === 'order';
+  if (
+    Array.isArray(account.authorisedCompanyIds)
+    && account.authorisedCompanyIds.length
+    && !account.authorisedCompanyIds.includes(record.companyId)
+  ) return false;
 
   if (isOrder && roleCan(account.role, PERMISSIONS.VIEW_ALL_ORDERS)) return true;
   if (!isOrder && roleCan(account.role, PERMISSIONS.VIEW_ALL_RFQS)) return true;
@@ -216,6 +221,11 @@ export const canAccessRecord = (account, record) => {
 
 export const canAccessNotification = (account, notification) => {
   if (!account || !notification) return false;
+  if (
+    Array.isArray(account.authorisedCompanyIds)
+    && account.authorisedCompanyIds.length
+    && !account.authorisedCompanyIds.includes(notification.companyId)
+  ) return false;
   const recipients = notification.recipients || [];
   if (roleCan(account.role, PERMISSIONS.VIEW_ALL_RFQS) || roleCan(account.role, PERMISSIONS.VIEW_ALL_ORDERS)) return true;
   if (

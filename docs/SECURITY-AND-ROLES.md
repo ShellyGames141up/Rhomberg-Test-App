@@ -132,6 +132,17 @@ Customer isolation is a server responsibility. The backend must:
 
 The React filter is only a display safeguard. It is not an authorisation control.
 
+Management reporting uses the same rule. Every metric, group, search result, ageing row, recent-activity item and exported CSV row must be calculated only after the backend applies the manager's authorised-company scope. Management projections explicitly omit protected price-engine fields. A separate future permission must be approved before any protected pricing can enter this workspace.
+
+## Validation and public errors
+
+- Important submissions require an idempotency key bound to the authenticated actor and canonical request intent.
+- Safe read-only requests may retry a transient network/502/503/504 failure once. Mutations are never automatically replayed by the low-level HTTP client.
+- Session expiry returns a sign-in instruction; permission failures return a generic capability message; server/dependency failures use a public fallback.
+- API responses and UI alerts must never contain stack traces, SQL/database messages, connection strings, secret names, provider bodies or internal authorisation predicates.
+- Uploads require a safe original filename, allow-listed extension/MIME type, verified non-zero size, upper size limit and later production signature/malware checks.
+- Estimated completion dates cannot be in the past, chronological fields must remain ordered and confirmation dates cannot be fabricated in the future.
+
 ## Representative access
 
 A sales representative may see a company only through an active `representative_company_assignments` record. Branch membership alone must not grant access to every company in that branch unless management approves that rule.

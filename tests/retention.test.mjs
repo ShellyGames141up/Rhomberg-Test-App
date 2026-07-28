@@ -52,6 +52,7 @@ assert.deepEqual(filterArchiveRecords(archiveRecords, { search: 'Cape Process', 
 
 const eligibleOrder = archiveRecords.find(order => order.reference === 'OR-ARCHIVE-0001');
 const originalHistoryLength = eligibleOrder.trackingHistory.length;
+await services.archive.approveArchival(eligibleOrder.id, { reason: 'Manager approved the annual archival action.' });
 await services.archive.archiveOrder(eligibleOrder.id, { reason: 'Annual retention review completed.' });
 archiveRecords = await services.archive.list();
 const archivedOrder = archiveRecords.find(order => order.id === eligibleOrder.id);
@@ -84,7 +85,7 @@ await assert.rejects(
 );
 
 const auditEvents = await services.audit.list({ entityId: archivedOrder.id });
-for (const action of ['retention.order_archived', 'retention.export_created', 'retention.legal_hold_applied', 'retention.legal_hold_released', 'retention.order_restored']) {
+for (const action of ['management.archival_approved', 'retention.order_archived', 'retention.export_created', 'retention.legal_hold_applied', 'retention.legal_hold_released', 'retention.order_restored']) {
   assert.ok(auditEvents.some(event => event.action === action), `${action} must create an immutable audit event`);
 }
 

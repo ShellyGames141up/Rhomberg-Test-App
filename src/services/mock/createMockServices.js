@@ -1,6 +1,6 @@
 import { areas, branches } from '../../data/branches.js';
 import { categories, industries, products, recommendedCategories } from '../../data/catalogue.js';
-import { representativesForArea } from '../../data/representatives.js';
+import { representativeById, representatives, representativesForArea } from '../../data/representatives.js';
 import {
   canAccessNotification,
   canAccessRecord,
@@ -37,6 +37,10 @@ import {
   DEFAULT_RETENTION_POLICY,
   normaliseRetentionPolicy,
 } from '../../domain/retention.js';
+import {
+  buildManagementDashboard,
+  createOperationalReportCsv,
+} from '../../domain/management.js';
 import { PLANNING_PRIORITIES } from '../../domain/planningQueue.js';
 import {
   createDeniedWorkflowAudit,
@@ -386,6 +390,10 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   const writeRetentionPolicy = policy => store.set(STORE_KEYS.retentionPolicy, normaliseRetentionPolicy(policy));
   const readRetentionExports = () => store.get(STORE_KEYS.retentionExports, []);
   const writeRetentionExports = exports => store.set(STORE_KEYS.retentionExports, exports);
+  const readIdempotencyRecords = () => store.get(STORE_KEYS.idempotency, {});
+  const writeIdempotencyRecords = records => store.set(STORE_KEYS.idempotency, records);
+  const readManagementExports = () => store.get(STORE_KEYS.managementExports, []);
+  const writeManagementExports = exports => store.set(STORE_KEYS.managementExports, exports);
   const presentAuditEvent = event => {
     const record = readAllRecords().find(item => item.id === event.entityId);
     const actor = readAccounts().find(item => item.id === event.actorId);
@@ -563,7 +571,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       };
     }
     if (request.action === 'complete_planning') {
-      const validated = validatePlanningSubmission(request.data);
+      const validated = validatePlanningSubmission(request.data, { today: now().toISOString().slice(0, 10) });
       const assignedPlanningUser = planningUsers().find(user => user.id === validated.planning.assignedPlanningUserId);
       if (!assignedPlanningUser) {
         throw new ServiceError('Select an authorised Planning user.', {
@@ -651,7 +659,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       }
       return {
         ...request,
-        data: validateExpeditingAction(request.action, request.data),
+        data: validateExpeditingAction(request.action, request.data, { today: now().toISOString().slice(0, 10) }),
       };
     }
     return request;
@@ -820,6 +828,8 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     if (!store.has(STORE_KEYS.retentionPolicy)) writeRetentionPolicy(DEFAULT_RETENTION_POLICY);
     if (!store.has(STORE_KEYS.retentionExports)) store.set(STORE_KEYS.retentionExports, []);
     if (!store.has(STORE_KEYS.deletionLog)) store.set(STORE_KEYS.deletionLog, []);
+    if (!store.has(STORE_KEYS.idempotency)) writeIdempotencyRecords({});
+    if (!store.has(STORE_KEYS.managementExports)) writeManagementExports([]);
     if (!store.has(STORE_KEYS.notifications)) store.set(STORE_KEYS.notifications, []);
     if (!store.has(STORE_KEYS.notificationPreferences)) store.set(STORE_KEYS.notificationPreferences, {});
     if (!store.has(STORE_KEYS.personalisation)) store.set(STORE_KEYS.personalisation, {});
@@ -976,7 +986,27 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       validateConfiguredProducts(lines);
       const representativeDirectory = representativesForArea(details.area);
       const selectedRepresentative = validateRepresentativeAssignment(details.selectedRep, representativeDirectory.representatives);
-      const { poFile, ...serialisableDetails } = details;
+      const submissionKey = String(details?.submissionKey || '').trim();
+      if (!submissionKey || submissionKey.length < 8 || submissionKey.length > 160) {
+        throw new ServiceError('Refresh the RFQ form and try again.', {
+          code: 'INVALID_IDEMPOTENCY_KEY',
+          status: 422,
+          fieldErrors: { submission: 'A valid submission key is required to prevent duplicate RFQs.' },
+        });
+      }
+      const idempotencyRecords = readIdempotencyRecords();
+      const existingSubmission = idempotencyRecords[`rfq:${account.id}:${submissionKey}`];
+      if (existingSubmission) {
+        const existingEnquiry = readAllEnquiries().find(item => item.id === existingSubmission.entityId);
+        if (existingEnquiry && canReadRecord(account, existingEnquiry)) {
+          return {
+            enquiry: clone(presentRecord(account, existingEnquiry)),
+            delivery: clone(existingSubmission.delivery),
+            idempotent: true,
+          };
+        }
+      }
+      const { poFile, submissionKey: _submissionKey, ...serialisableDetails } = details;
       const reference = nextRfqReference();
       const createdAt = now().toISOString();
       const assignedRepresentative = {
@@ -1087,6 +1117,13 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         actorRole: account.role,
         createdAt: now().toISOString(),
       });
+      idempotencyRecords[`rfq:${account.id}:${submissionKey}`] = {
+        entityType: 'rfq',
+        entityId: enquiry.id,
+        delivery: clone(delivery),
+        createdAt: now().toISOString(),
+      };
+      writeIdempotencyRecords(idempotencyRecords);
       await enquiries.saveDraft([]);
       return { enquiry: clone(presentRecord(account, enquiry)), delivery: clone(delivery) };
     },
@@ -1585,12 +1622,68 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         ...order,
         allowedArchiveActions: {
           archive: order.retentionStatus === 'archive_eligible' && accountCan(account, PERMISSIONS.ARCHIVE_ORDERS),
+          approve: order.retentionStatus === 'archive_eligible'
+            && !order.archiveApproval?.approved
+            && accountCan(account, PERMISSIONS.APPROVE_ARCHIVAL),
           restore: order.retentionStatus === 'archived' && accountCan(account, PERMISSIONS.RESTORE_ARCHIVED_ORDERS),
           export: accountCan(account, PERMISSIONS.EXPORT_ARCHIVED_ORDERS),
           legalHold: accountCan(account, PERMISSIONS.MANAGE_LEGAL_HOLD),
           permanentDeletion: false,
         },
       })));
+    },
+
+    async approveArchival(orderId, { reason = '' } = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.APPROVE_ARCHIVAL)) {
+        throw new ServiceError('Your role cannot approve archival actions.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const order = refreshRetentionStates().find(item => item.id === orderId);
+      if (!order || !canReadRecord(account, order)) {
+        throw new ServiceError('The order was not found.', { code: 'ORDER_NOT_FOUND', status: 404 });
+      }
+      try {
+        assertArchiveAllowed(order);
+      } catch (error) {
+        throw new ServiceError(error.message, { code: 'ORDER_NOT_ARCHIVE_ELIGIBLE', status: 409 });
+      }
+      const approvalReason = String(reason || '').trim();
+      if (approvalReason.length < 5) {
+        throw new ServiceError('Enter a clear archival approval reason.', {
+          code: 'ARCHIVE_APPROVAL_REASON_REQUIRED',
+          status: 422,
+          fieldErrors: { reason: 'Enter at least 5 characters.' },
+        });
+      }
+      const approvedAt = now().toISOString();
+      const updated = saveOrder({
+        ...order,
+        archiveApproval: {
+          approved: true,
+          reason: approvalReason,
+          approvedAt,
+          approvedBy: { id: account.id, displayName: account.contact, role: account.role },
+        },
+        updatedAt: approvedAt,
+      });
+      appendAuditEvent({
+        id: makeId('audit'),
+        eventType: 'order_archival_approved',
+        action: 'management.archival_approved',
+        outcome: 'success',
+        entityType: 'order',
+        entityId: updated.id,
+        companyId: updated.companyId,
+        companyName: updated.company,
+        reference: updated.reference,
+        actorId: account.id,
+        actorDisplayName: account.contact,
+        actorRole: account.role,
+        fieldsChanged: ['archiveApproval'],
+        reason: approvalReason,
+        createdAt: approvedAt,
+      });
+      return clone(updated);
     },
 
     async archiveOrder(orderId, { reason = '' } = {}) {
@@ -1602,6 +1695,12 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         assertArchiveAllowed(order);
       } catch (error) {
         throw new ServiceError(error.message, { code: 'ORDER_NOT_ARCHIVE_ELIGIBLE', status: 409 });
+      }
+      if (!order.archiveApproval?.approved) {
+        throw new ServiceError('A manager or administrator must approve this archival action first.', {
+          code: 'ARCHIVAL_APPROVAL_REQUIRED',
+          status: 409,
+        });
       }
       const archivedAt = now().toISOString();
       const updated = saveOrder({
@@ -1759,6 +1858,205 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     async requestPermanentDeletion() {
       requireAccount();
       throw new ServiceError('Permanent deletion is disabled in mock mode and must be performed by an approved backend workflow.', { code: 'BACKEND_DELETION_REQUIRED', status: 501 });
+    },
+  };
+
+  const management = {
+    async getDashboard(filters = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.VIEW_REPORTS)) {
+        throw new ServiceError('Your role cannot access management oversight.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const records = readAllRecords().filter(record => canReadRecord(account, record));
+      const auditEvents = readAuditEvents()
+        .map(presentAuditEvent)
+        .filter(event => {
+          if (!event.company?.id) return true;
+          return canReadRecord(account, {
+            workflowType: event.entityType === 'order' ? 'order' : 'rfq',
+            companyId: event.company.id,
+          });
+        });
+      return clone(buildManagementDashboard({
+        records,
+        auditEvents,
+        search: filters.search,
+        status: filters.status,
+        branch: filters.branch,
+        now: now(),
+      }));
+    },
+
+    async getRepresentativeOptions() {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.REASSIGN_REPRESENTATIVE)) {
+        throw new ServiceError('Your role cannot reassign representatives.', { code: 'FORBIDDEN', status: 403 });
+      }
+      return clone(representatives.map(representative => ({
+        ...representative,
+        branchName: branches.find(branch => branch.id === representative.branchId)?.name || representative.branchId,
+      })));
+    },
+
+    async reassignRepresentative(recordId, { representativeId, reason = '', expectedVersion } = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.REASSIGN_REPRESENTATIVE)) {
+        throw new ServiceError('Your role cannot reassign representatives.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const state = readWorkflowState();
+      const located = locateWorkflowRecord(state, recordId);
+      if (!located || !canReadRecord(account, located.record)) {
+        throw new ServiceError('The RFQ or order was not found.', { code: 'WORKFLOW_RECORD_NOT_FOUND', status: 404 });
+      }
+      if (Number(expectedVersion) !== Number(located.record.version)) {
+        throw new ServiceError('This record changed while you were reviewing it. Refresh and try again.', {
+          code: 'VERSION_CONFLICT',
+          status: 409,
+        });
+      }
+      if (['cancelled', 'expired', 'archived'].includes(located.record.trackingStatus)) {
+        throw new ServiceError('Terminal or archived records cannot be reassigned.', { code: 'REASSIGNMENT_NOT_ALLOWED', status: 409 });
+      }
+      const representative = representativeById(String(representativeId || ''));
+      if (!representative) {
+        throw new ServiceError('Select an authorised Rhomberg representative.', {
+          code: 'INVALID_REPRESENTATIVE',
+          status: 422,
+          fieldErrors: { representativeId: 'Select an authorised representative.' },
+        });
+      }
+      const reassignmentReason = String(reason || '').trim();
+      if (reassignmentReason.length < 5) {
+        throw new ServiceError('Enter a clear reassignment reason.', {
+          code: 'REASSIGNMENT_REASON_REQUIRED',
+          status: 422,
+          fieldErrors: { reason: 'Enter at least 5 characters.' },
+        });
+      }
+      const previousRepresentative = located.record.selectedRep || null;
+      const updatedAt = now().toISOString();
+      const updated = normaliseEnquiry({
+        ...located.record,
+        selectedRep: {
+          ...representative,
+          branchName: branches.find(branch => branch.id === representative.branchId)?.name || representative.branchId,
+        },
+        representativeId: representative.id,
+        version: Number(located.record.version) + 1,
+        updatedAt,
+      });
+      located.collection[located.index] = updated;
+      writeWorkflowState(state);
+      appendAuditEvent({
+        id: makeId('audit'),
+        eventType: 'representative_reassigned',
+        action: 'management.representative_reassigned',
+        outcome: 'success',
+        entityType: located.entityType,
+        entityId: updated.id,
+        companyId: updated.companyId,
+        companyName: updated.company,
+        reference: updated.reference,
+        actorId: account.id,
+        actorDisplayName: account.contact,
+        actorRole: account.role,
+        fieldsChanged: ['selectedRep', 'representativeId'],
+        reason: reassignmentReason,
+        details: {
+          previousRepresentativeId: previousRepresentative?.id || '',
+          newRepresentativeId: representative.id,
+        },
+        createdAt: updatedAt,
+      });
+      return clone(presentRecord(account, updated));
+    },
+
+    async approveWorkflowOverride(recordId, {
+      targetStatus,
+      reason = '',
+      entityType = '',
+      expectedVersion,
+    } = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.APPROVE_WORKFLOW_OVERRIDE)) {
+        throw new ServiceError('Your role cannot approve workflow overrides.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const overrideReason = String(reason || '').trim();
+      if (overrideReason.length < 10) {
+        throw new ServiceError('Explain the controlled override in at least 10 characters.', {
+          code: 'OVERRIDE_REASON_REQUIRED',
+          status: 422,
+          fieldErrors: { reason: 'Enter at least 10 characters.' },
+        });
+      }
+      const updated = await workflow.performAction(recordId, {
+        action: 'override_workflow',
+        comment: overrideReason,
+        data: { targetStatus, overrideReason },
+        entityType,
+        expectedVersion,
+      });
+      appendAuditEvent({
+        id: makeId('audit'),
+        eventType: 'workflow_override_approved',
+        action: 'management.workflow_override_approved',
+        outcome: 'success',
+        entityType: updated.workflowType,
+        entityId: updated.id,
+        companyId: updated.companyId,
+        companyName: updated.company,
+        reference: updated.reference,
+        actorId: account.id,
+        actorDisplayName: account.contact,
+        actorRole: account.role,
+        fieldsChanged: ['trackingStatus'],
+        reason: overrideReason,
+        isOverride: true,
+        overrideReason,
+        createdAt: now().toISOString(),
+      });
+      return updated;
+    },
+
+    async exportOperationalReport(filters = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.EXPORT_OPERATIONAL_REPORTS)) {
+        throw new ServiceError('Your role cannot export operational reports.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const dashboard = await this.getDashboard(filters);
+      const generatedAt = now().toISOString();
+      const report = {
+        id: makeId('management-report'),
+        fileName: `rhomberg-operational-report-${generatedAt.slice(0, 10)}.csv`,
+        mimeType: 'text/csv;charset=utf-8',
+        classification: 'INTERNAL OPERATIONAL REPORT',
+        generatedAt,
+        generatedBy: { id: account.id, displayName: account.contact, role: account.role },
+        rowCount: dashboard.records.length,
+        csv: createOperationalReportCsv(dashboard),
+      };
+      writeManagementExports([...readManagementExports(), report]);
+      appendAuditEvent({
+        id: makeId('audit'),
+        eventType: 'operational_report_exported',
+        action: 'management.operational_report_exported',
+        outcome: 'success',
+        entityType: 'management_report',
+        entityId: report.id,
+        actorId: account.id,
+        actorDisplayName: account.contact,
+        actorRole: account.role,
+        fieldsChanged: [],
+        reason: `Exported ${report.rowCount} authorised records.`,
+        documentMetadata: [{
+          id: report.id,
+          fileName: report.fileName,
+          mimeType: report.mimeType,
+          classification: report.classification,
+        }],
+        createdAt: generatedAt,
+      });
+      return clone(report);
     },
   };
 
@@ -2189,6 +2487,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     tracking: workflow,
     orderDocuments,
     archive,
+    management,
     audit,
     notifications,
     planning,

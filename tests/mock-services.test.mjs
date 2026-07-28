@@ -129,6 +129,7 @@ await assert.rejects(
 
 const testPoFile = { name: 'demo-purchase-order.pdf', type: 'application/pdf', size: 2048 };
 const submissionDetails = {
+  submissionKey: 'test-rfq-submission-001',
   application: 'Test pressure monitoring application',
   medium: 'Water',
   area: 'Western Cape',
@@ -154,8 +155,11 @@ await assert.rejects(
 );
 
 const submission = await reopenedServices.enquiries.submit(submissionDetails, [draftLine]);
+const repeatedSubmission = await reopenedServices.enquiries.submit(submissionDetails, [draftLine]);
 
 assert.match(submission.enquiry.reference, /^RQ-PREVIEW-/);
+assert.equal(repeatedSubmission.enquiry.id, submission.enquiry.id, 'repeating an RFQ idempotency key must return the existing RFQ');
+assert.equal(repeatedSubmission.idempotent, true);
 assert.equal(submission.enquiry.companyId, customer.companyId);
 assert.equal(submission.enquiry.trackingStatus, 'submitted', 'internal assignment should remain hidden in the customer projection');
 assert.equal(submission.enquiry.submittedAt, '2026-07-22T12:00:00.000Z');
@@ -918,6 +922,12 @@ await apiServices.notifications.retryDelivery(
   '00000000-0000-4000-8000-000000000101',
   '00000000-0000-4000-8000-000000000102',
 );
+await apiServices.management.getDashboard({ status: 'all' });
+await apiServices.management.getRepresentativeOptions();
+await apiServices.management.reassignRepresentative('record-api-test', { representativeId: 'C-27', reason: 'API adapter test.', expectedVersion: 1 });
+await apiServices.management.approveWorkflowOverride('record-api-test', { targetStatus: 'under_rep_review', reason: 'API adapter controlled override test.', entityType: 'rfq', expectedVersion: 1 });
+await apiServices.management.exportOperationalReport({ branch: 'cape-town' });
+await apiServices.archive.approveArchival('order-api-test', { reason: 'API adapter archival approval test.' });
 assert.ok(apiRequests.some(request => request.path.endsWith('/enquiries') && request.options.method === 'GET'), 'API RFQ reads must use the RFQ collection endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/enquiries/inbox') && request.options.method === 'GET'), 'API representative inbox reads must use the dedicated inbox endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/orders') && request.options.method === 'GET'), 'API order reads must use the separate order collection endpoint');
@@ -929,7 +939,13 @@ assert.ok(apiRequests.some(request => request.path.endsWith('/notifications') &&
 assert.ok(apiRequests.some(request => request.path.endsWith('/notifications/read-all') && request.options.method === 'POST'), 'API notification mark-all must use its controlled endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/users/me/notification-preferences') && request.options.method === 'PUT'), 'API notification preferences must use the current-user endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/notifications/00000000-0000-4000-8000-000000000101/deliveries/00000000-0000-4000-8000-000000000102/retry') && request.options.method === 'POST'), 'API delivery retry must use the controlled delivery endpoint');
+assert.ok(apiRequests.some(request => request.path.endsWith('/management/dashboard') && request.options.method === 'GET'), 'API management metrics must use the authorised dashboard endpoint');
+assert.ok(apiRequests.some(request => request.path.endsWith('/management/records/record-api-test/representative') && request.options.method === 'POST'), 'API representative reassignment must use the controlled management endpoint');
+assert.ok(apiRequests.some(request => request.path.endsWith('/management/records/record-api-test/workflow-override-approval') && request.options.method === 'POST'), 'API override approval must use the controlled management endpoint');
+assert.ok(apiRequests.some(request => request.path.endsWith('/management/reports') && request.options.method === 'POST'), 'API report exports must use the audited management endpoint');
+assert.ok(apiRequests.some(request => request.path.endsWith('/orders/order-api-test/archive-approval') && request.options.method === 'POST'), 'API archival approval must use a separate approval endpoint');
 const apiSubmission = await apiServices.enquiries.submit({
+  submissionKey: 'api-rfq-submission-001',
   application: 'API contract test application',
   area: 'Gauteng',
   selectedRep: { id: '00000000-0000-4000-8000-000000000004' },

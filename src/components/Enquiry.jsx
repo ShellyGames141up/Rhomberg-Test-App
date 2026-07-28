@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { LeadTimeNotice } from './Layout.jsx';
 
 const ALLOWED_PO_FILE = /\.(pdf|doc|docx|png|jpe?g|webp|gif|heic)$/i;
@@ -18,6 +18,7 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
   const [error, setError] = useState('');
   const [fallbackUrl, setFallbackUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submissionKey = useRef(globalThis.crypto?.randomUUID?.() || `rfq-form-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   const totalQuantity = lines.reduce((sum, line) => sum + line.quantity, 0);
   const repSelection = useMemo(() => areaDirectory[area] || { branch: registrationOptions?.branches?.[0] || {}, representatives: [] }, [area, areaDirectory, registrationOptions]);
   const nearestBranch = repSelection.branch;
@@ -102,6 +103,7 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
         poNumber: poMode === 'number' ? data.poNumber.trim() : '',
         poFileName: poMode === 'upload' ? poFile.name : '',
         poFile,
+        submissionKey: submissionKey.current,
       });
     } catch {
       result = { ok: false, message: 'The RFQ could not be submitted. Your configured units are still here, so please try again.' };
@@ -120,6 +122,7 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
     setSelectedRepId('');
     setEmergency('no');
     setFulfilment('');
+    submissionKey.current = globalThis.crypto?.randomUUID?.() || `rfq-form-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   };
 
   return (

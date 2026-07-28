@@ -102,11 +102,13 @@ export function createApiServices(config = {}) {
     async submit(details, lines) {
       validateEnquiry(details, lines);
       await draftSaveQueue.catch(() => undefined);
-      const { poFile, ...serialisableDetails } = details;
+      const { poFile, submissionKey, ...serialisableDetails } = details;
       const form = new FormData();
       form.append('payload', JSON.stringify({ details: serialisableDetails, items: lines }));
       if (poFile) form.append('purchaseOrder', poFile, poFile.name);
-      return client.post('/enquiries', form, { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `rfq-${Date.now()}` } });
+      return client.post('/enquiries', form, {
+        headers: { 'Idempotency-Key': submissionKey || globalThis.crypto?.randomUUID?.() || `rfq-${Date.now()}` },
+      });
     },
   };
 
@@ -222,6 +224,11 @@ export function createApiServices(config = {}) {
     getPolicy: () => client.get('/admin/retention-policy'),
     savePolicy: input => client.put('/admin/retention-policy', input),
     list: filters => client.get('/archived-orders', { query: filters }),
+    approveArchival: (orderId, input) => client.post(
+      `/orders/${encodeURIComponent(orderId)}/archive-approval`,
+      input,
+      { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `archive-approval-${Date.now()}` } },
+    ),
     archiveOrder: (orderId, input) => client.post(
       `/orders/${encodeURIComponent(orderId)}/archive`,
       input,
@@ -239,6 +246,26 @@ export function createApiServices(config = {}) {
       { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `retention-export-${Date.now()}` } },
     ),
     requestPermanentDeletion: (orderId, input) => client.post(`/orders/${encodeURIComponent(orderId)}/deletion-requests`, input),
+  };
+
+  const management = {
+    getDashboard: filters => client.get('/management/dashboard', { query: filters }),
+    getRepresentativeOptions: () => client.get('/management/representatives'),
+    reassignRepresentative: (recordId, input) => client.post(
+      `/management/records/${encodeURIComponent(recordId)}/representative`,
+      input,
+      { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `reassign-${Date.now()}` } },
+    ),
+    approveWorkflowOverride: (recordId, input) => client.post(
+      `/management/records/${encodeURIComponent(recordId)}/workflow-override-approval`,
+      input,
+      { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `override-approval-${Date.now()}` } },
+    ),
+    exportOperationalReport: filters => client.post(
+      '/management/reports',
+      filters || {},
+      { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `management-report-${Date.now()}` } },
+    ),
   };
 
   const notifications = {
@@ -319,6 +346,7 @@ export function createApiServices(config = {}) {
     audit,
     orderDocuments,
     archive,
+    management,
     notifications,
     planning,
     expediting,

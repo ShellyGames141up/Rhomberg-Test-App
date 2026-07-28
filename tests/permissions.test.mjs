@@ -48,6 +48,10 @@ for (const requiredPermission of [
   'restore_archived_orders',
   'administer_users',
   'override_workflow',
+  'reassign_representative',
+  'approve_workflow_override',
+  'approve_archival',
+  'export_operational_reports',
 ]) {
   assert.ok(Object.values(PERMISSIONS).includes(requiredPermission), `permission catalogue must include ${requiredPermission}`);
 }
@@ -83,6 +87,10 @@ assert.deepEqual(
 );
 assert.ok(roleCan(USER_ROLES.MANAGER, PERMISSIONS.VIEW_ALL_ORDERS));
 assert.ok(roleCan(USER_ROLES.MANAGER, PERMISSIONS.OVERRIDE_WORKFLOW));
+assert.ok(roleCan(USER_ROLES.MANAGER, PERMISSIONS.REASSIGN_REPRESENTATIVE));
+assert.ok(roleCan(USER_ROLES.MANAGER, PERMISSIONS.APPROVE_WORKFLOW_OVERRIDE));
+assert.ok(roleCan(USER_ROLES.MANAGER, PERMISSIONS.APPROVE_ARCHIVAL));
+assert.ok(roleCan(USER_ROLES.MANAGER, PERMISSIONS.EXPORT_OPERATIONAL_REPORTS));
 assert.equal(roleCan(USER_ROLES.MANAGER, PERMISSIONS.ADMINISTER_USERS), false);
 for (const permission of Object.values(PERMISSIONS)) {
   assert.ok(roleCan(USER_ROLES.ADMINISTRATOR, permission), `administrator must receive ${permission}`);
@@ -122,6 +130,8 @@ assert.equal(canAccessRecord(customerA, rfqB), false);
 assert.ok(canAccessRecord(salesA, rfqA));
 assert.equal(canAccessRecord(salesA, rfqB), false);
 assert.ok(canAccessRecord(manager, rfqA) && canAccessRecord(manager, rfqB));
+assert.ok(canAccessRecord({ ...manager, authorisedCompanyIds: ['company-a'] }, rfqA));
+assert.equal(canAccessRecord({ ...manager, authorisedCompanyIds: ['company-a'] }, rfqB), false);
 assert.equal(canAccessRecord(planning, rfqA), false);
 
 const orderAt = (status, overrides = {}) => ({

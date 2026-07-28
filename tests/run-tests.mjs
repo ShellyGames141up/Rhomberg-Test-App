@@ -8,5 +8,7 @@ await import('./workflow.test.mjs');
 await import('./notifications.test.mjs');
 await import('./order-documents.test.mjs');
 await import('./retention.test.mjs');
+await import('./management.test.mjs');
+await import('./validation-errors.test.mjs');
 await import('./mock-services.test.mjs');
 await import('./platform-previews.test.mjs');

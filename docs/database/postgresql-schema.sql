@@ -1335,4 +1335,88 @@ CREATE POLICY customer_identity_images_own_scope ON app.customer_identity_images
 -- parent order/company checks pass. Row-level security does not provide
 -- column-level redaction.
 
+-- Prompt 15/16 management, approval and idempotency proposal.
+CREATE TABLE IF NOT EXISTS app.management_approvals (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  enquiry_id uuid REFERENCES app.enquiries(id),
+  order_id uuid REFERENCES app.orders(id),
+  approval_type text NOT NULL CHECK (approval_type IN ('representative_reassignment', 'workflow_override', 'archival')),
+  previous_value jsonb NOT NULL DEFAULT '{}'::jsonb,
+  approved_value jsonb NOT NULL DEFAULT '{}'::jsonb,
+  reason text NOT NULL CHECK (char_length(reason) >= 5),
+  approved_by_user_id uuid NOT NULL REFERENCES app.users(id),
+  approved_at timestamptz NOT NULL DEFAULT now(),
+  request_id text NOT NULL,
+  correlation_id text NOT NULL,
+  CHECK ((enquiry_id IS NOT NULL)::integer + (order_id IS NOT NULL)::integer = 1)
+);
+
+CREATE TABLE IF NOT EXISTS app.operational_report_exports (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  generated_by_user_id uuid NOT NULL REFERENCES app.users(id),
+  filter_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb,
+  authorised_company_ids uuid[] NOT NULL DEFAULT '{}',
+  row_count integer NOT NULL CHECK (row_count >= 0),
+  classification text NOT NULL DEFAULT 'INTERNAL OPERATIONAL REPORT',
+  storage_object_key text,
+  sha256 text,
+  generated_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz,
+  audit_event_id uuid REFERENCES app.audit_events(id)
+);
+
+CREATE TABLE IF NOT EXISTS app.idempotency_records (
+  actor_user_id uuid NOT NULL REFERENCES app.users(id),
+  route_key text NOT NULL,
+  idempotency_key text NOT NULL,
+  request_hash text NOT NULL,
+  response_status integer NOT NULL,
+  response_reference text,
+  response_body jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL,
+  PRIMARY KEY (actor_user_id, route_key, idempotency_key)
+);
+
+CREATE INDEX IF NOT EXISTS management_approvals_company_time_idx
+  ON app.management_approvals (company_id, approved_at DESC);
+CREATE INDEX IF NOT EXISTS operational_report_exports_actor_time_idx
+  ON app.operational_report_exports (generated_by_user_id, generated_at DESC);
+CREATE INDEX IF NOT EXISTS idempotency_records_expiry_idx
+  ON app.idempotency_records (expires_at);
+
+ALTER TABLE app.management_approvals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.operational_report_exports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.idempotency_records ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY management_approvals_authorised_scope ON app.management_approvals
+  USING (
+    app.current_user_has_permission('view_reports')
+    AND app.can_access_company(company_id)
+  )
+  WITH CHECK (
+    app.can_access_company(company_id)
+    AND (
+      app.current_user_has_permission('reassign_representative')
+      OR app.current_user_has_permission('approve_workflow_override')
+      OR app.current_user_has_permission('approve_archival')
+    )
+  );
+
+CREATE POLICY operational_report_exports_own_scope ON app.operational_report_exports
+  USING (
+    generated_by_user_id = app.current_user_id()
+    OR app.current_user_has_permission('administer_users')
+  )
+  WITH CHECK (
+    generated_by_user_id = app.current_user_id()
+    AND app.current_user_has_permission('export_operational_reports')
+  );
+
+-- Idempotency reads/writes belong to narrowly scoped security-definer service
+-- functions. The ordinary API role receives no direct SELECT of response bodies.
+-- Management aggregates must apply app.can_access_company before grouping, and
+-- the API projection must omit all protected pricing columns/JSON keys.
+
 COMMIT;

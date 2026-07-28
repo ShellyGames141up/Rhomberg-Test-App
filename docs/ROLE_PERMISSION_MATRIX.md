@@ -4,6 +4,8 @@ Retention controls are internal-only. Managers and Administrators can search arc
 
 The canonical permission catalogue remains `src/services/contracts.js`. This document summarises preview access; it does not replace the code or server policy.
 
+Management oversight requires `view_reports`. Representative reassignment, workflow-override approval, archival approval and report export use the separate permissions `reassign_representative`, `approve_workflow_override`, `approve_archival` and `export_operational_reports`. A wider management role can also carry an explicit `authorisedCompanyIds` restriction; broad role naming never bypasses that list.
+
 | Role | Connect | Operations mobile | Operations desktop | Record scope |
 | --- | :---: | :---: | :---: | --- |
 | Customer | Yes | No | No | Authorised company only |

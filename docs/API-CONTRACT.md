@@ -959,6 +959,38 @@ After authorisation, either streams the file or returns a very short-lived signe
 
 ### Administration
 
+### Management oversight
+
+#### `GET /management/dashboard?search=&status=&branch=`
+
+Requires `view_reports`. The backend first applies the caller's authorised-company scope, then calculates RFQ/order totals, average stage duration, representative/branch/status groups, ageing and recent activity. Records and aggregates exclude protected pricing fields.
+
+#### `GET /management/representatives`
+
+Requires `reassign_representative`. Returns the approved representative directory with branch metadata.
+
+#### `POST /management/records/{recordId}/representative`
+
+Requires `reassign_representative`, `Idempotency-Key`, expected version, approved representative ID and a reason. The backend rechecks record/company scope and appends an immutable audit event.
+
+#### `POST /management/records/{recordId}/workflow-override-approval`
+
+Requires `approve_workflow_override` and `override_workflow`, exact expected version, valid target status and a detailed reason. Approval and the controlled state transition are separately audited.
+
+#### `POST /orders/{orderId}/archive-approval`
+
+Requires `approve_archival`. Only an archive-eligible completed order inside the caller's scope can be approved. The later archive command rechecks approval, eligibility and legal-hold rules.
+
+#### `POST /management/reports`
+
+Requires `export_operational_reports` and an idempotency key. Generates an internal CSV from only the filtered authorised projection and records document metadata in the immutable audit stream.
+
+### Validation, retry and idempotency
+
+`POST /enquiries` requires a stable `Idempotency-Key`. A replay with the same authenticated actor/key returns the existing RFQ rather than creating another reference. Important workflow, management, archive, notification and document mutations follow the same pattern.
+
+The web HTTP client retries only safe `GET`/`HEAD` requests once after a transient network/502/503/504 failure. Mutation retry is a higher-level decision and requires an unchanged idempotency key. Public error envelopes never expose stack, database, provider or security-policy details.
+
 The administrator UI is a later phase, but the backend should reserve:
 
 - `GET/POST/PATCH /admin/users`

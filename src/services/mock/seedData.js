@@ -12,13 +12,15 @@ export const STORE_KEYS = Object.freeze({
   retentionPolicy: 'rhombergPreviewRetentionPolicyV1',
   retentionExports: 'rhombergPreviewRetentionExportsV1',
   deletionLog: 'rhombergPreviewDeletionLogV1',
+  idempotency: 'rhombergPreviewIdempotencyV1',
+  managementExports: 'rhombergPreviewManagementExportsV1',
   notifications: 'rhombergPreviewNotificationsV1',
   notificationPreferences: 'rhombergPreviewNotificationPreferencesV1',
   personalisation: 'rhombergPreviewPersonalisationV1',
   mockImages: 'rhombergPreviewCustomerImagesV1',
   rfqSequence: 'rhombergPreviewRfqSequenceV1',
   theme: THEME_PREFERENCE_KEY,
-  seedVersion: 'rhombergPreviewSeedV14',
+  seedVersion: 'rhombergPreviewSeedV15',
 });
 
 export const LEGACY_STORE_KEYS = Object.freeze({

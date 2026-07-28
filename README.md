@@ -43,11 +43,10 @@ All credentials above are fabricated and demonstration-only. GitHub Pages runs i
 ## Current development checkpoint
 
 - **Checkpoint date:** 28 July 2026
-- **Current version:** 4.5.0
-- **Latest main commit:** `b817dd3` - `feat: add retention management and delivery preparation`
-- **Last completed steps:** Prompt 13 - archive and retention management; Prompt 14 - desktop and mobile delivery preparation.
+- **Current version:** 4.6.0
+- **Last completed steps:** Prompt 15 - management oversight; Prompt 16 - strengthened validation and error handling.
 
-This checkpoint adds manager/administrator retention controls, an Archived Orders workspace, legal holds, protected pre-deletion exports and a shared PWA/Capacitor/Windows delivery strategy. Permanent deletion remains disabled in browser mock mode.
+This checkpoint adds a permission-controlled management dashboard, operational metrics and reports, controlled representative reassignment and approvals, stronger company isolation, idempotent RFQ submission, safe network retry and expanded validation/error coverage.
 
 All automated tests, source checks, stylesheet checks, static preview builds and the API-only production-candidate safety build passed before this checkpoint was committed. The GitHub Pages preview remains browser-local and uses fabricated data only.
 
@@ -55,14 +54,32 @@ The separately attached quotation, PO, rejection and Document Centre prompt was 
 
 ## Latest changes committed to `main`
 
-The latest fast-forward update to `main` includes the completed Prompt 11-14 work:
+The latest release includes the completed Prompt 11-16 work:
 
 - **Prompt 11:** Separate customer-visible order timelines and immutable internal audit history, with management viewing permissions and customer-data leakage tests.
 - **Prompt 12:** Customer-safe and internal operational order-summary PDFs, preview/download controls, simulated email sharing, recipient validation and audited document actions.
 - **Prompt 13:** Configurable archiving and retention management, archive eligibility, Archived Orders search, restore/export controls, legal holds and deletion safeguards.
 - **Prompt 14:** One responsive Progressive Web App codebase, role-specific mobile and desktop navigation, Capacitor preparation and documented Windows/mobile delivery requirements.
+- **Prompt 15:** Management oversight metrics, ageing, activity, authorised search, reassignments, override/archive approvals and operational CSV reporting.
+- **Prompt 16:** Stronger end-to-end validation, public-safe errors, idempotency, safe read retries and expanded failure/isolation tests.
 
 The public GitHub Pages build remains a fabricated mock demonstration. Email and push delivery are simulated, browser code cannot permanently delete orders, and no production credentials or customer data were added.
+
+## Included in version 4.6
+
+- Management dashboard covering RFQ, Planning, Expediting, hold/delay, Dispatch, completion, emergency and archive totals
+- Average stage time plus orders by representative, branch and status
+- Authorised cross-record search, ageing list and recent immutable activity
+- Controlled representative reassignment with version checks, reason and audit event
+- Controlled workflow-override approval and separate archival approval
+- Pricing-safe management projections and internal operational CSV export
+- Optional authorised-company restrictions for wider management accounts
+- Stable RFQ idempotency keys and duplicate-submission replay protection
+- Safe retry of transient read-only API requests without automatically replaying mutations
+- Stronger reference, upload metadata, date-order and past-estimate validation
+- Friendly session, permission, network and unexpected-error messages without stack or infrastructure leakage
+- Expanded permission, company-isolation, management, validation, retry and duplicate-submission tests
+- Proposed private API, database and security contracts documented in [Management Oversight and Validation](docs/MANAGEMENT_OVERSIGHT_AND_VALIDATION.md)
 
 ## Included in version 4.5
 

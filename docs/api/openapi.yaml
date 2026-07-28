@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Rhomberg Instruments Private-Cloud API
-  version: 0.4.0-proposed
+  version: 0.5.0-proposed
   description: Proposed contract only. No production service is connected.
 servers:
   - url: /api/v1
@@ -1122,6 +1122,29 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ArchivedOrder' }
         '409': { description: Order is not archive eligible }
+  /orders/{orderId}/archive-approval:
+    post:
+      summary: Approve a later archival action
+      security: [{ cookieSession: [], csrfToken: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/OrderId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 5, maxLength: 2000 }
+      responses:
+        '200':
+          description: Archive eligibility record with approval evidence
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArchivedOrder' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: Order is not archive eligible }
   /orders/{orderId}/restore:
     post:
       summary: Restore an archived order to completed-order history
@@ -1188,6 +1211,103 @@ paths:
       responses:
         '202': { description: Deletion approval request accepted; no record deleted yet }
         '409': { description: Deletion disabled, retention incomplete, export missing or legal hold active }
+  /management/dashboard:
+    get:
+      summary: Read authorised management metrics, groups, ageing, activity and records
+      security: [{ cookieSession: [] }]
+      parameters:
+        - { in: query, name: search, schema: { type: string } }
+        - { in: query, name: status, schema: { type: string } }
+        - { in: query, name: branch, schema: { type: string } }
+      responses:
+        '200':
+          description: Pricing-safe management projection after company authorisation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ManagementDashboard' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /management/representatives:
+    get:
+      summary: List representatives available for controlled reassignment
+      security: [{ cookieSession: [] }]
+      responses:
+        '200':
+          description: Authorised representative options
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, name, branchId, branchName]
+                  properties:
+                    id: { type: string }
+                    name: { type: string }
+                    branchId: { type: string }
+                    branchName: { type: string }
+  /management/records/{recordId}/representative:
+    post:
+      summary: Reassign an authorised RFQ or order
+      security: [{ cookieSession: [], csrfToken: [] }]
+      parameters:
+        - { in: path, name: recordId, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [representativeId, reason, expectedVersion]
+              properties:
+                representativeId: { type: string }
+                reason: { type: string, minLength: 5, maxLength: 2000 }
+                expectedVersion: { type: integer, minimum: 0 }
+      responses:
+        '200': { description: Reassigned pricing-safe record }
+        '409': { description: Stale version or reassignment not permitted }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /management/records/{recordId}/workflow-override-approval:
+    post:
+      summary: Approve and apply a controlled workflow override
+      security: [{ cookieSession: [], csrfToken: [] }]
+      parameters:
+        - { in: path, name: recordId, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetStatus, reason, entityType, expectedVersion]
+              properties:
+                targetStatus: { type: string }
+                reason: { type: string, minLength: 10, maxLength: 2000 }
+                entityType: { type: string, enum: [rfq, order] }
+                expectedVersion: { type: integer, minimum: 0 }
+      responses:
+        '200': { description: Updated pricing-safe record }
+        '409': { description: Invalid transition or stale version }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /management/reports:
+    post:
+      summary: Generate an authorised internal operational CSV
+      security: [{ cookieSession: [], csrfToken: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                search: { type: string }
+                status: { type: string }
+                branch: { type: string }
+      responses:
+        '201':
+          description: Audited report metadata and short-lived download response
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ManagementReport' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
 components:
   securitySchemes:
@@ -2425,6 +2545,12 @@ components:
             active: { type: boolean }
             reason: { type: string }
             placedAt: { type: string, format: date-time }
+        archiveApproval:
+          type: object
+          properties:
+            approved: { type: boolean }
+            reason: { type: string }
+            approvedAt: { type: string, format: date-time }
     ArchiveCommand:
       type: object
       properties:
@@ -2445,6 +2571,43 @@ components:
         classification: { type: string, const: INTERNAL - RETENTION EXPORT }
         sizeBytes: { type: integer }
         generatedAt: { type: string, format: date-time }
+        downloadUrl: { type: string, format: uri, description: Short-lived authenticated URL }
+    ManagementDashboard:
+      type: object
+      required: [generatedAt, metrics, records, ageing, recentActivity, ordersByRepresentative, ordersByBranch, ordersByStatus]
+      properties:
+        generatedAt: { type: string, format: date-time }
+        metrics:
+          type: object
+          additionalProperties: { type: number }
+        records:
+          type: array
+          items: { type: object, additionalProperties: true, description: Pricing-safe authorised RFQ/order projection }
+        ageing:
+          type: array
+          items: { type: object, additionalProperties: true }
+        recentActivity:
+          type: array
+          items: { type: object, additionalProperties: true }
+        ordersByRepresentative:
+          type: array
+          items: { type: object, additionalProperties: true }
+        ordersByBranch:
+          type: array
+          items: { type: object, additionalProperties: true }
+        ordersByStatus:
+          type: array
+          items: { type: object, additionalProperties: true }
+    ManagementReport:
+      type: object
+      required: [id, fileName, mimeType, classification, generatedAt, rowCount]
+      properties:
+        id: { type: string, format: uuid }
+        fileName: { type: string }
+        mimeType: { type: string, const: text/csv;charset=utf-8 }
+        classification: { type: string, const: INTERNAL OPERATIONAL REPORT }
+        generatedAt: { type: string, format: date-time }
+        rowCount: { type: integer, minimum: 0 }
         downloadUrl: { type: string, format: uri, description: Short-lived authenticated URL }
     PageMeta:
       type: object

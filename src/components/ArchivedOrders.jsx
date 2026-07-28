@@ -144,10 +144,12 @@ export function ArchivedOrders({ account, archiveActions, serviceMode, onRecords
                   <label className="archive-reason"><span>Reason or comment</span><textarea rows="2" value={reason} onChange={event => setReason(event.target.value)} placeholder="Recorded in the immutable audit history" /></label>
                   <div className="archive-actions">
                     {order.allowedArchiveActions.archive && <button className="primary-button" type="button" disabled={busy} onClick={() => run(`archive-${order.id}`, () => archiveActions.archiveOrder(order.id, { reason }), `${order.reference} moved to the archive.`)}>Archive order</button>}
+                    {order.allowedArchiveActions.approve && <button className="secondary-button" type="button" disabled={busy} onClick={() => run(`approve-${order.id}`, () => archiveActions.approveArchival(order.id, { reason }), `${order.reference} archival action approved and audited.`)}>Approve archival</button>}
                     {order.allowedArchiveActions.restore && <button className="secondary-button" type="button" disabled={busy} onClick={() => run(`restore-${order.id}`, () => archiveActions.restoreOrder(order.id, { reason }), `${order.reference} restored to completed-order history.`)}>Restore</button>}
                     {order.allowedArchiveActions.export && <button className="secondary-button" type="button" disabled={busy} onClick={() => exportRecord(order)}>Export retention copy</button>}
                     {order.allowedArchiveActions.legalHold && <button className="secondary-button" type="button" disabled={busy} onClick={() => run(`hold-${order.id}`, () => archiveActions.setLegalHold(order.id, { active: !order.legalHold?.active, reason }), order.legalHold?.active ? 'Legal hold released and audited.' : 'Legal hold applied and audited.')}>{order.legalHold?.active ? 'Release legal hold' : 'Apply legal hold'}</button>}
                   </div>
+                  {order.archiveApproval?.approved && <p className="archive-approval-note"><strong>Archival approved</strong>{order.archiveApproval.reason}<small>{formatDate(order.archiveApproval.approvedAt)} · {order.archiveApproval.approvedBy?.displayName}</small></p>}
                 </div>
               )}
             </article>

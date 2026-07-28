@@ -11,6 +11,7 @@ import { ExpeditorDashboard } from './components/ExpeditorDashboard.jsx';
 import { Home } from './components/Home.jsx';
 import { Intro } from './components/Intro.jsx';
 import { AppHeader, BottomNav, Toast } from './components/Layout.jsx';
+import { ManagementDashboard } from './components/ManagementDashboard.jsx';
 import { Notifications } from './components/Notifications.jsx';
 import { OperationalDashboard } from './components/OperationalDashboard.jsx';
 import { OrderTracking } from './components/OrderTracking.jsx';
@@ -224,6 +225,7 @@ export default function App() {
   const isPlanningWorkspace = usesPlanningWorkspace(account);
   const isExpeditorWorkspace = usesExpeditorWorkspace(account);
   const isDispatchWorkspace = usesDispatchWorkspace(account);
+  const isManagementWorkspace = accountCan(account, PERMISSIONS.VIEW_REPORTS);
   const canPerformWorkflow = accountCanPerformWorkflow(account);
   const personalisationStyle = useMemo(
     () => PREVIEW_CONTEXT.customer ? customerPersonalisationCss(customerPersonalisation) : undefined,
@@ -475,6 +477,17 @@ export default function App() {
     setAuditEvents(loadedAuditEvents);
   };
 
+  const refreshAfterManagementAction = async () => {
+    const [loadedEnquiries, loadedOrders, loadedAuditEvents] = await Promise.all([
+      listEnquiriesForAccount(account),
+      services.orders.list(),
+      accountCan(account, PERMISSIONS.READ_AUDIT_HISTORY) ? services.audit.list() : Promise.resolve([]),
+    ]);
+    setEnquiries(loadedEnquiries);
+    setOrders(loadedOrders);
+    setAuditEvents(loadedAuditEvents);
+  };
+
   const openNotificationRecord = notification => {
     setNotificationTarget({
       entityId: notification.entityId,
@@ -587,6 +600,8 @@ export default function App() {
                     ? <ExpeditorDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} expeditingOptions={expeditingOptions} focusRecordId={notificationTarget?.entityId} documentActions={orderDocumentActions} />
                     : isDispatchWorkspace
                       ? <DispatchDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} documentActions={orderDocumentActions} />
+                    : isManagementWorkspace
+                      ? <ManagementDashboard account={account} managementActions={services.management} serviceMode={services.mode} onRecordsChanged={refreshAfterManagementAction} onOpenAudit={() => navigate('audit')} />
                       : <OperationalDashboard account={account} enquiries={staffRecords} onAction={performWorkflowAction} canUpdate={canPerformWorkflow} serviceMode={services.mode} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} documentActions={orderDocumentActions} />)}
               {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
               {view === 'archive' && <ArchivedOrders account={account} archiveActions={services.archive} serviceMode={services.mode} onRecordsChanged={refreshAfterRetentionAction} />}

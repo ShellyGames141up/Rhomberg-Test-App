@@ -15,6 +15,24 @@ export class HttpClient {
   }
 
   async request(path, { method = 'GET', body, query, signal, headers = {} } = {}) {
+    const safeToRetry = ['GET', 'HEAD'].includes(method);
+    const attempts = safeToRetry ? 2 : 1;
+    let lastError;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        return await this.requestOnce(path, { method, body, query, signal, headers });
+      } catch (error) {
+        lastError = error;
+        const retryable = error?.code === 'NETWORK_ERROR'
+          || error?.name === 'AbortError'
+          || [502, 503, 504].includes(error?.status);
+        if (!safeToRetry || !retryable || attempt === attempts - 1 || signal?.aborted) throw error;
+      }
+    }
+    throw lastError;
+  }
+
+  async requestOnce(path, { method = 'GET', body, query, signal, headers = {} } = {}) {
     const url = new URL(`${this.baseUrl}${path}`, globalThis.location?.origin || 'http://localhost');
     for (const [key, value] of Object.entries(query || {})) if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
     const controller = new AbortController();

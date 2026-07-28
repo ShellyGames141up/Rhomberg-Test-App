@@ -34,6 +34,7 @@ export const PERMISSIONS = Object.freeze({
   VIEW_ASSIGNED_RFQS: 'view_assigned_rfqs',
   VIEW_ALL_RFQS: 'view_all_rfqs',
   ASSIGN_RFQ: 'assign_rfq',
+  REASSIGN_REPRESENTATIVE: 'reassign_representative',
   MARK_RFQ_UNDER_REVIEW: 'mark_rfq_under_review',
   MARK_RFQ_QUOTED: 'mark_rfq_quoted',
   ACKNOWLEDGE_QUOTATION: 'acknowledge_quotation',
@@ -64,10 +65,13 @@ export const PERMISSIONS = Object.freeze({
   MANAGE_RETENTION_POLICY: 'manage_retention_policy',
   ADMINISTER_USERS: 'administer_users',
   OVERRIDE_WORKFLOW: 'override_workflow',
+  APPROVE_WORKFLOW_OVERRIDE: 'approve_workflow_override',
+  APPROVE_ARCHIVAL: 'approve_archival',
   READ_AUDIT_HISTORY: 'read_audit_history',
   RETRY_NOTIFICATION_DELIVERY: 'retry_notification_delivery',
   MANAGE_PRODUCTS: 'manage_products',
   VIEW_REPORTS: 'view_reports',
+  EXPORT_OPERATIONAL_REPORTS: 'export_operational_reports',
 });
 
 const permissionList = (...values) => Object.freeze(values);
@@ -133,6 +137,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.VIEW_ALL_RFQS,
     PERMISSIONS.VIEW_ALL_ORDERS,
     PERMISSIONS.ASSIGN_RFQ,
+    PERMISSIONS.REASSIGN_REPRESENTATIVE,
     PERMISSIONS.MARK_RFQ_UNDER_REVIEW,
     PERMISSIONS.MARK_RFQ_QUOTED,
     PERMISSIONS.ACCEPT_CUSTOMER_ORDER,
@@ -154,9 +159,12 @@ export const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.EXPORT_ARCHIVED_ORDERS,
     PERMISSIONS.MANAGE_LEGAL_HOLD,
     PERMISSIONS.OVERRIDE_WORKFLOW,
+    PERMISSIONS.APPROVE_WORKFLOW_OVERRIDE,
+    PERMISSIONS.APPROVE_ARCHIVAL,
     PERMISSIONS.READ_AUDIT_HISTORY,
     PERMISSIONS.RETRY_NOTIFICATION_DELIVERY,
     PERMISSIONS.VIEW_REPORTS,
+    PERMISSIONS.EXPORT_OPERATIONAL_REPORTS,
   ),
   [USER_ROLES.ADMINISTRATOR]: permissionList(...Object.values(PERMISSIONS)),
 });
@@ -224,7 +232,14 @@ export const toPublicAccount = account => {
 };
 
 export const friendlyServiceError = (error, fallback = 'Something went wrong. Please try again.') => {
-  if (error instanceof ServiceError) return error.message;
+  if (error instanceof ServiceError) {
+    if (error.status === 401) return 'Your session has ended. Please sign in again.';
+    if (error.status === 403) return 'You do not have permission to complete this action.';
+    if (error.status >= 500) return error.code === 'NETWORK_ERROR'
+      ? 'The service is temporarily unavailable. Check your connection and try again.'
+      : fallback;
+    return error.message;
+  }
   if (error?.name === 'AbortError') return 'The request took too long. Please check your connection and try again.';
   return fallback;
 };

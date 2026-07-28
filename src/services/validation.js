@@ -24,11 +24,28 @@ export const MAX_ACCEPTANCE_DOCUMENT_BYTES = 4 * 1024 * 1024;
 export const MAX_DISPATCH_PROOF_BYTES = 4 * 1024 * 1024;
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const referencePattern = /^[\p{L}\p{N}][\p{L}\p{N} ._/#-]*$/u;
+const supportedDocumentMimePattern = /^(application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document|image\/[a-z0-9.+-]+)$/i;
 const present = value => String(value || '').trim();
 
 const throwValidation = (fieldErrors, fallback) => {
   const message = Object.values(fieldErrors)[0] || fallback;
   throw new ServiceError(message, { code: 'VALIDATION_ERROR', status: 422, fieldErrors });
+};
+
+const validateDocumentMetadata = (file, field) => {
+  if (!file) return;
+  const fileName = present(file.name);
+  const mimeType = present(file.type);
+  if (!fileName || /[\\/]/.test(fileName)) {
+    throwValidation({ [field]: 'Choose a file with a valid name.' }, 'The uploaded document metadata is invalid.');
+  }
+  if (mimeType && !supportedDocumentMimePattern.test(mimeType)) {
+    throwValidation({ [field]: 'Choose a PDF, DOCX, DOC or supported image.' }, 'The uploaded document type is not supported.');
+  }
+  if (!Number.isFinite(Number(file.size)) || Number(file.size) < 1) {
+    throwValidation({ [field]: 'The selected document is empty or its size could not be verified.' }, 'The uploaded document metadata is invalid.');
+  }
 };
 
 export function validateSignIn({ email, password }) {
@@ -71,6 +88,7 @@ export function validateNotificationPreferenceSettings(candidate) {
 
 export function validatePoFile(file) {
   if (!file) return;
+  validateDocumentMetadata(file, 'poFile');
   if (!ALLOWED_PO_FILE_PATTERN.test(file.name || '')) {
     throwValidation({ poFile: 'Choose a PDF, DOCX, DOC or image Purchase Order.' }, 'The Purchase Order file is not supported.');
   }
@@ -129,6 +147,7 @@ const validDateOnly = value => {
 
 export function validateQuotationDocument(file) {
   if (!file) return;
+  validateDocumentMetadata(file, 'quotationDocumentFile');
   if (!ALLOWED_PO_FILE_PATTERN.test(file.name || '')) {
     throwValidation(
       { quotationDocumentFile: 'Choose a PDF, DOCX, DOC or image quotation copy.' },
@@ -155,8 +174,10 @@ export function validateQuotationConfirmation(data = {}) {
   const documentFile = data.quotationDocumentFile || null;
 
   if (!number) errors.quotationNumber = 'Enter the quotation number.';
+  else if (!referencePattern.test(number)) errors.quotationNumber = 'Use letters, numbers and normal reference punctuation only.';
   else if (number.length > 80) errors.quotationNumber = 'Keep the quotation number below 80 characters.';
   if (!validDateOnly(date)) errors.quotationDate = 'Enter a valid quotation date.';
+  else if (date > new Date().toISOString().slice(0, 10)) errors.quotationDate = 'The quotation date cannot be in the future.';
   if (!['dated', 'not_applicable'].includes(expiryMode)) errors.quotationExpiryMode = 'Select whether the quotation has an expiry date.';
   if (expiryMode === 'dated') {
     if (!validDateOnly(expiryDate)) errors.quotationExpiryDate = 'Enter a valid quotation expiry date.';
@@ -187,6 +208,7 @@ export function validateQuotationConfirmation(data = {}) {
 
 export function validateAcceptanceDocument(file) {
   if (!file) return;
+  validateDocumentMetadata(file, 'acceptanceDocumentFile');
   if (!ALLOWED_PO_FILE_PATTERN.test(file.name || '')) {
     throwValidation(
       { acceptanceDocumentFile: 'Choose a PDF, DOCX, DOC or image supporting document.' },
@@ -203,6 +225,7 @@ export function validateAcceptanceDocument(file) {
 
 export function validateDispatchProof(file) {
   if (!file) return;
+  validateDocumentMetadata(file, 'dispatchProofFile');
   if (!ALLOWED_PO_FILE_PATTERN.test(file.name || '')) {
     throwValidation(
       { dispatchProofFile: 'Choose a PDF, DOCX, DOC or image proof file.' },
@@ -229,6 +252,7 @@ export function validateOrderAcceptance(data = {}) {
 
   if (!RFQ_ACCEPTANCE_TYPES.includes(type)) errors.acceptanceType = 'Select how the customer acceptance was received.';
   if (!validDateOnly(date)) errors.acceptanceDate = 'Enter a valid acceptance date.';
+  else if (date > new Date().toISOString().slice(0, 10)) errors.acceptanceDate = 'The acceptance date cannot be in the future.';
   if (type === 'purchase_order_received' && !purchaseOrderNumber) errors.acceptancePurchaseOrderNumber = 'Enter the received Purchase Order number.';
   if (type === 'payment_confirmed' && !paymentReference) errors.acceptancePaymentReference = 'Enter the external payment or transaction reference.';
   if (!internalNote) errors.acceptanceInternalNote = 'Add an internal note describing the evidence you verified.';
@@ -270,7 +294,7 @@ const normaliseDocumentReferences = value => {
   return String(value || '').split(/\r?\n/).map(present).filter(Boolean);
 };
 
-export function validatePlanningSubmission(data = {}) {
+export function validatePlanningSubmission(data = {}, { today = new Date().toISOString().slice(0, 10) } = {}) {
   const errors = {};
   const internalJobNumber = present(planningValue(data, 'internalJobNumber', 'planningInternalJobNumber'));
   const customerPoNumber = present(planningValue(data, 'customerPoNumber', 'planningCustomerPoNumber'));
@@ -290,8 +314,10 @@ export function validatePlanningSubmission(data = {}) {
   const documentReferences = normaliseDocumentReferences(planningValue(data, 'documentReferences', 'planningDocumentReferences'));
 
   if (!internalJobNumber) errors.planningInternalJobNumber = 'Enter the internal job number.';
+  else if (!referencePattern.test(internalJobNumber)) errors.planningInternalJobNumber = 'Use letters, numbers and normal reference punctuation only.';
   else if (internalJobNumber.length > 100) errors.planningInternalJobNumber = 'Keep the internal job number below 100 characters.';
   if (customerPoNumber.length > 100) errors.planningCustomerPoNumber = 'Keep the customer Purchase Order number below 100 characters.';
+  else if (customerPoNumber && !referencePattern.test(customerPoNumber)) errors.planningCustomerPoNumber = 'Use letters, numbers and normal reference punctuation only.';
   if (!customerPoNumber && !poExceptionAuthorised) {
     errors.planningPoExceptionAuthorised = 'Enter the customer Purchase Order number or record an authorised exception.';
   }
@@ -311,9 +337,13 @@ export function validatePlanningSubmission(data = {}) {
   ) {
     errors.planningEstimatedCompletionDate = 'The estimated completion date cannot be before the planned start date.';
   }
+  if (estimatedCompletionDate && validDateOnly(estimatedCompletionDate) && estimatedCompletionDate < today) {
+    errors.planningEstimatedCompletionDate = 'The estimated completion date cannot be in the past.';
+  }
   if (!assignedPlanningUserId) errors.planningAssignedUserId = 'Select the Planning user responsible for this order.';
   if (!PLANNING_PRIORITY_VALUES.includes(priority)) errors.planningPriority = 'Select a valid Planning priority.';
   if (!validDateOnly(submissionDate)) errors.planningSubmissionDate = 'Enter the Planning submission date.';
+  else if (submissionDate > today) errors.planningSubmissionDate = 'The Planning submission date cannot be in the future.';
   if (documentReferences.length > 10) errors.planningDocumentReferences = 'Add no more than 10 document references.';
   if (documentReferences.some(reference => reference.length > 240)) {
     errors.planningDocumentReferences = 'Keep each document reference below 240 characters.';
@@ -362,10 +392,7 @@ const EXPEDITOR_UPDATE_ACTIONS = Object.freeze([
 export function validateExpeditingAction(
   action,
   data = {},
-  {
-    progressSteps = EXPEDITOR_PROGRESS_STEPS,
-    documentTypes = EXPEDITOR_DOCUMENT_TYPES,
-  } = {},
+  options = {},
 ) {
   const errors = {};
   if (!EXPEDITOR_UPDATE_ACTIONS.includes(action)) {
@@ -378,8 +405,11 @@ export function validateExpeditingAction(
     complete_expediting: 'ready_for_dispatch',
   }[action];
   const progressStep = forcedStep || present(expeditingValue(data, 'progressStep', 'expeditingProgressStep'));
-  const allowedStepIds = progressSteps.map(step => step.id);
-  const stepDefinition = progressSteps.find(step => step.id === progressStep)
+  const today = options.today || new Date().toISOString().slice(0, 10);
+  const effectiveProgressSteps = options.progressSteps || EXPEDITOR_PROGRESS_STEPS;
+  const effectiveDocumentTypes = options.documentTypes || EXPEDITOR_DOCUMENT_TYPES;
+  const allowedStepIds = effectiveProgressSteps.map(step => step.id);
+  const stepDefinition = effectiveProgressSteps.find(step => step.id === progressStep)
     || expeditorProgressStepById(progressStep);
   const customerMessage = present(expeditingValue(data, 'customerMessage', 'expeditingCustomerMessage'));
   const internalNote = present(expeditingValue(data, 'internalNote', 'expeditingInternalNote'));
@@ -419,13 +449,15 @@ export function validateExpeditingAction(
   if (internalNote.length > 2000) errors.expeditingInternalNote = 'Keep the internal note below 2,000 characters.';
   if (estimatedCompletionDate && !validDateOnly(estimatedCompletionDate)) {
     errors.expeditingEstimatedCompletionDate = 'Enter a valid estimated completion date.';
+  } else if (estimatedCompletionDate && estimatedCompletionDate < today) {
+    errors.expeditingEstimatedCompletionDate = 'The estimated completion date cannot be in the past.';
   }
   if (delayReason.length > 1000) errors.expeditingDelayReason = 'Keep the delay reason below 1,000 characters.';
   if (action === 'place_on_hold' && delayReason.length < 5) {
     errors.expeditingDelayReason = 'Record why the order is being placed on hold.';
   }
   if (documentReference.length > 240) errors.expeditingDocumentReference = 'Keep the controlled reference below 240 characters.';
-  if (documentReference && !documentTypes.some(type => type.id === documentType)) {
+  if (documentReference && !effectiveDocumentTypes.some(type => type.id === documentType)) {
     errors.expeditingDocumentType = 'Select the type of controlled document or image reference.';
   }
   if (documentType && !documentReference) {
