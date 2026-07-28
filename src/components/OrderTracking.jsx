@@ -47,7 +47,7 @@ function TrackingCard({ enquiry, expanded, onToggle, onAction, serviceMode }) {
   const status = statusById(enquiry.trackingStatus, enquiry.workflowType);
   const progress = progressForStatus(enquiry.trackingStatus, enquiry.workflowType);
   const totalQuantity = (enquiry.items || []).reduce((sum, item) => sum + Number(item.quantity || 1), 0);
-  const history = [...(enquiry.trackingHistory || [])].reverse();
+  const history = [...(enquiry.customerTimeline || enquiry.trackingHistory || [])].reverse();
   const isOrder = enquiry.workflowType === 'order';
 
   return (
@@ -71,8 +71,8 @@ function TrackingCard({ enquiry, expanded, onToggle, onAction, serviceMode }) {
             <h3>Requested instruments</h3>
             {(enquiry.items || []).map(item => <span key={item.lineId}><img src={item.image} alt="" /><b>{item.code}</b><small>{item.name}</small><strong>× {item.quantity}</strong></span>)}
           </div>
-          <div className="tracking-timeline">
-            <h3>Update history</h3>
+          <div className="tracking-timeline" aria-label="Customer-visible order timeline">
+            <h3>Order timeline</h3>
             {history.map((event, index) => {
               const eventStatus = statusById(event.toStatus || event.status, event.entityType);
               return <div className="timeline-event" key={event.id || `${event.createdAt}-${index}`}><i className={index === 0 ? 'latest' : ''} /><span><small>{formatDate(event.createdAt)} · {event.actor || 'Rhomberg'}</small><strong>{eventStatus.label}</strong><p>{event.note || eventStatus.customerDescription}</p></span></div>;

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Account } from './components/Account.jsx';
+import { AuditTrail } from './components/AuditTrail.jsx';
 import { Auth } from './components/Auth.jsx';
 import { Catalogue } from './components/Catalogue.jsx';
 import { Configurator } from './components/Configurator.jsx';
@@ -91,6 +92,7 @@ export default function App() {
   const [enquiries, setEnquiries] = useState([]);
   const [orders, setOrders] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [auditEvents, setAuditEvents] = useState([]);
   const [notificationPreferences, setNotificationPreferences] = useState(createDefaultNotificationPreferences);
   const [notificationTarget, setNotificationTarget] = useState(null);
   const [planningOptions, setPlanningOptions] = useState(EMPTY_PLANNING_OPTIONS);
@@ -128,17 +130,21 @@ export default function App() {
         let loadedEnquiries = [];
         let loadedOrders = [];
         let loadedNotifications = [];
+        let loadedAuditEvents = [];
         let loadedNotificationPreferences = createDefaultNotificationPreferences();
         let loadedPlanningOptions = EMPTY_PLANNING_OPTIONS;
         let loadedExpeditingOptions = EMPTY_EXPEDITING_OPTIONS;
         let loadedDispatchOptions = EMPTY_DISPATCH_OPTIONS;
         let loadedPersonalisation = createDefaultCustomerPersonalisation();
         if (session) {
-          [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedPersonalisation] = await Promise.all([
+          [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedAuditEvents, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedPersonalisation] = await Promise.all([
             accountCan(session, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
             listEnquiriesForAccount(session),
             services.orders.list(),
             services.notifications.list(),
+            accountCan(session, PERMISSIONS.READ_AUDIT_HISTORY)
+              ? services.audit.list()
+              : Promise.resolve([]),
             services.notifications.getPreferences(),
             accountCan(session, PERMISSIONS.ADD_PLANNING_INFORMATION)
               ? services.planning.getWorkspaceOptions()
@@ -167,6 +173,7 @@ export default function App() {
         setEnquiries(loadedEnquiries);
         setOrders(loadedOrders);
         setNotifications(loadedNotifications);
+        setAuditEvents(loadedAuditEvents);
         setNotificationPreferences(loadedNotificationPreferences);
         setPlanningOptions(loadedPlanningOptions);
         setExpeditingOptions(loadedExpeditingOptions);
@@ -236,11 +243,14 @@ export default function App() {
     if (!previewAllowsRole(PREVIEW_CONTEXT, signedInAccount.role)) {
       throw new Error(`This ${signedInAccount.role.replaceAll('_', ' ')} account is not supported in ${PREVIEW_CONTEXT.displayName}.`);
     }
-    const [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedPersonalisation] = await Promise.all([
+    const [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedAuditEvents, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedPersonalisation] = await Promise.all([
       accountCan(signedInAccount, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
       listEnquiriesForAccount(signedInAccount),
       services.orders.list(),
       services.notifications.list(),
+      accountCan(signedInAccount, PERMISSIONS.READ_AUDIT_HISTORY)
+        ? services.audit.list()
+        : Promise.resolve([]),
       services.notifications.getPreferences(),
       accountCan(signedInAccount, PERMISSIONS.ADD_PLANNING_INFORMATION)
         ? services.planning.getWorkspaceOptions()
@@ -260,6 +270,7 @@ export default function App() {
     setEnquiries(loadedEnquiries);
     setOrders(loadedOrders);
     setNotifications(loadedNotifications);
+    setAuditEvents(loadedAuditEvents);
     setNotificationPreferences(loadedNotificationPreferences);
     setPlanningOptions(loadedPlanningOptions);
     setExpeditingOptions(loadedExpeditingOptions);
@@ -393,6 +404,9 @@ export default function App() {
     }
     if (createdOrder) setOrders(current => [createdOrder, ...current.filter(order => order.id !== createdOrder.id)]);
     services.notifications.list().then(setNotifications).catch(() => undefined);
+    if (accountCan(account, PERMISSIONS.READ_AUDIT_HISTORY)) {
+      services.audit.list().then(setAuditEvents).catch(() => undefined);
+    }
     notify(createdOrder ? `${updated.reference} converted to ${createdOrder.reference}` : `${updated.reference} updated to ${updated.status}`);
     return result;
   };
@@ -481,6 +495,7 @@ export default function App() {
       setEnquiries([]);
       setOrders([]);
       setNotifications([]);
+      setAuditEvents([]);
       setNotificationPreferences(createDefaultNotificationPreferences());
       setNotificationTarget(null);
       setCustomerPersonalisation(createDefaultCustomerPersonalisation());
@@ -544,6 +559,7 @@ export default function App() {
                       ? <DispatchDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} />
                       : <OperationalDashboard account={account} enquiries={staffRecords} onAction={performWorkflowAction} canUpdate={canPerformWorkflow} serviceMode={services.mode} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} />)}
               {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
+              {view === 'audit' && <AuditTrail events={auditEvents} serviceMode={services.mode} />}
               {view === 'account' && <Account account={account} enquiries={staffRecords} onSignOut={signOut} serviceMode={services.mode} />}
             </>
           ) : (

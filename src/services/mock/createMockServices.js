@@ -174,6 +174,23 @@ const normaliseEnquiry = enquiry => {
 const isCustomerVisibleEvent = event => event.customerVisible !== false
   && workflowStatusById(event.toStatus || event.status, event.entityType)?.customerVisible !== false;
 
+const toCustomerTimelineEvent = event => ({
+  id: event.id,
+  eventType: event.action || event.eventType || event.toStatus || event.status,
+  action: event.action || event.eventType || '',
+  entityType: event.entityType,
+  fromStatus: event.fromStatus,
+  toStatus: event.toStatus || event.status,
+  status: event.status || event.toStatus,
+  label: event.label,
+  note: event.customerDescription || event.note,
+  customerDescription: event.customerDescription || event.note,
+  actor: event.actorRole === USER_ROLES.CUSTOMER ? 'You' : 'Rhomberg Instruments',
+  progressStep: event.progressStep || '',
+  dispatchMethod: event.dispatchMethod || '',
+  createdAt: event.createdAt,
+});
+
 const toCustomerVisibleQuotation = quotation => {
   if (!quotation) return undefined;
   const documentIsVisible = Boolean(quotation.documentCustomerVisible);
@@ -254,7 +271,9 @@ const toCustomerVisibleDispatch = dispatch => {
 };
 
 const toCustomerVisibleRecord = enquiry => {
-  const history = (enquiry.trackingHistory || []).filter(isCustomerVisibleEvent);
+  const history = (enquiry.trackingHistory || [])
+    .filter(isCustomerVisibleEvent)
+    .map(toCustomerTimelineEvent);
   const lastVisible = history.at(-1);
   const visibleStatus = lastVisible?.toStatus || lastVisible?.status || (workflowStatusById(enquiry.trackingStatus, enquiry.workflowType)?.customerVisible ? enquiry.trackingStatus : 'submitted');
   const definition = workflowStatusById(visibleStatus);
@@ -263,6 +282,7 @@ const toCustomerVisibleRecord = enquiry => {
     trackingStatus: visibleStatus,
     status: definition?.label || enquiry.status,
     trackingHistory: history,
+    customerTimeline: history,
     quotation: toCustomerVisibleQuotation(enquiry.quotation),
     quotedBy: enquiry.quotedBy ? { displayName: enquiry.quotedBy.displayName } : undefined,
     quotationAcknowledgedBy: undefined,
@@ -348,6 +368,45 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   };
   const readAuditEvents = () => store.get(STORE_KEYS.audit, []);
   const appendAuditEvent = event => store.set(STORE_KEYS.audit, [...readAuditEvents(), event]);
+  const presentAuditEvent = event => {
+    const record = readAllRecords().find(item => item.id === event.entityId);
+    const actor = readAccounts().find(item => item.id === event.actorId);
+    const deliveryStatuses = event.notificationResults
+      || event.details?.deliveryStatuses
+      || [];
+    return {
+      ...event,
+      eventType: event.eventType || String(event.action || '').replace(/^workflow\./, ''),
+      previousStatus: event.previousStatus ?? event.fromStatus ?? '',
+      newStatus: event.newStatus ?? event.toStatus ?? '',
+      actingUser: {
+        id: event.actorId || '',
+        displayName: event.actorDisplayName || actor?.contact || actor?.company || event.actorRole || 'Workflow service',
+      },
+      actingRole: event.actorRole || '',
+      timestamp: event.createdAt,
+      requestId: event.requestId || event.details?.requestId || event.id,
+      correlationId: event.correlationId || event.details?.correlationId || event.id,
+      company: {
+        id: event.companyId || record?.companyId || '',
+        name: event.companyName || record?.company || '',
+      },
+      reference: event.reference || record?.reference || '',
+      fieldsChanged: event.fieldsChanged?.length
+        ? event.fieldsChanged
+        : (event.fromStatus !== event.toStatus ? ['trackingStatus'] : []),
+      reason: event.reason || event.comment || event.details?.reason || '',
+      notificationResults: Array.isArray(deliveryStatuses)
+        ? deliveryStatuses
+        : [],
+      override: {
+        used: event.isOverride === true,
+        reason: event.overrideReason || '',
+      },
+      documentMetadata: event.documentMetadata || event.details?.documentMetadata || [],
+      immutable: true,
+    };
+  };
   const readNotifications = () => store.get(STORE_KEYS.notifications, []).map(normaliseNotificationRecord);
   const writeNotifications = notifications => store.set(STORE_KEYS.notifications, notifications.map(normaliseNotificationRecord));
   const appendNotification = notification => writeNotifications([...readNotifications(), notification]);
@@ -636,13 +695,30 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       appendNotification(notification);
       appendAuditEvent({
         id: makeId('audit'),
+        eventType: 'notification_created',
         action: 'notification.created',
         outcome: 'success',
         entityType: notification.entityType,
         entityId: notification.entityId,
         companyId: notification.companyId,
+        companyName: notification.companyName || '',
+        reference: notification.reference,
         actorId: actor?.id || 'workflow-service',
         actorRole: actor?.role || SYSTEM_ACTOR_ROLE,
+        actorDisplayName: actor?.displayName || 'Workflow service',
+        requestId: notification.audit?.requestId || notification.id,
+        correlationId: notification.audit?.correlationId || notification.id,
+        fieldsChanged: [],
+        reason: `Notification generated for ${notification.eventType}.`,
+        notificationResults: notification.deliveries.map(delivery => ({
+          channel: delivery.channel,
+          recipient: delivery.recipient,
+          status: delivery.status,
+          simulated: delivery.simulated === true,
+        })),
+        documentMetadata: [],
+        isOverride: false,
+        immutable: true,
         details: {
           notificationId: notification.id,
           eventType: notification.eventType,
@@ -1207,10 +1283,25 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   };
 
   const audit = {
-    async list({ entityId } = {}) {
+    async list({ entityId = '', entityType = '', outcome = '', search = '' } = {}) {
       const account = requireAccount();
-      if (!roleCan(account.role, PERMISSIONS.READ_AUDIT_HISTORY)) throw new ServiceError('Your role cannot view audit history.', { code: 'FORBIDDEN', status: 403 });
-      return clone(readAuditEvents().filter(event => !entityId || event.entityId === entityId));
+      if (!accountCan(account, PERMISSIONS.READ_AUDIT_HISTORY)) throw new ServiceError('Your role cannot view audit history.', { code: 'FORBIDDEN', status: 403 });
+      const term = String(search || '').trim().toLowerCase();
+      return clone(readAuditEvents()
+        .map(presentAuditEvent)
+        .filter(event => !entityId || event.entityId === entityId)
+        .filter(event => !entityType || event.entityType === entityType)
+        .filter(event => !outcome || event.outcome === outcome)
+        .filter(event => !term || [
+          event.eventType,
+          event.action,
+          event.reference,
+          event.company?.name,
+          event.actingUser?.displayName,
+          event.requestId,
+          event.correlationId,
+        ].some(value => String(value || '').toLowerCase().includes(term)))
+        .sort((left, right) => new Date(right.timestamp) - new Date(left.timestamp)));
     },
   };
 

@@ -97,6 +97,11 @@ for (const role of allRoles) {
 }
 assert.equal(defaultViewForRole(USER_ROLES.CUSTOMER), 'home');
 assert.equal(defaultViewForRole(USER_ROLES.PLANNING), 'expeditor');
+assert.ok(navigationItemsForRole(USER_ROLES.MANAGER).some(item => item.id === 'audit'));
+assert.ok(navigationItemsForRole(USER_ROLES.ADMINISTRATOR).some(item => item.id === 'audit'));
+assert.equal(navigationItemsForRole(USER_ROLES.CUSTOMER).some(item => item.id === 'audit'), false);
+assert.equal(normaliseViewForRole(USER_ROLES.MANAGER, 'audit'), 'audit');
+assert.equal(normaliseViewForRole(USER_ROLES.CUSTOMER, 'audit'), 'home');
 assert.equal(normaliseViewForRole(USER_ROLES.CUSTOMER, 'expeditor'), 'home');
 assert.equal(normaliseViewForRole(USER_ROLES.DISPATCH, 'catalogue'), 'expeditor');
 assert.equal(roleProfileFor(USER_ROLES.BUYER).dashboard.queue, 'Buyer workflow inactive');

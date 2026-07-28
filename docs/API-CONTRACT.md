@@ -764,6 +764,13 @@ Deletes or schedules deletion only when the image belongs to the signed-in user 
 
 ### Notifications and audit
 
+Customer record responses and internal audit responses are deliberately separate:
+
+- `customerTimeline` is a customer-safe, ordered projection of approved RFQ/order milestones. It may contain the public event/action, previous/new public status, customer message, public progress/dispatch method, a generic `You` or `Rhomberg Instruments` actor label and timestamp.
+- It must omit internal descriptions and notes, actor IDs/roles, override evidence, request/correlation IDs, fields-changed data, notification/provider diagnostics and non-public document metadata.
+- `trackingHistory` is an internal workflow source and must not be returned to customers unless it has been transformed into the `customerTimeline` schema.
+- corrections append a new workflow/audit event; ordinary APIs never update or delete an existing history entry.
+
 #### `GET /notifications?unreadOnly=true&page=1&pageSize=50`
 
 Returns notifications within the caller's authorised company/role scope. Internal-only message variants, notes, provider responses and actor identifiers are never returned to customers. A representative receives only notifications for records assigned to their authoritative representative identity, unless a separately audited wider permission applies. Each recipient has independent read state; one user marking a message read must not mark it read for another recipient.
@@ -868,6 +875,10 @@ The API and worker must use an outbox transaction: the workflow change, recipien
 #### `GET /audit-events?entityId=&entityType=&page=1&pageSize=50`
 
 Manager/administrator only unless a narrower audited support permission is approved. Audit records are append-only and include successful and denied workflow attempts.
+
+Each audit item returns `eventType`, previous/new status, acting user and role, timestamp, request and correlation IDs, company, RFQ/order reference, fields changed, reason/comment, notification results, override usage and relevant safe document metadata. Audit responses set `immutable: true`. No `PUT`, `PATCH` or `DELETE` audit-event route exists.
+
+The database writer role may insert audit rows but the ordinary application role must not update or delete them. A correction references the earlier event and appends a new correction event. Customers, representatives and ordinary operational roles receive `403` from this endpoint, and audit information is never embedded in customer RFQ/order responses.
 
 The complete event catalogue, visibility rules and future Microsoft 365/SMTP/mobile-push requirements are in `docs/NOTIFICATION_SYSTEM.md`.
 

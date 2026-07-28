@@ -10,14 +10,16 @@ const CUSTOMER_NAVIGATION = Object.freeze([
   navItem('notifications', '!', 'Alerts'),
 ]);
 
-const internalNavigation = workspaceLabel => Object.freeze([
+const internalNavigation = (workspaceLabel, includeAudit = false) => Object.freeze([
   navItem('expeditor', '↻', workspaceLabel),
   navItem('notifications', '!', 'Alerts'),
+  ...(includeAudit ? [navItem('audit', '≡', 'Audit')] : []),
   navItem('account', '○', 'Account'),
 ]);
 
 const CUSTOMER_VIEWS = Object.freeze(['home', 'catalogue', 'product', 'configurator', 'enquiry', 'tracking', 'notifications', 'account', 'settings']);
 const INTERNAL_VIEWS = Object.freeze(['expeditor', 'notifications', 'account']);
+const OVERSIGHT_VIEWS = Object.freeze([...INTERNAL_VIEWS, 'audit']);
 
 const profile = ({
   role,
@@ -105,6 +107,8 @@ export const ROLE_PROFILES = Object.freeze({
     role: USER_ROLES.MANAGER,
     label: 'Manager',
     workspaceLabel: 'Oversight',
+    navigation: internalNavigation('Oversight', true),
+    allowedViews: OVERSIGHT_VIEWS,
     dashboard: {
       eyebrow: 'Management oversight',
       headline: 'Workflow health at a glance.',
@@ -116,6 +120,8 @@ export const ROLE_PROFILES = Object.freeze({
     role: USER_ROLES.ADMINISTRATOR,
     label: 'Administrator',
     workspaceLabel: 'Admin',
+    navigation: internalNavigation('Admin', true),
+    allowedViews: OVERSIGHT_VIEWS,
     dashboard: {
       eyebrow: 'Administration workspace',
       headline: 'Controlled workflow oversight.',

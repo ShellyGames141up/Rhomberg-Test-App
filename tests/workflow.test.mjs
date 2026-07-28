@@ -78,7 +78,7 @@ for (const definition of WORKFLOW_TRANSITIONS) {
 
 let rfq = {
   id: 'rfq-test', workflowType: 'rfq', trackingStatus: 'draft', status: 'Draft', version: 0,
-  companyId: 'company-test', application: 'Pressure monitoring test application', items: [{ productId: 'pbb', quantity: 1 }],
+  reference: 'RQ-TEST-001', companyId: 'company-test', company: 'Test Company', application: 'Pressure monitoring test application', items: [{ productId: 'pbb', quantity: 1 }],
   selectedRep: { id: 'REP-TEST', name: 'Representative Test' }, trackingHistory: [], createdAt: fixedNow().toISOString(),
 };
 
@@ -151,6 +151,15 @@ assert.equal(rfq.quotedAt, fixedNow().toISOString());
 assert.equal(rfq.quotedBy.id, assignedRep.id);
 assert.equal(result.workflowEvent.note, 'Please review the quotation sent through Outlook.');
 assert.equal(result.auditEvent.comment, 'Internal test note.');
+assert.equal(result.auditEvent.eventType, 'mark_quoted');
+assert.equal(result.auditEvent.reference, 'RQ-TEST-001');
+assert.equal(result.auditEvent.companyName, 'Test Company');
+assert.equal(result.auditEvent.actorDisplayName, assignedRep.displayName);
+assert.ok(result.auditEvent.requestId && result.auditEvent.correlationId === result.workflowEvent.id);
+assert.ok(result.auditEvent.fieldsChanged.includes('quotation'));
+assert.equal(result.auditEvent.reason, 'Internal test note.');
+assert.deepEqual(result.auditEvent.notificationResults, []);
+assert.equal(result.auditEvent.immutable, true);
 assert.deepEqual(result.notification.recipients, ['customer', 'assigned_representative']);
 assert.ok(result.notification.messages.customer.includes('emailed separately'));
 assert.ok(result.notification.messages.assigned_representative.includes('customer was notified'));

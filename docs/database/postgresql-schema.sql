@@ -746,23 +746,43 @@ CREATE TABLE app.email_outbox (
 
 CREATE TABLE app.audit_events (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  event_type text NOT NULL,
   actor_user_id uuid REFERENCES app.users(id),
   actor_role text NOT NULL CHECK (actor_role IN ('customer', 'sales_representative', 'planning', 'expeditor', 'dispatch', 'buyer', 'manager', 'administrator', 'system')),
   company_id uuid REFERENCES app.companies(id),
   action text NOT NULL,
   entity_type text NOT NULL,
   entity_id text,
+  entity_reference text,
   from_status text,
   to_status text,
   comment text,
+  fields_changed jsonb NOT NULL DEFAULT '[]'::jsonb,
+  notification_results jsonb NOT NULL DEFAULT '[]'::jsonb,
+  document_metadata jsonb NOT NULL DEFAULT '[]'::jsonb,
   is_override boolean NOT NULL DEFAULT false,
+  override_reason text,
   request_id text,
+  correlation_id text NOT NULL,
   ip_address inet,
   user_agent_hash text,
   outcome text NOT NULL CHECK (outcome IN ('success', 'failed', 'denied', 'idempotent_replay')),
   details jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE OR REPLACE FUNCTION app.reject_audit_event_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION 'audit_events are append-only; record a correction event instead';
+END;
+$$;
+
+CREATE TRIGGER audit_events_immutable
+BEFORE UPDATE OR DELETE ON app.audit_events
+FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
 
 CREATE INDEX user_company_access_company_idx ON app.user_company_access (company_id, user_id) WHERE revoked_at IS NULL;
 CREATE UNIQUE INDEX users_external_identity_unique ON app.users (identity_provider, external_subject) WHERE identity_provider IS NOT NULL AND external_subject IS NOT NULL;
@@ -1017,6 +1037,7 @@ ALTER TABLE app.workflow_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.notification_deliveries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.notification_preferences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.audit_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.uploaded_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.customer_personalisations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.customer_identity_images ENABLE ROW LEVEL SECURITY;
@@ -1138,6 +1159,14 @@ CREATE POLICY notifications_authorised_scope ON app.notifications
     )
     AND (app.current_user_role() <> 'customer' OR customer_visible)
   );
+
+CREATE POLICY audit_events_management_read ON app.audit_events
+  FOR SELECT
+  USING (app.current_user_has_permission('read_audit_history'));
+
+-- The ordinary application role receives SELECT (subject to RLS) and INSERT
+-- through the audited service function only. It must never receive UPDATE or
+-- DELETE on app.audit_events.
 
 CREATE POLICY notification_deliveries_authorised_scope ON app.notification_deliveries
   USING (EXISTS (

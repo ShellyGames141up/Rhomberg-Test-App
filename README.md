@@ -43,16 +43,27 @@ All credentials above are fabricated and demonstration-only. GitHub Pages runs i
 ## Current development checkpoint
 
 - **Checkpoint date:** 28 July 2026
-- **Current version:** 4.2.0
-- **Last completed step:** Prompt 10 — the Dispatch workspace.
+- **Current version:** 4.3.0
+- **Last completed step:** Prompt 11 — complete order timeline and audit trail.
 
-This checkpoint includes the central notification system from Prompt 9 and the complete mock-mode Dispatch workflow from Prompt 10. Dispatch can now process collection and delivery routes, record structured handover details and proof metadata, report delivery problems, notify the customer and assigned representative, and complete orders through the controlled service/workflow layer. Internal Dispatch notes and operational problem details remain hidden from customer projections.
+This checkpoint includes the Prompt 10 Dispatch workflow and Prompt 11’s two deliberately separate histories: a sanitised customer order timeline and a manager/administrator-only immutable audit workspace. Audit entries now expose request/correlation context, actor, company/reference, changed fields, comments, notification outcomes, override use and safe document metadata without leaking those details to customers.
 
 All automated tests, source checks, stylesheet checks, static preview builds and the API-only production-candidate safety build passed before this checkpoint was committed. The GitHub Pages preview remains browser-local and uses fabricated data only.
 
-Development stopped after completing and validating Prompt 10. The next workflow phase has not been started, and no real database, email provider, push provider, courier integration or document-storage service has been connected. Continue from [the progress handoff](docs/HOME_PC_PROGRESS_HANDOFF.md) and [Dispatch workspace documentation](docs/DISPATCH_WORKSPACE.md).
+Development stopped after completing and validating Prompt 11. The next workflow phase has not been started, and no real database, email provider, push provider, courier integration or document-storage service has been connected. Continue from [the progress handoff](docs/HOME_PC_PROGRESS_HANDOFF.md) and [Dispatch workspace documentation](docs/DISPATCH_WORKSPACE.md).
 
-## Included in version 4.2
+## Included in version 4.3
+
+- Dedicated customer-safe `customerTimeline` projection used by the order-tracking interface
+- Internal actor IDs, roles, notes, override data and audit metadata removed from customer timeline events
+- Manager/Administrator Audit navigation and responsive read-only audit workspace
+- Search and filters by record type, outcome, company, reference, user, request ID and correlation ID
+- Complete audit projection with event/status transition, actor, timestamp, company/reference, changed fields, reason, notification results, override usage and safe document metadata
+- Append-only mock behaviour with no ordinary audit update/delete service
+- Proposed PostgreSQL mutation-rejection trigger and management-only audit RLS
+- Expanded API/OpenAPI contracts and tests for immutability and customer-data leakage prevention
+
+## Included in version 4.3
 
 - Dedicated desktop-optimised Dispatch workspace in the existing responsive Operations application
 - Controlled queue for `awaiting_dispatch`, `ready_for_collection` and `out_for_delivery`, plus handover-confirmed records awaiting final completion

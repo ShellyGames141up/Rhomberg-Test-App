@@ -767,6 +767,20 @@ assert.equal(customerCompletedOrder.dispatch.recipientName, 'Fabricated Test Col
 assert.equal(customerCompletedOrder.dispatch.proofOfDelivery.reference, 'POD-TEST-SERVICE-001');
 assert.equal('internalNotes' in customerCompletedOrder.dispatch, false, 'customer records must not expose internal Dispatch notes');
 assert.equal(customerCompletedOrder.dispatch.updates.some(update => 'internalNotes' in update || 'problemReason' in update), false, 'customer Dispatch history must exclude internal notes and operational problem detail');
+assert.ok(customerCompletedOrder.customerTimeline.length > 0, 'customer responses must expose a dedicated customer-visible timeline');
+assert.ok(customerCompletedOrder.customerTimeline.every(event => (
+  !('actorId' in event)
+  && !('actorRole' in event)
+  && !('internalDescription' in event)
+  && !('overrideReason' in event)
+  && !('audit' in event)
+)), 'customer timeline events must not expose internal actor, audit, override or description fields');
+assert.equal('auditHistory' in customerCompletedOrder, false);
+await assert.rejects(
+  () => reopenedServices.audit.list(),
+  error => error instanceof ServiceError && error.status === 403,
+  'customers must never read the internal audit service',
+);
 const customerNotifications = await reopenedServices.notifications.list();
 assert.ok(customerNotifications.length > 0 && customerNotifications.every(notification => notification.companyId === 'company-demo-cape'), 'customer notifications must remain company-isolated');
 
@@ -806,7 +820,21 @@ const managerOrders = await reopenedServices.orders.list();
 assert.ok(managerOrders.length >= 3, 'Manager must receive the wider order oversight scope');
 assert.ok(managerOrders.find(order => order.id === conversion.createdOrder.id)?.allowedWorkflowActions.some(action => action.action === 'override_workflow'));
 assert.ok((await reopenedServices.expediting.getWorkspaceOptions()).requiredStepIds.includes('ready_for_dispatch'), 'authorised management actions must use the same service-owned Expediting configuration');
-assert.ok((await reopenedServices.audit.list()).some(event => event.actorRole === USER_ROLES.BUYER && event.outcome === 'denied'), 'Buyer workflow denial must be visible in authorised audit history');
+const managerAudit = await reopenedServices.audit.list();
+assert.ok(managerAudit.some(event => event.actorRole === USER_ROLES.BUYER && event.outcome === 'denied'), 'Buyer workflow denial must be visible in authorised audit history');
+const completeAudit = managerAudit.find(event => event.action === 'workflow.complete_collection');
+assert.ok(completeAudit, 'completion must be present in the immutable audit history');
+for (const field of ['eventType', 'previousStatus', 'newStatus', 'actingUser', 'actingRole', 'timestamp', 'requestId', 'correlationId', 'company', 'reference', 'fieldsChanged', 'reason', 'notificationResults', 'override', 'documentMetadata', 'immutable']) {
+  assert.ok(field in completeAudit, `audit projections must include ${field}`);
+}
+assert.equal(completeAudit.immutable, true);
+assert.ok(managerAudit.some(event => event.eventType === 'notification_created' && event.notificationResults.length > 0), 'notification outcomes must be represented in the internal audit stream');
+assert.ok((await reopenedServices.audit.list({ search: conversion.createdOrder.reference })).every(event => event.reference === conversion.createdOrder.reference), 'audit search must support the order reference');
+const originalAuditAction = managerAudit[0].action;
+managerAudit[0].action = 'tampered.client.value';
+assert.equal((await reopenedServices.audit.list())[0].action, originalAuditAction, 'changing a returned audit projection must not modify append-only storage');
+assert.equal(reopenedServices.audit.update, undefined, 'ordinary audit update operations must not exist');
+assert.equal(reopenedServices.audit.delete, undefined, 'ordinary audit delete operations must not exist');
 
 await reopenedServices.auth.signOut();
 const administratorAccount = await reopenedServices.auth.signIn({ email: 'administrator.workflow@example.invalid', password: 'Admin123!' });
@@ -869,6 +897,7 @@ await apiServices.auth.signIn({ email: 'api@example.invalid', password: 'Example
 await apiServices.enquiries.list();
 await apiServices.enquiries.listRepresentativeInbox();
 await apiServices.orders.list();
+await apiServices.audit.list({ entityType: 'order', search: 'OR-API' });
 const apiPlanningOptions = await apiServices.planning.getWorkspaceOptions();
 assert.equal(apiPlanningOptions.priorities[0].id, 'standard');
 const apiExpeditingOptions = await apiServices.expediting.getWorkspaceOptions();
@@ -892,6 +921,7 @@ await apiServices.notifications.retryDelivery(
 assert.ok(apiRequests.some(request => request.path.endsWith('/enquiries') && request.options.method === 'GET'), 'API RFQ reads must use the RFQ collection endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/enquiries/inbox') && request.options.method === 'GET'), 'API representative inbox reads must use the dedicated inbox endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/orders') && request.options.method === 'GET'), 'API order reads must use the separate order collection endpoint');
+assert.ok(apiRequests.some(request => request.path.endsWith('/audit-events') && request.options.method === 'GET'), 'API audit reads must use the read-only audit endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/users/me/personalisation') && request.options.method === 'PUT'), 'API personalisation saves must use the current-user endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/users/me/personalisation/images') && request.options.method === 'POST' && request.options.body instanceof FormData), 'API identity image uploads must use multipart current-user storage');
 assert.ok(apiRequests.some(request => request.path.endsWith('/users/me/personalisation/images/00000000-0000-4000-8000-000000000099') && request.options.method === 'DELETE'), 'API image deletion must be current-user scoped');

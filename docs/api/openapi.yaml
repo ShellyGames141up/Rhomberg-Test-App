@@ -838,6 +838,13 @@ paths:
         - name: entityType
           in: query
           schema: { type: string, enum: [rfq, order] }
+        - name: outcome
+          in: query
+          schema: { type: string, enum: [success, failed, denied, idempotent_replay] }
+        - name: search
+          in: query
+          description: Searches authorised reference, company, actor, request ID and correlation ID fields.
+          schema: { type: string, maxLength: 160 }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
       responses:
@@ -1213,6 +1220,25 @@ components:
           description: Configured Expediting progress-step code when the event records an Expeditor update.
         customerVisible: { type: boolean }
         isOverride: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    CustomerTimelineEvent:
+      type: object
+      additionalProperties: false
+      required: [id, eventType, action, toStatus, note, actor, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        eventType: { type: string }
+        action: { type: string }
+        entityType: { type: string, enum: [rfq, order] }
+        fromStatus: { type: string }
+        toStatus: { type: string }
+        status: { type: string }
+        label: { type: string }
+        note: { type: string }
+        customerDescription: { type: string }
+        actor: { type: string, enum: [You, Rhomberg Instruments] }
+        progressStep: { type: string }
+        dispatchMethod: { type: string }
         createdAt: { type: string, format: date-time }
     WorkflowActionRequest:
       type: object
@@ -1760,6 +1786,10 @@ components:
         version: { type: integer, minimum: 0 }
         allowedWorkflowActions: { type: array, items: { $ref: '#/components/schemas/WorkflowActionDescriptor' } }
         trackingHistory: { type: array, items: { $ref: '#/components/schemas/TrackingEvent' } }
+        customerTimeline:
+          type: array
+          description: Customer-safe timeline projection. Internal trackingHistory fields must not be copied into this response.
+          items: { $ref: '#/components/schemas/CustomerTimelineEvent' }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
       additionalProperties: true
@@ -1859,6 +1889,10 @@ components:
         version: { type: integer, minimum: 0 }
         allowedWorkflowActions: { type: array, items: { $ref: '#/components/schemas/WorkflowActionDescriptor' } }
         trackingHistory: { type: array, items: { $ref: '#/components/schemas/TrackingEvent' } }
+        customerTimeline:
+          type: array
+          description: Customer-safe timeline projection. Actor IDs, internal notes, overrides and audit metadata are prohibited.
+          items: { $ref: '#/components/schemas/CustomerTimelineEvent' }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     OrderItemSnapshot:
@@ -2021,18 +2055,52 @@ components:
         updatedAt: { type: [string, 'null'], format: date-time }
     AuditEvent:
       type: object
-      required: [id, action, outcome, entityType, entityId, actorRole, createdAt]
+      required: [id, eventType, action, outcome, entityType, entityId, previousStatus, newStatus, actingUser, actingRole, timestamp, requestId, correlationId, company, reference, fieldsChanged, notificationResults, override, documentMetadata, immutable]
       properties:
         id: { type: string }
+        eventType: { type: string }
         action: { type: string }
         outcome: { type: string, enum: [success, failed, denied, idempotent_replay] }
         entityType: { type: string, enum: [rfq, order] }
         entityId: { type: string, format: uuid }
-        actorRole: { $ref: '#/components/schemas/WorkflowActorRole' }
-        fromStatus: { type: string }
-        toStatus: { type: string }
-        isOverride: { type: boolean }
-        createdAt: { type: string, format: date-time }
+        previousStatus: { type: string }
+        newStatus: { type: string }
+        actingUser:
+          type: object
+          required: [id, displayName]
+          properties:
+            id: { type: string }
+            displayName: { type: string }
+        actingRole: { $ref: '#/components/schemas/WorkflowActorRole' }
+        timestamp: { type: string, format: date-time }
+        requestId: { type: string }
+        correlationId: { type: string }
+        company:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string }
+            name: { type: string }
+        reference: { type: string }
+        fieldsChanged: { type: array, items: { type: string } }
+        reason: { type: string }
+        notificationResults:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        override:
+          type: object
+          required: [used, reason]
+          properties:
+            used: { type: boolean }
+            reason: { type: string }
+        documentMetadata:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        immutable: { type: boolean, const: true }
     DocumentResponse:
       type: object
       required: [data]

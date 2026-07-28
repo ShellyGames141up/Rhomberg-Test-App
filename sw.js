@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rhomberg-app-preview-v33';
+const CACHE_NAME = 'rhomberg-app-preview-v34';
 
 const APP_FILES = [
   './',

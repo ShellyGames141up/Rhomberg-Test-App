@@ -8,10 +8,10 @@ Use this form as the checkpoint for continuing the project on another computer.
 |---|---|
 | Repository | `ShellyGames141up/Rhomberg-Test-App` |
 | Branch | `agent/improve-theme-readability-and-reps` |
-| App version | `4.2.0` |
+| App version | `4.3.0` |
 | Checkpoint date | 27 July 2026 |
-| Completed phase | Prompt 10 Dispatch workspace |
-| Last stopping point | The Dispatch queue, collection/delivery actions, proof metadata, notifications, audit and customer-safe projections are complete in mock mode. Stop before the next approved prompt. |
+| Completed phase | Prompt 11 complete order timeline and audit trail |
+| Last stopping point | Prompt 10 Dispatch remains complete. Customer-safe timelines and a manager/administrator-only immutable audit workspace are now complete in mock mode. Stop before the next approved prompt. |
 | Preview mode | GitHub Pages browser mock remains enabled |
 | Production connection | Not connected; API and PostgreSQL material remain proposed contracts only |
 
@@ -116,7 +116,8 @@ Use this form as the checkpoint for continuing the project on another computer.
 
 | Check | Result |
 |---|---|
-| `npm test` | Passed for version 4.2: Dispatch routes, validation, visibility, audit and notifications plus all existing suites |
+| `npm test` | Passed for version 4.3: Dispatch routes, customer timeline isolation, immutable audit contracts, visibility, notifications and all existing suites |
+| In-app browser QA | Passed: manager audit navigation and event rendering, customer-only company records, sanitised customer timeline, and desktop preview watermark placement |
 | `npm run check` | Passed for 54 React/source modules and relative imports |
 | `npm run check:css` | Passed |
 | `npm run build:previews` | Passed; four standalone preview artifacts and the combined GitHub Pages artifact were generated |
