@@ -8,6 +8,7 @@ export const STORE_KEYS = Object.freeze({
   orders: 'rhombergPreviewOrdersV1',
   workflowState: 'rhombergPreviewWorkflowStateV1',
   audit: 'rhombergPreviewAuditV1',
+  orderDocuments: 'rhombergPreviewOrderDocumentsV1',
   notifications: 'rhombergPreviewNotificationsV1',
   notificationPreferences: 'rhombergPreviewNotificationPreferencesV1',
   personalisation: 'rhombergPreviewPersonalisationV1',

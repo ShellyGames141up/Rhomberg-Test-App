@@ -26,7 +26,7 @@ CREATE TYPE app.fulfilment_method AS ENUM ('delivery', 'collect');
 CREATE TYPE app.dispatch_method AS ENUM ('collection', 'company_delivery', 'courier', 'third_party_delivery');
 CREATE TYPE app.dispatch_proof_type AS ENUM ('signed_delivery_note', 'collection_confirmation', 'courier_confirmation', 'photograph', 'other');
 CREATE TYPE app.acceptance_type AS ENUM ('purchase_order_received', 'payment_confirmed', 'written_acceptance_received', 'account_customer_authorisation', 'other');
-CREATE TYPE app.document_kind AS ENUM ('purchase_order', 'quotation', 'order_acceptance_evidence', 'expediting_evidence', 'dispatch_proof', 'datasheet', 'certificate', 'customer_attachment', 'other');
+CREATE TYPE app.document_kind AS ENUM ('purchase_order', 'quotation', 'order_acceptance_evidence', 'expediting_evidence', 'dispatch_proof', 'order_summary_customer', 'order_summary_internal', 'datasheet', 'certificate', 'customer_attachment', 'other');
 CREATE TYPE app.scan_status AS ENUM ('pending', 'clean', 'rejected', 'failed');
 CREATE TYPE app.notification_channel AS ENUM ('in_app', 'email', 'push');
 CREATE TYPE app.notification_delivery_status AS ENUM (
@@ -732,8 +732,13 @@ CREATE TABLE app.email_outbox (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   enquiry_id uuid REFERENCES app.enquiries(id) ON DELETE CASCADE,
   order_id uuid REFERENCES app.orders(id) ON DELETE CASCADE,
+  document_id uuid REFERENCES app.uploaded_documents(id),
   template_key text NOT NULL,
+  recipient_type text CHECK (recipient_type IS NULL OR recipient_type IN ('manual', 'representative', 'internal')),
   recipient_reference text NOT NULL,
+  recipient_email citext,
+  external_recipient boolean NOT NULL DEFAULT false,
+  external_recipient_confirmed_at timestamptz,
   payload jsonb NOT NULL,
   status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'sent', 'failed', 'cancelled')),
   attempt_count integer NOT NULL DEFAULT 0,
@@ -741,7 +746,10 @@ CREATE TABLE app.email_outbox (
   last_error_code text,
   created_at timestamptz NOT NULL DEFAULT now(),
   sent_at timestamptz,
-  CONSTRAINT email_parent CHECK (num_nonnulls(enquiry_id, order_id) >= 1)
+  CONSTRAINT email_parent CHECK (num_nonnulls(enquiry_id, order_id) >= 1),
+  CONSTRAINT email_external_confirmation CHECK (
+    NOT external_recipient OR external_recipient_confirmed_at IS NOT NULL
+  )
 );
 
 CREATE TABLE app.audit_events (

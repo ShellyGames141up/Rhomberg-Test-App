@@ -43,14 +43,27 @@ All credentials above are fabricated and demonstration-only. GitHub Pages runs i
 ## Current development checkpoint
 
 - **Checkpoint date:** 28 July 2026
-- **Current version:** 4.3.0
-- **Last completed step:** Prompt 11 — complete order timeline and audit trail.
+- **Current version:** 4.4.0
+- **Last completed step:** Prompt 12 - PDF download and email sharing.
 
-This checkpoint includes the Prompt 10 Dispatch workflow and Prompt 11’s two deliberately separate histories: a sanitised customer order timeline and a manager/administrator-only immutable audit workspace. Audit entries now expose request/correlation context, actor, company/reference, changed fields, comments, notification outcomes, override use and safe document metadata without leaking those details to customers.
+This checkpoint adds branded customer-safe and internal operational order-summary PDFs, browser preview/download, simulated email sharing, external-recipient confirmation, internal-copy protection and immutable audit events for every generation and send.
 
 All automated tests, source checks, stylesheet checks, static preview builds and the API-only production-candidate safety build passed before this checkpoint was committed. The GitHub Pages preview remains browser-local and uses fabricated data only.
 
-Development stopped after completing and validating Prompt 11. The next workflow phase has not been started, and no real database, email provider, push provider, courier integration or document-storage service has been connected. Continue from [the progress handoff](docs/HOME_PC_PROGRESS_HANDOFF.md) and [Dispatch workspace documentation](docs/DISPATCH_WORKSPACE.md).
+Development stopped after completing and validating Prompt 12. The next workflow phase has not been started, and no real database, email provider, push provider, courier integration or document-storage service has been connected. Continue from [the progress handoff](docs/HOME_PC_PROGRESS_HANDOFF.md) and [order-summary PDF documentation](docs/ORDER_SUMMARY_PDF.md).
+
+## Included in version 4.4
+
+- Professional multi-page Rhomberg order-summary PDF generation with classification, dates and page numbering
+- Customer-safe and internal operational copies built from separate projections
+- Product configuration, requirements, Planning, Expediting, Dispatch and customer-visible timeline sections
+- Browser preview, download and fresh-copy generation for authorised internal roles
+- Manual, assigned-representative and allow-listed internal email recipients
+- External-recipient validation and explicit confirmation
+- Simulated mock email delivery only; no real email or credentials
+- Immutable PDF-generation and email-delivery audit events
+- Future secure Microsoft 365/SMTP, private-storage and outbox API contracts
+- Automated privacy, permission, validation, PDF-byte and audit tests
 
 ## Included in version 4.3
 
@@ -63,7 +76,7 @@ Development stopped after completing and validating Prompt 11. The next workflow
 - Proposed PostgreSQL mutation-rejection trigger and management-only audit RLS
 - Expanded API/OpenAPI contracts and tests for immutability and customer-data leakage prevention
 
-## Included in version 4.3
+## Included in version 4.2
 
 - Dedicated desktop-optimised Dispatch workspace in the existing responsive Operations application
 - Controlled queue for `awaiting_dispatch`, `ready_for_collection` and `out_for_delivery`, plus handover-confirmed records awaiting final completion

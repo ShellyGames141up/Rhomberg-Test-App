@@ -12,6 +12,7 @@ import {
   filterDispatchOrders,
 } from '../domain/dispatch.js';
 import { statusById } from '../domain/tracking.js';
+import { OrderSummaryPanel } from './OrderSummaryPanel.jsx';
 import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
 
 const formatDateTime = value => {
@@ -61,6 +62,7 @@ export function DispatchDashboard({
   serviceMode,
   dispatchOptions,
   focusRecordId = '',
+  documentActions,
 }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
@@ -139,6 +141,8 @@ export function DispatchDashboard({
             onAction={onAction}
             account={account}
             dispatchOptions={dispatchOptions}
+            documentActions={documentActions}
+            serviceMode={serviceMode}
           />
         ))}
         {!filtered.length && (
@@ -156,7 +160,7 @@ export function DispatchDashboard({
   );
 }
 
-function DispatchOrder({ order, expanded, onToggle, onAction, account, dispatchOptions }) {
+function DispatchOrder({ order, expanded, onToggle, onAction, account, dispatchOptions, documentActions, serviceMode }) {
   const dispatch = order.dispatch || {};
   const stage = statusById(order.trackingStatus, 'order');
   const priority = dispatchOrderPriority(order);
@@ -220,6 +224,8 @@ function DispatchOrder({ order, expanded, onToggle, onAction, account, dispatchO
             <div className="planning-section-heading"><div><span className="eyebrow">Configured units</span><h3>{lineItems} immutable line item{lineItems === 1 ? '' : 's'}</h3></div><small>Order snapshot</small></div>
             <div className="dispatch-product-grid">{(order.items || []).map(item => <span key={item.lineId || `${item.productId}-${item.code}`}><img src={item.image} alt="" /><i>{item.code}</i><strong>{item.name}</strong><small>Quantity {item.quantity || 1}</small></span>)}</div>
           </section>
+
+          {documentActions && <OrderSummaryPanel order={order} serviceMode={serviceMode} {...documentActions} />}
 
           {primaryAction && (
             <WorkflowActionPanel

@@ -695,6 +695,149 @@ paths:
           description: Image removed from the signed-in customer account
         '404':
           $ref: '#/components/responses/ApiError'
+  /orders/{orderId}/summary-sharing-options:
+    get:
+      operationId: getOrderSummarySharingOptions
+      description: Returns only the assigned representative and internal recipients authorised for the signed-in internal user.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Authorised recipient choices
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [canEmail, internalRecipients]
+                    properties:
+                      canEmail: { type: boolean }
+                      representative:
+                        type: object
+                        nullable: true
+                        properties:
+                          name: { type: string }
+                          email: { type: string, format: email }
+                      internalRecipients:
+                        type: array
+                        items:
+                          type: object
+                          required: [id, name, role, email]
+                          properties:
+                            id: { type: string, format: uuid }
+                            name: { type: string }
+                            role: { type: string }
+                            email: { type: string, format: email }
+        '403':
+          $ref: '#/components/responses/ApiError'
+        '404':
+          $ref: '#/components/responses/ApiError'
+  /orders/{orderId}/summary-pdfs:
+    post:
+      operationId: generateOrderSummaryPdf
+      description: Generates a fresh private customer-safe or internal operational PDF and appends an immutable audit event.
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [copyType]
+              properties:
+                copyType: { type: string, enum: [customer, internal] }
+      responses:
+        '201':
+          description: Private document metadata with short-lived authorised URLs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [id, orderId, copyType, classification, fileName, mimeType, sizeBytes, generatedAt, generatedBy, previewUrl, downloadUrl]
+                    properties:
+                      id: { type: string, format: uuid }
+                      orderId: { type: string, format: uuid }
+                      copyType: { type: string, enum: [customer, internal] }
+                      classification: { type: string, enum: [CUSTOMER COPY, INTERNAL - OPERATIONAL COPY] }
+                      fileName: { type: string }
+                      mimeType: { type: string, enum: [application/pdf] }
+                      sizeBytes: { type: integer, minimum: 1 }
+                      generatedAt: { type: string, format: date-time }
+                      generatedBy:
+                        type: object
+                        properties:
+                          id: { type: string, format: uuid }
+                          displayName: { type: string }
+                          role: { type: string }
+                      previewUrl: { type: string, format: uri, description: Short-lived, authorised URL. }
+                      downloadUrl: { type: string, format: uri, description: Short-lived, authorised URL. }
+        '403':
+          $ref: '#/components/responses/ApiError'
+        '404':
+          $ref: '#/components/responses/ApiError'
+        '422':
+          $ref: '#/components/responses/ApiError'
+  /orders/{orderId}/summary-emails:
+    post:
+      operationId: emailOrderSummaryPdf
+      description: Validates the recipient and queues delivery through the secure outbox. Internal copies cannot be sent externally.
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [documentId, recipientType]
+              properties:
+                documentId: { type: string, format: uuid }
+                recipientType: { type: string, enum: [manual, representative, internal] }
+                recipientEmail: { type: string, format: email }
+                confirmedExternal: { type: boolean, default: false }
+      responses:
+        '202':
+          description: Email accepted by the retry-ready outbox
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [id, channel, status, recipientType, recipientEmail, external, documentId, createdAt]
+                    properties:
+                      id: { type: string, format: uuid }
+                      channel: { type: string, enum: [email] }
+                      status: { type: string, enum: [email_pending] }
+                      recipientType: { type: string, enum: [manual, representative, internal] }
+                      recipientEmail: { type: string, format: email }
+                      external: { type: boolean }
+                      documentId: { type: string, format: uuid }
+                      createdAt: { type: string, format: date-time }
+        '403':
+          $ref: '#/components/responses/ApiError'
+        '404':
+          $ref: '#/components/responses/ApiError'
+        '409':
+          $ref: '#/components/responses/ApiError'
+        '422':
+          $ref: '#/components/responses/ApiError'
   /notifications:
     get:
       operationId: listAuthorisedNotifications

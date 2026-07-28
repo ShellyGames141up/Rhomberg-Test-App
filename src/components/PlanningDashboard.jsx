@@ -10,6 +10,7 @@ import {
   planningQueueCounts,
 } from '../domain/planningQueue.js';
 import { statusById } from '../domain/tracking.js';
+import { OrderSummaryPanel } from './OrderSummaryPanel.jsx';
 import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
 
 const formatDateTime = value => {
@@ -45,7 +46,7 @@ const primaryActionFor = order => {
   return (order.allowedWorkflowActions || []).find(action => action.action === actionId);
 };
 
-export function PlanningDashboard({ account, orders, onAction, serviceMode, planningOptions, focusRecordId = '' }) {
+export function PlanningDashboard({ account, orders, onAction, serviceMode, planningOptions, focusRecordId = '', documentActions }) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [priority, setPriority] = useState('all');
@@ -123,6 +124,8 @@ export function PlanningDashboard({ account, orders, onAction, serviceMode, plan
             onAction={onAction}
             account={account}
             planningOptions={options}
+            documentActions={documentActions}
+            serviceMode={serviceMode}
           />
         ))}
         {!filtered.length && (
@@ -140,7 +143,7 @@ export function PlanningDashboard({ account, orders, onAction, serviceMode, plan
   );
 }
 
-function PlanningOrder({ order, expanded, onToggle, onAction, account, planningOptions }) {
+function PlanningOrder({ order, expanded, onToggle, onAction, account, planningOptions, documentActions, serviceMode }) {
   const stage = statusById(order.trackingStatus, 'order');
   const priority = planningOrderPriority(order);
   const primaryAction = primaryActionFor(order);
@@ -196,6 +199,8 @@ function PlanningOrder({ order, expanded, onToggle, onAction, account, planningO
               {planning.documentReferences?.length > 0 && <p className="planning-saved-notes"><strong>Document references</strong>{planning.documentReferences.join(' · ')}</p>}
             </section>
           )}
+
+          {documentActions && <OrderSummaryPanel order={order} serviceMode={serviceMode} {...documentActions} />}
 
           {primaryAction ? (
             <WorkflowActionPanel

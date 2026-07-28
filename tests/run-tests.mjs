@@ -6,5 +6,6 @@ await import('./expediting.test.mjs');
 await import('./dispatch.test.mjs');
 await import('./workflow.test.mjs');
 await import('./notifications.test.mjs');
+await import('./order-documents.test.mjs');
 await import('./mock-services.test.mjs');
 await import('./platform-previews.test.mjs');

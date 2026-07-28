@@ -25,6 +25,12 @@ import {
   notificationRequestsForWorkflowAction,
   retryMockDelivery,
 } from '../../domain/notifications.js';
+import {
+  buildOrderSummaryModel,
+  generateOrderSummaryPdf,
+  ORDER_COPY_TYPES,
+  validateOrderEmailRequest,
+} from '../../domain/orderDocuments.js';
 import { PLANNING_PRIORITIES } from '../../domain/planningQueue.js';
 import {
   createDeniedWorkflowAudit,
@@ -368,6 +374,8 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   };
   const readAuditEvents = () => store.get(STORE_KEYS.audit, []);
   const appendAuditEvent = event => store.set(STORE_KEYS.audit, [...readAuditEvents(), event]);
+  const readOrderDocuments = () => store.get(STORE_KEYS.orderDocuments, []);
+  const writeOrderDocuments = documents => store.set(STORE_KEYS.orderDocuments, documents);
   const presentAuditEvent = event => {
     const record = readAllRecords().find(item => item.id === event.entityId);
     const actor = readAccounts().find(item => item.id === event.actorId);
@@ -788,6 +796,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     }
     writeWorkflowState(workflowState);
     if (!store.has(STORE_KEYS.audit)) store.set(STORE_KEYS.audit, []);
+    if (!store.has(STORE_KEYS.orderDocuments)) store.set(STORE_KEYS.orderDocuments, []);
     if (!store.has(STORE_KEYS.notifications)) store.set(STORE_KEYS.notifications, []);
     if (!store.has(STORE_KEYS.notificationPreferences)) store.set(STORE_KEYS.notificationPreferences, {});
     if (!store.has(STORE_KEYS.personalisation)) store.set(STORE_KEYS.personalisation, {});
@@ -1282,6 +1291,186 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     },
   };
 
+  const orderDocuments = {
+    async getSharingOptions(orderId) {
+      const account = requireAccount();
+      const order = readAllOrders().find(item => item.id === orderId);
+      if (!order || !canReadRecord(account, order)) throw new ServiceError('The order was not found.', { code: 'ORDER_NOT_FOUND', status: 404 });
+      if (!accountCan(account, PERMISSIONS.EXPORT_ORDER_PDF)) throw new ServiceError('Your role cannot export order summaries.', { code: 'FORBIDDEN', status: 403 });
+      const representativeId = order.representativeId || order.selectedRep?.id || '';
+      const representativeAccount = readAccounts().find(item => item.representativeId === representativeId);
+      const representativeName = order.selectedRep?.name || representativeAccount?.contact || 'Assigned representative';
+      const simulatedRepresentativeEmail = `${representativeName.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '') || 'representative'}@rhomberg.example.invalid`;
+      return clone({
+        canEmail: accountCan(account, PERMISSIONS.EMAIL_ORDER_SUMMARY),
+        representative: {
+          name: representativeName,
+          email: representativeAccount?.email || simulatedRepresentativeEmail,
+        },
+        internalRecipients: readAccounts()
+          .filter(item => accountCan(item, PERMISSIONS.ACCESS_INTERNAL_WORKSPACE))
+          .map(item => ({ id: item.id, name: item.contact, role: item.role, email: item.email }))
+          .sort((left, right) => left.name.localeCompare(right.name)),
+      });
+    },
+
+    async generate(orderId, { copyType = ORDER_COPY_TYPES.CUSTOMER } = {}) {
+      const account = requireAccount();
+      const order = readAllOrders().find(item => item.id === orderId);
+      if (!order || !canReadRecord(account, order)) throw new ServiceError('The order was not found.', { code: 'ORDER_NOT_FOUND', status: 404 });
+      if (!accountCan(account, PERMISSIONS.EXPORT_ORDER_PDF)) {
+        appendAuditEvent({
+          id: makeId('audit'), eventType: 'order_summary_pdf_denied', action: 'order_summary.pdf_generated', outcome: 'denied',
+          entityType: 'order', entityId: order.id, companyId: order.companyId, companyName: order.company, reference: order.reference,
+          actorId: account.id, actorDisplayName: account.contact, actorRole: account.role, reason: 'Missing export_order_pdf permission',
+          details: { copyType }, createdAt: now().toISOString(),
+        });
+        throw new ServiceError('Your role cannot export order summaries.', { code: 'FORBIDDEN', status: 403 });
+      }
+      if (!Object.values(ORDER_COPY_TYPES).includes(copyType)) {
+        appendAuditEvent({
+          id: makeId('audit'), eventType: 'order_summary_pdf_failed', action: 'order_summary.pdf_generated', outcome: 'failed',
+          entityType: 'order', entityId: order.id, companyId: order.companyId, companyName: order.company, reference: order.reference,
+          actorId: account.id, actorDisplayName: account.contact, actorRole: account.role, reason: 'Invalid PDF copy type',
+          details: { copyType }, createdAt: now().toISOString(),
+        });
+        throw new ServiceError('Choose a recognised PDF copy type.', { code: 'INVALID_COPY_TYPE', status: 422 });
+      }
+      const generatedAt = now().toISOString();
+      const documentId = makeId('order-summary');
+      const model = buildOrderSummaryModel({
+        order,
+        copyType,
+        generatedAt,
+        generatedBy: account.contact || account.email,
+      });
+      const bytesBase64 = await generateOrderSummaryPdf(model);
+      const fileName = `${order.reference}-${copyType === ORDER_COPY_TYPES.INTERNAL ? 'internal-operational' : 'customer-copy'}.pdf`;
+      const metadata = {
+        id: documentId,
+        orderId,
+        orderReference: order.reference,
+        companyId: order.companyId,
+        copyType,
+        classification: model.classification,
+        fileName,
+        mimeType: 'application/pdf',
+        sizeBytes: Math.ceil(bytesBase64.length * 0.75),
+        generatedAt,
+        generatedBy: { id: account.id, displayName: account.contact, role: account.role },
+      };
+      writeOrderDocuments([...readOrderDocuments(), metadata]);
+      appendAuditEvent({
+        id: makeId('audit'),
+        eventType: 'order_summary_pdf_generated',
+        action: 'order_summary.pdf_generated',
+        outcome: 'success',
+        entityType: 'order',
+        entityId: order.id,
+        companyId: order.companyId,
+        companyName: order.company,
+        reference: order.reference,
+        actorId: account.id,
+        actorDisplayName: account.contact,
+        actorRole: account.role,
+        fieldsChanged: [],
+        documentMetadata: [metadata],
+        details: { copyType, classification: model.classification },
+        createdAt: generatedAt,
+      });
+      return clone({ ...metadata, bytesBase64 });
+    },
+
+    async email(orderId, input = {}) {
+      const account = requireAccount();
+      const order = readAllOrders().find(item => item.id === orderId);
+      if (!order || !canReadRecord(account, order)) throw new ServiceError('The order was not found.', { code: 'ORDER_NOT_FOUND', status: 404 });
+      if (!accountCan(account, PERMISSIONS.EMAIL_ORDER_SUMMARY)) {
+        appendAuditEvent({
+          id: makeId('audit'), eventType: 'order_summary_email_denied', action: 'order_summary.email_sent', outcome: 'denied',
+          entityType: 'order', entityId: order.id, companyId: order.companyId, companyName: order.company, reference: order.reference,
+          actorId: account.id, actorDisplayName: account.contact, actorRole: account.role, reason: 'Missing email_order_summary permission',
+          details: { documentId: input.documentId || '', recipientType: input.recipientType || '' }, createdAt: now().toISOString(),
+        });
+        throw new ServiceError('Your role cannot email order summaries.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const document = readOrderDocuments().find(item => item.id === input.documentId && item.orderId === orderId);
+      if (!document) {
+        appendAuditEvent({
+          id: makeId('audit'), eventType: 'order_summary_email_failed', action: 'order_summary.email_sent', outcome: 'failed',
+          entityType: 'order', entityId: order.id, companyId: order.companyId, companyName: order.company, reference: order.reference,
+          actorId: account.id, actorDisplayName: account.contact, actorRole: account.role, reason: 'Generated document not found',
+          details: { documentId: input.documentId || '', recipientType: input.recipientType || '' }, createdAt: now().toISOString(),
+        });
+        throw new ServiceError('Generate a fresh PDF before emailing it.', { code: 'ORDER_DOCUMENT_NOT_FOUND', status: 404 });
+      }
+      const options = await orderDocuments.getSharingOptions(orderId);
+      let recipient;
+      try {
+        recipient = validateOrderEmailRequest(input, options);
+      } catch (error) {
+        appendAuditEvent({
+          id: makeId('audit'), eventType: 'order_summary_email_denied', action: 'order_summary.email_sent', outcome: 'denied',
+          entityType: 'order', entityId: order.id, companyId: order.companyId, companyName: order.company, reference: order.reference,
+          actorId: account.id, actorDisplayName: account.contact, actorRole: account.role, reason: error.message,
+          documentMetadata: [document],
+          details: { recipientType: input.recipientType || '', recipientEmail: String(input.recipientEmail || '').trim().toLowerCase(), confirmedExternal: input.confirmedExternal === true },
+          createdAt: now().toISOString(),
+        });
+        throw new ServiceError(error.message, { code: 'INVALID_EMAIL_RECIPIENT', status: 422, fieldErrors: { recipientEmail: error.message } });
+      }
+      if (document.copyType === ORDER_COPY_TYPES.INTERNAL && recipient.external) {
+        appendAuditEvent({
+          id: makeId('audit'), eventType: 'order_summary_email_denied', action: 'order_summary.email_sent', outcome: 'denied',
+          entityType: 'order', entityId: order.id, companyId: order.companyId, companyName: order.company, reference: order.reference,
+          actorId: account.id, actorDisplayName: account.contact, actorRole: account.role, reason: 'Internal copy cannot be sent externally',
+          documentMetadata: [document],
+          details: { recipientType: recipient.recipientType, recipientEmail: recipient.recipientEmail, external: true, confirmedExternal: true },
+          createdAt: now().toISOString(),
+        });
+        throw new ServiceError('Internal operational copies cannot be sent to an external recipient. Generate a customer-safe copy instead.', { code: 'INTERNAL_COPY_EXTERNAL_RECIPIENT', status: 422 });
+      }
+      const sentAt = now().toISOString();
+      const delivery = {
+        id: makeId('order-summary-email'),
+        channel: 'email',
+        status: 'email_sent',
+        simulated: true,
+        recipientType: recipient.recipientType,
+        recipientEmail: recipient.recipientEmail,
+        external: recipient.external,
+        documentId: document.id,
+        sentAt,
+      };
+      appendAuditEvent({
+        id: makeId('audit'),
+        eventType: 'order_summary_email_sent',
+        action: 'order_summary.email_sent',
+        outcome: 'success',
+        entityType: 'order',
+        entityId: order.id,
+        companyId: order.companyId,
+        companyName: order.company,
+        reference: order.reference,
+        actorId: account.id,
+        actorDisplayName: account.contact,
+        actorRole: account.role,
+        fieldsChanged: [],
+        notificationResults: [{ channel: 'email', status: 'email_sent', simulated: true }],
+        documentMetadata: [document],
+        details: {
+          recipientType: recipient.recipientType,
+          recipientEmail: recipient.recipientEmail,
+          external: recipient.external,
+          confirmedExternal: recipient.external ? input.confirmedExternal === true : false,
+          simulated: true,
+        },
+        createdAt: sentAt,
+      });
+      return clone(delivery);
+    },
+  };
+
   const audit = {
     async list({ entityId = '', entityType = '', outcome = '', search = '' } = {}) {
       const account = requireAccount();
@@ -1707,6 +1896,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     orders,
     workflow,
     tracking: workflow,
+    orderDocuments,
     audit,
     notifications,
     planning,

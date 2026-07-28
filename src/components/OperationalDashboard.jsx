@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { roleProfileFor } from '../domain/accessControl.js';
 import { statusById, trackingStatuses } from '../domain/tracking.js';
+import { OrderSummaryPanel } from './OrderSummaryPanel.jsx';
 import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
 
 const TERMINAL_STATUSES = new Set(['completed', 'cancelled', 'expired', 'converted_to_order', 'archived']);
@@ -15,7 +16,7 @@ const searchableText = enquiry => [
   enquiry.selectedRep?.name, enquiry.selectedRep?.code, enquiry.selectedRep?.branchName,
 ].filter(Boolean).join(' ').toLowerCase();
 
-export function OperationalDashboard({ account, enquiries, onAction, canUpdate, serviceMode, planningOptions, expeditingOptions, dispatchOptions, focusRecordId = '' }) {
+export function OperationalDashboard({ account, enquiries, onAction, canUpdate, serviceMode, planningOptions, expeditingOptions, dispatchOptions, focusRecordId = '', documentActions }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState(canUpdate ? 'actionable' : 'active');
   const [openId, setOpenId] = useState(null);
@@ -64,7 +65,7 @@ export function OperationalDashboard({ account, enquiries, onAction, canUpdate, 
       <div className="expeditor-result-heading"><div><span className="eyebrow">{copy.queue}</span><h2>{filtered.length} matching record{filtered.length === 1 ? '' : 's'}</h2></div><small>Oldest updates first</small></div>
 
       <div className="expeditor-order-list">
-        {filtered.map(enquiry => <ExpeditorOrderCard key={enquiry.id} enquiry={enquiry} expanded={openId === enquiry.id} onToggle={() => setOpenId(current => current === enquiry.id ? null : enquiry.id)} onAction={onAction} canUpdate={canUpdate} account={account} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} />)}
+        {filtered.map(enquiry => <ExpeditorOrderCard key={enquiry.id} enquiry={enquiry} expanded={openId === enquiry.id} onToggle={() => setOpenId(current => current === enquiry.id ? null : enquiry.id)} onAction={onAction} canUpdate={canUpdate} account={account} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} documentActions={documentActions} serviceMode={serviceMode} />)}
         {!filtered.length && <div className="expeditor-empty"><span>✓</span><strong>No matching requests</strong><p>Change the search or filter to view other work.</p></div>}
       </div>
 
@@ -73,7 +74,7 @@ export function OperationalDashboard({ account, enquiries, onAction, canUpdate, 
   );
 }
 
-function ExpeditorOrderCard({ enquiry, expanded, onToggle, onAction, canUpdate, account, planningOptions, expeditingOptions, dispatchOptions }) {
+function ExpeditorOrderCard({ enquiry, expanded, onToggle, onAction, canUpdate, account, planningOptions, expeditingOptions, dispatchOptions, documentActions, serviceMode }) {
   const status = statusById(enquiry.trackingStatus, enquiry.workflowType);
   const quantity = (enquiry.items || []).reduce((sum, item) => sum + Number(item.quantity || 1), 0);
   const availableActions = (enquiry.allowedWorkflowActions || []).filter(action => action.action !== 'override_workflow');
@@ -91,6 +92,7 @@ function ExpeditorOrderCard({ enquiry, expanded, onToggle, onAction, canUpdate, 
         <div className="expeditor-order-detail">
           <div className="expeditor-facts"><span><small>Application</small><strong>{enquiry.application}</strong></span><span><small>PO</small><strong>{enquiry.poNumber || enquiry.poFileName || 'Not supplied'}</strong></span><span><small>Supply</small><strong>{enquiry.fulfilment === 'collect' ? 'Collection' : 'Delivery'}</strong></span><span><small>Contact</small><strong>{enquiry.phone}<br />{enquiry.email}</strong></span></div>
           <div className="expeditor-products">{(enquiry.items || []).map(item => <span key={item.lineId}><img src={item.image} alt="" /><strong>{item.code}</strong><small>{item.name}</small><b>× {item.quantity}</b></span>)}</div>
+          {enquiry.workflowType === 'order' && documentActions && <OrderSummaryPanel order={enquiry} serviceMode={serviceMode} {...documentActions} />}
           {canUpdate && availableActions.length
             ? <WorkflowActionPanel record={enquiry} actions={availableActions} onAction={onAction} account={account} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} />
             : <p className="tracking-storage-note expeditor-readonly-note"><span>i</span><span><strong>{canUpdate ? 'No action at this stage' : 'Read-only role'}</strong> {canUpdate ? 'This record must first be completed by the role responsible for its current workflow stage.' : 'Your account may view this record but cannot perform workflow actions.'}</span></p>}

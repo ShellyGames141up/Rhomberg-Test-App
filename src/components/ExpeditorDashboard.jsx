@@ -14,6 +14,7 @@ import {
   missingRequiredExpeditorSteps,
 } from '../domain/expediting.js';
 import { statusById } from '../domain/tracking.js';
+import { OrderSummaryPanel } from './OrderSummaryPanel.jsx';
 import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
 
 const formatDateTime = value => {
@@ -49,7 +50,7 @@ const ageLabel = order => {
   return `${days} day${days === 1 ? '' : 's'} old`;
 };
 
-export function ExpeditorDashboard({ account, orders, onAction, serviceMode, expeditingOptions, focusRecordId = '' }) {
+export function ExpeditorDashboard({ account, orders, onAction, serviceMode, expeditingOptions, focusRecordId = '', documentActions }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('oldest_update');
@@ -130,6 +131,8 @@ export function ExpeditorDashboard({ account, orders, onAction, serviceMode, exp
             account={account}
             options={options}
             now={now}
+            documentActions={documentActions}
+            serviceMode={serviceMode}
           />
         ))}
         {!filtered.length && (
@@ -147,7 +150,7 @@ export function ExpeditorDashboard({ account, orders, onAction, serviceMode, exp
   );
 }
 
-function ExpeditingOrder({ order, expanded, onToggle, onAction, account, options, now }) {
+function ExpeditingOrder({ order, expanded, onToggle, onAction, account, options, now, documentActions, serviceMode }) {
   const stepById = id => options.progressSteps.find(item => item.id === id) || expeditorProgressStepById(id);
   const stage = statusById(order.trackingStatus, 'order');
   const priority = expeditorOrderPriority(order);
@@ -212,6 +215,8 @@ function ExpeditingOrder({ order, expanded, onToggle, onAction, account, options
               ))}
             </div>
           </section>
+
+          {documentActions && <OrderSummaryPanel order={order} serviceMode={serviceMode} {...documentActions} />}
 
           {startAction && (
             <WorkflowActionPanel record={order} actions={[startAction]} preferredAction="start_expediting" onAction={onAction} account={account} expeditingOptions={options} title="Start Expediting work" description="Accept the planned order and create its first customer-visible progress update" />

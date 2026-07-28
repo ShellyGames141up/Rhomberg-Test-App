@@ -445,6 +445,26 @@ export default function App() {
     return delivery;
   };
 
+  const orderDocumentActions = useMemo(() => ({
+    onGetOptions: orderId => services.orderDocuments.getSharingOptions(orderId),
+    onGenerate: async (orderId, copyType) => {
+      const document = await services.orderDocuments.generate(orderId, { copyType });
+      if (accountCan(account, PERMISSIONS.READ_AUDIT_HISTORY)) {
+        services.audit.list().then(setAuditEvents).catch(() => undefined);
+      }
+      notify(`${document.classification} generated`);
+      return document;
+    },
+    onEmail: async (orderId, input) => {
+      const delivery = await services.orderDocuments.email(orderId, input);
+      if (accountCan(account, PERMISSIONS.READ_AUDIT_HISTORY)) {
+        services.audit.list().then(setAuditEvents).catch(() => undefined);
+      }
+      notify(services.mode === 'mock' ? 'Simulated PDF email recorded' : 'PDF email request submitted');
+      return delivery;
+    },
+  }), [account]);
+
   const openNotificationRecord = notification => {
     setNotificationTarget({
       entityId: notification.entityId,
@@ -552,12 +572,12 @@ export default function App() {
                 && notificationTarget?.entityType !== 'order'
                 ? <SalesRepresentativeDashboard account={account} rfqs={enquiries} onAction={performWorkflowAction} serviceMode={services.mode} focusRecordId={notificationTarget?.entityId} />
                 : isPlanningWorkspace
-                  ? <PlanningDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} planningOptions={planningOptions} focusRecordId={notificationTarget?.entityId} />
+                  ? <PlanningDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} planningOptions={planningOptions} focusRecordId={notificationTarget?.entityId} documentActions={orderDocumentActions} />
                   : isExpeditorWorkspace
-                    ? <ExpeditorDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} expeditingOptions={expeditingOptions} focusRecordId={notificationTarget?.entityId} />
+                    ? <ExpeditorDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} expeditingOptions={expeditingOptions} focusRecordId={notificationTarget?.entityId} documentActions={orderDocumentActions} />
                     : isDispatchWorkspace
-                      ? <DispatchDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} />
-                      : <OperationalDashboard account={account} enquiries={staffRecords} onAction={performWorkflowAction} canUpdate={canPerformWorkflow} serviceMode={services.mode} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} />)}
+                      ? <DispatchDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} documentActions={orderDocumentActions} />
+                      : <OperationalDashboard account={account} enquiries={staffRecords} onAction={performWorkflowAction} canUpdate={canPerformWorkflow} serviceMode={services.mode} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} documentActions={orderDocumentActions} />)}
               {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
               {view === 'audit' && <AuditTrail events={auditEvents} serviceMode={services.mode} />}
               {view === 'account' && <Account account={account} enquiries={staffRecords} onSignOut={signOut} serviceMode={services.mode} />}

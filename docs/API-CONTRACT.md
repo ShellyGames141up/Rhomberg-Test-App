@@ -762,6 +762,46 @@ Multipart fields: `kind` (`profileImage` or `companyLogo`), `position` (`{"x":50
 
 Deletes or schedules deletion only when the image belongs to the signed-in user and authorised company. The response does not reveal whether an out-of-scope image exists.
 
+### Order-summary PDF generation and secure email sharing
+
+These endpoints require an authenticated internal session, record-scope access and the named `export_order_pdf` or `email_order_summary` permission. Customers cannot call them.
+
+#### `GET /orders/{orderId}/summary-sharing-options`
+
+Returns the assigned representative and an allow-listed set of active internal recipients that the signed-in user may select. It never returns arbitrary user-directory data or credentials.
+
+#### `POST /orders/{orderId}/summary-pdfs`
+
+```json
+{ "copyType": "customer" }
+```
+
+`copyType` is `customer` or `internal`. The backend re-reads the authorised order and renders a fresh, immutable PDF:
+
+- the customer copy is built from an explicit customer-safe projection and excludes internal notes, audit/provider metadata, staff comments, price-engine fields and non-approved technical fields;
+- the internal copy may add the authorised Planning, Expediting and Dispatch section, but still excludes credentials and private price-engine output;
+- the document includes Rhomberg branding, classification, generated date/user and page numbers;
+- the response contains document metadata and a short-lived preview/download URL. Production does not return raw base64 in JSON.
+
+Generation stores private document metadata and appends `order_summary.pdf_generated` with the copy type and generated document metadata. Object storage must use encryption, malware scanning where applicable, short retention for regenerated copies and no public bucket access.
+
+#### `POST /orders/{orderId}/summary-emails`
+
+```json
+{
+  "documentId": "document-uuid",
+  "recipientType": "manual",
+  "recipientEmail": "approved@example.com",
+  "confirmedExternal": true
+}
+```
+
+`recipientType` is `manual`, `representative` or `internal`. The server validates the address, resolves representative/internal recipients from authoritative records and requires `confirmedExternal: true` for every unrecognised external address. Internal operational copies may never be sent externally; the caller must generate a customer-safe copy.
+
+Response `202` records an outbox item with `email_pending`. A background worker sends through an approved Microsoft 365 application/mailbox or SMTP relay and updates it to `email_sent` or `email_failed`. The API and worker append immutable audit events containing actor, order, document, recipient type, safe delivery outcome and correlation ID. Provider tokens, SMTP passwords and full provider diagnostics are never returned to the browser or stored in source control.
+
+Production Microsoft 365 requires tenant/application approval, least-privilege mail permissions, a controlled sender mailbox, secret or certificate rotation, recipient/domain policy, attachment size limits, antivirus/DLP controls, retry/idempotency handling and delivery monitoring. SMTP requires an approved TLS relay, restricted sender identity, secret management and equivalent outbox/retry controls. No real credentials are included in this repository.
+
 ### Notifications and audit
 
 Customer record responses and internal audit responses are deliberately separate:

@@ -204,6 +204,20 @@ export function createApiServices(config = {}) {
     list: filters => client.get('/audit-events', { query: filters }),
   };
 
+  const orderDocuments = {
+    getSharingOptions: orderId => client.get(`/orders/${encodeURIComponent(orderId)}/summary-sharing-options`),
+    generate: (orderId, input) => client.post(
+      `/orders/${encodeURIComponent(orderId)}/summary-pdfs`,
+      input,
+      { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `order-pdf-${Date.now()}` } },
+    ),
+    email: (orderId, input) => client.post(
+      `/orders/${encodeURIComponent(orderId)}/summary-emails`,
+      input,
+      { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `order-email-${Date.now()}` } },
+    ),
+  };
+
   const notifications = {
     list: filters => client.get('/notifications', { query: filters }),
     markRead: notificationId => client.post(`/notifications/${encodeURIComponent(notificationId)}/read`, {}),
@@ -280,6 +294,7 @@ export function createApiServices(config = {}) {
     workflow,
     tracking: workflow,
     audit,
+    orderDocuments,
     notifications,
     planning,
     expediting,

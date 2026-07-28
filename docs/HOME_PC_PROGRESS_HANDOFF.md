@@ -7,15 +7,25 @@ Use this form as the checkpoint for continuing the project on another computer.
 | Field | Value |
 |---|---|
 | Repository | `ShellyGames141up/Rhomberg-Test-App` |
-| Branch | `agent/improve-theme-readability-and-reps` |
-| App version | `4.3.0` |
-| Checkpoint date | 27 July 2026 |
-| Completed phase | Prompt 11 complete order timeline and audit trail |
-| Last stopping point | Prompt 10 Dispatch remains complete. Customer-safe timelines and a manager/administrator-only immutable audit workspace are now complete in mock mode. Stop before the next approved prompt. |
+| Branch | `feature/prompt-12-pdf-sharing` |
+| App version | `4.4.0` |
+| Checkpoint date | 28 July 2026 |
+| Completed phase | Prompt 12 PDF download and email sharing |
+| Last stopping point | Branded customer-safe and internal operational PDFs, preview/download, simulated email sharing, recipient confirmation and audit events are complete in mock mode. Stop before the next approved prompt. |
 | Preview mode | GitHub Pages browser mock remains enabled |
 | Production connection | Not connected; API and PostgreSQL material remain proposed contracts only |
 
 ## What changed in this checkpoint
+
+- Added real multi-page Rhomberg order-summary PDF generation using `pdf-lib`.
+- Added separate allow-listed customer-safe and internal operational document models.
+- Added preview, download and fresh-copy controls to Planning, Expediting, Dispatch and management order details.
+- Added manual, assigned-representative and authorised-internal recipient modes.
+- Added recipient email validation, explicit external confirmation and a prohibition on sending internal copies externally.
+- Added simulated `email_sent` delivery without making a network email call.
+- Added immutable audit events for every generation and simulated send.
+- Added future private-storage, Microsoft 365/SMTP and transactional-outbox API contracts.
+- Added PDF privacy, permission, email-validation, byte-stream and audit tests.
 
 - Added one desktop-optimised Dispatch workspace with responsive mobile/tablet cards, queue KPIs, search, status/method filters and sorting.
 - Added structured collection, company delivery, courier and third-party delivery methods with route-specific state-machine guards.
@@ -116,7 +126,7 @@ Use this form as the checkpoint for continuing the project on another computer.
 
 | Check | Result |
 |---|---|
-| `npm test` | Passed for version 4.3: Dispatch routes, customer timeline isolation, immutable audit contracts, visibility, notifications and all existing suites |
+| `npm test` | Passed for version 4.4: PDF privacy/generation/sharing/audit plus Dispatch, customer timeline, notification and all existing suites |
 | In-app browser QA | Passed: manager audit navigation and event rendering, customer-only company records, sanitised customer timeline, and desktop preview watermark placement |
 | `npm run check` | Passed for 54 React/source modules and relative imports |
 | `npm run check:css` | Passed |
