@@ -2,6 +2,10 @@
 
 This repository contains four focused interfaces backed by one shared React domain, permission model, workflow state machine and interchangeable service layer. The public GitHub Pages deployment is a fabricated browser-only demonstration: it contains no production database connection, private price values, API keys or real customer accounts.
 
+## RFQ quotation and Purchase Order phase
+
+The preview implements RFQ submission without a PO, immutable quotation versions, customer acceptance with a mandatory PO or rejection with a reason, an amended-quotation loop, representative PO verification, and idempotent order conversion. Files are fabricated metadata-only demonstrations in mock mode. Production requires private storage, authenticated short-lived downloads, server-side authorisation, malware scanning and audit logging. See `docs/QUOTATION_WORKFLOW.md`, `docs/PURCHASE_ORDER_WORKFLOW.md`, `docs/DOCUMENT_ACCESS_MATRIX.md`, and `docs/SECURITY_REVIEW.md`.
+
 # Launch a Test Preview
 
 ### [1. Rhomberg Connect — Customer Desktop](https://shellygames141up.github.io/Rhomberg-Test-App/preview/customer-desktop/)

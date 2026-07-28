@@ -8,6 +8,47 @@ servers:
 security:
   - sessionCookie: []
 paths:
+  /rfqs/{rfqId}/quotations:
+    get:
+      summary: List authorised immutable quotation versions
+      responses:
+        '200': { description: Quotation versions }
+    post:
+      summary: Create a quotation version with private document metadata
+      responses:
+        '201': { description: Version created }
+  /quotations/{quotationId}/send:
+    post:
+      summary: Send the validated current quotation version
+      responses:
+        '200': { description: Quotation sent }
+  /quotations/{quotationId}/accept:
+    post:
+      summary: Accept current quotation and attach a mandatory PO
+      responses:
+        '200': { description: Awaiting representative verification }
+        '409': { description: Stale, superseded or duplicate response }
+  /quotations/{quotationId}/reject:
+    post:
+      summary: Reject current quotation with category and explanation
+      responses:
+        '200': { description: Rejection recorded }
+  /quotations/{quotationId}/amend:
+    post:
+      summary: Create the next immutable quotation version
+      responses:
+        '201': { description: Amended quotation created }
+  /rfqs/{rfqId}/convert-to-order:
+    post:
+      summary: Idempotently verify PO and create one Planning order
+      responses:
+        '200': { description: Existing or newly created order }
+  /documents/{documentId}/download:
+    get:
+      summary: Authorise and audit a time-limited private download
+      responses:
+        '200': { description: Short-lived download response }
+        '404': { description: Not found or not authorised }
   /auth/csrf-token:
     get:
       security: []

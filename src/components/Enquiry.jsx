@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { LeadTimeNotice } from './Layout.jsx';
 
-const ALLOWED_PO_FILE = /\.(pdf|doc|docx|png|jpe?g|webp|gif|heic)$/i;
 const normaliseQuantity = value => Math.min(9999, Math.max(1, Math.trunc(Number(value) || 1)));
 const humanise = key => key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, character => character.toUpperCase());
 const formatValue = value => Array.isArray(value) ? value.join(', ') : typeof value === 'boolean' ? value ? 'Yes' : 'No' : value;
@@ -9,8 +8,6 @@ const formatValue = value => Array.isArray(value) ? value.join(', ') : typeof va
 export function Enquiry({ account, lines, registrationOptions, deliverySettings, onAddProducts, onEdit, onRemove, onQuantity, onSubmit, success, onCloseSuccess }) {
   const areas = registrationOptions?.areas || [];
   const areaDirectory = registrationOptions?.areaDirectory || {};
-  const [poMode, setPoMode] = useState('none');
-  const [poFile, setPoFile] = useState(null);
   const [area, setArea] = useState(areas.includes(account.area) ? account.area : areas[0] || account.area);
   const [selectedRepId, setSelectedRepId] = useState('');
   const [emergency, setEmergency] = useState('no');
@@ -25,29 +22,6 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
   useEffect(() => {
     if (selectedRepId && !repSelection.representatives.some(representative => representative.id === selectedRepId)) setSelectedRepId('');
   }, [repSelection, selectedRepId]);
-
-  const selectPoFile = event => {
-    const file = event.target.files?.[0] || null;
-    setError('');
-    setFallbackUrl('');
-    if (!file) {
-      setPoFile(null);
-      return;
-    }
-    if (!ALLOWED_PO_FILE.test(file.name)) {
-      event.target.value = '';
-      setPoFile(null);
-      setError('Please choose a PDF, DOCX, DOC or image Purchase Order.');
-      return;
-    }
-    if (file.size > (deliverySettings?.maxPoFileBytes || 4 * 1024 * 1024)) {
-      event.target.value = '';
-      setPoFile(null);
-      setError('The Purchase Order document must be 4 MB or smaller.');
-      return;
-    }
-    setPoFile(file);
-  };
 
   const submit = async event => {
     event.preventDefault();
@@ -72,15 +46,6 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
       setError('Please enter the delivery address.');
       return;
     }
-    if (poMode === 'number' && !data.poNumber?.trim()) {
-      setError('Please enter the Purchase Order number or choose another PO option.');
-      return;
-    }
-    if (poMode === 'upload' && !poFile) {
-      setError('Please select the Purchase Order document to upload.');
-      return;
-    }
-
     const selectedRepresentative = repSelection.representatives.find(representative => representative.id === selectedRepId);
     setIsSubmitting(true);
     let result;
@@ -98,10 +63,6 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
         deliveryAddress: fulfilment === 'delivery' ? data.deliveryAddress.trim() : '',
         collectionBranch: fulfilment === 'collect' ? `${nearestBranch.name} - ${nearestBranch.address}` : '',
         notes: data.notes?.trim(),
-        poMode,
-        poNumber: poMode === 'number' ? data.poNumber.trim() : '',
-        poFileName: poMode === 'upload' ? poFile.name : '',
-        poFile,
       });
     } catch {
       result = { ok: false, message: 'The RFQ could not be submitted. Your configured units are still here, so please try again.' };
@@ -115,8 +76,6 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
       return;
     }
     form.reset();
-    setPoMode('none');
-    setPoFile(null);
     setSelectedRepId('');
     setEmergency('no');
     setFulfilment('');
@@ -180,21 +139,9 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
           <label className="form-field"><span>Additional specifications <i>Optional</i></span><textarea name="notes" rows="3" placeholder="Plant standards, environment, urgency or other requirements..." /></label>
         </section>
 
-        <section className="enquiry-section form-panel po-panel">
-          <div className="panel-index"><span>02</span><div><strong>Purchase Order</strong><small>Provide a number, upload a document, or continue without one</small></div></div>
-          <div className="po-options" role="radiogroup" aria-label="Purchase Order method">
-            <button type="button" role="radio" aria-checked={poMode === 'number'} className={poMode === 'number' ? 'selected' : ''} onClick={() => setPoMode('number')}><span>#</span><strong>PO number</strong><small>Enter the reference</small></button>
-            <button type="button" role="radio" aria-checked={poMode === 'upload'} className={poMode === 'upload' ? 'selected' : ''} onClick={() => setPoMode('upload')}><span>↑</span><strong>Upload PO</strong><small>PDF, DOCX or image</small></button>
-            <button type="button" role="radio" aria-checked={poMode === 'none'} className={poMode === 'none' ? 'selected' : ''} onClick={() => setPoMode('none')}><span>—</span><strong>No PO yet</strong><small>Submit a quote request</small></button>
-          </div>
-          {poMode === 'number' && <label className="form-field po-detail"><span>Purchase Order number</span><input name="poNumber" required placeholder="Example: PO-450021" /></label>}
-          {poMode === 'upload' && <label className={`po-upload ${poFile ? 'has-file' : ''}`}><input type="file" accept=".pdf,.doc,.docx,image/*" required onChange={selectPoFile} /><span>↑</span><div><strong>{poFile ? poFile.name : 'Choose Purchase Order document'}</strong><small>{poFile ? 'Ready to submit with the RFQ' : 'PDF, DOCX, DOC or image · maximum 4 MB'}</small></div></label>}
-          {poMode === 'none' && <p className="po-none-note"><span>i</span> You may submit the enquiry without a PO. The 3-10 working day review notice applies after Rhomberg receives the Purchase Order.</p>}
-        </section>
-
         <section className="enquiry-section submit-panel">
           <div className="client-summary"><span className="client-avatar">{account.company.slice(0, 1)}</span><div><strong>{account.company}</strong><small>{account.contact} · {account.email} · {account.phone}</small></div></div>
-          <label className="consent-row"><input type="checkbox" required /><span>{deliverySettings?.emailRecipient ? 'I confirm this is an RFQ and agree that these details, the structured RFQ PDF and any PO attachment may be emailed to Rhomberg through the test delivery service.' : 'I confirm this is an RFQ and agree that these details and any PO attachment may be securely submitted to Rhomberg for processing.'}</span></label>
+          <label className="consent-row"><input type="checkbox" required /><span>I confirm this is a quotation request only. A Purchase Order will be requested only if I accept a quotation later.</span></label>
           {error && <p className="form-error submit-error" role="alert">{error}</p>}
           {fallbackUrl && <a className="email-fallback" href={fallbackUrl}>Open my email app with this RFQ summary <span>→</span></a>}
           <button className="primary-button full submit-enquiry" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Submitting RFQ…' : 'Submit RFQ'} <span>{isSubmitting ? '•••' : '→'}</span></button>

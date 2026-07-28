@@ -66,7 +66,8 @@ function TrackingCard({ enquiry, expanded, onToggle, onAction, serviceMode }) {
             <span><small>Representative</small><strong>{enquiry.selectedRep?.name || 'To be assigned'}</strong><em>{enquiry.selectedRep?.branchName || enquiry.area}</em></span>
             <span><small>Purchase Order</small><strong>{enquiry.poNumber || enquiry.poFileName || 'Not supplied'}</strong><em>{enquiry.emergency === 'yes' ? 'Emergency request' : 'Standard request'}</em></span>
           </div>
-          {!isOrder && enquiry.quotation && <CustomerQuotationPanel enquiry={enquiry} onAction={onAction} serviceMode={serviceMode} />}
+          {!isOrder && enquiry.quotationVersions?.length > 0 && <CustomerQuotationWorkflowPanel enquiry={enquiry} onAction={onAction} serviceMode={serviceMode} />}
+          {!isOrder && !enquiry.quotationVersions?.length && enquiry.quotation && <CustomerQuotationPanel enquiry={enquiry} onAction={onAction} serviceMode={serviceMode} />}
           <div className="tracking-products">
             <h3>Requested instruments</h3>
             {(enquiry.items || []).map(item => <span key={item.lineId}><img src={item.image} alt="" /><b>{item.code}</b><small>{item.name}</small><strong>× {item.quantity}</strong></span>)}
@@ -81,6 +82,71 @@ function TrackingCard({ enquiry, expanded, onToggle, onAction, serviceMode }) {
         </div>
       )}
     </article>
+  );
+}
+
+function CustomerQuotationWorkflowPanel({ enquiry, onAction, serviceMode }) {
+  const versions = [...(enquiry.quotationVersions || [])].sort((a, b) => b.versionNumber - a.versionNumber);
+  const current = versions.find(version => version.isCurrent) || versions[0];
+  const acceptAction = (enquiry.allowedWorkflowActions || []).find(action => action.action === 'accept_quotation');
+  const rejectAction = (enquiry.allowedWorkflowActions || []).find(action => action.action === 'reject_quotation');
+  const [mode, setMode] = useState('');
+  const [poNumber, setPoNumber] = useState('');
+  const [poFile, setPoFile] = useState(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const [customerMessage, setCustomerMessage] = useState('');
+  const [category, setCategory] = useState('');
+  const [explanation, setExplanation] = useState('');
+  const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const submit = async action => {
+    setError('');
+    setIsSaving(true);
+    try {
+      const data = action === 'accept_quotation'
+        ? { purchaseOrderNumber: poNumber, documentFile: poFile, confirmed, customerMessage }
+        : { category, explanation };
+      await onAction(enquiry.id, action, '', data, enquiry.workflowType, enquiry.version);
+      setMode('');
+    } catch (actionError) {
+      setError(actionError?.message || 'Your quotation response could not be saved.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <section className="customer-quotation-panel" aria-label="Quotation">
+      <div className="customer-quotation-heading"><span>Q</span><div><small>Current quotation · Version {current.versionNumber}</small><strong>{current.quotationNumber}</strong></div></div>
+      <dl>
+        <div><dt>Quotation date</dt><dd>{current.quotationDate}</dd></div>
+        <div><dt>Expiry date</dt><dd>{current.expiryDate}</dd></div>
+        <div><dt>Status</dt><dd>{current.status.replaceAll('_', ' ')}</dd></div>
+        <div><dt>Representative</dt><dd>{enquiry.selectedRep?.name}</dd></div>
+      </dl>
+      <p className="customer-quotation-note"><strong>Message from your representative</strong>{current.customerMessage}</p>
+      {current.document && <div className="customer-quotation-document"><span>PDF</span><div><strong>{current.document.originalFilename}</strong><small>{current.document.mimeType} · {Math.ceil(current.document.fileSize / 1024)} KB · demonstration metadata</small></div><a href={`data:text/plain;charset=utf-8,${encodeURIComponent(`DEMONSTRATION QUOTATION ${current.quotationNumber}`)}`} download={current.document.originalFilename}>Download quotation</a></div>}
+      <details>
+        <summary>Quotation version history ({versions.length})</summary>
+        <div className="tracking-products">{versions.map(version => <span key={version.id}><b>Version {version.versionNumber}</b><small>{version.quotationNumber} · {version.status.replaceAll('_', ' ')}</small><strong>{version.isCurrent ? 'Current' : 'Preserved'}</strong></span>)}</div>
+      </details>
+      {(acceptAction || rejectAction) && !mode && <div className="expeditor-update-actions"><button className="primary-button" type="button" onClick={() => setMode('accept')}>Accept Quotation</button><button className="secondary-button" type="button" onClick={() => setMode('reject')}>Reject Quotation</button></div>}
+      {mode === 'accept' && <div className="order-acceptance-fields">
+        <label className="form-field"><span>Purchase Order number <b>Required</b></span><input value={poNumber} onChange={event => setPoNumber(event.target.value)} /></label>
+        <label className="form-field"><span>Purchase Order attachment <b>Required</b></span><input type="file" accept=".pdf,.docx,.xlsx" onChange={event => setPoFile(event.target.files?.[0] || null)} /></label>
+        <label className="form-field"><span>Message <i>Optional</i></span><textarea value={customerMessage} onChange={event => setCustomerMessage(event.target.value)} /></label>
+        <label className="choice-row"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /><span>I accept current Version {current.versionNumber}; this PO relates to it and the information is correct.</span></label>
+        <div className="expeditor-update-actions"><button className="primary-button" disabled={isSaving || !poNumber.trim() || !poFile || !confirmed} onClick={() => submit('accept_quotation')}>Submit acceptance and PO</button><button onClick={() => setMode('')}>Cancel</button></div>
+      </div>}
+      {mode === 'reject' && <div className="order-acceptance-fields">
+        <label className="form-field"><span>Rejection category <b>Required</b></span><select value={category} onChange={event => setCategory(event.target.value)}><option value="">Choose reason</option><option value="price_too_high">Price too high</option><option value="incorrect_product">Incorrect product</option><option value="incorrect_quantity">Incorrect quantity</option><option value="incorrect_configuration">Incorrect configuration</option><option value="delivery_time_unacceptable">Delivery time unacceptable</option><option value="terms_unacceptable">Terms unacceptable</option><option value="missing_information">Missing information</option><option value="customer_no_longer_requires_item">No longer required</option><option value="alternative_supplier_selected">Alternative supplier selected</option><option value="other">Other</option></select></label>
+        <label className="form-field"><span>Detailed explanation <b>Required</b></span><textarea rows="4" value={explanation} onChange={event => setExplanation(event.target.value)} /></label>
+        <div className="expeditor-update-actions"><button className="primary-button" disabled={isSaving || !category || explanation.trim().length < 10} onClick={() => submit('reject_quotation')}>Submit rejection</button><button onClick={() => setMode('')}>Cancel</button></div>
+      </div>}
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <p className="tracking-storage-note"><span>i</span><span>{serviceMode === 'mock' ? 'Demonstration documents are simulated and contain no real customer or pricing data.' : 'Downloads require authenticated, time-limited server authorisation.'}</span></p>
+    </section>
   );
 }
 

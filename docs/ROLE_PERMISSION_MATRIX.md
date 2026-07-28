@@ -2,6 +2,21 @@
 
 The canonical permission catalogue remains `src/services/contracts.js`. This document summarises preview access; it does not replace the code or server policy.
 
+## Quotation and document permissions
+
+| Capability | Customer | Sales rep | Planning | Expeditor | Dispatch | Manager/Admin |
+|---|---|---|---|---|---|---|
+| Submit RFQ without PO | Own company | — | — | — | — | — |
+| Send/amend quotation | — | Assigned RFQ | — | — | — | Authorised |
+| Accept/reject quotation | Own company | — | — | — | — | — |
+| Upload PO after acceptance | Own company | — | — | — | — | — |
+| Verify PO/create order | — | Assigned RFQ | — | — | — | Authorised |
+| Close rejected RFQ | — | Assigned RFQ | — | — | — | Authorised |
+| Reopen closed RFQ | — | — | — | — | — | Authorised |
+| Download documents | Customer-authorised only | Assigned/relevant | Planning-relevant | Expediting-relevant; no quotation pricing by default | Dispatch-relevant | Authorised |
+
+Every operation still requires company, branch, assignment and workflow-stage access. Hiding a UI control is not authorisation.
+
 | Role | Connect | Operations mobile | Operations desktop | Record scope |
 | --- | :---: | :---: | :---: | --- |
 | Customer | Yes | No | No | Authorised company only |
