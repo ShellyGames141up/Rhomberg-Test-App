@@ -1,3 +1,8 @@
+import {
+  DEFAULT_NOTIFICATION_CATEGORY_PREFERENCES,
+  NOTIFICATION_PREFERENCE_CATEGORIES,
+} from '../../domain/notifications.js';
+
 export const CUSTOMER_THEME_PRESETS = Object.freeze([
   { id: 'rhomberg-default', label: 'Rhomberg Default', description: 'Trusted Rhomberg navy and cyan.', colours: { primary: '#073b53', secondary: '#075e7b', accent: '#08788d', success: '#217a55', warning: '#b77812' } },
   { id: 'industrial-professional', label: 'Industrial Professional', description: 'Steel, graphite and safety blue.', colours: { primary: '#263943', secondary: '#3c5966', accent: '#147896', success: '#28775a', warning: '#a96d13' } },
@@ -27,16 +32,7 @@ export const APPEARANCE_MODES = Object.freeze([
   { id: 'system', label: 'System Default' },
 ]);
 
-export const NOTIFICATION_PREFERENCE_CATEGORIES = Object.freeze([
-  { id: 'rfqUpdates', label: 'RFQ updates', critical: false },
-  { id: 'quotationNotifications', label: 'Quotation notifications', critical: false },
-  { id: 'orderProgress', label: 'Order-progress notifications', critical: false },
-  { id: 'delayNotifications', label: 'Delay notifications', critical: false },
-  { id: 'fulfilmentNotifications', label: 'Collection or delivery notifications', critical: false },
-  { id: 'accountSecurity', label: 'Account and security notifications', critical: true },
-  { id: 'maintenanceNotices', label: 'Maintenance notices', critical: true },
-  { id: 'companyAnnouncements', label: 'General company announcements', critical: false },
-]);
+export { NOTIFICATION_PREFERENCE_CATEGORIES };
 
 export const DEFAULT_CUSTOM_COLOURS = Object.freeze({
   primary: '#073b53',
@@ -46,9 +42,7 @@ export const DEFAULT_CUSTOM_COLOURS = Object.freeze({
   warning: '#b77812',
 });
 
-export const DEFAULT_NOTIFICATION_PREFERENCES = Object.freeze(Object.fromEntries(
-  NOTIFICATION_PREFERENCE_CATEGORIES.map(item => [item.id, true]),
-));
+export const DEFAULT_NOTIFICATION_PREFERENCES = DEFAULT_NOTIFICATION_CATEGORY_PREFERENCES;
 
 export const createDefaultCustomerPersonalisation = () => ({
   schemaVersion: 1,

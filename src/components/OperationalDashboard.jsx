@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { roleProfileFor } from '../domain/accessControl.js';
 import { statusById, trackingStatuses } from '../domain/tracking.js';
 import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
@@ -15,7 +15,7 @@ const searchableText = enquiry => [
   enquiry.selectedRep?.name, enquiry.selectedRep?.code, enquiry.selectedRep?.branchName,
 ].filter(Boolean).join(' ').toLowerCase();
 
-export function OperationalDashboard({ account, enquiries, onAction, canUpdate, serviceMode, planningOptions, expeditingOptions }) {
+export function OperationalDashboard({ account, enquiries, onAction, canUpdate, serviceMode, planningOptions, expeditingOptions, dispatchOptions, focusRecordId = '' }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState(canUpdate ? 'actionable' : 'active');
   const [openId, setOpenId] = useState(null);
@@ -23,6 +23,14 @@ export function OperationalDashboard({ account, enquiries, onAction, canUpdate, 
   const emergency = active.filter(enquiry => enquiry.emergency === 'yes').length;
   const awaitingPo = active.filter(enquiry => !enquiry.poNumber && !enquiry.poFileName).length;
   const copy = roleProfileFor(account.role).dashboard;
+
+  useEffect(() => {
+    if (!focusRecordId || !enquiries.some(enquiry => enquiry.id === focusRecordId)) return;
+    setFilter('all');
+    setOpenId(focusRecordId);
+    const timer = window.setTimeout(() => document.getElementById(`operational-record-${focusRecordId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    return () => window.clearTimeout(timer);
+  }, [focusRecordId]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -56,7 +64,7 @@ export function OperationalDashboard({ account, enquiries, onAction, canUpdate, 
       <div className="expeditor-result-heading"><div><span className="eyebrow">{copy.queue}</span><h2>{filtered.length} matching record{filtered.length === 1 ? '' : 's'}</h2></div><small>Oldest updates first</small></div>
 
       <div className="expeditor-order-list">
-        {filtered.map(enquiry => <ExpeditorOrderCard key={enquiry.id} enquiry={enquiry} expanded={openId === enquiry.id} onToggle={() => setOpenId(current => current === enquiry.id ? null : enquiry.id)} onAction={onAction} canUpdate={canUpdate} account={account} planningOptions={planningOptions} expeditingOptions={expeditingOptions} />)}
+        {filtered.map(enquiry => <ExpeditorOrderCard key={enquiry.id} enquiry={enquiry} expanded={openId === enquiry.id} onToggle={() => setOpenId(current => current === enquiry.id ? null : enquiry.id)} onAction={onAction} canUpdate={canUpdate} account={account} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} />)}
         {!filtered.length && <div className="expeditor-empty"><span>✓</span><strong>No matching requests</strong><p>Change the search or filter to view other work.</p></div>}
       </div>
 
@@ -65,13 +73,13 @@ export function OperationalDashboard({ account, enquiries, onAction, canUpdate, 
   );
 }
 
-function ExpeditorOrderCard({ enquiry, expanded, onToggle, onAction, canUpdate, account, planningOptions, expeditingOptions }) {
+function ExpeditorOrderCard({ enquiry, expanded, onToggle, onAction, canUpdate, account, planningOptions, expeditingOptions, dispatchOptions }) {
   const status = statusById(enquiry.trackingStatus, enquiry.workflowType);
   const quantity = (enquiry.items || []).reduce((sum, item) => sum + Number(item.quantity || 1), 0);
   const availableActions = (enquiry.allowedWorkflowActions || []).filter(action => action.action !== 'override_workflow');
 
   return (
-    <article className={`expeditor-order-card ${enquiry.emergency === 'yes' ? 'is-emergency' : ''}`}>
+    <article className={`expeditor-order-card ${enquiry.emergency === 'yes' ? 'is-emergency' : ''}`} id={`operational-record-${enquiry.id}`}>
       <button type="button" className="expeditor-order-summary" onClick={onToggle} aria-expanded={expanded}>
         <span className="expeditor-order-id"><small>{enquiry.workflowType === 'order' ? 'ORDER' : 'RFQ'} · {enquiry.reference}{enquiry.isDemo ? ' · DEMO' : ''}</small><strong>{enquiry.company}</strong><em>{enquiry.contact}</em></span>
         <span className={`tracking-status status-${enquiry.trackingStatus}`}>{status.label}</span>
@@ -84,7 +92,7 @@ function ExpeditorOrderCard({ enquiry, expanded, onToggle, onAction, canUpdate, 
           <div className="expeditor-facts"><span><small>Application</small><strong>{enquiry.application}</strong></span><span><small>PO</small><strong>{enquiry.poNumber || enquiry.poFileName || 'Not supplied'}</strong></span><span><small>Supply</small><strong>{enquiry.fulfilment === 'collect' ? 'Collection' : 'Delivery'}</strong></span><span><small>Contact</small><strong>{enquiry.phone}<br />{enquiry.email}</strong></span></div>
           <div className="expeditor-products">{(enquiry.items || []).map(item => <span key={item.lineId}><img src={item.image} alt="" /><strong>{item.code}</strong><small>{item.name}</small><b>× {item.quantity}</b></span>)}</div>
           {canUpdate && availableActions.length
-            ? <WorkflowActionPanel record={enquiry} actions={availableActions} onAction={onAction} account={account} planningOptions={planningOptions} expeditingOptions={expeditingOptions} />
+            ? <WorkflowActionPanel record={enquiry} actions={availableActions} onAction={onAction} account={account} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} />
             : <p className="tracking-storage-note expeditor-readonly-note"><span>i</span><span><strong>{canUpdate ? 'No action at this stage' : 'Read-only role'}</strong> {canUpdate ? 'This record must first be completed by the role responsible for its current workflow stage.' : 'Your account may view this record but cannot perform workflow actions.'}</span></p>}
           <div className="expeditor-history"><h3>Recent updates</h3>{[...(enquiry.trackingHistory || [])].reverse().slice(0, 4).map(event => <span key={event.id}><i /><small>{formatDate(event.createdAt)}</small><strong>{statusById(event.toStatus || event.status, event.entityType).label}</strong><p>{event.note}</p></span>)}</div>
         </div>

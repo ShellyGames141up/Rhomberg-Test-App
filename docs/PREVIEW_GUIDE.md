@@ -7,7 +7,7 @@ Base URL: `https://shellygames141up.github.io/Rhomberg-Test-App/`
 | Rhomberg Connect — Customer Desktop | `/preview/customer-desktop/` | `customer.demo@example.invalid` / `Demo123!` | Complete setup, browse/configure a product, submit an RFQ and review tracking |
 | Rhomberg Connect — Customer Mobile | `/preview/customer-mobile/` | `cape.demo@client.test` / `Demo123!` | Touch-first customer journey, notifications, profile and settings |
 | Rhomberg Operations — Rep & Expeditor Mobile | `/preview/internal-mobile/` | `sales.workflow@example.invalid` / `Sales123!`, `expeditor.workflow@example.invalid` / `Expedite123!`, or manager demo | Review assigned RFQs or update Expediting from a phone-sized layout |
-| Rhomberg Operations — Internal Desktop | `/preview/internal-desktop/` | Role-specific account shown below | Review Sales, Planning, Expediting, Dispatch or management queues |
+| Rhomberg Operations — Internal Desktop | `/preview/internal-desktop/` | Role-specific account shown below | Review Sales, Planning, Expediting, the structured Dispatch workspace or management queues |
 
 Additional desktop-only accounts:
 

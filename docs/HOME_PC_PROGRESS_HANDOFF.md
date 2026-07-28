@@ -8,14 +8,33 @@ Use this form as the checkpoint for continuing the project on another computer.
 |---|---|
 | Repository | `ShellyGames141up/Rhomberg-Test-App` |
 | Branch | `agent/improve-theme-readability-and-reps` |
-| App version | `4.0.0` |
+| App version | `4.2.0` |
 | Checkpoint date | 27 July 2026 |
-| Completed phase | Rhomberg Connect/Operations platform split and customer personalisation |
-| Last stopping point | Four public preview interfaces share the existing Prompt 8 workflow. Customer onboarding/settings are complete; the next numbered RFQ-to-order phase has not been started. |
+| Completed phase | Prompt 10 Dispatch workspace |
+| Last stopping point | The Dispatch queue, collection/delivery actions, proof metadata, notifications, audit and customer-safe projections are complete in mock mode. Stop before the next approved prompt. |
 | Preview mode | GitHub Pages browser mock remains enabled |
 | Production connection | Not connected; API and PostgreSQL material remain proposed contracts only |
 
 ## What changed in this checkpoint
+
+- Added one desktop-optimised Dispatch workspace with responsive mobile/tablet cards, queue KPIs, search, status/method filters and sorting.
+- Added structured collection, company delivery, courier and third-party delivery methods with route-specific state-machine guards.
+- Added ready, out-for-delivery, collection/delivery confirmation, completion and delivery-problem actions through the service layer.
+- Added ready/collection/delivery dates, driver/courier, tracking, packages, delivery note, recipient/collector, proof metadata, public messages and separate internal notes.
+- Added Dispatch workflow/audit history and customer/representative notifications for each approved customer-visible milestone.
+- Added customer projections that remove internal Dispatch notes, problem details, internal actor IDs and unauthorised proof information.
+- Added fabricated handed-off, collection and delivery records for demonstration; no real company/customer data was introduced.
+- Added mock/API Dispatch workspace contracts, proposed PostgreSQL tables/RLS, private upload requirements and a dedicated test suite.
+
+- Added one central notification event catalogue covering every approved RFQ/order milestone through completion/cancellation.
+- Added recipient-specific messages, per-user read state, mark-all, deep links, preferences and role-gated simulated-delivery retries.
+- Added exact in-app/email/push delivery statuses plus retry attempt/error/timestamp metadata without contacting a provider.
+- Enforced customer-company and representative-assignment isolation before preference filtering.
+- Added notification creation/read/read-all/preference/retry audit entries.
+- Expanded the shared notification centre for customer/internal mobile and desktop previews without changing the visual identity.
+- Added interchangeable mock/API notification services and shared validation.
+- Added proposed API, PostgreSQL outbox, Microsoft 365/SMTP and APNs/FCM requirements.
+- Added a dedicated notification test suite and expanded API-adapter coverage.
 
 - Split the public experience into Connect customer desktop/mobile and Operations internal mobile/desktop routes without copying business logic.
 - Added a responsive preview centre, role-filtered demo accounts and strict route-entry role gates.
@@ -74,6 +93,8 @@ Use this form as the checkpoint for continuing the project on another computer.
 |---|---|
 | Preview split and routes | `src/shared/platform/previewConfig.js`, `src/apps/PreviewLanding.jsx`, `preview/*/index.html` |
 | Customer personalisation | `src/apps/customer/CustomerPersonalisation.jsx`, `src/shared/personalisation/personalisation.js` |
+| Notification domain and UI | `src/domain/notifications.js`, `src/components/Notifications.jsx` |
+| Notification implementation | `src/services/mock/createMockServices.js`, `src/services/api/createApiServices.js`, `src/services/validation.js` |
 | Preview build tooling | `scripts/build-tools.mjs`, `scripts/build-preview.mjs`, `scripts/build-previews.mjs`, `scripts/dev-preview.mjs`, `scripts/build-production.mjs` |
 | Catalogue rules | `src/data/catalogue.js`, `src/domain/productConfiguration.js`, `src/components/Configurator.jsx` |
 | Workflow source of truth | `src/domain/workflow.js` |
@@ -84,43 +105,46 @@ Use this form as the checkpoint for continuing the project on another computer.
 | React integration | `src/App.jsx`, `src/components/SalesRepresentativeDashboard.jsx`, `src/components/WorkflowActionPanel.jsx`, `src/components/OrderTracking.jsx` |
 | Planning workspace | `src/components/PlanningDashboard.jsx`, `src/components/PlanningFields.jsx`, `src/domain/planningQueue.js` |
 | Expeditor workspace | `src/components/ExpeditorDashboard.jsx`, `src/components/ExpeditingFields.jsx`, `src/domain/expediting.js` |
+| Dispatch workspace | `src/components/DispatchDashboard.jsx`, `src/components/DispatchFields.jsx`, `src/domain/dispatch.js` |
 | Shared operational fallback | `src/components/OperationalDashboard.jsx` |
-| Automated tests | `tests/catalogue-rules.test.mjs`, `tests/rfq-inbox.test.mjs`, `tests/planning-queue.test.mjs`, `tests/expediting.test.mjs`, `tests/permissions.test.mjs`, `tests/workflow.test.mjs`, `tests/mock-services.test.mjs`, `tests/platform-previews.test.mjs`, `tests/run-tests.mjs` |
+| Automated tests | `tests/dispatch.test.mjs`, `tests/notifications.test.mjs` plus the existing catalogue, permissions, RFQ inbox, Planning, Expediting, workflow, mock service and preview suites |
 | Workflow documentation | `docs/WORKFLOW_STATE_MACHINE.md`, `docs/ORDER_WORKFLOW_IMPLEMENTATION_PLAN.md` |
 | Platform and deployment documentation | `docs/ARCHITECTURE.md`, `docs/PREVIEW_GUIDE.md`, `docs/PLATFORM_MATRIX.md`, `docs/ROLE_PERMISSION_MATRIX.md`, `docs/CUSTOMER_PERSONALISATION.md`, `docs/RESPONSIVE_TESTING.md`, `docs/BUILD_AND_DEPLOYMENT.md`, `docs/MOCK_MODE_LIMITATIONS.md` |
-| Production proposals | `docs/API-CONTRACT.md`, `docs/api/openapi.yaml`, `docs/database/postgresql-schema.sql`, `docs/SECURITY-AND-ROLES.md`, `docs/PRODUCTION-DEPLOYMENT.md` |
+| Production proposals | `docs/NOTIFICATION_SYSTEM.md`, `docs/API-CONTRACT.md`, `docs/api/openapi.yaml`, `docs/database/postgresql-schema.sql`, `docs/SECURITY-AND-ROLES.md`, `docs/PRODUCTION-DEPLOYMENT.md` |
 
 ## Validation completed at this checkpoint
 
 | Check | Result |
 |---|---|
-| `npm test` | Passed for version 4.0: eight suites covering the existing workflow through Expediting plus preview routing, role separation, customer personalisation, validation and responsive guards |
-| `npm run check` | Passed for 50 React/source modules and relative imports |
+| `npm test` | Passed for version 4.2: Dispatch routes, validation, visibility, audit and notifications plus all existing suites |
+| `npm run check` | Passed for 54 React/source modules and relative imports |
 | `npm run check:css` | Passed |
 | `npm run build:previews` | Passed; four standalone preview artifacts and the combined GitHub Pages artifact were generated |
 | `npm run build:netlify` | Passed; the backward-compatible static preview was staged in `dist/` |
 | `npm run build:production` | Passed; the API-only candidate was built without source maps and scanned for forbidden demo accounts, passwords and preview-only markers |
 | Repository checks | `git diff --check` passed; React/App source contains no direct `localStorage` or `sessionStorage` calls |
-| Browser interaction QA | Passed representative customer mobile/desktop, internal mobile/desktop, tablet and preview-centre checks; no console errors or document overflow were found. Full results are in `docs/RESPONSIVE_TESTING.md` |
+| Browser interaction QA | Passed the Dispatch queue/detail workflow at 1280 × 720 and its single-column responsive layout at 390 × 844; no console errors or horizontal document overflow were found |
 
 ## Known limitations and risks
 
 - Browser mock data belongs to one device/browser and is not production authentication, concurrency or durability.
 - The backend does not exist yet; the API, PostgreSQL, notification and audit structures are implementation proposals.
-- Customer email/in-app notification delivery remains a mock queue until IT supplies the approved backend and email service.
+- In-app delivery is functional only in this browser. Email and push statuses/retries are simulations until IT supplies the approved backend, worker and providers.
 - Outlook remains external. The preview records only fabricated confirmation/acceptance metadata and does not prove that an email, PO or payment was received.
 - Quotation and acceptance uploads retain metadata only in mock mode. Production requires private object storage, malware scanning and an authorised download endpoint.
 - Customer receipt acknowledgement is intentionally not commercial acceptance; the assigned representative must still record verified external evidence with `Accept Order`.
 - Mock atomic/idempotent behavior is a same-browser demonstration. Production requires an RFQ row lock, unique source-RFQ order constraint, idempotency record and one database transaction.
 - The proposed Expediting steps now work in mock mode, but the owner must approve the production step list, required-for-Dispatch subset and whether steps vary by product/location.
 - Expediting document/image fields store metadata references only. Real uploads require private object storage, malware scanning and approved visibility/download rules.
+- Dispatch proof fields store safe metadata only in mock mode. No file bytes, courier integration, mapping, signature capture or legal proof-of-delivery process is connected.
+- The production owner must approve Dispatch methods, branch/address access, mandatory completion evidence and proof-retention periods.
 - Generated order-summary PDFs, delivery retries and retention/archive jobs are not implemented yet.
 - PO-exception authority is modelled and audited, but the owner/IT must still define which staff permissions or approval records authorise that exception in production.
 - Planning reference options use fabricated mock accounts/branches; production must resolve active staff and location scope from authoritative directories.
 
 ## Recommended next phase
 
-After owner review of the four previews and customer setup, continue the next approved RFQ-to-order prompt. Do not start another numbered workflow phase automatically. Dispatch, PDF/email delivery and retention remain later controlled phases.
+Continue only with the next approved prompt. Do not connect Microsoft 365/SMTP, APNs/FCM or a production database without an approved IT phase. PDF generation, real delivery workers and retention remain later controlled work.
 
 ## Continue on the home PC
 
@@ -134,4 +158,4 @@ npm install
 npm test
 ```
 
-Then read this file, `docs/WORKFLOW_STATE_MACHINE.md` and the Expediting/next-phase sections of `docs/ORDER_WORKFLOW_IMPLEMENTATION_PLAN.md`.
+Then read this file, `docs/DISPATCH_WORKSPACE.md`, `docs/WORKFLOW_STATE_MACHINE.md` and the next-phase sections of `docs/ORDER_WORKFLOW_IMPLEMENTATION_PLAN.md`.

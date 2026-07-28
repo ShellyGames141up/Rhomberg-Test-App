@@ -11,6 +11,10 @@ import {
   expeditorProgressStepById,
   missingRequiredExpeditorSteps,
 } from './expediting.js';
+import {
+  DISPATCH_METHODS,
+  DISPATCH_PROOF_TYPES,
+} from './dispatch.js';
 
 export const WORKFLOW_ENTITY_TYPES = Object.freeze({
   RFQ: 'rfq',
@@ -160,17 +164,18 @@ const transitions = [
     action: 'submit_rfq', from: 'draft', to: 'submitted', roles: [USER_ROLES.CUSTOMER], label: 'Submit RFQ',
     requiredFields: [required('entity.companyId', 'Authorised company account'), required('entity.application', 'Application'), required('entity.items', 'Configured units')],
     customerDescription: 'Your RFQ was submitted successfully.', internalDescription: 'Customer submitted the RFQ.',
-    generatesNotification: false, timestampField: 'submittedAt', customerVisible: true,
+    generatesNotification: true, notificationRecipients: ['customer'], timestampField: 'submittedAt', customerVisible: true,
   }),
   rfqTransition({
     action: 'assign_representative', from: 'submitted', to: 'assigned_to_rep', roles: [SYSTEM_ACTOR_ROLE, ...INTERNAL_MANAGEMENT], label: 'Assign representative',
     requiredFields: [required('entity.selectedRep.id', 'Assigned representative')],
     customerDescription: 'Your RFQ was routed to the sales team.', internalDescription: 'RFQ assigned to its selected representative.',
-    generatesNotification: true, notificationRecipients: ['assigned_representative'], timestampField: 'assignedAt', customerVisible: false,
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'], timestampField: 'assignedAt', customerVisible: false,
   }),
   rfqTransition({
     action: 'start_rep_review', from: 'assigned_to_rep', to: 'under_rep_review', roles: REP_ACTION_ROLES, label: 'Start Review',
     customerDescription: 'Your representative started reviewing the RFQ.', internalDescription: 'Assigned representative accepted the RFQ into their review queue.',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'],
     requiresAssignedRepresentative: true, timestampField: 'reviewStartedAt', customerVisible: true,
   }),
   rfqTransition({
@@ -220,6 +225,8 @@ const transitions = [
     ],
     customerDescription: 'Rhomberg confirmed your external acceptance and created an order for Planning.',
     internalDescription: 'Assigned representative verified external acceptance evidence before conversion.',
+    generatesNotification: true,
+    notificationRecipients: ['customer', 'assigned_representative'],
     requiresAssignedRepresentative: true,
     guard: 'order_acceptance',
     timestampField: 'acceptedAt',
@@ -351,33 +358,90 @@ const transitions = [
   }),
   orderTransition({
     action: 'mark_ready_for_collection', from: 'awaiting_dispatch', to: 'ready_for_collection', roles: DISPATCH_ACTION_ROLES, label: 'Mark ready for collection',
-    customerDescription: 'Your order is ready for collection.', internalDescription: 'Dispatch released the collection order.', guard: 'collection_order',
-    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'], timestampField: 'readyForCollectionAt', customerVisible: true,
+    requiredFields: [
+      required('input.dispatchUpdate.method', 'Dispatch method'),
+      required('input.dispatchUpdate.readyDate', 'Ready date'),
+      required('input.dispatchUpdate.numberOfPackages', 'Number of packages'),
+      required('input.dispatchUpdate.customerMessage', 'Customer-facing message'),
+    ],
+    customerDescription: 'Your order is ready for collection.', internalDescription: 'Dispatch released the collection order.',
+    guard: 'dispatch_collection_ready',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'],
+    timestampField: 'readyForCollectionAt', actorField: 'readyForCollectionBy', customerVisible: true,
+    customerNotePath: 'input.dispatchUpdate.customerMessage', auditNotePath: 'input.dispatchUpdate.internalNotes',
   }),
   orderTransition({
-    action: 'start_delivery', from: 'awaiting_dispatch', to: 'out_for_delivery', roles: DISPATCH_ACTION_ROLES, label: 'Start delivery',
-    customerDescription: 'Your order is out for delivery.', internalDescription: 'Dispatch released the delivery order.', guard: 'delivery_order',
-    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'], requiresComment: true, timestampField: 'outForDeliveryAt', customerVisible: true,
+    action: 'start_delivery', from: 'awaiting_dispatch', to: 'out_for_delivery', roles: DISPATCH_ACTION_ROLES, label: 'Mark out for delivery',
+    requiredFields: [
+      required('input.dispatchUpdate.method', 'Dispatch method'),
+      required('input.dispatchUpdate.readyDate', 'Ready date'),
+      required('input.dispatchUpdate.numberOfPackages', 'Number of packages'),
+      required('input.dispatchUpdate.courierOrDriver', 'Courier or driver'),
+      required('input.dispatchUpdate.customerMessage', 'Customer-facing message'),
+    ],
+    customerDescription: 'Your order is out for delivery.', internalDescription: 'Dispatch released the delivery order.',
+    guard: 'dispatch_delivery_release',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'],
+    timestampField: 'outForDeliveryAt', actorField: 'outForDeliveryBy', customerVisible: true,
+    customerNotePath: 'input.dispatchUpdate.customerMessage', auditNotePath: 'input.dispatchUpdate.internalNotes',
   }),
   orderTransition({
     action: 'confirm_delivery', from: 'out_for_delivery', to: 'delivered', roles: DISPATCH_ACTION_ROLES, label: 'Confirm delivery',
+    requiredFields: [
+      required('input.dispatchUpdate.deliveryDate', 'Delivery date'),
+      required('input.dispatchUpdate.recipientName', 'Recipient name'),
+      required('input.dispatchUpdate.customerMessage', 'Customer-facing message'),
+    ],
     customerDescription: 'Your order was delivered.', internalDescription: 'Dispatch recorded successful delivery.',
-    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'], requiresComment: true, timestampField: 'deliveredAt', customerVisible: true,
+    guard: 'dispatch_delivery_confirmation',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'],
+    timestampField: 'deliveredAt', actorField: 'deliveredBy', customerVisible: true,
+    customerNotePath: 'input.dispatchUpdate.customerMessage', auditNotePath: 'input.dispatchUpdate.internalNotes',
   }),
   orderTransition({
     action: 'confirm_collection', from: 'ready_for_collection', to: 'collected', roles: DISPATCH_ACTION_ROLES, label: 'Confirm collection',
+    requiredFields: [
+      required('input.dispatchUpdate.collectionDate', 'Collection date'),
+      required('input.dispatchUpdate.recipientName', 'Collector name'),
+      required('input.dispatchUpdate.customerMessage', 'Customer-facing message'),
+    ],
     customerDescription: 'Your order was collected.', internalDescription: 'Dispatch recorded successful collection.',
-    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'], requiresComment: true, timestampField: 'collectedAt', customerVisible: true,
+    guard: 'dispatch_collection_confirmation',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'],
+    timestampField: 'collectedAt', actorField: 'collectedBy', customerVisible: true,
+    customerNotePath: 'input.dispatchUpdate.customerMessage', auditNotePath: 'input.dispatchUpdate.internalNotes',
   }),
   orderTransition({
-    action: 'complete_delivery', from: 'delivered', to: 'completed', roles: DISPATCH_ACTION_ROLES, label: 'Complete delivered order',
+    action: 'complete_delivery', from: 'delivered', to: 'completed', roles: DISPATCH_ACTION_ROLES, label: 'Mark completed',
+    requiredFields: [required('input.dispatchUpdate.customerMessage', 'Final customer-facing message')],
     customerDescription: 'Your order is complete.', internalDescription: 'Dispatch closed the delivered order.',
-    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'], timestampField: 'completedAt', customerVisible: true,
+    guard: 'dispatch_completion',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'],
+    timestampField: 'completedAt', actorField: 'completedBy', customerVisible: true,
+    customerNotePath: 'input.dispatchUpdate.customerMessage', auditNotePath: 'input.dispatchUpdate.internalNotes',
   }),
   orderTransition({
-    action: 'complete_collection', from: 'collected', to: 'completed', roles: DISPATCH_ACTION_ROLES, label: 'Complete collected order',
+    action: 'complete_collection', from: 'collected', to: 'completed', roles: DISPATCH_ACTION_ROLES, label: 'Mark completed',
+    requiredFields: [required('input.dispatchUpdate.customerMessage', 'Final customer-facing message')],
     customerDescription: 'Your order is complete.', internalDescription: 'Dispatch closed the collected order.',
-    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'], timestampField: 'completedAt', customerVisible: true,
+    guard: 'dispatch_completion',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'],
+    timestampField: 'completedAt', actorField: 'completedBy', customerVisible: true,
+    customerNotePath: 'input.dispatchUpdate.customerMessage', auditNotePath: 'input.dispatchUpdate.internalNotes',
+  }),
+  orderTransition({
+    action: 'report_delivery_problem', from: 'out_for_delivery', to: '__same__', roles: DISPATCH_ACTION_ROLES, label: 'Report delivery problem',
+    requiredFields: [
+      required('input.dispatchUpdate.problemReason', 'Delivery problem'),
+      required('input.dispatchUpdate.customerMessage', 'Customer-facing message'),
+    ],
+    customerDescription: 'A delivery problem was recorded and the Dispatch team is following up.',
+    internalDescription: 'Dispatch recorded a controlled delivery problem without changing the handover stage.',
+    guard: 'dispatch_delivery_problem',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'],
+    timestampField: 'dispatchProblemReportedAt', actorField: 'lastDispatchUpdatedBy', customerVisible: true,
+    customerNotePath: 'input.dispatchUpdate.customerMessage', auditNotePath: 'input.dispatchUpdate.internalNotes',
+    allowsSameStatus: true,
   }),
   ...[
     ['awaiting_planning', PLANNING_ACTION_ROLES], ['planning_in_progress', PLANNING_ACTION_ROLES], ['planned', PLANNING_ACTION_ROLES],
@@ -680,6 +744,95 @@ const assertExpeditingHandoff = (entity, input) => {
   }
 };
 
+const assertDispatchUpdate = (entity, input, action) => {
+  if (['mark_ready_for_collection', 'confirm_collection', 'complete_collection'].includes(action) && entity.fulfilment !== 'collect') {
+    throw new ServiceError('Only a collection order can use the collection handover path.', { code: 'INVALID_FULFILMENT_TRANSITION', status: 409 });
+  }
+  if (['start_delivery', 'confirm_delivery', 'complete_delivery', 'report_delivery_problem'].includes(action) && entity.fulfilment !== 'delivery') {
+    throw new ServiceError('Only a delivery order can use the delivery handover path.', { code: 'INVALID_FULFILMENT_TRANSITION', status: 409 });
+  }
+  const update = input?.dispatchUpdate || {};
+  const existing = entity?.dispatch || {};
+  const details = {
+    ...existing,
+    ...update,
+    proofOfDelivery: update.proofOfDelivery || existing.proofOfDelivery || null,
+  };
+  const fieldErrors = {};
+  const method = DISPATCH_METHODS.find(item => item.id === details.method);
+  const proof = details.proofOfDelivery;
+  const customerMessage = String(update.customerMessage || '').trim();
+  const internalNotes = String(update.internalNotes || '');
+  const problemReason = String(update.problemReason || '').trim();
+  const readyDate = String(details.readyDate || '').trim();
+  const collectionDate = String(details.collectionDate || '').trim();
+  const deliveryDate = String(details.deliveryDate || '').trim();
+  const courierOrDriver = String(details.courierOrDriver || '').trim();
+  const recipientName = String(details.recipientName || '').trim();
+  const numberOfPackages = Number(details.numberOfPackages);
+
+  if (!method) fieldErrors.dispatchMethod = 'Select a recognised Dispatch method.';
+  if (entity.fulfilment === 'collect' && method?.fulfilment !== 'collect') {
+    fieldErrors.dispatchMethod = 'This collection order must use the customer collection method.';
+  }
+  if (entity.fulfilment === 'delivery' && method?.fulfilment !== 'delivery') {
+    fieldErrors.dispatchMethod = 'This delivery order must use a delivery method.';
+  }
+  if (['mark_ready_for_collection', 'start_delivery'].includes(action) && !validDateOnly(readyDate)) {
+    fieldErrors.dispatchReadyDate = 'Enter the date this order became ready for handover.';
+  }
+  if (action === 'confirm_collection' && !validDateOnly(collectionDate)) {
+    fieldErrors.dispatchCollectionDate = 'Enter the confirmed collection date.';
+  }
+  if (action === 'confirm_delivery' && !validDateOnly(deliveryDate)) {
+    fieldErrors.dispatchDeliveryDate = 'Enter the confirmed delivery date.';
+  }
+  if (validDateOnly(readyDate) && validDateOnly(collectionDate) && collectionDate < readyDate) {
+    fieldErrors.dispatchCollectionDate = 'The collection date cannot be before the ready date.';
+  }
+  if (validDateOnly(readyDate) && validDateOnly(deliveryDate) && deliveryDate < readyDate) {
+    fieldErrors.dispatchDeliveryDate = 'The delivery date cannot be before the ready date.';
+  }
+  if (
+    ['mark_ready_for_collection', 'start_delivery'].includes(action)
+    && (!Number.isInteger(numberOfPackages) || numberOfPackages < 1 || numberOfPackages > 999)
+  ) {
+    fieldErrors.dispatchNumberOfPackages = 'Enter a package quantity between 1 and 999.';
+  }
+  if (['start_delivery', 'confirm_delivery'].includes(action) && courierOrDriver.length < 2) {
+    fieldErrors.dispatchCourierOrDriver = 'Enter the courier, driver or delivery provider.';
+  }
+  if (['confirm_collection', 'confirm_delivery'].includes(action) && recipientName.length < 2) {
+    fieldErrors.dispatchRecipientName = 'Enter the person who received or collected the order.';
+  }
+  if (action === 'report_delivery_problem' && problemReason.length < 5) {
+    fieldErrors.dispatchProblemReason = 'Describe the delivery problem clearly.';
+  }
+  if (customerMessage.length < 5) fieldErrors.dispatchCustomerMessage = 'Add a clear customer-facing Dispatch message.';
+  if (customerMessage.length > 1000) fieldErrors.dispatchCustomerMessage = 'Keep the customer-facing message below 1,000 characters.';
+  if (internalNotes.length > 2000) fieldErrors.dispatchInternalNotes = 'Keep internal Dispatch notes below 2,000 characters.';
+  if (problemReason.length > 1000) fieldErrors.dispatchProblemReason = 'Keep the delivery problem below 1,000 characters.';
+  if (String(details.trackingReference || '').length > 160) fieldErrors.dispatchTrackingReference = 'Keep the tracking reference below 160 characters.';
+  if (String(details.deliveryNoteNumber || '').length > 160) fieldErrors.dispatchDeliveryNoteNumber = 'Keep the delivery note number below 160 characters.';
+  if (courierOrDriver.length > 160) fieldErrors.dispatchCourierOrDriver = 'Keep the courier or driver below 160 characters.';
+  if (recipientName.length > 160) fieldErrors.dispatchRecipientName = 'Keep the recipient name below 160 characters.';
+  if (proof) {
+    if (!DISPATCH_PROOF_TYPES.some(type => type.id === proof.type)) {
+      fieldErrors.dispatchProofType = 'Select the type of proof being recorded.';
+    }
+    if (!String(proof.reference || proof.fileName || '').trim()) {
+      fieldErrors.dispatchProofReference = 'Record a controlled proof reference or file name.';
+    }
+  }
+  if (Object.keys(fieldErrors).length) {
+    throw new ServiceError(Object.values(fieldErrors)[0], {
+      code: 'DISPATCH_DETAILS_INVALID',
+      status: 422,
+      fieldErrors,
+    });
+  }
+};
+
 const assertGuard = (entity, actor, transitionDefinition, input) => {
   if (transitionDefinition.guard === 'quotation_confirmation' && input !== undefined) assertQuotationConfirmation(input);
   if (transitionDefinition.guard === 'order_acceptance' && input !== undefined) assertOrderAcceptance(input);
@@ -693,6 +846,9 @@ const assertGuard = (entity, actor, transitionDefinition, input) => {
   }
   if (transitionDefinition.guard === 'expediting_dispatch_handoff' && input !== undefined) {
     assertExpeditingHandoff(entity, input);
+  }
+  if (transitionDefinition.guard?.startsWith('dispatch_') && input !== undefined) {
+    assertDispatchUpdate(entity, input, transitionDefinition.action);
   }
   if (transitionDefinition.guard === 'accepted_order' && !(entity.sourceRfqStatus === 'converted_to_order' && entity.acceptedAt)) {
     throw new ServiceError('Planning cannot start until the source RFQ has been accepted and converted to an order.', { code: 'ORDER_NOT_ACCEPTED', status: 409 });
@@ -810,10 +966,14 @@ export function performWorkflowTransition({ entity, action, actor, input = {}, e
   const targetDefinition = workflowStatusById(validated.targetStatus, validated.entityType);
   const isOverride = action === 'override_workflow';
   const context = { entity, input };
-  const customerNote = input.expeditingUpdate?.customerMessage || (validated.transitionDefinition.customerNotePath
+  const customerNote = input.dispatchUpdate?.customerMessage
+    || input.expeditingUpdate?.customerMessage
+    || (validated.transitionDefinition.customerNotePath
     ? getPath(context, validated.transitionDefinition.customerNotePath)
     : input.comment);
-  const auditNote = input.expeditingUpdate?.internalNote || (validated.transitionDefinition.auditNotePath
+  const auditNote = input.dispatchUpdate?.internalNotes
+    || input.expeditingUpdate?.internalNote
+    || (validated.transitionDefinition.auditNotePath
     ? getPath(context, validated.transitionDefinition.auditNotePath)
     : input.comment);
   const description = String(customerNote || validated.transitionDefinition.customerDescription || targetDefinition.customerDescription).trim();
@@ -846,6 +1006,13 @@ export function performWorkflowTransition({ entity, action, actor, input = {}, e
       role: actor.role,
       representativeId: actor.representativeId || '',
       displayName: actor.displayName || actor.contact || actor.role,
+    };
+  }
+  if (action === 'complete_expediting') {
+    updatedEntity.dispatch = {
+      ...(entity.dispatch || {}),
+      receivedAt: entity.dispatch?.receivedAt || occurredAt,
+      lastUpdatedAt: entity.dispatch?.lastUpdatedAt || occurredAt,
     };
   }
   if (input.expeditingUpdate) {
@@ -889,6 +1056,58 @@ export function performWorkflowTransition({ entity, action, actor, input = {}, e
       } : {}),
     };
   }
+  if (input.dispatchUpdate) {
+    const previousDispatch = updatedEntity.dispatch || entity.dispatch || {};
+    const dispatchInput = input.dispatchUpdate;
+    const updatedBy = {
+      id: actor.id,
+      role: actor.role,
+      displayName: actor.displayName || actor.contact || actor.role,
+    };
+    const proofOfDelivery = dispatchInput.proofOfDelivery
+      ? { ...dispatchInput.proofOfDelivery }
+      : previousDispatch.proofOfDelivery || null;
+    const update = {
+      id: makeId('dispatch-update', idFactory),
+      action,
+      method: String(dispatchInput.method || previousDispatch.method || ''),
+      readyDate: String(dispatchInput.readyDate || previousDispatch.readyDate || ''),
+      collectionDate: String(dispatchInput.collectionDate || previousDispatch.collectionDate || ''),
+      deliveryDate: String(dispatchInput.deliveryDate || previousDispatch.deliveryDate || ''),
+      courierOrDriver: String(dispatchInput.courierOrDriver || previousDispatch.courierOrDriver || '').trim(),
+      trackingReference: String(dispatchInput.trackingReference || previousDispatch.trackingReference || '').trim(),
+      numberOfPackages: Number(dispatchInput.numberOfPackages || previousDispatch.numberOfPackages || 0),
+      deliveryNoteNumber: String(dispatchInput.deliveryNoteNumber || previousDispatch.deliveryNoteNumber || '').trim(),
+      recipientName: String(dispatchInput.recipientName || previousDispatch.recipientName || '').trim(),
+      proofOfDelivery,
+      problemReason: String(dispatchInput.problemReason || '').trim(),
+      customerMessage: description,
+      internalNotes: String(dispatchInput.internalNotes || '').trim(),
+      customerVisible: dispatchInput.customerVisible !== false,
+      updatedBy,
+      createdAt: occurredAt,
+    };
+    updatedEntity.dispatch = {
+      ...previousDispatch,
+      method: update.method,
+      readyDate: update.readyDate,
+      collectionDate: update.collectionDate,
+      deliveryDate: update.deliveryDate,
+      courierOrDriver: update.courierOrDriver,
+      trackingReference: update.trackingReference,
+      numberOfPackages: update.numberOfPackages,
+      deliveryNoteNumber: update.deliveryNoteNumber,
+      recipientName: update.recipientName,
+      proofOfDelivery,
+      currentProblemReason: action === 'report_delivery_problem' ? update.problemReason : '',
+      internalNotes: update.internalNotes || previousDispatch.internalNotes || '',
+      customerMessage: update.customerMessage,
+      receivedAt: previousDispatch.receivedAt || entity.submittedToDispatchAt || occurredAt,
+      updates: [...(previousDispatch.updates || []), update],
+      lastUpdatedAt: occurredAt,
+      lastUpdatedBy: updatedBy,
+    };
+  }
 
   const workflowEvent = {
     id: makeId('workflow-event', idFactory),
@@ -906,6 +1125,7 @@ export function performWorkflowTransition({ entity, action, actor, input = {}, e
     actorRole: actor.role,
     actor: actor.displayName || actor.contact || actor.role,
     progressStep: input.expeditingUpdate?.progressStep || '',
+    dispatchMethod: input.dispatchUpdate?.method || '',
     isOverride,
     overrideReason: isOverride ? String(input.overrideReason || '').trim() : '',
     createdAt: occurredAt,
@@ -925,6 +1145,7 @@ export function performWorkflowTransition({ entity, action, actor, input = {}, e
     toStatus: validated.targetStatus,
     comment: String(auditNote || '').trim(),
     progressStep: input.expeditingUpdate?.progressStep || '',
+    dispatchMethod: input.dispatchUpdate?.method || '',
     isOverride,
     createdAt: occurredAt,
   };

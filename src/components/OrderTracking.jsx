@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { progressForStatus, statusById } from '../domain/tracking.js';
 
 const TERMINAL_STATUSES = new Set(['completed', 'cancelled', 'expired', 'converted_to_order', 'archived']);
@@ -7,10 +7,17 @@ const formatDate = value => new Date(value).toLocaleString('en-ZA', {
   day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
 });
 
-export function OrderTracking({ account, enquiries, onStartEnquiry, onAction, serviceMode }) {
+export function OrderTracking({ account, enquiries, onStartEnquiry, onAction, serviceMode, focusRecordId = '' }) {
   const ordered = useMemo(() => [...enquiries].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)), [enquiries]);
   const [openId, setOpenId] = useState(null);
   const activeCount = ordered.filter(enquiry => !TERMINAL_STATUSES.has(enquiry.trackingStatus)).length;
+
+  useEffect(() => {
+    if (!focusRecordId || !enquiries.some(enquiry => enquiry.id === focusRecordId)) return;
+    setOpenId(focusRecordId);
+    const timer = window.setTimeout(() => document.getElementById(`tracking-${focusRecordId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    return () => window.clearTimeout(timer);
+  }, [focusRecordId]);
 
   return (
     <section className="app-screen tracking-screen" aria-labelledby="tracking-title">
@@ -44,7 +51,7 @@ function TrackingCard({ enquiry, expanded, onToggle, onAction, serviceMode }) {
   const isOrder = enquiry.workflowType === 'order';
 
   return (
-    <article className={`tracking-card ${expanded ? 'expanded' : ''}`}>
+    <article className={`tracking-card ${expanded ? 'expanded' : ''}`} id={`tracking-${enquiry.id}`}>
       <button className="tracking-card-summary" type="button" onClick={onToggle} aria-expanded={expanded}>
         <span className="tracking-reference"><small>{isOrder ? 'Order progress' : 'Request for quotation'}</small><strong>{enquiry.reference}</strong></span>
         <span className={`tracking-status status-${enquiry.trackingStatus}`}>{status.label}</span>

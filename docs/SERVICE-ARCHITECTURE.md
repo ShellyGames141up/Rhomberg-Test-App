@@ -11,7 +11,7 @@ React screens and App orchestration
  central role profiles + permission catalogue
               |
               v
- auth | accounts | products | enquiries | orders | planning | expediting | workflow | audit | notifications
+ auth | accounts | products | enquiries | orders | planning | expediting | dispatch | workflow | audit | notifications
               |
        service implementation
           /             \
@@ -32,11 +32,12 @@ This boundary lets the company replace the demo implementation without redesigni
 | `orders` | Separate authorised order retrieval; order records are never returned by `enquiries` |
 | `planning` | Authorised Planning users, approved production locations and controlled priority reference data |
 | `expediting` | Configured progress steps, Dispatch requirements, controlled metadata types and approaching-completion policy |
+| `dispatch` | Approved handover methods, proof metadata types and proof upload limit |
 | `workflow` | Authorised RFQ/order timelines, permitted actions and controlled transitions |
 | `tracking` | Compatibility alias for `workflow` while existing tracking views are retained |
 | `audit` | Append-only workflow/security history within an authorised internal scope |
-| `notifications` | Customer/staff notification inbox operations; mock mode queues local test records |
-| `personalisation` | Customer-only onboarding, theme, typography/density, notification preferences and image metadata |
+| `notifications` | Recipient-scoped event inbox, read state, preferences and retry-ready delivery metadata; mock mode simulates email/push |
+| `personalisation` | Customer-only onboarding, theme, typography/density, mirrored notification-category choices and image metadata |
 | `preferences` | Internal/non-sensitive light and dark display preference |
 
 Every method is asynchronous, including the browser mock. This is intentional: moving to the API implementation will not require UI event handlers to change from synchronous to asynchronous later.
@@ -52,9 +53,10 @@ enquiries.list(filters) | listRepresentativeInbox(filters) | getById(id) | getDr
 orders.list(filters) | getById(id)
 planning.getWorkspaceOptions()
 expediting.getWorkspaceOptions()
+dispatch.getWorkspaceOptions()
 workflow.list(filters) | getAllowedActions(recordId) | performAction(recordId, actionRequest)
 audit.list(filters)
-notifications.list(filters) | markRead(notificationId)
+notifications.list(filters) | markRead(notificationId) | markAllRead() | getPreferences() | savePreferences(settings) | retryDelivery(notificationId, deliveryId)
 personalisation.get() | save(settings) | complete(settings) | reset(options) | uploadImage(file, kind, position) | removeImage(imageId)
 preferences.getTheme() | setTheme(theme)
 ```
@@ -72,6 +74,12 @@ RFQ draft writes are serialised in API mode so rapid quantity/configuration chan
 `src/domain/expediting.js` is the single configurable Expediting progress catalogue for mock mode. It defines the proposed steps, required-for-Dispatch subset, queue filters, sort choices, priority rules, estimated-completion warning window and pure search/count helpers. `expediting.getWorkspaceOptions()` exposes the same contract from both service implementations, allowing the production API to provide reviewed configuration without changing React.
 
 `src/components/ExpeditorDashboard.jsx` consumes only service-scoped orders and the returned workspace options. It provides one responsive mobile/desktop queue with oldest-update-first ordering, search across customer/representative/RFQ/order/job/PO references, due-soon/hold/priority views and read-only visibility after hand-off. `src/components/ExpeditingFields.jsx` is shared with the generic management workflow panel. It separates customer messages from internal notes and converts all Expediting interactions into the same validated workflow request.
+
+`src/domain/dispatch.js` owns the approved Dispatch methods, primary/completion stages, age and activity calculations, filters, search, sorting and queue counts. `dispatch.getWorkspaceOptions()` exposes matching methods/proof types from mock and future API services. `src/components/DispatchDashboard.jsx` consumes only service-scoped orders and provides the desktop-first responsive queue. `src/components/DispatchFields.jsx` converts release, confirmation, completion and delivery-problem interactions into one structured workflow request while keeping customer and internal messages separate.
+
+`src/domain/notifications.js` is the single notification catalogue. It maps controlled workflow actions to event types, recipient groups, customer/internal wording, preference categories, links, delivery channels/statuses and retry metadata. The mock service resolves those events after successful workflow persistence and records `notification.created` audit entries. The API service exposes the equivalent inbox, mark-read, mark-all, preference and delivery-retry endpoints.
+
+`src/components/Notifications.jsx` is a service-only consumer. It never inspects workflow storage. It displays recipient-safe messages and delivery status, opens the linked service-scoped RFQ/order, and exposes retry only when the central permission catalogue grants `retry_notification_delivery`.
 
 ## Implementations
 
@@ -103,6 +111,10 @@ Expediting follows the same boundary. `start_expediting`, `add_expediting_update
 
 The state machine keeps ordinary progress updates inside `expediting_in_progress`, appends structured progress and audit history, and creates notifications for the customer and assigned representative. Dispatch hand-off additionally notifies Dispatch and requires all configured required steps, or a recorded authorised exception with a meaningful reason and authorisation reference. Customer projections remove internal notes, delay/supplier context, controlled document references, internal actor IDs and exception evidence while preserving the customer message, step, public updater name and time.
 
+Dispatch follows the same boundary. Shared validation normalises the chosen method, handover dates, courier/driver, tracking/package/delivery-note detail, recipient, proof metadata and separate customer/internal text. The state machine independently checks the order fulfilment path and exact stage. Every action appends a structured Dispatch update, workflow event, audit event and applicable customer/representative notifications. `report_delivery_problem` is same-status and cannot bypass delivery confirmation.
+
+Mock proof file selections are reduced to metadata and discarded. Customer projections omit internal Dispatch notes, raw problem reasons and actor IDs while preserving approved handover fields, customer messages and intentionally customer-visible proof metadata.
+
 Legacy preview sessions are migrated only once and their old key is retired. Sign-out removes both the current and legacy session keys so an older browser profile cannot silently restore a staff session.
 
 The mock is not production security. It does, however, model important rules:
@@ -122,9 +134,12 @@ The mock is not production security. It does, however, model important rules:
 - Planning, Expediting and Dispatch handoffs cannot be skipped;
 - Expediting operational states cannot be selected through an ordinary progress update, and Dispatch hand-off cannot bypass the required-step or authorised-exception guard;
 - Expediting internal notes and controlled document/image references are removed from every customer projection;
+- Dispatch internal notes, problem details and internal actor IDs are removed from every customer projection;
 - every successful or denied workflow attempt creates a mock audit entry;
-- notifiable actions queue mock notification records;
-- notification inbox results are filtered by company, recipient role and representative assignment, with per-user read state;
+- every approved milestone creates a central event and recipient-specific in-app/email/push delivery records;
+- email and push are deterministic simulations in mock mode and never contact a provider;
+- notification inbox results are filtered by company, recipient role and representative assignment before preferences, with per-user read state;
+- mark-read, mark-all, preference changes and delivery retries create audit entries;
 - `accept_order` creates exactly one linked order, acceptance/conversion/order audit records and role-specific notifications; a repeated request returns the existing order;
 - customer projections hide representative-only acceptance evidence and supporting-document metadata;
 - validation runs inside the service boundary, even when the UI has already validated the form;
@@ -147,6 +162,7 @@ The API client is designed for:
 - JSON quotation confirmation requests, or multipart requests containing a JSON `payload` plus optional `quotationDocument`;
 - JSON order-acceptance requests, or multipart requests containing a JSON `payload` plus optional private `acceptanceDocument`;
 - JSON Planning action requests containing a validated nested `planning` object;
+- JSON Dispatch action requests, or multipart requests containing a JSON `payload` plus optional `dispatchProof`;
 - request timeouts and friendly network errors.
 
 Production access tokens must not be placed in Web Storage. The browser must never connect directly to PostgreSQL, SMTP or object storage with privileged credentials.

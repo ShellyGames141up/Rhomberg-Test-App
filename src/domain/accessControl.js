@@ -157,6 +157,10 @@ export const usesExpeditorWorkspace = account => (
   accountCan(account, PERMISSIONS.VIEW_EXPEDITING_QUEUE)
   && !accountCan(account, PERMISSIONS.VIEW_ALL_ORDERS)
 );
+export const usesDispatchWorkspace = account => (
+  accountCan(account, PERMISSIONS.VIEW_DISPATCH_QUEUE)
+  && !accountCan(account, PERMISSIONS.VIEW_ALL_ORDERS)
+);
 
 export const ORDER_QUEUE_SCOPES = Object.freeze({
   [PERMISSIONS.VIEW_PLANNING_QUEUE]: Object.freeze(['awaiting_planning', 'planning_in_progress', 'planned']),

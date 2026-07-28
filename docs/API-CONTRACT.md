@@ -553,6 +553,30 @@ Requires `view_expediting_queue` or an authorised Expediting action permission s
 
 The backend owns the active step catalogue, ordering and required-for-Dispatch flags. A client-supplied label, sequence or required flag is never authoritative.
 
+#### `GET /dispatch/workspace-options`
+
+Requires `view_dispatch_queue`, `confirm_collection` or `confirm_delivery`. Returns server-owned Dispatch methods, approved proof types and the current proof upload limit:
+
+```json
+{
+  "data": {
+    "methods": [
+      { "id": "collection", "label": "Customer collection", "fulfilment": "collect" },
+      { "id": "company_delivery", "label": "Rhomberg company delivery", "fulfilment": "delivery" },
+      { "id": "courier", "label": "Courier", "fulfilment": "delivery" },
+      { "id": "third_party_delivery", "label": "Third-party delivery", "fulfilment": "delivery" }
+    ],
+    "proofTypes": [
+      { "id": "signed_delivery_note", "label": "Signed delivery note" },
+      { "id": "collection_confirmation", "label": "Collection confirmation" }
+    ],
+    "maxProofBytes": 4194304
+  }
+}
+```
+
+The method’s `fulfilment` value is authoritative. The API rejects a delivery method for a collection order and vice versa.
+
 #### `GET /orders?page=1&pageSize=50&status=&search=&repId=&companyId=`
 
 Returns authorised orders. Customer-supplied `companyId` may narrow a result only within the companies already authorised by the session.
@@ -659,6 +683,55 @@ Expediting actions use this same endpoint:
 
 Customer order projections may include only `expediting.currentStep`, the current estimated completion date and customer-visible updates containing the progress step, customer message, public updater name and timestamp. They must omit internal notes, delay/supplier context, document/image references, internal actor IDs and hand-off exception evidence. The assigned representative and authorised internal roles may receive the appropriate fuller projection.
 
+Dispatch actions use the same workflow endpoint:
+
+- `mark_ready_for_collection` requires `collection`, ready date, package count and a customer-facing message;
+- `start_delivery` requires a delivery method, ready date, package count, courier/driver and a customer-facing message;
+- `confirm_collection` requires collection date, collector and a customer-facing message;
+- `confirm_delivery` requires delivery date, recipient, courier/driver and a customer-facing message;
+- `complete_collection` and `complete_delivery` require a final customer-facing message;
+- `report_delivery_problem` is a controlled same-status action from `out_for_delivery`; it requires a meaningful problem reason and customer-facing message.
+
+Example delivery confirmation:
+
+```json
+{
+  "action": "confirm_delivery",
+  "comment": "",
+  "data": {
+    "dispatchUpdate": {
+      "method": "courier",
+      "readyDate": "2026-07-25",
+      "deliveryDate": "2026-07-26",
+      "courierOrDriver": "Fabricated Preview Courier",
+      "trackingReference": "TRACK-TEST-001",
+      "numberOfPackages": 2,
+      "deliveryNoteNumber": "DN-TEST-001",
+      "recipientName": "Fabricated Test Recipient",
+      "proofOfDelivery": {
+        "type": "signed_delivery_note",
+        "reference": "POD-TEST-001",
+        "storageStatus": "metadata_only",
+        "customerVisible": true
+      },
+      "customerMessage": "Your order was delivered successfully.",
+      "internalNotes": "Fabricated internal Dispatch note.",
+      "customerVisible": true
+    }
+  },
+  "expectedVersion": 9
+}
+```
+
+When a proof file is selected, send multipart form data:
+
+- `payload`: JSON-encoded workflow request;
+- `dispatchProof`: PDF or image, maximum 4 MB under the proposed policy.
+
+The backend derives the actor/company, locks and re-reads the order, validates the exact status, permission, fulfilment method, dates and required fields, then writes the Dispatch record/update, workflow event, audit event and customer/representative notifications in one transaction. File bytes go only to private scanned object storage.
+
+Customer projections omit `dispatch.internalNotes`, `dispatch.currentProblemReason`, per-update `internalNotes`/`problemReason`, internal actor IDs and storage keys. They may expose approved handover fields, customer messages and intentionally customer-visible proof metadata only after the order/company check.
+
 An arbitrary `{ "status": "..." }` update is not supported. See `WORKFLOW_STATE_MACHINE.md` for the authoritative transition list.
 
 ### Customer personalisation
@@ -693,15 +766,110 @@ Deletes or schedules deletion only when the image belongs to the signed-in user 
 
 #### `GET /notifications?unreadOnly=true&page=1&pageSize=50`
 
-Returns notifications within the caller's authorised company/role scope. Internal-only notification payloads are never returned to customers. A representative receives only notifications addressed to their authoritative representative identity. Each recipient has independent read state; one user marking a message read must not mark it read for another recipient.
+Returns notifications within the caller's authorised company/role scope. Internal-only message variants, notes, provider responses and actor identifiers are never returned to customers. A representative receives only notifications for records assigned to their authoritative representative identity, unless a separately audited wider permission applies. Each recipient has independent read state; one user marking a message read must not mark it read for another recipient.
+
+Each item contains:
+
+```json
+{
+  "id": "notification-uuid",
+  "eventType": "order_sent_to_expediting",
+  "category": "orderProgress",
+  "title": "Order sent to Expediting",
+  "priority": "normal",
+  "entityType": "order",
+  "entityId": "order-uuid",
+  "reference": "OR-...",
+  "status": "submitted_to_expediting",
+  "message": "Recipient-safe rendered text",
+  "link": {
+    "entityType": "order",
+    "entityId": "order-uuid",
+    "reference": "OR-...",
+    "targetView": "tracking"
+  },
+  "deliveries": [
+    {
+      "id": "delivery-uuid",
+      "channel": "in_app",
+      "status": "in_app",
+      "attemptCount": 1,
+      "maxAttempts": 3,
+      "retryable": false
+    }
+  ],
+  "audit": {
+    "sourceAction": "submit_to_expediting",
+    "createdAt": "2026-07-27T09:00:00Z"
+  },
+  "createdAt": "2026-07-27T09:00:00Z",
+  "readAt": null
+}
+```
+
+Permitted delivery statuses are exactly `in_app`, `email_pending`, `email_sent`, `email_failed`, `push_pending`, `push_sent` and `push_failed`. A production response returns delivery rows only for the signed-in recipient, except that a manager/administrator with the approved operational permission may inspect delivery state across their authorised record scope.
 
 #### `POST /notifications/{notificationId}/read`
 
-Marks one authorised notification as read. Response `200` returns the updated notification.
+Marks one authorised notification as read and appends `notification.read` to the audit history. Response `200` returns the updated notification. Repeating the request is idempotent.
+
+#### `POST /notifications/read-all`
+
+Marks every unread notification in the caller's authorised inbox as read without changing another user's read state.
+
+```json
+{
+  "data": {
+    "updatedCount": 4,
+    "readAt": "2026-07-27T09:00:00Z"
+  }
+}
+```
+
+The operation appends one summary audit event; it does not create a separate audit row for every item.
+
+#### `GET /users/me/notification-preferences`
+
+Returns the signed-in user's channel and category preferences. `inApp`, `accountSecurity` and `maintenanceNotices` are mandatory and cannot be disabled. The API is the canonical preference source; customer-personalisation responses may mirror the category values temporarily for backward compatibility.
+
+#### `PUT /users/me/notification-preferences`
+
+Replaces one complete preference document after shared validation:
+
+```json
+{
+  "schemaVersion": 1,
+  "channels": {
+    "inApp": true,
+    "email": true,
+    "push": false
+  },
+  "categories": {
+    "rfqUpdates": true,
+    "quotationNotifications": true,
+    "orderProgress": true,
+    "delayNotifications": true,
+    "fulfilmentNotifications": true,
+    "accountSecurity": true,
+    "maintenanceNotices": true,
+    "companyAnnouncements": false
+  }
+}
+```
+
+The server appends `notification.preferences_updated`. Preferences never authorise access to a record: company, assignment and role checks occur before preference filtering.
+
+#### `POST /notifications/{notificationId}/deliveries/{deliveryId}/retry`
+
+Requires `retry_notification_delivery` (Manager and Administrator in the proposed matrix). It accepts only a failed email or push delivery inside the caller's wider authorised record scope, increments the attempt count, clears the safe error fields and sets the matching pending status. Response `202` means the outbox accepted the retry; it does not mean the provider delivered it. The worker later records sent/failed state and an audit event. In-app delivery cannot be retried.
+
+The API and worker must use an outbox transaction: the workflow change, recipient-specific notification, initial `in_app` delivery, email/push pending rows and `notification.created` audit record either all commit or all roll back. Provider calls run only after commit. Retry workers use row locking or `SKIP LOCKED`, idempotency keys, exponential backoff, a maximum-attempt policy and a dead-letter/operations queue.
 
 #### `GET /audit-events?entityId=&entityType=&page=1&pageSize=50`
 
 Manager/administrator only unless a narrower audited support permission is approved. Audit records are append-only and include successful and denied workflow attempts.
+
+The complete event catalogue, visibility rules and future Microsoft 365/SMTP/mobile-push requirements are in `docs/NOTIFICATION_SYSTEM.md`.
 
 ### Documents
 

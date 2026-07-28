@@ -23,9 +23,21 @@ CREATE TYPE app.record_status AS ENUM ('pending', 'active', 'suspended', 'archiv
 CREATE TYPE app.enquiry_status AS ENUM ('draft', 'submitted', 'assigned_to_rep', 'under_rep_review', 'quoted', 'awaiting_customer_acceptance', 'accepted', 'cancelled', 'expired', 'converted_to_order');
 CREATE TYPE app.order_status AS ENUM ('awaiting_planning', 'planning_in_progress', 'planned', 'submitted_to_expediting', 'expediting_in_progress', 'awaiting_dispatch', 'ready_for_collection', 'out_for_delivery', 'delivered', 'collected', 'completed', 'on_hold', 'cancelled', 'archived');
 CREATE TYPE app.fulfilment_method AS ENUM ('delivery', 'collect');
+CREATE TYPE app.dispatch_method AS ENUM ('collection', 'company_delivery', 'courier', 'third_party_delivery');
+CREATE TYPE app.dispatch_proof_type AS ENUM ('signed_delivery_note', 'collection_confirmation', 'courier_confirmation', 'photograph', 'other');
 CREATE TYPE app.acceptance_type AS ENUM ('purchase_order_received', 'payment_confirmed', 'written_acceptance_received', 'account_customer_authorisation', 'other');
-CREATE TYPE app.document_kind AS ENUM ('purchase_order', 'quotation', 'order_acceptance_evidence', 'expediting_evidence', 'datasheet', 'certificate', 'customer_attachment', 'other');
+CREATE TYPE app.document_kind AS ENUM ('purchase_order', 'quotation', 'order_acceptance_evidence', 'expediting_evidence', 'dispatch_proof', 'datasheet', 'certificate', 'customer_attachment', 'other');
 CREATE TYPE app.scan_status AS ENUM ('pending', 'clean', 'rejected', 'failed');
+CREATE TYPE app.notification_channel AS ENUM ('in_app', 'email', 'push');
+CREATE TYPE app.notification_delivery_status AS ENUM (
+  'in_app',
+  'email_pending',
+  'email_sent',
+  'email_failed',
+  'push_pending',
+  'push_sent',
+  'push_failed'
+);
 
 CREATE TABLE app.companies (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -454,18 +466,88 @@ CREATE TABLE app.workflow_events (
 CREATE TABLE app.notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id uuid NOT NULL REFERENCES app.companies(id),
-  recipient_user_id uuid REFERENCES app.users(id),
+  recipient_user_id uuid NOT NULL REFERENCES app.users(id) ON DELETE CASCADE,
+  representative_id uuid REFERENCES app.representatives(id),
   enquiry_id uuid REFERENCES app.enquiries(id) ON DELETE CASCADE,
   order_id uuid REFERENCES app.orders(id) ON DELETE CASCADE,
-  workflow_event_id uuid NOT NULL REFERENCES app.workflow_events(id) ON DELETE CASCADE,
-  channel text NOT NULL CHECK (channel IN ('in_app', 'email')),
+  workflow_event_id uuid REFERENCES app.workflow_events(id) ON DELETE CASCADE,
+  event_type text NOT NULL CHECK (event_type IN (
+    'rfq_submitted', 'rfq_assigned', 'rfq_under_review', 'rfq_quoted',
+    'customer_acknowledgement', 'order_accepted', 'order_created',
+    'order_sent_to_planning', 'order_sent_to_expediting',
+    'customer_progress_update', 'order_delayed', 'order_on_hold',
+    'order_resumed', 'order_sent_to_dispatch', 'ready_for_collection',
+    'out_for_delivery', 'delivery_problem_reported', 'delivered', 'collected', 'completed',
+    'order_cancelled', 'rfq_cancelled', 'rfq_expired', 'workflow_override'
+  )),
+  category text NOT NULL CHECK (category IN (
+    'rfqUpdates', 'quotationNotifications', 'orderProgress',
+    'delayNotifications', 'fulfilmentNotifications', 'accountSecurity',
+    'maintenanceNotices', 'companyAnnouncements'
+  )),
+  title text NOT NULL CHECK (length(title) BETWEEN 1 AND 160),
+  message text NOT NULL CHECK (length(message) BETWEEN 1 AND 2000),
+  priority text NOT NULL DEFAULT 'normal' CHECK (priority IN ('normal', 'high')),
   template_key text NOT NULL,
-  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
-  delivery_status text NOT NULL DEFAULT 'pending' CHECK (delivery_status IN ('pending', 'processing', 'sent', 'failed', 'cancelled')),
+  link_target jsonb NOT NULL DEFAULT '{}'::jsonb,
+  customer_visible boolean NOT NULL DEFAULT false,
+  source_action text,
+  created_by_user_id uuid REFERENCES app.users(id),
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
-  sent_at timestamptz,
   read_at timestamptz,
-  CONSTRAINT notification_parent CHECK (num_nonnulls(enquiry_id, order_id) = 1)
+  CONSTRAINT notification_parent CHECK (num_nonnulls(enquiry_id, order_id) = 1),
+  CHECK (jsonb_typeof(link_target) = 'object'),
+  CHECK (jsonb_typeof(metadata) = 'object')
+);
+
+CREATE TABLE app.notification_deliveries (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  notification_id uuid NOT NULL REFERENCES app.notifications(id) ON DELETE CASCADE,
+  channel app.notification_channel NOT NULL,
+  status app.notification_delivery_status NOT NULL,
+  attempt_count integer NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  max_attempts integer NOT NULL DEFAULT 3 CHECK (max_attempts BETWEEN 1 AND 20),
+  next_attempt_at timestamptz,
+  last_attempt_at timestamptz,
+  delivered_at timestamptz,
+  provider_message_reference text,
+  last_error_code text,
+  last_error_message text,
+  locked_at timestamptz,
+  locked_by text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (notification_id, channel),
+  CHECK (
+    (channel = 'in_app' AND status = 'in_app')
+    OR (channel = 'email' AND status IN ('email_pending', 'email_sent', 'email_failed'))
+    OR (channel = 'push' AND status IN ('push_pending', 'push_sent', 'push_failed'))
+  )
+);
+
+CREATE TABLE app.notification_preferences (
+  user_id uuid PRIMARY KEY REFERENCES app.users(id) ON DELETE CASCADE,
+  company_id uuid NOT NULL REFERENCES app.companies(id) ON DELETE CASCADE,
+  schema_version integer NOT NULL DEFAULT 1 CHECK (schema_version = 1),
+  in_app_enabled boolean NOT NULL DEFAULT true CHECK (in_app_enabled),
+  email_enabled boolean NOT NULL DEFAULT true,
+  push_enabled boolean NOT NULL DEFAULT true,
+  category_preferences jsonb NOT NULL DEFAULT '{
+    "rfqUpdates": true,
+    "quotationNotifications": true,
+    "orderProgress": true,
+    "delayNotifications": true,
+    "fulfilmentNotifications": true,
+    "accountSecurity": true,
+    "maintenanceNotices": true,
+    "companyAnnouncements": true
+  }'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (jsonb_typeof(category_preferences) = 'object'),
+  CHECK (category_preferences ->> 'accountSecurity' = 'true'),
+  CHECK (category_preferences ->> 'maintenanceNotices' = 'true')
 );
 
 CREATE TABLE app.uploaded_documents (
@@ -492,6 +574,80 @@ CREATE TABLE app.uploaded_documents (
     (NOT customer_visible AND customer_visibility_authorised_by IS NULL AND customer_visibility_authorised_at IS NULL)
     OR
     (customer_visible AND customer_visibility_authorised_by IS NOT NULL AND customer_visibility_authorised_at IS NOT NULL)
+  )
+);
+
+-- Current Dispatch summary plus append-only updates. Internal and customer text
+-- remain separate so API projections cannot accidentally reuse internal notes.
+CREATE TABLE app.order_dispatch_records (
+  order_id uuid PRIMARY KEY REFERENCES app.orders(id) ON DELETE CASCADE,
+  method app.dispatch_method,
+  ready_date date,
+  collection_date date,
+  delivery_date date,
+  courier_or_driver text CHECK (courier_or_driver IS NULL OR length(courier_or_driver) <= 160),
+  tracking_reference text CHECK (tracking_reference IS NULL OR length(tracking_reference) <= 160),
+  number_of_packages integer CHECK (number_of_packages BETWEEN 1 AND 999),
+  delivery_note_number text CHECK (delivery_note_number IS NULL OR length(delivery_note_number) <= 160),
+  recipient_name text CHECK (recipient_name IS NULL OR length(recipient_name) <= 160),
+  proof_document_id uuid REFERENCES app.uploaded_documents(id),
+  proof_type app.dispatch_proof_type,
+  proof_reference text CHECK (proof_reference IS NULL OR length(proof_reference) <= 240),
+  current_problem_reason text CHECK (current_problem_reason IS NULL OR length(current_problem_reason) <= 1000),
+  customer_message text CHECK (customer_message IS NULL OR length(customer_message) <= 1000),
+  internal_notes text CHECK (internal_notes IS NULL OR length(internal_notes) <= 2000),
+  received_at timestamptz NOT NULL,
+  last_updated_by_user_id uuid REFERENCES app.users(id),
+  last_updated_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT dispatch_summary_date_order CHECK (
+    (collection_date IS NULL OR ready_date IS NULL OR collection_date >= ready_date)
+    AND
+    (delivery_date IS NULL OR ready_date IS NULL OR delivery_date >= ready_date)
+  ),
+  CONSTRAINT dispatch_summary_proof_pair CHECK (
+    (proof_type IS NULL AND proof_reference IS NULL AND proof_document_id IS NULL)
+    OR
+    (proof_type IS NOT NULL AND (proof_reference IS NOT NULL OR proof_document_id IS NOT NULL))
+  )
+);
+
+CREATE TABLE app.order_dispatch_updates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL REFERENCES app.order_dispatch_records(order_id) ON DELETE CASCADE,
+  action text NOT NULL CHECK (action IN (
+    'mark_ready_for_collection', 'start_delivery', 'confirm_collection',
+    'confirm_delivery', 'complete_collection', 'complete_delivery',
+    'report_delivery_problem'
+  )),
+  method app.dispatch_method NOT NULL,
+  ready_date date,
+  collection_date date,
+  delivery_date date,
+  courier_or_driver text CHECK (courier_or_driver IS NULL OR length(courier_or_driver) <= 160),
+  tracking_reference text CHECK (tracking_reference IS NULL OR length(tracking_reference) <= 160),
+  number_of_packages integer CHECK (number_of_packages BETWEEN 1 AND 999),
+  delivery_note_number text CHECK (delivery_note_number IS NULL OR length(delivery_note_number) <= 160),
+  recipient_name text CHECK (recipient_name IS NULL OR length(recipient_name) <= 160),
+  proof_document_id uuid REFERENCES app.uploaded_documents(id),
+  proof_type app.dispatch_proof_type,
+  proof_reference text CHECK (proof_reference IS NULL OR length(proof_reference) <= 240),
+  problem_reason text CHECK (problem_reason IS NULL OR length(problem_reason) <= 1000),
+  customer_message text NOT NULL CHECK (length(trim(customer_message)) BETWEEN 5 AND 1000),
+  internal_notes text CHECK (internal_notes IS NULL OR length(internal_notes) <= 2000),
+  customer_visible boolean NOT NULL DEFAULT true,
+  updated_by_user_id uuid NOT NULL REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT dispatch_update_date_order CHECK (
+    (collection_date IS NULL OR ready_date IS NULL OR collection_date >= ready_date)
+    AND
+    (delivery_date IS NULL OR ready_date IS NULL OR delivery_date >= ready_date)
+  ),
+  CONSTRAINT dispatch_update_proof_pair CHECK (
+    (proof_type IS NULL AND proof_reference IS NULL AND proof_document_id IS NULL)
+    OR
+    (proof_type IS NOT NULL AND (proof_reference IS NOT NULL OR proof_document_id IS NOT NULL))
   )
 );
 
@@ -637,10 +793,18 @@ CREATE INDEX order_items_order_idx ON app.order_items (order_id, line_number);
 CREATE INDEX expediting_progress_steps_active_idx ON app.expediting_progress_steps (is_active, display_order);
 CREATE INDEX expediting_updates_order_time_idx ON app.expediting_updates (order_id, created_at);
 CREATE INDEX expediting_updates_step_time_idx ON app.expediting_updates (progress_step_code, created_at);
+CREATE INDEX orders_dispatch_queue_idx ON app.orders (status, submitted_to_dispatch_at, updated_at)
+  WHERE status IN ('awaiting_dispatch', 'ready_for_collection', 'out_for_delivery', 'delivered', 'collected', 'on_hold');
+CREATE INDEX dispatch_updates_order_time_idx ON app.order_dispatch_updates (order_id, created_at DESC);
+CREATE INDEX dispatch_records_received_idx ON app.order_dispatch_records (received_at, last_updated_at);
 CREATE INDEX workflow_events_enquiry_idx ON app.workflow_events (enquiry_id, created_at);
 CREATE INDEX workflow_events_order_idx ON app.workflow_events (order_id, created_at);
 CREATE INDEX notifications_recipient_unread_idx ON app.notifications (recipient_user_id, created_at DESC) WHERE read_at IS NULL;
 CREATE INDEX notifications_company_idx ON app.notifications (company_id, created_at DESC);
+CREATE INDEX notifications_entity_event_idx ON app.notifications (order_id, enquiry_id, event_type, created_at DESC);
+CREATE INDEX notification_deliveries_work_idx ON app.notification_deliveries (status, next_attempt_at)
+  WHERE status IN ('email_pending', 'email_failed', 'push_pending', 'push_failed');
+CREATE INDEX notification_preferences_company_idx ON app.notification_preferences (company_id, updated_at DESC);
 CREATE INDEX documents_company_idx ON app.uploaded_documents (company_id, created_at DESC) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX customer_identity_images_active_kind_idx
   ON app.customer_identity_images (user_id, kind) WHERE deleted_at IS NULL;
@@ -682,6 +846,13 @@ CREATE INDEX user_permission_overrides_active_idx ON app.user_permission_overrid
 -- Dispatch hand-off additionally verifies the required step set or records the
 -- authorised exception fields. The API derives actors/recipients from server
 -- records and never trusts browser-supplied identity, company or target status.
+
+-- Every Dispatch action follows the same atomic pattern: lock the authorised
+-- order and current dispatch record, validate the exact stage, fulfilment method,
+-- expected version, dates and evidence, append order_dispatch_updates, update the
+-- summary/order status, append workflow/audit events and enqueue customer and
+-- assigned-representative notifications. Proof bytes are private
+-- uploaded_documents(kind = dispatch_proof) and cannot be served before scanning.
 
 -- The API starts every transaction by setting these from a verified server session:
 -- SET LOCAL app.user_id = '<verified uuid>';
@@ -840,8 +1011,12 @@ ALTER TABLE app.enquiry_drafts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.expediting_updates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.order_dispatch_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.order_dispatch_updates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.workflow_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.notification_deliveries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.notification_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.uploaded_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.customer_personalisations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.customer_identity_images ENABLE ROW LEVEL SECURITY;
@@ -909,6 +1084,32 @@ CREATE POLICY expediting_updates_authorised_scope ON app.expediting_updates
     AND app.can_access_order(order_id)
   );
 
+CREATE POLICY dispatch_records_authorised_scope ON app.order_dispatch_records
+  USING (app.can_access_order(order_id))
+  WITH CHECK (
+    (
+      app.current_user_has_permission('confirm_delivery')
+      OR app.current_user_has_permission('confirm_collection')
+    )
+    AND app.can_access_order(order_id)
+  );
+
+CREATE POLICY dispatch_updates_authorised_scope ON app.order_dispatch_updates
+  USING (
+    app.can_access_order(order_id)
+    AND (
+      app.current_user_role() <> 'customer'
+      OR customer_visible
+    )
+  )
+  WITH CHECK (
+    (
+      app.current_user_has_permission('confirm_delivery')
+      OR app.current_user_has_permission('confirm_collection')
+    )
+    AND app.can_access_order(order_id)
+  );
+
 CREATE POLICY workflow_events_authorised_scope ON app.workflow_events
   USING (
     (
@@ -924,19 +1125,35 @@ CREATE POLICY workflow_events_authorised_scope ON app.workflow_events
 
 CREATE POLICY notifications_authorised_scope ON app.notifications
   USING (
-    recipient_user_id = app.current_user_id()
-    OR app.current_user_has_permission('view_all_orders')
-    OR app.current_user_has_permission('view_all_rfqs')
-    OR (
-      recipient_user_id IS NULL
-      AND app.current_user_has_permission('view_own_company_orders')
-      AND app.can_access_company(company_id)
+    app.can_access_company(company_id)
+    AND (
+      (enquiry_id IS NOT NULL AND app.can_access_enquiry(enquiry_id))
+      OR
+      (order_id IS NOT NULL AND app.can_access_order(order_id))
     )
-    OR (
-      recipient_user_id IS NULL
-      AND app.current_user_has_permission('view_own_company_rfqs')
-      AND app.can_access_company(company_id)
+    AND (
+      recipient_user_id = app.current_user_id()
+      OR app.current_user_has_permission('view_all_orders')
+      OR app.current_user_has_permission('view_all_rfqs')
     )
+    AND (app.current_user_role() <> 'customer' OR customer_visible)
+  );
+
+CREATE POLICY notification_deliveries_authorised_scope ON app.notification_deliveries
+  USING (EXISTS (
+    SELECT 1
+    FROM app.notifications notification
+    WHERE notification.id = notification_id
+  ));
+
+CREATE POLICY notification_preferences_own_scope ON app.notification_preferences
+  USING (
+    user_id = app.current_user_id()
+    OR app.current_user_has_permission('administer_users')
+  )
+  WITH CHECK (
+    user_id = app.current_user_id()
+    OR app.current_user_has_permission('administer_users')
   );
 
 CREATE POLICY documents_authorised_scope ON app.uploaded_documents
@@ -994,7 +1211,10 @@ CREATE POLICY customer_identity_images_own_scope ON app.customer_identity_images
 -- audit events. The API must return a customer quotation projection that omits
 -- internal_note, marked_by_user_id and unauthorised document/reference fields;
 -- it must likewise project expediting_updates without internal_note, delay_reason,
--- document metadata, internal actor IDs or hand-off exception fields. Row-level
--- security does not provide column-level redaction.
+-- document metadata, internal actor IDs or hand-off exception fields. Dispatch
+-- projections must omit internal_notes, problem_reason/current_problem_reason and
+-- internal actor IDs, and expose proof metadata only when customer visibility and
+-- parent order/company checks pass. Row-level security does not provide
+-- column-level redaction.
 
 COMMIT;

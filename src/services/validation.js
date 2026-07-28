@@ -4,15 +4,24 @@ import {
   expeditorProgressStepById,
 } from '../domain/expediting.js';
 import {
+  DISPATCH_METHODS,
+  DISPATCH_PROOF_TYPES,
+} from '../domain/dispatch.js';
+import {
   validateCustomerImage,
   validateCustomerPersonalisation,
 } from '../shared/personalisation/personalisation.js';
+import {
+  normaliseNotificationPreferences,
+  validateNotificationPreferences,
+} from '../domain/notifications.js';
 import { PLANNING_PRIORITY_VALUES, RFQ_ACCEPTANCE_TYPES, ServiceError } from './contracts.js';
 
 export const MAX_PO_FILE_BYTES = 4 * 1024 * 1024;
 export const ALLOWED_PO_FILE_PATTERN = /\.(pdf|doc|docx|png|jpe?g|webp|gif|heic)$/i;
 export const MAX_QUOTATION_DOCUMENT_BYTES = 4 * 1024 * 1024;
 export const MAX_ACCEPTANCE_DOCUMENT_BYTES = 4 * 1024 * 1024;
+export const MAX_DISPATCH_PROOF_BYTES = 4 * 1024 * 1024;
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const present = value => String(value || '').trim();
@@ -51,6 +60,13 @@ export function validatePersonalisationImage(file) {
   const message = validateCustomerImage(file);
   if (message) throwValidation({ image: message }, message);
   return file;
+}
+
+export function validateNotificationPreferenceSettings(candidate) {
+  const normalised = normaliseNotificationPreferences(candidate);
+  const errors = validateNotificationPreferences(normalised);
+  if (Object.keys(errors).length) throwValidation(errors, 'Check the notification preferences.');
+  return normalised;
 }
 
 export function validatePoFile(file) {
@@ -181,6 +197,22 @@ export function validateAcceptanceDocument(file) {
     throwValidation(
       { acceptanceDocumentFile: 'The acceptance supporting document must be 4 MB or smaller.' },
       'The acceptance supporting document is too large.',
+    );
+  }
+}
+
+export function validateDispatchProof(file) {
+  if (!file) return;
+  if (!ALLOWED_PO_FILE_PATTERN.test(file.name || '')) {
+    throwValidation(
+      { dispatchProofFile: 'Choose a PDF, DOCX, DOC or image proof file.' },
+      'The proof-of-delivery file is not supported.',
+    );
+  }
+  if (Number(file.size || 0) > MAX_DISPATCH_PROOF_BYTES) {
+    throwValidation(
+      { dispatchProofFile: 'The proof-of-delivery file must be 4 MB or smaller.' },
+      'The proof-of-delivery file is too large.',
     );
   }
 }
@@ -437,6 +469,161 @@ export function validateExpeditingAction(
         exceptionAuthorisationReference: authorisedException ? exceptionAuthorisationReference : '',
       },
     } : {}),
+  };
+}
+
+const DISPATCH_ACTIONS = Object.freeze([
+  'mark_ready_for_collection',
+  'start_delivery',
+  'confirm_collection',
+  'confirm_delivery',
+  'complete_collection',
+  'complete_delivery',
+  'report_delivery_problem',
+]);
+
+const dispatchValue = (data, field, legacyField) => (
+  data?.dispatchUpdate?.[field]
+  ?? data?.[legacyField]
+  ?? data?.[field]
+);
+
+export function validateDispatchAction(
+  action,
+  data = {},
+  {
+    methods = DISPATCH_METHODS,
+    proofTypes = DISPATCH_PROOF_TYPES,
+  } = {},
+) {
+  const errors = {};
+  if (!DISPATCH_ACTIONS.includes(action)) {
+    throwValidation({ action: 'Select a recognised Dispatch action.' }, 'The Dispatch action is not supported.');
+  }
+
+  const method = present(dispatchValue(data, 'method', 'dispatchMethod'));
+  const readyDate = present(dispatchValue(data, 'readyDate', 'dispatchReadyDate'));
+  const collectionDate = present(dispatchValue(data, 'collectionDate', 'dispatchCollectionDate'));
+  const deliveryDate = present(dispatchValue(data, 'deliveryDate', 'dispatchDeliveryDate'));
+  const courierOrDriver = present(dispatchValue(data, 'courierOrDriver', 'dispatchCourierOrDriver'));
+  const trackingReference = present(dispatchValue(data, 'trackingReference', 'dispatchTrackingReference'));
+  const numberOfPackages = Number(dispatchValue(data, 'numberOfPackages', 'dispatchNumberOfPackages'));
+  const deliveryNoteNumber = present(dispatchValue(data, 'deliveryNoteNumber', 'dispatchDeliveryNoteNumber'));
+  const recipientName = present(dispatchValue(data, 'recipientName', 'dispatchRecipientName'));
+  const internalNotes = present(dispatchValue(data, 'internalNotes', 'dispatchInternalNotes'));
+  const customerMessage = present(dispatchValue(data, 'customerMessage', 'dispatchCustomerMessage'));
+  const problemReason = present(dispatchValue(data, 'problemReason', 'dispatchProblemReason'));
+  const proofType = present(
+    dispatchValue(data, 'proofType', 'dispatchProofType')
+    || data?.dispatchUpdate?.proofOfDelivery?.type,
+  );
+  const proofReference = present(
+    dispatchValue(data, 'proofReference', 'dispatchProofReference')
+    || data?.dispatchUpdate?.proofOfDelivery?.reference,
+  );
+  const proofFile = data?.dispatchProofFile || data?.dispatchUpdate?.proofFile || null;
+  const methodDefinition = methods.find(item => item.id === method);
+
+  if (!methodDefinition) errors.dispatchMethod = 'Select a recognised Dispatch method.';
+  if (action === 'mark_ready_for_collection' && methodDefinition?.fulfilment !== 'collect') {
+    errors.dispatchMethod = 'Collection orders must use the customer collection method.';
+  }
+  if (['start_delivery', 'confirm_delivery', 'report_delivery_problem'].includes(action) && methodDefinition?.fulfilment !== 'delivery') {
+    errors.dispatchMethod = 'Select a delivery method for this action.';
+  }
+  if (action === 'confirm_collection' && methodDefinition?.fulfilment !== 'collect') {
+    errors.dispatchMethod = 'Collection confirmation requires the customer collection method.';
+  }
+
+  if (['mark_ready_for_collection', 'start_delivery'].includes(action) && !validDateOnly(readyDate)) {
+    errors.dispatchReadyDate = 'Enter the date this order became ready for handover.';
+  } else if (readyDate && !validDateOnly(readyDate)) {
+    errors.dispatchReadyDate = 'Enter a valid ready date.';
+  }
+  if (action === 'confirm_collection' && !validDateOnly(collectionDate)) {
+    errors.dispatchCollectionDate = 'Enter the confirmed collection date.';
+  } else if (collectionDate && !validDateOnly(collectionDate)) {
+    errors.dispatchCollectionDate = 'Enter a valid collection date.';
+  }
+  if (action === 'confirm_delivery' && !validDateOnly(deliveryDate)) {
+    errors.dispatchDeliveryDate = 'Enter the confirmed delivery date.';
+  } else if (deliveryDate && !validDateOnly(deliveryDate)) {
+    errors.dispatchDeliveryDate = 'Enter a valid delivery date.';
+  }
+  if (readyDate && collectionDate && validDateOnly(readyDate) && validDateOnly(collectionDate) && collectionDate < readyDate) {
+    errors.dispatchCollectionDate = 'The collection date cannot be before the ready date.';
+  }
+  if (readyDate && deliveryDate && validDateOnly(readyDate) && validDateOnly(deliveryDate) && deliveryDate < readyDate) {
+    errors.dispatchDeliveryDate = 'The delivery date cannot be before the ready date.';
+  }
+
+  if (
+    ['mark_ready_for_collection', 'start_delivery'].includes(action)
+    && (!Number.isInteger(numberOfPackages) || numberOfPackages < 1 || numberOfPackages > 999)
+  ) {
+    errors.dispatchNumberOfPackages = 'Enter a package quantity between 1 and 999.';
+  }
+  if (
+    Number.isFinite(numberOfPackages)
+    && numberOfPackages !== 0
+    && (!Number.isInteger(numberOfPackages) || numberOfPackages < 1 || numberOfPackages > 999)
+  ) {
+    errors.dispatchNumberOfPackages = 'Enter a package quantity between 1 and 999.';
+  }
+  if (
+    ['start_delivery', 'confirm_delivery'].includes(action)
+    && methodDefinition?.fulfilment === 'delivery'
+    && courierOrDriver.length < 2
+  ) {
+    errors.dispatchCourierOrDriver = 'Enter the courier, driver or delivery provider.';
+  }
+  if (['confirm_collection', 'confirm_delivery'].includes(action) && recipientName.length < 2) {
+    errors.dispatchRecipientName = 'Enter the person who received or collected the order.';
+  }
+  if (action === 'report_delivery_problem' && problemReason.length < 5) {
+    errors.dispatchProblemReason = 'Describe the delivery problem clearly.';
+  }
+  if (customerMessage.length < 5) errors.dispatchCustomerMessage = 'Add a clear customer-facing Dispatch message.';
+  else if (customerMessage.length > 1000) errors.dispatchCustomerMessage = 'Keep the customer-facing message below 1,000 characters.';
+  if (internalNotes.length > 2000) errors.dispatchInternalNotes = 'Keep internal Dispatch notes below 2,000 characters.';
+  if (problemReason.length > 1000) errors.dispatchProblemReason = 'Keep the delivery problem below 1,000 characters.';
+  if (courierOrDriver.length > 160) errors.dispatchCourierOrDriver = 'Keep the courier or driver below 160 characters.';
+  if (trackingReference.length > 160) errors.dispatchTrackingReference = 'Keep the tracking reference below 160 characters.';
+  if (deliveryNoteNumber.length > 160) errors.dispatchDeliveryNoteNumber = 'Keep the delivery note number below 160 characters.';
+  if (recipientName.length > 160) errors.dispatchRecipientName = 'Keep the recipient name below 160 characters.';
+  if (proofReference.length > 240) errors.dispatchProofReference = 'Keep the proof reference below 240 characters.';
+  if ((proofReference || proofFile) && !proofTypes.some(type => type.id === proofType)) {
+    errors.dispatchProofType = 'Select the type of proof being recorded.';
+  }
+  if (proofType && !proofReference && !proofFile) {
+    errors.dispatchProofReference = 'Enter a controlled proof reference or choose a proof file.';
+  }
+  if (Object.keys(errors).length) throwValidation(errors, 'Check the Dispatch information.');
+  validateDispatchProof(proofFile);
+
+  return {
+    dispatchUpdate: {
+      method,
+      readyDate,
+      collectionDate,
+      deliveryDate,
+      courierOrDriver,
+      trackingReference,
+      numberOfPackages: Number.isInteger(numberOfPackages) && numberOfPackages > 0 ? numberOfPackages : 0,
+      deliveryNoteNumber,
+      recipientName,
+      internalNotes,
+      customerMessage,
+      problemReason,
+      proofOfDelivery: proofType ? {
+        type: proofType,
+        reference: proofReference,
+        storageStatus: 'metadata_only',
+        customerVisible: true,
+      } : null,
+      customerVisible: true,
+    },
+    dispatchProofFile: proofFile,
   };
 }
 

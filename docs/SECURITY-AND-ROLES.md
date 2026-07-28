@@ -100,6 +100,24 @@ The backend must:
 
 The public preview stores only fabricated metadata references. A production document or image upload still requires private object storage, malware scanning and a separately authorised download route.
 
+### Dispatch controls
+
+The desktop Dispatch workspace does not widen access. `view_dispatch_queue` grants only `awaiting_dispatch`, `ready_for_collection`, `out_for_delivery`, `delivered`, `collected` and Dispatch-owned holds. `confirm_collection`, `confirm_delivery` and `manage_order_hold` remain separate capabilities.
+
+The backend must:
+
+- derive the Dispatch actor and company/order scope from the authenticated staff session;
+- reject a method that does not match the order’s persisted collection/delivery preference;
+- enforce the exact current stage and expected row version for every release, confirmation and completion;
+- require ready date/package count on release, courier/driver for delivery, and recipient or collector/date at confirmation;
+- validate chronological dates and bounded text/package fields;
+- store the customer message separately from internal notes and raw delivery-problem reasons;
+- keep `report_delivery_problem` in `out_for_delivery`; it cannot confirm delivery or skip a mandatory step;
+- create workflow, audit and customer/assigned-representative notifications in the same transaction;
+- retain delivered/collected records until the explicit completion transition;
+- keep proof file bytes in private scanned storage and return metadata only through an authorised order/document projection;
+- reject stale, cross-company and non-Dispatch-queue actions without revealing an inaccessible order.
+
 ## Company isolation requirement
 
 Customer isolation is a server responsibility. The backend must:
@@ -149,9 +167,14 @@ The API must reject price payloads and any card number, CVV, PIN, password, bank
 - Treat order-acceptance evidence as internal-only. Its upload metadata, PO/payment reference, verification note and accepting-user identity must not be serialised to customers.
 - Treat the complete Planning record as internal-only. Customer projections must omit internal job numbers, Planning PO/exception fields, notes, schedules, ownership, production location, document references and Planning actor metadata.
 - Treat Expediting internal notes, delay/supplier context, internal actor IDs, document/image references and hand-off exception evidence as internal-only. Customers receive only approved customer messages, public progress labels, dates and the safe updater display name.
+- Treat Dispatch internal notes, delivery-problem/escalation detail and internal actor IDs as internal-only. Customer proof metadata requires explicit visibility plus a fresh order/company/document authorisation check.
 - Never return quotation internal notes to customer responses. Row-level security restricts rows, but the API must also apply role-specific field projection.
 - Keep quotation pricing outside this customer-facing application until a separately approved phase defines its source, visibility and controls.
 
 ## Audit events
 
 At minimum, record successful/failed sign-ins, session revocation, account creation, role changes, company/rep assignment changes, every successful or denied workflow action, overrides, RFQ submission, PO upload/download, notification/email delivery/retry, retention/archive actions and administrative product edits. Audit records should be append-only for ordinary application roles.
+
+Notification access is not a separate shortcut around record access. The backend must first resolve the recipient from authenticated company/representative/queue relationships, then require access to the parent RFQ/order on every list, read, deep-link and retry request. A customer receives only customer-visible wording for its company. An assigned representative receives only its assignment. Provider error bodies, tokens, internal message variants and internal actor identifiers must never enter customer responses.
+
+Only Manager and Administrator receive `retry_notification_delivery`. A retry may update the delivery outbox only; it cannot alter the workflow record. In-app delivery is not retryable. Email/push provider calls occur in a background worker after the business transaction commits and use server-side vault credentials.

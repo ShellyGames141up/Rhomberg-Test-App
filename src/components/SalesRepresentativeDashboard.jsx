@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { roleProfileFor } from '../domain/accessControl.js';
 import {
   filterRepresentativeRfqs,
@@ -19,7 +19,7 @@ const formatDate = value => value ? new Date(value).toLocaleString('en-ZA', {
   minute: '2-digit',
 }) : 'Not recorded';
 
-export function SalesRepresentativeDashboard({ account, rfqs, onAction, serviceMode }) {
+export function SalesRepresentativeDashboard({ account, rfqs, onAction, serviceMode, focusRecordId = '' }) {
   const [search, setSearch] = useState('');
   const [group, setGroup] = useState('all');
   const [priority, setPriority] = useState('all');
@@ -31,6 +31,14 @@ export function SalesRepresentativeDashboard({ account, rfqs, onAction, serviceM
   );
   const urgentCount = rfqs.filter(rfq => representativeRfqPriority(rfq) === 'urgent').length;
   const copy = roleProfileFor(account.role).dashboard;
+
+  useEffect(() => {
+    if (!focusRecordId || !rfqs.some(rfq => rfq.id === focusRecordId)) return;
+    setGroup('all');
+    setOpenId(focusRecordId);
+    const timer = window.setTimeout(() => document.getElementById(`sales-rfq-${focusRecordId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    return () => window.clearTimeout(timer);
+  }, [focusRecordId]);
 
   return (
     <section className="app-screen sales-inbox-screen" aria-labelledby="sales-inbox-title">
@@ -87,7 +95,7 @@ function SalesRfqCard({ rfq, expanded, onToggle, onAction }) {
   const documents = rfq.documents || [];
 
   return (
-    <article className={`sales-rfq-card ${priority === 'urgent' ? 'is-emergency' : ''}`}>
+    <article className={`sales-rfq-card ${priority === 'urgent' ? 'is-emergency' : ''}`} id={`sales-rfq-${rfq.id}`}>
       <div className="sales-rfq-summary">
         <div className="sales-rfq-reference"><small>{rfq.reference}{rfq.isDemo ? ' · DEMO' : ''}</small><strong>{rfq.company}</strong><span>{rfq.contact}</span></div>
         <span className={`tracking-status status-${rfq.trackingStatus}`}>{status.label}</span>

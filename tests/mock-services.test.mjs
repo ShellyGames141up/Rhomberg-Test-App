@@ -8,6 +8,7 @@ import { ServiceError, USER_ROLES } from '../src/services/contracts.js';
 import { optionsForField, shouldShowField } from '../src/domain/productConfiguration.js';
 import { representativesByBranch } from '../src/data/representatives.js';
 import { createDefaultCustomerPersonalisation } from '../src/shared/personalisation/personalisation.js';
+import { createDefaultNotificationPreferences } from '../src/domain/notifications.js';
 
 class TestStorage {
   constructor() {
@@ -214,9 +215,15 @@ const submissionAudit = JSON.parse(storage.getItem(STORE_KEYS.audit)).filter(eve
 assert.equal(submissionAudit[0].action, 'workflow.submit_rfq', 'customer submission must be the first append-only audit entry');
 assert.equal(submissionAudit[1].action, 'workflow.assign_representative');
 const submissionNotifications = JSON.parse(storage.getItem(STORE_KEYS.notifications)).filter(notification => notification.entityId === submission.enquiry.id);
-assert.equal(submissionNotifications.length, 1, 'RFQ submission must create one representative assignment notification');
-assert.equal(submissionNotifications[0].status, 'assigned_to_rep');
-assert.deepEqual(submissionNotifications[0].recipients, ['assigned_representative']);
+assert.equal(submissionNotifications.length, 2, 'RFQ submission must create separate submitted and representative-assignment notification events');
+assert.deepEqual(
+  submissionNotifications.map(notification => notification.eventType),
+  ['rfq_submitted', 'rfq_assigned'],
+);
+assert.deepEqual(
+  submissionNotifications.find(notification => notification.eventType === 'rfq_assigned').recipients,
+  ['customer', 'assigned_representative'],
+);
 
 await reopenedServices.auth.signOut();
 await reopenedServices.auth.signIn({ email: 'sales.workflow@example.invalid', password: 'Sales123!' });
@@ -483,8 +490,8 @@ const planningOptions = await reopenedServices.planning.getWorkspaceOptions();
 assert.ok(planningOptions.users.some(user => user.id === 'staff-planning-preview'), 'Planning options must list authorised Planning users through the service layer');
 assert.ok(planningOptions.locations.some(location => location.id === 'cape-town'), 'Planning options must list recognised production locations through the service layer');
 assert.deepEqual(planningOptions.priorities.map(priority => priority.id), ['standard', 'high', 'urgent']);
-const planningConversionNotice = (await reopenedServices.notifications.list()).find(notification => notification.status === 'converted_to_order');
-assert.ok(planningConversionNotice?.message.includes('waiting for Planning'), 'Planning must receive a new-order notification');
+const planningConversionNotice = (await reopenedServices.notifications.list()).find(notification => notification.eventType === 'order_sent_to_planning');
+assert.ok(planningConversionNotice?.message.includes('ready for Planning'), 'Planning must receive a new-order notification');
 let plannedOrder = planningQueue.find(order => order.id === conversion.createdOrder.id);
 plannedOrder = await reopenedServices.workflow.performAction(plannedOrder.id, {
   entityType: 'order', action: 'start_planning', comment: '', data: {}, expectedVersion: plannedOrder.version,
@@ -665,19 +672,74 @@ assert.ok((await reopenedServices.notifications.list()).some(notification => not
 
 await reopenedServices.auth.signOut();
 await reopenedServices.auth.signIn({ email: 'dispatch.workflow@example.invalid', password: 'Dispatch123!' });
+const dispatchWorkspaceOptions = await reopenedServices.dispatch.getWorkspaceOptions();
+assert.deepEqual(
+  dispatchWorkspaceOptions.methods.map(method => method.id),
+  ['collection', 'company_delivery', 'courier', 'third_party_delivery'],
+  'Dispatch method options must come from the service layer',
+);
+assert.ok(dispatchWorkspaceOptions.proofTypes.some(type => type.id === 'signed_delivery_note'));
+assert.equal(dispatchWorkspaceOptions.maxProofBytes, 4 * 1024 * 1024);
 const dispatchQueue = await reopenedServices.orders.list();
 assert.ok(dispatchQueue.every(order => ['awaiting_dispatch', 'ready_for_collection', 'out_for_delivery', 'delivered', 'collected'].includes(order.trackingStatus)
   || (order.trackingStatus === 'on_hold' && ['awaiting_dispatch', 'ready_for_collection', 'out_for_delivery', 'delivered', 'collected'].includes(order.workflowContext?.resumeStatus))),
 'Dispatch must receive only orders handed over by Expediting');
+const migratedDispatchDemo = dispatchQueue.find(order => order.id === 'enquiry-demo-kzn-001');
+assert.equal(migratedDispatchDemo.reference, 'OR-TEST-0003', 'legacy fabricated Dispatch records must expose a permanent order reference');
+assert.equal(migratedDispatchDemo.sourceRfqReference, 'RQ-TEST-0003', 'the source RFQ reference must remain separate from the order reference');
+assert.equal(migratedDispatchDemo.internalJobNumber, 'JOB-TEST-0003', 'legacy fabricated Dispatch records must retain their job number');
 let dispatchedOrder = dispatchQueue.find(order => order.id === conversion.createdOrder.id);
 dispatchedOrder = await reopenedServices.workflow.performAction(dispatchedOrder.id, {
-  entityType: 'order', action: 'mark_ready_for_collection', comment: '', data: {}, expectedVersion: dispatchedOrder.version,
+  entityType: 'order',
+  action: 'mark_ready_for_collection',
+  comment: '',
+  data: {
+    dispatchMethod: 'collection',
+    dispatchReadyDate: '2026-07-22',
+    dispatchNumberOfPackages: 2,
+    dispatchDeliveryNoteNumber: 'DN-TEST-SERVICE-001',
+    dispatchCustomerMessage: 'Your order is ready for collection.',
+    dispatchInternalNotes: 'Fabricated restricted Dispatch note.',
+  },
+  expectedVersion: dispatchedOrder.version,
 });
+const proofFile = new File(['fabricated proof metadata'], 'collection-proof-test.pdf', { type: 'application/pdf' });
 dispatchedOrder = await reopenedServices.workflow.performAction(dispatchedOrder.id, {
-  entityType: 'order', action: 'confirm_collection', comment: 'Collected by the authorised test contact.', data: {}, expectedVersion: dispatchedOrder.version,
+  entityType: 'order',
+  action: 'confirm_collection',
+  comment: '',
+  data: {
+    dispatchMethod: 'collection',
+    dispatchReadyDate: '2026-07-22',
+    dispatchCollectionDate: '2026-07-22',
+    dispatchNumberOfPackages: 2,
+    dispatchDeliveryNoteNumber: 'DN-TEST-SERVICE-001',
+    dispatchRecipientName: 'Fabricated Test Collector',
+    dispatchProofType: 'collection_confirmation',
+    dispatchProofReference: 'POD-TEST-SERVICE-001',
+    dispatchProofFile: proofFile,
+    dispatchCustomerMessage: 'Your order was collected successfully.',
+    dispatchInternalNotes: 'Fabricated internal handover confirmation.',
+  },
+  expectedVersion: dispatchedOrder.version,
 });
+assert.equal(dispatchedOrder.dispatch.proofOfDelivery.fileName, proofFile.name);
+assert.equal(dispatchedOrder.dispatch.proofOfDelivery.storageStatus, 'metadata_only');
 dispatchedOrder = await reopenedServices.workflow.performAction(dispatchedOrder.id, {
-  entityType: 'order', action: 'complete_collection', comment: '', data: {}, expectedVersion: dispatchedOrder.version,
+  entityType: 'order',
+  action: 'complete_collection',
+  comment: '',
+  data: {
+    dispatchMethod: 'collection',
+    dispatchReadyDate: '2026-07-22',
+    dispatchCollectionDate: '2026-07-22',
+    dispatchNumberOfPackages: 2,
+    dispatchDeliveryNoteNumber: 'DN-TEST-SERVICE-001',
+    dispatchRecipientName: 'Fabricated Test Collector',
+    dispatchCustomerMessage: 'Your collected order is complete.',
+    dispatchInternalNotes: 'Fabricated internal closure note.',
+  },
+  expectedVersion: dispatchedOrder.version,
 });
 assert.equal(dispatchedOrder.trackingStatus, 'completed');
 
@@ -687,6 +749,9 @@ assert.ok(auditEvents.some(event => event.action === 'workflow.mark_quoted' && e
 assert.ok(auditEvents.some(event => event.action === 'workflow.acknowledge_quotation' && event.entityId === conversion.id && event.actorRole === USER_ROLES.CUSTOMER), 'customer receipt acknowledgement must add an audit event');
 assert.ok(auditEvents.some(event => event.action === 'workflow.complete_expediting' && event.outcome === 'success'), 'successful workflow actions must create audit entries');
 assert.ok(auditEvents.some(event => event.action === 'workflow.complete_expediting' && event.outcome === 'denied' && event.errorCode === 'EXPEDITING_HANDOFF_INVALID'), 'denied Expediting hand-offs must create audit entries');
+assert.ok(auditEvents.some(event => event.action === 'workflow.mark_ready_for_collection' && event.outcome === 'success'), 'collection release must create an audit entry');
+assert.ok(auditEvents.some(event => event.action === 'workflow.confirm_collection' && event.outcome === 'success'), 'collection confirmation must create an audit entry');
+assert.ok(auditEvents.some(event => event.action === 'workflow.complete_collection' && event.outcome === 'success'), 'Dispatch completion must create an audit entry');
 const storedNotifications = JSON.parse(storage.getItem(STORE_KEYS.notifications));
 assert.ok(storedNotifications.some(item => item.entityId === conversion.createdOrder.id && item.status === 'awaiting_dispatch'), 'notifiable transitions must queue a mock notification');
 
@@ -696,7 +761,12 @@ const capeRfqs = await reopenedServices.enquiries.list();
 const capeOrders = await reopenedServices.orders.list();
 assert.ok(capeRfqs.every(record => record.companyId === 'company-demo-cape'));
 assert.ok(capeOrders.every(record => record.companyId === 'company-demo-cape'));
-assert.equal(capeOrders.find(order => order.id === conversion.createdOrder.id).trackingStatus, 'completed', 'customer tracking must show the completed order from its own company');
+const customerCompletedOrder = capeOrders.find(order => order.id === conversion.createdOrder.id);
+assert.equal(customerCompletedOrder.trackingStatus, 'completed', 'customer tracking must show the completed order from its own company');
+assert.equal(customerCompletedOrder.dispatch.recipientName, 'Fabricated Test Collector');
+assert.equal(customerCompletedOrder.dispatch.proofOfDelivery.reference, 'POD-TEST-SERVICE-001');
+assert.equal('internalNotes' in customerCompletedOrder.dispatch, false, 'customer records must not expose internal Dispatch notes');
+assert.equal(customerCompletedOrder.dispatch.updates.some(update => 'internalNotes' in update || 'problemReason' in update), false, 'customer Dispatch history must exclude internal notes and operational problem detail');
 const customerNotifications = await reopenedServices.notifications.list();
 assert.ok(customerNotifications.length > 0 && customerNotifications.every(notification => notification.companyId === 'company-demo-cape'), 'customer notifications must remain company-isolated');
 
@@ -777,6 +847,16 @@ const apiFetch = async (url, options) => {
     documentTypes: [{ id: 'document', label: 'Document reference' }],
     approachingCompletionDays: 3,
   });
+  if (url.pathname.endsWith('/dispatch/workspace-options')) return jsonResponse({
+    methods: [
+      { id: 'collection', label: 'Customer collection', fulfilment: 'collect' },
+      { id: 'company_delivery', label: 'Rhomberg company delivery', fulfilment: 'delivery' },
+      { id: 'courier', label: 'Courier', fulfilment: 'delivery' },
+      { id: 'third_party_delivery', label: 'Third-party delivery', fulfilment: 'delivery' },
+    ],
+    proofTypes: [{ id: 'collection_confirmation', label: 'Collection confirmation' }],
+    maxProofBytes: 4 * 1024 * 1024,
+  });
   if (url.pathname.endsWith('/enquiries') && options.method === 'POST') return jsonResponse({ enquiry: { id: '00000000-0000-4000-8000-000000000003', reference: 'RQ-API-TEST', companyId: apiUser.companyId }, delivery: { ok: true, deliveryMode: 'queued' } }, 201);
   if (url.pathname.endsWith('/workflow-actions') && options.method === 'POST') return jsonResponse({ id: '00000000-0000-4000-8000-000000000003', reference: 'RQ-API-TEST', workflowType: 'order', trackingStatus: 'awaiting_dispatch', version: 6 }, 201);
   return jsonResponse([]);
@@ -793,17 +873,32 @@ const apiPlanningOptions = await apiServices.planning.getWorkspaceOptions();
 assert.equal(apiPlanningOptions.priorities[0].id, 'standard');
 const apiExpeditingOptions = await apiServices.expediting.getWorkspaceOptions();
 assert.equal(apiExpeditingOptions.progressSteps.at(-1).id, 'ready_for_dispatch');
+const apiDispatchOptions = await apiServices.dispatch.getWorkspaceOptions();
+assert.equal(apiDispatchOptions.methods.at(-1).id, 'third_party_delivery');
 await apiServices.personalisation.get();
 await apiServices.personalisation.complete({ ...createDefaultCustomerPersonalisation(), setupCompleted: true });
 const apiIdentityImage = new File([new Uint8Array([1, 2, 3])], 'api-logo.png', { type: 'image/png' });
 await apiServices.personalisation.uploadImage(apiIdentityImage, 'companyLogo', { x: 45, y: 55 });
 await apiServices.personalisation.removeImage('00000000-0000-4000-8000-000000000099');
+await apiServices.notifications.list({ unreadOnly: true });
+await apiServices.notifications.markRead('00000000-0000-4000-8000-000000000101');
+await apiServices.notifications.markAllRead();
+await apiServices.notifications.getPreferences();
+await apiServices.notifications.savePreferences(createDefaultNotificationPreferences());
+await apiServices.notifications.retryDelivery(
+  '00000000-0000-4000-8000-000000000101',
+  '00000000-0000-4000-8000-000000000102',
+);
 assert.ok(apiRequests.some(request => request.path.endsWith('/enquiries') && request.options.method === 'GET'), 'API RFQ reads must use the RFQ collection endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/enquiries/inbox') && request.options.method === 'GET'), 'API representative inbox reads must use the dedicated inbox endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/orders') && request.options.method === 'GET'), 'API order reads must use the separate order collection endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/users/me/personalisation') && request.options.method === 'PUT'), 'API personalisation saves must use the current-user endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/users/me/personalisation/images') && request.options.method === 'POST' && request.options.body instanceof FormData), 'API identity image uploads must use multipart current-user storage');
 assert.ok(apiRequests.some(request => request.path.endsWith('/users/me/personalisation/images/00000000-0000-4000-8000-000000000099') && request.options.method === 'DELETE'), 'API image deletion must be current-user scoped');
+assert.ok(apiRequests.some(request => request.path.endsWith('/notifications') && request.options.method === 'GET'), 'API notifications must use the current-user scoped collection endpoint');
+assert.ok(apiRequests.some(request => request.path.endsWith('/notifications/read-all') && request.options.method === 'POST'), 'API notification mark-all must use its controlled endpoint');
+assert.ok(apiRequests.some(request => request.path.endsWith('/users/me/notification-preferences') && request.options.method === 'PUT'), 'API notification preferences must use the current-user endpoint');
+assert.ok(apiRequests.some(request => request.path.endsWith('/notifications/00000000-0000-4000-8000-000000000101/deliveries/00000000-0000-4000-8000-000000000102/retry') && request.options.method === 'POST'), 'API delivery retry must use the controlled delivery endpoint');
 const apiSubmission = await apiServices.enquiries.submit({
   application: 'API contract test application',
   area: 'Gauteng',
@@ -844,6 +939,25 @@ await apiServices.workflow.performAction(apiSubmission.enquiry.id, {
     acceptanceVerified: true,
   },
   expectedVersion: 5,
+});
+const apiDispatchProof = new File(['fabricated dispatch proof'], 'dispatch-api-test.pdf', { type: 'application/pdf' });
+await apiServices.workflow.performAction(apiSubmission.enquiry.id, {
+  entityType: 'order',
+  action: 'confirm_collection',
+  comment: '',
+  data: {
+    dispatchMethod: 'collection',
+    dispatchReadyDate: '2026-07-22',
+    dispatchCollectionDate: '2026-07-22',
+    dispatchNumberOfPackages: 1,
+    dispatchRecipientName: 'Fabricated API Collector',
+    dispatchProofType: 'collection_confirmation',
+    dispatchProofReference: 'POD-API-TEST',
+    dispatchProofFile: apiDispatchProof,
+    dispatchCustomerMessage: 'Your order was collected successfully.',
+    dispatchInternalNotes: 'Fabricated API Dispatch note.',
+  },
+  expectedVersion: 6,
 });
 await apiServices.workflow.performAction(apiSubmission.enquiry.id, {
   entityType: 'order',
@@ -892,14 +1006,30 @@ assert.equal(acceptancePayload.data.acceptance.type, 'purchase_order_received');
 assert.equal(acceptancePayload.data.acceptance.purchaseOrderNumber, 'PO-API-TEST');
 assert.equal(acceptanceWorkflowRequest.options.body.get('acceptanceDocument').name, apiAcceptanceFile.name);
 const orderWorkflowRequests = apiRequests.filter(request => request.path.endsWith('/orders/00000000-0000-4000-8000-000000000003/workflow-actions'));
-const planningWorkflowRequest = orderWorkflowRequests.find(request => JSON.parse(request.options.body).action === 'complete_planning');
+const planningWorkflowRequest = orderWorkflowRequests.find(request => (
+  !(request.options.body instanceof FormData)
+  && JSON.parse(request.options.body).action === 'complete_planning'
+));
 assert.equal(JSON.parse(planningWorkflowRequest.options.body).data.planning.internalJobNumber, 'JOB-API-TEST', 'the API adapter must send validated structured Planning data');
 assert.equal(JSON.parse(planningWorkflowRequest.options.body).data.planning.assignedPlanningUserId, 'planner-api-test');
-const workflowRequest = orderWorkflowRequests.find(request => JSON.parse(request.options.body).action === 'complete_expediting');
+const workflowRequest = orderWorkflowRequests.find(request => (
+  !(request.options.body instanceof FormData)
+  && JSON.parse(request.options.body).action === 'complete_expediting'
+));
 assert.ok(workflowRequest, 'API adapter must route order actions to the controlled workflow endpoint');
 assert.ok(workflowRequest.options.headers['Idempotency-Key'], 'workflow actions must carry an idempotency key');
 assert.equal(JSON.parse(workflowRequest.options.body).action, 'complete_expediting', 'API workflow request must send an action rather than a target status');
 assert.equal(JSON.parse(workflowRequest.options.body).data.expeditingUpdate.progressStep, 'ready_for_dispatch', 'the API adapter must send a validated structured Expediting update');
 assert.equal(JSON.parse(workflowRequest.options.body).data.expeditingHandoff.authorisedException, true, 'the API adapter must preserve controlled hand-off exception evidence');
+const dispatchWorkflowRequest = orderWorkflowRequests.find(request => (
+  request.options.body instanceof FormData
+  && JSON.parse(request.options.body.get('payload')).action === 'confirm_collection'
+));
+assert.ok(dispatchWorkflowRequest, 'Dispatch proof metadata and files must use the controlled workflow endpoint');
+const dispatchPayload = JSON.parse(dispatchWorkflowRequest.options.body.get('payload'));
+assert.equal(dispatchPayload.data.dispatchUpdate.method, 'collection');
+assert.equal(dispatchPayload.data.dispatchUpdate.recipientName, 'Fabricated API Collector');
+assert.equal(dispatchPayload.data.dispatchUpdate.proofOfDelivery.reference, 'POD-API-TEST');
+assert.equal(dispatchWorkflowRequest.options.body.get('dispatchProof').name, apiDispatchProof.name);
 
 console.log('Mock persistence, workflow audit, company isolation, validation and API adapter tests passed.');

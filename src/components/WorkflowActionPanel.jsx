@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import { statusById } from '../domain/tracking.js';
 import {
+  DISPATCH_ACTIONS,
+  DispatchFields,
+  dispatchActionDataFor,
+  isDispatchOwnedOrder,
+} from './DispatchFields.jsx';
+import {
   ExpeditingFields,
   expeditingActionDataFor,
   isExpeditingOwnedOrder,
@@ -20,6 +26,11 @@ const usesExpeditingFields = (record, action) => (
   && (!['place_on_hold', 'resume_order'].includes(action) || isExpeditingOwnedOrder(record))
 );
 
+const usesDispatchFields = (record, action) => (
+  DISPATCH_ACTIONS.has(action)
+  && isDispatchOwnedOrder(record)
+);
+
 export function WorkflowActionPanel({
   record,
   onAction,
@@ -30,6 +41,7 @@ export function WorkflowActionPanel({
   account,
   planningOptions,
   expeditingOptions,
+  dispatchOptions,
 }) {
   const [selectedAction, setSelectedAction] = useState(preferredAction);
   const [note, setNote] = useState('');
@@ -55,6 +67,8 @@ export function WorkflowActionPanel({
         submittedData = planningActionDataFor(record, account, planningOptions, actionData);
       } else if (usesExpeditingFields(record, actionId)) {
         submittedData = expeditingActionDataFor(record, expeditingOptions, actionId, actionData);
+      } else if (usesDispatchFields(record, actionId)) {
+        submittedData = dispatchActionDataFor(record, dispatchOptions, actionId, actionData);
       }
       const saved = await onAction(
         record.id,
@@ -86,19 +100,22 @@ export function WorkflowActionPanel({
       ) : (
         <p className="workflow-selected-action"><span>Next action</span><strong>{action.label}</strong><small>{action.toStatus ? statusById(action.toStatus, record.workflowType).label : ''}</small></p>
       )}
-      <WorkflowActionFields action={action} data={actionData} onChange={setActionData} errors={fieldErrors} record={record} account={account} planningOptions={planningOptions} expeditingOptions={expeditingOptions} />
-      {!['mark_quoted', 'accept_order', 'complete_planning'].includes(action.action) && !usesExpeditingFields(record, action.action) && <label className="form-field"><span>Workflow comment {action.requiresComment ? <b>Required</b> : <i>Optional</i>}</span><textarea rows="3" value={note} onChange={event => setNote(event.target.value)} placeholder="Add a clear update for the audit history and customer timeline." />{fieldErrors.comment && <small className="field-error">{fieldErrors.comment}</small>}</label>}
+      <WorkflowActionFields action={action} data={actionData} onChange={setActionData} errors={fieldErrors} record={record} account={account} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} />
+      {!['mark_quoted', 'accept_order', 'complete_planning'].includes(action.action) && !usesExpeditingFields(record, action.action) && !usesDispatchFields(record, action.action) && <label className="form-field"><span>Workflow comment {action.requiresComment ? <b>Required</b> : <i>Optional</i>}</span><textarea rows="3" value={note} onChange={event => setNote(event.target.value)} placeholder="Add a clear update for the audit history and customer timeline." />{fieldErrors.comment && <small className="field-error">{fieldErrors.comment}</small>}</label>}
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="expeditor-update-actions"><button className="primary-button" type="button" onClick={save} disabled={isSaving || !actionId}>{isSaving ? 'Saving…' : action.label} <span>{isSaving ? '•••' : '→'}</span></button></div>
     </div>
   );
 }
 
-function WorkflowActionFields({ action, data, onChange, errors = {}, record, account, planningOptions, expeditingOptions }) {
+function WorkflowActionFields({ action, data, onChange, errors = {}, record, account, planningOptions, expeditingOptions, dispatchOptions }) {
   if (!action) return null;
   const set = (key, value) => onChange(current => ({ ...current, [key]: value }));
   if (usesExpeditingFields(record, action.action)) {
     return <ExpeditingFields action={action.action} record={record} options={expeditingOptions} data={data} onChange={onChange} errors={errors} />;
+  }
+  if (usesDispatchFields(record, action.action)) {
+    return <DispatchFields action={action.action} record={record} options={dispatchOptions} data={data} onChange={onChange} errors={errors} />;
   }
   if (action.action === 'complete_planning') {
     return <PlanningFields record={record} account={account} options={planningOptions} data={data} onChange={onChange} errors={errors} />;

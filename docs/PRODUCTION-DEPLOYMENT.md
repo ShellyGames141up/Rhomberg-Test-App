@@ -11,8 +11,8 @@ Approved customer/staff device
         |
    Static React application  ---- same-origin ----  API service
                                                   /     |      \
-                                         PostgreSQL  Object   Email worker
-                                                     storage
+                                         PostgreSQL  Object   Notification worker
+                                                     storage   / email / push
 ```
 
 The browser never connects directly to PostgreSQL, SMTP or object storage. The API is the only component allowed to use those privileged services.
@@ -94,11 +94,13 @@ Order-acceptance evidence is always internal-only in this phase. It may record a
 
 Expediting document/image fields are metadata references only in the public preview. If production permits actual Expediting evidence uploads, they must use the same private object-storage, scanning and authorisation controls. Internal Expediting notes, delay/supplier context, references and hand-off exception evidence must never be exposed through a customer download or API projection.
 
-### 5. Email delivery
+Dispatch collection and proof-of-delivery fields are also metadata-only in the public preview. Production must upload bytes through the API, quarantine and scan them, bind them to an authorised order/dispatch update, and expose them only through short-lived authorised downloads. Internal Dispatch notes, delivery-problem investigation details, actor IDs and unauthorised proof metadata must never appear in a customer projection. IT and the business owner must approve evidence types, signature/recipient rules, retention periods and whether courier/driver integrations are permitted.
+
+### 5. Notification, email and mobile-push delivery
 
 IT must provide:
 
-- approved SMTP relay or transactional email service;
+- an approved Microsoft 365/Graph, SMTP relay or transactional email route;
 - verified sender domain/address;
 - destination/routing policy for test, staging and production;
 - DNS records required by the provider (SPF, DKIM and DMARC as applicable);
@@ -107,8 +109,15 @@ IT must provide:
 - approved attachment policy;
 - service credentials through the secret vault;
 - non-production mailbox or sink that cannot accidentally contact real customers.
+- an approved APNs/FCM project for each environment when mobile push is enabled;
+- a secure device-registration/token-revocation service;
+- non-production mobile devices and push-routing controls.
 
-RFQ creation and email delivery must be decoupled with a durable outbox/worker. A temporary email failure leaves the RFQ stored and retries safely. Internal pricing must be generated only in the protected backend and never returned to a customer response.
+Workflow persistence and provider delivery must be decoupled with a durable notification outbox/worker. The workflow change, notification, in-app delivery, email/push pending rows and audit entry commit atomically. A provider outage leaves the business record stored and retries safely. Workers need bounded exponential backoff, idempotency, row locking, dead-letter handling and delivery-age/failure monitoring.
+
+For Microsoft Graph, use a managed identity or certificate where supported and restrict application mail access to approved mailboxes with Exchange Application RBAC or an application-access policy. For SMTP, enforce TLS and sender/relay restrictions. For push, encrypt device tokens, revoke them on sign-out/device removal and keep payloads free of internal or sensitive data. See `NOTIFICATION_SYSTEM.md`.
+
+Internal pricing must be generated only in the protected backend and never returned to a customer response.
 
 ### 6. Backups and recovery
 
@@ -149,6 +158,12 @@ EMAIL_PROVIDER
 EMAIL_API_KEY
 EMAIL_FROM_ADDRESS
 RFQ_ROUTING_ADDRESS
+M365_TENANT_ID
+M365_CLIENT_ID
+M365_CERTIFICATE_REFERENCE
+PUSH_PROVIDER
+PUSH_PROJECT_ID
+PUSH_CREDENTIAL_REFERENCE
 AUDIT_LOG_DESTINATION
 ```
 
@@ -160,7 +175,7 @@ Provide:
 
 - central structured logs with request/correlation IDs;
 - security/audit log retention separate from ordinary application logs;
-- dashboards for error rate, latency, login failures, RFQ volume, Expediting queue age, overdue estimates, orders on hold, email queue, document-scan failures and database health;
+- dashboards for error rate, latency, login failures, RFQ volume, Expediting and Dispatch queue age, overdue estimates, orders on hold, delivery problems, email queue, document-scan failures and database health;
 - alerts with named owners and escalation paths;
 - application performance monitoring approved for customer-data handling;
 - a support runbook for sign-in, failed email, stuck order status, upload and restore incidents.
@@ -192,7 +207,7 @@ Use zero-downtime migrations where practical. Destructive schema changes require
 - Changing a company, enquiry, order or document ID in a URL does not cross the authorised scope.
 - A sales representative sees only actively assigned companies.
 - Client-supplied representative names/codes are ignored; an invalid representative/area pairing is rejected.
-- RFQ creation atomically stores the permanent reference, company/customer, line items, metadata, first audit event and one representative notification.
+- RFQ creation atomically stores the permanent reference, company/customer, line items, metadata, workflow/audit events, customer submission notification and assigned-representative notification.
 - The representative inbox derives identity from the session and exposes Start Review only for an assigned `assigned_to_rep` RFQ.
 - Only the assigned representative (or explicitly authorised management role) can mark an under-review RFQ as quoted.
 - Quotation number/date/expiry rules are validated; pricing fields are rejected.
@@ -208,6 +223,12 @@ Use zero-downtime migrations where practical. Destructive schema changes require
 - Planning sees only Planning stages (including Planning-owned holds).
 - Expediting sees only orders submitted by Planning, Expediting-owned holds and read-only awaiting-Dispatch hand-offs.
 - Dispatch sees only orders handed over by Expediting and Dispatch-owned holds.
+- Dispatch route choices are server-controlled and compatible with the authoritative collection/delivery preference; browser-supplied method labels are ignored.
+- Ready, out-for-delivery, collection, delivery and completion actions enforce their exact prior states and cannot skip required route stages.
+- Collection confirmation records the collector and collection date; delivery confirmation records recipient and delivery date; configured proof rules are enforced.
+- Package counts, delivery-note/tracking references, dates and proof metadata are validated server-side, while uploaded bytes are scanned and stored privately.
+- Every Dispatch action appends a structured update plus an immutable audit event; ready/dispatched/collected/delivered/completed/problem notifications resolve recipients server-side.
+- Customer responses never contain Dispatch internal notes, internal problem details, internal actor IDs or proof objects that were not explicitly authorised for customer visibility.
 - A customer cannot invoke internal RFQ or order workflow actions.
 - An unassigned representative cannot review, quote, accept or convert another representative's RFQ.
 - Planning cannot start an order without accepted/conversion evidence and cannot skip its required references.
@@ -219,6 +240,14 @@ Use zero-downtime migrations where practical. Destructive schema changes require
 - The Expediting step list, ordering and required-for-Dispatch subset come from approved server configuration; browser-supplied labels and flags are ignored.
 - Start, progress, hold, resume and Dispatch hand-off actions enforce the exact state, named permission and expected record version.
 - Every customer-visible Expediting update creates independent customer and assigned-representative timeline/notification records in the same transaction as the audit event.
+- Customers cannot list, read or deep-link to another company's notifications.
+- Representatives cannot list notifications for records not assigned to their authoritative representative identity.
+- One recipient's read/read-all actions never change another recipient's read state.
+- Notification preferences are user-scoped, validated and cannot disable mandatory in-app/security/maintenance categories.
+- Every required workflow milestone creates the correct recipient-specific event and safe message variant.
+- Email and push deliveries are created as pending outbox rows; API requests never call providers before transaction commit.
+- Delivery retries are idempotent, bounded, audited and available only through `retry_notification_delivery`.
+- Microsoft 365/SMTP and push provider failures do not lose RFQs/orders or expose provider credentials/errors to customers.
 - Customer projections omit Expediting internal notes, delay/supplier context, controlled references, actor IDs and hand-off exception evidence.
 - Dispatch hand-off is rejected while required Expediting steps are incomplete unless the authorised exception reason and authorisation reference are complete and audited.
 - Dispatch cannot complete an order until the required collection or delivery stages occur.
@@ -229,7 +258,7 @@ Use zero-downtime migrations where practical. Destructive schema changes require
 - Duplicate RFQ retries with one idempotency key create one RFQ.
 - Invalid product options and quantities are rejected server-side.
 - PO type, size, signature and malware controls work.
-- Email outage does not lose an RFQ and recovery retries once.
+- Email or push outage does not lose an RFQ/order and recovery follows the approved bounded retry/dead-letter policy.
 - Database plus object documents can be restored together.
 - The public/static bundle contains no credentials, price book or real customer exports.
 
@@ -239,6 +268,7 @@ Use zero-downtime migrations where practical. Destructive schema changes require
 - identity/onboarding decision;
 - database platform/version and migration process;
 - object-storage and malware-scanning design;
+- approved Dispatch methods, proof/evidence policy, address-access policy and retention rules;
 - email delivery/routing design;
 - secret-vault integration method;
 - backup RPO/RTO, retention and latest restore-test result;

@@ -123,6 +123,7 @@ stateDiagram-v2
   awaiting_dispatch --> ready_for_collection: mark_ready_for_collection / Dispatch
   awaiting_dispatch --> out_for_delivery: start_delivery / Dispatch
   ready_for_collection --> collected: confirm_collection / Dispatch
+  out_for_delivery --> out_for_delivery: report_delivery_problem / Dispatch
   out_for_delivery --> delivered: confirm_delivery / Dispatch
   collected --> completed: complete_collection / Dispatch
   delivered --> completed: complete_delivery / Dispatch
@@ -139,12 +140,13 @@ stateDiagram-v2
 | `start_expediting` | `submitted_to_expediting` -> `expediting_in_progress` | Expeditor, manager, administrator | `planning_received` plus customer-facing message | Separate optional internal note | Customer and assigned rep | `expeditingStartedAt`, `expeditingStartedBy` |
 | `add_expediting_update` | `expediting_in_progress` -> same status | Expeditor, manager, administrator | recognised selectable progress step plus customer-facing message | Separate optional internal note | Customer and assigned rep | `expeditingUpdatedAt`, `lastExpeditingUpdatedBy` |
 | `complete_expediting` | `expediting_in_progress` -> `awaiting_dispatch` | Expeditor, manager, administrator | `ready_for_dispatch`, completion check, and all required steps or authorised exception evidence | Separate optional internal note | Customer, assigned rep and Dispatch | `submittedToDispatchAt`, `submittedToDispatchBy` |
-| `mark_ready_for_collection` | `awaiting_dispatch` -> `ready_for_collection` | Dispatch, manager, administrator | fulfilment is collection | No | Yes | `readyForCollectionAt` |
-| `start_delivery` | `awaiting_dispatch` -> `out_for_delivery` | Dispatch, manager, administrator | fulfilment is delivery | Yes | Yes | `outForDeliveryAt` |
-| `confirm_collection` | `ready_for_collection` -> `collected` | Dispatch, manager, administrator | exact prior status | Yes | Yes | `collectedAt` |
-| `confirm_delivery` | `out_for_delivery` -> `delivered` | Dispatch, manager, administrator | exact prior status | Yes | Yes | `deliveredAt` |
-| `complete_collection` | `collected` -> `completed` | Dispatch, manager, administrator | exact prior status | No | Yes | `completedAt` |
-| `complete_delivery` | `delivered` -> `completed` | Dispatch, manager, administrator | exact prior status | No | Yes | `completedAt` |
+| `mark_ready_for_collection` | `awaiting_dispatch` -> `ready_for_collection` | Dispatch, manager, administrator | collection method, ready date, package count and customer message; fulfilment must be collection | Separate optional internal note | Customer and assigned rep | `readyForCollectionAt` |
+| `start_delivery` | `awaiting_dispatch` -> `out_for_delivery` | Dispatch, manager, administrator | delivery method, ready date, package count, courier/driver and customer message; fulfilment must be delivery | Separate optional internal note | Customer and assigned rep | `outForDeliveryAt` |
+| `report_delivery_problem` | `out_for_delivery` -> same status | Dispatch, manager, administrator | delivery method, meaningful problem reason and customer message | Separate optional internal note | Customer and assigned rep | `dispatchProblemReportedAt` |
+| `confirm_collection` | `ready_for_collection` -> `collected` | Dispatch, manager, administrator | collection date, collector and customer message; optional proof metadata | Separate optional internal note | Customer and assigned rep | `collectedAt` |
+| `confirm_delivery` | `out_for_delivery` -> `delivered` | Dispatch, manager, administrator | delivery date, recipient, courier/driver and customer message; optional proof metadata | Separate optional internal note | Customer and assigned rep | `deliveredAt` |
+| `complete_collection` | `collected` -> `completed` | Dispatch, manager, administrator | exact prior status and final customer message | Separate optional internal note | Customer and assigned rep | `completedAt` |
+| `complete_delivery` | `delivered` -> `completed` | Dispatch, manager, administrator | exact prior status and final customer message | Separate optional internal note | Customer and assigned rep | `completedAt` |
 | `place_on_hold` | active operational stage -> `on_hold` | Role owning the stage, manager, administrator | current stage stored as resume target | Yes | Yes | `heldAt` |
 | `resume_order` | `on_hold` -> stored prior stage | Role owning the stored stage, manager, administrator | valid stored resume status | Yes | Yes | `resumedAt` |
 | `cancel_order` | active order -> `cancelled` | Manager, administrator | none | Yes | Yes | `cancelledAt` |
@@ -194,6 +196,16 @@ An Expediting hold records the `on_hold` step, customer message and required del
 
 `complete_expediting` appends `ready_for_dispatch` and checks the completed-step set. If a required step is absent, hand-off is denied unless a controlled exception has an adequate reason and authorisation reference. A valid hand-off changes the top-level order to `awaiting_dispatch`, adds workflow/audit history and creates independent customer, assigned-representative and Dispatch notifications. It remains read-only in the Expeditor queue for hand-off awareness.
 
+### Dispatch handover
+
+`src/domain/dispatch.js` owns the approved methods, queue stages, search/filter/sort rules, age calculations and counts. `dispatch.getWorkspaceOptions()` exposes method/proof reference data through both service implementations. The UI submits structured data through `DispatchFields`; the service validation and state-machine guard independently enforce it.
+
+Collection orders can use only `collection`. Delivery orders can use only `company_delivery`, `courier` or `third_party_delivery`. A release requires the ready date and package count; delivery release also requires its courier/driver. Confirmation records the collection/delivery date and the collector/recipient, with optional controlled proof metadata. The final completion transition remains mandatory.
+
+`report_delivery_problem` is an audited, notifiable same-status action. It cannot mark a delivery as delivered, skip confirmation or expose its internal reason to the customer. The customer receives only the separate customer-facing message.
+
+Mock mode keeps proof file metadata only. Production must store scanned file bytes privately and expose them only through a company/order/document visibility check.
+
 ## Controlled override
 
 Only `manager` and `administrator` may invoke `override_workflow`. The request must include:
@@ -212,6 +224,8 @@ Internal status remains authoritative. Customer responses expose only workflow e
 Planning projections follow the same rule: customers never receive the structured Planning record, internal/compatibility job and PO fields, Planning notes or schedule, production location, document references, or internal Planning actor metadata.
 
 Expediting projections expose only the current public progress step, current estimated completion date and customer-visible updates. They omit internal notes, delay/supplier context, controlled document/image references, internal actor IDs and hand-off exception evidence. Customer-visible updates still appear in both the customer and assigned representative timelines.
+
+Dispatch projections expose public handover fields and customer-visible updates, but omit summary/update internal notes, raw problem reasons and internal actor IDs. Proof metadata is visible only when explicitly customer-visible and still requires an authorised document endpoint before download.
 
 This display filtering is not the security boundary. In production, the API must enforce company scope and event visibility before serialisation.
 

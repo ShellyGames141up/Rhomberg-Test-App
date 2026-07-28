@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   completedExpeditorStepIds,
   EXPEDITOR_PROGRESS_STEPS,
@@ -49,7 +49,7 @@ const ageLabel = order => {
   return `${days} day${days === 1 ? '' : 's'} old`;
 };
 
-export function ExpeditorDashboard({ account, orders, onAction, serviceMode, expeditingOptions }) {
+export function ExpeditorDashboard({ account, orders, onAction, serviceMode, expeditingOptions, focusRecordId = '' }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('oldest_update');
@@ -77,6 +77,14 @@ export function ExpeditorDashboard({ account, orders, onAction, serviceMode, exp
     awaiting_dispatch: counts.awaitingDispatch,
     priority: counts.priority,
   };
+
+  useEffect(() => {
+    if (!focusRecordId || !orders.some(order => order.id === focusRecordId)) return;
+    setFilter('all');
+    setOpenId(focusRecordId);
+    const timer = window.setTimeout(() => document.getElementById(`expediting-order-${focusRecordId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    return () => window.clearTimeout(timer);
+  }, [focusRecordId]);
 
   return (
     <section className="app-screen expediting-screen" aria-labelledby="expediting-title">
@@ -160,7 +168,7 @@ function ExpeditingOrder({ order, expanded, onToggle, onAction, account, options
   const updates = [...(order.expediting?.updates || [])].reverse();
 
   return (
-    <article className={`expediting-order-card ${expanded ? 'is-open' : ''} ${order.emergency === 'yes' ? 'is-emergency' : ''} ${approaching ? 'is-approaching' : ''}`}>
+    <article className={`expediting-order-card ${expanded ? 'is-open' : ''} ${order.emergency === 'yes' ? 'is-emergency' : ''} ${approaching ? 'is-approaching' : ''}`} id={`expediting-order-${order.id}`}>
       <button type="button" className="expediting-order-summary" onClick={onToggle} aria-expanded={expanded}>
         <span className="expediting-order-reference"><small>Order / RFQ</small><strong>{order.reference}</strong><em>{order.sourceRfqReference || 'No linked RFQ'} · {ageLabel(order)}</em></span>
         <span><small>Customer</small><strong>{order.company}</strong><em>{order.contact}</em></span>

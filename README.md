@@ -40,6 +40,46 @@ The preview centre contains the same four launch cards, intended-user details an
 
 All credentials above are fabricated and demonstration-only. GitHub Pages runs in mock mode: no real customer accounts are synchronised, no production authentication is used, and unrelated browsers or devices do not share changes. The four interfaces use the same mock service contracts and same-browser logical data. Future production versions will use one secure backend on Rhomberg’s private infrastructure.
 
+## Current development checkpoint
+
+- **Checkpoint date:** 28 July 2026
+- **Current version:** 4.2.0
+- **Last completed step:** Prompt 10 — the Dispatch workspace.
+
+This checkpoint includes the central notification system from Prompt 9 and the complete mock-mode Dispatch workflow from Prompt 10. Dispatch can now process collection and delivery routes, record structured handover details and proof metadata, report delivery problems, notify the customer and assigned representative, and complete orders through the controlled service/workflow layer. Internal Dispatch notes and operational problem details remain hidden from customer projections.
+
+All automated tests, source checks, stylesheet checks, static preview builds and the API-only production-candidate safety build passed before this checkpoint was committed. The GitHub Pages preview remains browser-local and uses fabricated data only.
+
+Development stopped after completing and validating Prompt 10. The next workflow phase has not been started, and no real database, email provider, push provider, courier integration or document-storage service has been connected. Continue from [the progress handoff](docs/HOME_PC_PROGRESS_HANDOFF.md) and [Dispatch workspace documentation](docs/DISPATCH_WORKSPACE.md).
+
+## Included in version 4.2
+
+- Dedicated desktop-optimised Dispatch workspace in the existing responsive Operations application
+- Controlled queue for `awaiting_dispatch`, `ready_for_collection` and `out_for_delivery`, plus handover-confirmed records awaiting final completion
+- Search across order, RFQ, job, Purchase Order, customer, representative, courier and tracking references, with queue filters and sorting
+- Structured collection, company delivery, courier and third-party delivery methods that must match the customer’s fulfilment choice
+- Validated ready/collection/delivery dates, courier or driver, tracking reference, package count, delivery note, recipient or collector and separate customer/internal messages
+- Controlled optional proof-of-delivery metadata and PDF/image selection; mock mode stores metadata only and never retains file bytes
+- `Mark Ready for Collection`, `Mark Out for Delivery`, `Confirm Collected`, `Confirm Delivered`, `Mark Completed` and same-stage `Report Delivery Problem` actions
+- Customer and assigned-representative notifications plus audit history for every important Dispatch action
+- Customer-safe Dispatch projection that excludes internal notes, problem/escalation detail and internal actor IDs
+- Fabricated collection and delivery records for immediate demonstration
+- Interchangeable `dispatch.getWorkspaceOptions()` mock/API service contract, proposed OpenAPI/PostgreSQL structures and dedicated automated tests
+
+## Included in version 4.1
+
+- Central notification event and delivery model for the approved RFQ/order milestones
+- Recipient-scoped in-app notification centre with unread count, mark-read, mark-all and direct RFQ/order links
+- Customer-company and assigned-representative isolation before preference filtering
+- Central channel/category preferences with mandatory in-app/security updates
+- Exact in-app/email/push delivery states plus retry-ready attempt metadata
+- Deterministic email and push simulations; no external provider is contacted
+- Manager/Administrator simulated delivery retry through a named permission and audit history
+- Interchangeable mock/API service methods and shared validation
+- Proposed PostgreSQL notification, delivery and preference tables plus OpenAPI contracts
+- Microsoft 365/SMTP, APNs/FCM, worker, retry and dead-letter deployment requirements
+- Automated event, isolation, read-state, preference, retry and API-adapter coverage
+
 ## Included in version 4.0
 
 - Separate Rhomberg Connect customer desktop/mobile and Rhomberg Operations internal mobile/desktop routes

@@ -21,6 +21,7 @@ export {
   navigationItemsForRole,
   normaliseViewForRole,
   roleProfileFor,
+  usesDispatchWorkspace,
   usesExpeditorWorkspace,
   usesPlanningWorkspace,
 } from '../domain/accessControl.js';

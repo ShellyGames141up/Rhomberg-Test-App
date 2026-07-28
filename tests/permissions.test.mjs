@@ -9,6 +9,7 @@ import {
   normaliseViewForRole,
   ORDER_QUEUE_SCOPES,
   roleProfileFor,
+  usesDispatchWorkspace,
 } from '../src/domain/accessControl.js';
 import { SYSTEM_ACTOR_ROLE, WORKFLOW_TRANSITIONS } from '../src/domain/workflow.js';
 import {
@@ -72,6 +73,8 @@ assert.equal(roleCan(USER_ROLES.EXPEDITOR, PERMISSIONS.VIEW_DISPATCH_QUEUE), fal
 assert.ok(roleCan(USER_ROLES.DISPATCH, PERMISSIONS.VIEW_DISPATCH_QUEUE));
 assert.ok(roleCan(USER_ROLES.DISPATCH, PERMISSIONS.CONFIRM_DELIVERY));
 assert.equal(roleCan(USER_ROLES.DISPATCH, PERMISSIONS.UPDATE_ORDER_PROGRESS), false);
+assert.equal(usesDispatchWorkspace({ role: USER_ROLES.DISPATCH }), true);
+assert.equal(usesDispatchWorkspace({ role: USER_ROLES.EXPEDITOR }), false);
 
 assert.deepEqual(
   ROLE_PERMISSIONS[USER_ROLES.BUYER],

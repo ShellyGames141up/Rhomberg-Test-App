@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   filterPlanningOrders,
   PLANNING_PRIORITIES,
@@ -45,7 +45,7 @@ const primaryActionFor = order => {
   return (order.allowedWorkflowActions || []).find(action => action.action === actionId);
 };
 
-export function PlanningDashboard({ account, orders, onAction, serviceMode, planningOptions }) {
+export function PlanningDashboard({ account, orders, onAction, serviceMode, planningOptions, focusRecordId = '' }) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [priority, setPriority] = useState('all');
@@ -61,6 +61,14 @@ export function PlanningDashboard({ account, orders, onAction, serviceMode, plan
     () => filterPlanningOrders(orders, { search, status, priority, sort }),
     [orders, priority, search, sort, status],
   );
+
+  useEffect(() => {
+    if (!focusRecordId || !orders.some(order => order.id === focusRecordId)) return;
+    setStatus('all');
+    setOpenId(focusRecordId);
+    const timer = window.setTimeout(() => document.getElementById(`planning-order-${focusRecordId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    return () => window.clearTimeout(timer);
+  }, [focusRecordId]);
 
   return (
     <section className="app-screen planning-screen" aria-labelledby="planning-title">
@@ -142,7 +150,7 @@ function PlanningOrder({ order, expanded, onToggle, onAction, account, planningO
   const lineItems = (order.items || []).length;
 
   return (
-    <article className={`planning-order ${expanded ? 'is-open' : ''} ${order.emergency === 'yes' ? 'is-emergency' : ''}`} role="rowgroup">
+    <article className={`planning-order ${expanded ? 'is-open' : ''} ${order.emergency === 'yes' ? 'is-emergency' : ''}`} role="rowgroup" id={`planning-order-${order.id}`}>
       <div className="planning-order-row" role="row">
         <span className="planning-order-reference" role="cell" data-label="Order / RFQ"><strong>{order.reference}</strong><small>{order.sourceRfqReference || 'No linked RFQ'} · {planningOrderAgeLabel(order)}</small></span>
         <span role="cell" data-label="Customer"><strong>{order.company}</strong><small>{order.contact}</small></span>

@@ -4,6 +4,7 @@ import { Auth } from './components/Auth.jsx';
 import { Catalogue } from './components/Catalogue.jsx';
 import { Configurator } from './components/Configurator.jsx';
 import { Enquiry } from './components/Enquiry.jsx';
+import { DispatchDashboard } from './components/DispatchDashboard.jsx';
 import { ExpeditorDashboard } from './components/ExpeditorDashboard.jsx';
 import { Home } from './components/Home.jsx';
 import { Intro } from './components/Intro.jsx';
@@ -16,6 +17,7 @@ import { ProductDetail } from './components/ProductDetail.jsx';
 import { SalesRepresentativeDashboard } from './components/SalesRepresentativeDashboard.jsx';
 import { CustomerPersonalisation } from './apps/customer/CustomerPersonalisation.jsx';
 import { PreviewLanding } from './apps/PreviewLanding.jsx';
+import { createDefaultNotificationPreferences } from './domain/notifications.js';
 import {
   createDefaultCustomerPersonalisation,
   customerPersonalisationCss,
@@ -36,6 +38,7 @@ import {
   normaliseViewForRole,
   PERMISSIONS,
   services,
+  usesDispatchWorkspace,
   usesExpeditorWorkspace,
   usesPlanningWorkspace,
 } from './services/index.js';
@@ -44,6 +47,7 @@ const EMPTY_CATALOGUE = { categories: [], products: [], recommendedCategories: {
 const EMPTY_REGISTRATION = { areas: [], industries: [], branches: [], areaDirectory: {} };
 const EMPTY_PLANNING_OPTIONS = { users: [], locations: [], priorities: [] };
 const EMPTY_EXPEDITING_OPTIONS = { progressSteps: [], requiredStepIds: [], documentTypes: [], approachingCompletionDays: 3 };
+const EMPTY_DISPATCH_OPTIONS = { methods: [], proofTypes: [], maxProofBytes: 4 * 1024 * 1024 };
 const PUBLIC_PREVIEW = __PUBLIC_PREVIEW__;
 const DOCUMENT_PREVIEW_ID = globalThis.document?.querySelector?.('meta[name="rhomberg-preview"]')?.content || '';
 const PREVIEW_CONTEXT = PUBLIC_PREVIEW
@@ -58,6 +62,11 @@ const canLoadExpeditingOptions = signedInAccount => (
   accountCan(signedInAccount, PERMISSIONS.VIEW_EXPEDITING_QUEUE)
   || accountCan(signedInAccount, PERMISSIONS.UPDATE_ORDER_PROGRESS)
   || accountCan(signedInAccount, PERMISSIONS.MOVE_TO_DISPATCH)
+);
+const canLoadDispatchOptions = signedInAccount => (
+  accountCan(signedInAccount, PERMISSIONS.VIEW_DISPATCH_QUEUE)
+  || accountCan(signedInAccount, PERMISSIONS.CONFIRM_DELIVERY)
+  || accountCan(signedInAccount, PERMISSIONS.CONFIRM_COLLECTION)
 );
 
 export default function App() {
@@ -82,8 +91,11 @@ export default function App() {
   const [enquiries, setEnquiries] = useState([]);
   const [orders, setOrders] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [notificationPreferences, setNotificationPreferences] = useState(createDefaultNotificationPreferences);
+  const [notificationTarget, setNotificationTarget] = useState(null);
   const [planningOptions, setPlanningOptions] = useState(EMPTY_PLANNING_OPTIONS);
   const [expeditingOptions, setExpeditingOptions] = useState(EMPTY_EXPEDITING_OPTIONS);
+  const [dispatchOptions, setDispatchOptions] = useState(EMPTY_DISPATCH_OPTIONS);
   const [success, setSuccess] = useState(null);
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
@@ -116,21 +128,27 @@ export default function App() {
         let loadedEnquiries = [];
         let loadedOrders = [];
         let loadedNotifications = [];
+        let loadedNotificationPreferences = createDefaultNotificationPreferences();
         let loadedPlanningOptions = EMPTY_PLANNING_OPTIONS;
         let loadedExpeditingOptions = EMPTY_EXPEDITING_OPTIONS;
+        let loadedDispatchOptions = EMPTY_DISPATCH_OPTIONS;
         let loadedPersonalisation = createDefaultCustomerPersonalisation();
         if (session) {
-          [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedPlanningOptions, loadedExpeditingOptions, loadedPersonalisation] = await Promise.all([
+          [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedPersonalisation] = await Promise.all([
             accountCan(session, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
             listEnquiriesForAccount(session),
             services.orders.list(),
             services.notifications.list(),
+            services.notifications.getPreferences(),
             accountCan(session, PERMISSIONS.ADD_PLANNING_INFORMATION)
               ? services.planning.getWorkspaceOptions()
               : Promise.resolve(EMPTY_PLANNING_OPTIONS),
             canLoadExpeditingOptions(session)
               ? services.expediting.getWorkspaceOptions()
               : Promise.resolve(EMPTY_EXPEDITING_OPTIONS),
+            canLoadDispatchOptions(session)
+              ? services.dispatch.getWorkspaceOptions()
+              : Promise.resolve(EMPTY_DISPATCH_OPTIONS),
             PREVIEW_CONTEXT.customer
               ? services.personalisation.get()
               : Promise.resolve(createDefaultCustomerPersonalisation()),
@@ -149,8 +167,10 @@ export default function App() {
         setEnquiries(loadedEnquiries);
         setOrders(loadedOrders);
         setNotifications(loadedNotifications);
+        setNotificationPreferences(loadedNotificationPreferences);
         setPlanningOptions(loadedPlanningOptions);
         setExpeditingOptions(loadedExpeditingOptions);
+        setDispatchOptions(loadedDispatchOptions);
         setView(session ? defaultViewForRole(session.role) : 'home');
         setAppStatus('ready');
       } catch (error) {
@@ -195,6 +215,7 @@ export default function App() {
   const isStaff = isInternalAccount(account);
   const isPlanningWorkspace = usesPlanningWorkspace(account);
   const isExpeditorWorkspace = usesExpeditorWorkspace(account);
+  const isDispatchWorkspace = usesDispatchWorkspace(account);
   const canPerformWorkflow = accountCanPerformWorkflow(account);
   const personalisationStyle = useMemo(
     () => PREVIEW_CONTEXT.customer ? customerPersonalisationCss(customerPersonalisation) : undefined,
@@ -215,17 +236,21 @@ export default function App() {
     if (!previewAllowsRole(PREVIEW_CONTEXT, signedInAccount.role)) {
       throw new Error(`This ${signedInAccount.role.replaceAll('_', ' ')} account is not supported in ${PREVIEW_CONTEXT.displayName}.`);
     }
-    const [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedPlanningOptions, loadedExpeditingOptions, loadedPersonalisation] = await Promise.all([
+    const [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedPersonalisation] = await Promise.all([
       accountCan(signedInAccount, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
       listEnquiriesForAccount(signedInAccount),
       services.orders.list(),
       services.notifications.list(),
+      services.notifications.getPreferences(),
       accountCan(signedInAccount, PERMISSIONS.ADD_PLANNING_INFORMATION)
         ? services.planning.getWorkspaceOptions()
         : Promise.resolve(EMPTY_PLANNING_OPTIONS),
       canLoadExpeditingOptions(signedInAccount)
         ? services.expediting.getWorkspaceOptions()
         : Promise.resolve(EMPTY_EXPEDITING_OPTIONS),
+      canLoadDispatchOptions(signedInAccount)
+        ? services.dispatch.getWorkspaceOptions()
+        : Promise.resolve(EMPTY_DISPATCH_OPTIONS),
       PREVIEW_CONTEXT.customer
         ? services.personalisation.get()
         : Promise.resolve(createDefaultCustomerPersonalisation()),
@@ -235,8 +260,10 @@ export default function App() {
     setEnquiries(loadedEnquiries);
     setOrders(loadedOrders);
     setNotifications(loadedNotifications);
+    setNotificationPreferences(loadedNotificationPreferences);
     setPlanningOptions(loadedPlanningOptions);
     setExpeditingOptions(loadedExpeditingOptions);
+    setDispatchOptions(loadedDispatchOptions);
     setCustomerPersonalisation(normaliseCustomerPersonalisation(loadedPersonalisation));
     setPersonalisationDeferred(false);
     setView(defaultViewForRole(signedInAccount.role));
@@ -278,6 +305,7 @@ export default function App() {
   const navigate = target => {
     const destination = account ? normaliseViewForRole(account.role, target) : 'home';
     if (destination === 'catalogue') setCategoryId(null);
+    setNotificationTarget(null);
     setView(destination);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -327,7 +355,9 @@ export default function App() {
     try {
       const result = await services.enquiries.submit(details, draft);
       const updatedEnquiries = await listEnquiriesForAccount(account);
+      const updatedNotifications = await services.notifications.list();
       setEnquiries(updatedEnquiries);
+      setNotifications(updatedNotifications);
       setDraft([]);
       const delivery = result.delivery || { ok: true };
       setSuccess({
@@ -373,12 +403,52 @@ export default function App() {
     return updated;
   };
 
+  const markAllNotificationsRead = async () => {
+    const result = await services.notifications.markAllRead();
+    setNotifications(await services.notifications.list());
+    notify(result.updatedCount ? `${result.updatedCount} notification${result.updatedCount === 1 ? '' : 's'} marked as read` : 'Inbox already up to date');
+    return result;
+  };
+
+  const saveNotificationPreferences = async candidate => {
+    const saved = await services.notifications.savePreferences(candidate);
+    setNotificationPreferences(saved);
+    setNotifications(await services.notifications.list());
+    if (PREVIEW_CONTEXT.customer) {
+      setCustomerPersonalisation(current => normaliseCustomerPersonalisation({
+        ...current,
+        notificationPreferences: saved.categories,
+      }));
+    }
+    notify('Notification preferences saved');
+    return saved;
+  };
+
+  const retryNotificationDelivery = async (notificationId, deliveryId) => {
+    const delivery = await services.notifications.retryDelivery(notificationId, deliveryId);
+    setNotifications(await services.notifications.list());
+    notify(delivery.status.endsWith('_sent') ? 'Simulated delivery retry completed' : 'Simulated delivery remains queued for retry');
+    return delivery;
+  };
+
+  const openNotificationRecord = notification => {
+    setNotificationTarget({
+      entityId: notification.entityId,
+      entityType: notification.entityType,
+      reference: notification.reference,
+      openedAt: Date.now(),
+    });
+    setView(isStaff ? notification.link?.internalView || 'expeditor' : notification.link?.customerView || 'tracking');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const saveCustomerPersonalisation = async candidate => {
     try {
       const saved = candidate.setupCompleted
         ? await services.personalisation.complete(candidate)
         : await services.personalisation.save(candidate);
       setCustomerPersonalisation(normaliseCustomerPersonalisation(saved));
+      setNotificationPreferences(await services.notifications.getPreferences());
       setView('home');
       notify('Rhomberg Connect settings saved');
       return saved;
@@ -411,10 +481,13 @@ export default function App() {
       setEnquiries([]);
       setOrders([]);
       setNotifications([]);
+      setNotificationPreferences(createDefaultNotificationPreferences());
+      setNotificationTarget(null);
       setCustomerPersonalisation(createDefaultCustomerPersonalisation());
       setPersonalisationDeferred(false);
       setPlanningOptions(EMPTY_PLANNING_OPTIONS);
       setExpeditingOptions(EMPTY_EXPEDITING_OPTIONS);
+      setDispatchOptions(EMPTY_DISPATCH_OPTIONS);
       setCategoryId(null);
       setProductId(null);
       setView('home');
@@ -454,20 +527,23 @@ export default function App() {
       data-density={PREVIEW_CONTEXT.customer ? customerPersonalisation.density : undefined}
     >
       <span className="desktop-caption">{PREVIEW_CONTEXT.product.toUpperCase()} · {PREVIEW_CONTEXT.platform.toUpperCase()} · {__PUBLIC_PREVIEW__ ? 'DEMO PREVIEW' : 'PRIVATE CLOUD'}</span>
-      <div className={`app-shell ${isStaff ? 'expeditor-shell' : ''} ${isPlanningWorkspace ? 'planning-shell' : ''} ${isExpeditorWorkspace ? 'expediting-workspace-shell' : ''}`}>
+      <div className={`app-shell ${isStaff ? 'expeditor-shell' : ''} ${isPlanningWorkspace ? 'planning-shell' : ''} ${isExpeditorWorkspace ? 'expediting-workspace-shell' : ''} ${isDispatchWorkspace ? 'dispatch-workspace-shell' : ''}`}>
         {__PUBLIC_PREVIEW__ && <div className="platform-preview-banner"><span><strong>{PREVIEW_CONTEXT.product}</strong> {PREVIEW_CONTEXT.platform}</span><a href="./">All previews</a></div>}
         <AppHeader account={account} onNavigate={navigate} onBack={detailView ? backFromDetail : null} backLabel={view === 'settings' ? 'Customer settings' : view === 'configurator' ? 'Product configuration' : selectedProduct?.code || 'Catalogue'} theme={theme} onToggleTheme={toggleTheme} serviceMode={services.mode} preview={PREVIEW_CONTEXT} showThemeToggle={!PREVIEW_CONTEXT.customer} personalisation={PREVIEW_CONTEXT.customer ? customerPersonalisation : null} />
         <main className="app-main">
           {isStaff ? (
             <>
               {view === 'expeditor' && (accountCan(account, PERMISSIONS.VIEW_ASSIGNED_RFQS)
-                ? <SalesRepresentativeDashboard account={account} rfqs={enquiries} onAction={performWorkflowAction} serviceMode={services.mode} />
+                && notificationTarget?.entityType !== 'order'
+                ? <SalesRepresentativeDashboard account={account} rfqs={enquiries} onAction={performWorkflowAction} serviceMode={services.mode} focusRecordId={notificationTarget?.entityId} />
                 : isPlanningWorkspace
-                  ? <PlanningDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} planningOptions={planningOptions} />
+                  ? <PlanningDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} planningOptions={planningOptions} focusRecordId={notificationTarget?.entityId} />
                   : isExpeditorWorkspace
-                    ? <ExpeditorDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} expeditingOptions={expeditingOptions} />
-                    : <OperationalDashboard account={account} enquiries={staffRecords} onAction={performWorkflowAction} canUpdate={canPerformWorkflow} serviceMode={services.mode} planningOptions={planningOptions} expeditingOptions={expeditingOptions} />)}
-              {view === 'notifications' && <Notifications notifications={notifications} onMarkRead={markNotificationRead} serviceMode={services.mode} />}
+                    ? <ExpeditorDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} expeditingOptions={expeditingOptions} focusRecordId={notificationTarget?.entityId} />
+                    : isDispatchWorkspace
+                      ? <DispatchDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} />
+                      : <OperationalDashboard account={account} enquiries={staffRecords} onAction={performWorkflowAction} canUpdate={canPerformWorkflow} serviceMode={services.mode} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} />)}
+              {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
               {view === 'account' && <Account account={account} enquiries={staffRecords} onSignOut={signOut} serviceMode={services.mode} />}
             </>
           ) : (
@@ -477,8 +553,8 @@ export default function App() {
               {view === 'product' && selectedProduct && <ProductDetail product={selectedProduct} category={selectedCategory} onConfigure={() => startConfigurator(null, 'product')} />}
               {view === 'configurator' && selectedProduct && <Configurator product={selectedProduct} existingLine={editingLine} onSave={saveConfiguredLine} onCancel={backFromDetail} />}
               {view === 'enquiry' && <Enquiry account={account} lines={draft} registrationOptions={registrationOptions} deliverySettings={services.preview} onAddProducts={() => navigate('catalogue')} onEdit={line => startConfigurator(line, 'enquiry')} onRemove={removeLine} onQuantity={updateQuantity} onSubmit={submitEnquiry} success={success} onCloseSuccess={() => { setSuccess(null); navigate('tracking'); }} />}
-              {view === 'tracking' && <OrderTracking account={account} enquiries={accountRecords} onStartEnquiry={() => navigate('enquiry')} onAction={performWorkflowAction} serviceMode={services.mode} />}
-              {view === 'notifications' && <Notifications notifications={notifications} onMarkRead={markNotificationRead} serviceMode={services.mode} />}
+              {view === 'tracking' && <OrderTracking account={account} enquiries={accountRecords} onStartEnquiry={() => navigate('enquiry')} onAction={performWorkflowAction} serviceMode={services.mode} focusRecordId={notificationTarget?.entityId} />}
+              {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
               {view === 'account' && <Account account={account} enquiries={accountRecords} onSignOut={signOut} serviceMode={services.mode} onOpenSettings={() => navigate('settings')} personalisation={customerPersonalisation} />}
               {view === 'settings' && <CustomerPersonalisation account={account} initialValue={customerPersonalisation} mode="settings" onSave={saveCustomerPersonalisation} onCancel={() => navigate('account')} onUploadImage={uploadCustomerImage} onRemoveImage={removeCustomerImage} />}
             </>

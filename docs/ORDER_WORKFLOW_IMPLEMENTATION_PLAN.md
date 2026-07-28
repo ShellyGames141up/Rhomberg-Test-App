@@ -1,13 +1,13 @@
 # Order Workflow Implementation Plan
 
-- Status: analysis plus mock workflow Phases 1-5 complete; centralized permissions, representative inbox, quotation, atomic order acceptance and the dedicated Planning workspace are implemented
+- Status: analysis plus mock workflow Phases 1-5 and Prompt 9 notification slice complete; centralized permissions, representative inbox, quotation, atomic order acceptance, Planning, Expediting and the central notification centre are implemented
 - Application version reviewed: 2.4.0; workflow implementation updated through 3.1.0
 - Reviewed branch: `agent/improve-theme-readability-and-reps`
 - Last pushed workflow commit before this phase: `d276488`
 
 ## 1. Purpose and scope
 
-This document originally mapped the Rhomberg Test App before implementation. Phase 1 implements the controlled state machine and action boundary. Version 2.6 adds the mock-preview integration slice: separate RFQ/order services, atomic same-browser conversion, immutable order-item snapshots, role-specific Sales/Planning/Expediting/Dispatch workspaces, recipient-scoped notifications and end-to-end integration tests. Version 2.7 centralizes all eight roles, named permissions, navigation metadata and exact operational queue scopes; Buyer remains deliberately inactive. Version 2.8 adds validated RFQ assignment, permanent references, submission snapshots, single-notification routing and a dedicated representative inbox. Version 2.9 adds assigned-representative quotation confirmation, protected evidence metadata, separate internal/customer notes, recipient-specific notifications and customer receipt acknowledgement. Version 3.0 completes the representative `Accept Order` command: validated external evidence, an atomic/idempotent RFQ conversion, permanent linked order and Planning notification. Version 3.1 adds the desktop-responsive Planning queue, complete Planning record, PO-exception control, actor/timestamp audit metadata and recipient-specific Expediting hand-off. The private-cloud backend, durable delivery workers, PDFs and retention remain future phases.
+This document originally mapped the Rhomberg Test App before implementation. Phase 1 implements the controlled state machine and action boundary. Version 2.6 adds the mock-preview integration slice: separate RFQ/order services, atomic same-browser conversion, immutable order-item snapshots, role-specific Sales/Planning/Expediting/Dispatch workspaces, recipient-scoped notifications and end-to-end integration tests. Version 2.7 centralizes all eight roles, named permissions, navigation metadata and exact operational queue scopes; Buyer remains deliberately inactive. Version 2.8 adds validated RFQ assignment, permanent references, submission snapshots and a dedicated representative inbox. Version 2.9 adds assigned-representative quotation confirmation, protected evidence metadata, separate internal/customer notes, recipient-specific notifications and customer receipt acknowledgement. Version 3.0 completes the representative `Accept Order` command: validated external evidence, an atomic/idempotent RFQ conversion, permanent linked order and Planning notification. Version 3.1 adds the desktop-responsive Planning queue, complete Planning record, PO-exception control, actor/timestamp audit metadata and recipient-specific Expediting hand-off. Version 4.1 adds the central event catalogue, recipient-safe notification centre, preferences, per-user read state, deep links, retry-ready delivery records and simulated email/push states. Version 4.2 adds the controlled Dispatch workspace, collection/delivery route validation, structured fulfilment evidence metadata, recipient-safe messages and final completion controls. The private-cloud backend, real delivery workers, PDFs and retention remain future phases.
 
 The browser mock is deliberately not a production transaction or security boundary. Its single aggregate workflow write exists to prove UI/service behaviour while PostgreSQL and the authoritative backend remain disconnected.
 
@@ -37,7 +37,7 @@ Version 2.9 completes the mock quotation-confirmation detail and replaces the ob
 The important remaining limitations are:
 
 - the browser aggregate is a same-device demo, not production authentication, concurrency or durability;
-- notification delivery attempts, retries and real email remain unimplemented;
+- notification delivery attempts/retries are simulated in mock mode; real Microsoft 365/SMTP/push delivery remains unimplemented;
 - staff branch/team scope is not yet backed by authoritative production assignments;
 - order-summary download/email and retention processing are not implemented;
 - PostgreSQL/API code remains a reviewed proposal rather than a connected environment.
@@ -152,6 +152,10 @@ audit
 notifications
   list(filters)
   markRead(notificationId)
+  markAllRead()
+  getPreferences()
+  savePreferences(settings)
+  retryDelivery(notificationId, deliveryId)
 
 preferences
   getTheme()
@@ -227,7 +231,7 @@ Products contain stable IDs/codes, category, specification snapshots, configurat
 
 The mock now models separate RFQs/orders/items, quotation confirmation, Planning and Expediting detail, Dispatch handoffs, in-app notifications and workflow/audit history. It intentionally does not yet model:
 
-- durable notification/email delivery attempts and retries;
+- production-grade durable notification/email/push workers, provider callbacks and dead-letter operations;
 - protected quotation/document byte storage or malware scanning;
 - generated order summaries;
 - retention policies and archive jobs;
@@ -250,8 +254,9 @@ Current mock keys are:
 | Atomic RFQ/order workflow aggregate | `rhombergPreviewWorkflowStateV1` |
 | Audit history | `rhombergPreviewAuditV1` |
 | Recipient notifications | `rhombergPreviewNotificationsV1` |
+| Per-account notification preferences | `rhombergPreviewNotificationPreferencesV1` |
 | Theme preference | `rhombergPreviewThemeV1` |
-| Demo seed version | `rhombergPreviewSeedV11` |
+| Demo seed version | `rhombergPreviewSeedV12` |
 
 Legacy V1 and combined V2 enquiry keys are read during mock initialisation. Combined records are normalised and partitioned into the aggregate's RFQ/order arrays without clearing existing demo records.
 
@@ -525,7 +530,7 @@ Exit gate: only the assigned/authorised representative can mark the RFQ quoted, 
 
 Exit gate: tests prove required/conditional evidence, assigned-representative scope, sensitive-data rejection, one-order idempotency, customer-safe projection and Planning routing; Expediting cannot receive an incomplete Planning record.
 
-### Phase 5 - Expediting (version 3.2 complete in mock/API contract); Dispatch workspace remains next
+### Phase 5 - Expediting (version 3.2 complete in mock/API contract)
 
 - provide one responsive Expeditor workspace with new/in-progress/hold/due-soon/awaiting-Dispatch/priority views;
 - default to oldest-update-first and search customer, representative, RFQ, order, job and PO references;
@@ -536,10 +541,25 @@ Exit gate: tests prove required/conditional evidence, assigned-representative sc
 - place the same public update in customer and representative timelines while removing internal notes and exception evidence from customer projections;
 - require the configured completion steps before Dispatch, or capture a controlled authorised exception reason/reference;
 - keep handed-off orders visible read-only to Expediting while `awaiting_dispatch`;
-- retain the existing separate Dispatch queue/actions for delivery and collection until its dedicated workspace phase;
+- hand orders to the dedicated Dispatch queue only after the required Expediting steps or an authorised exception;
 - cover permission, visibility, holds, resume, transition order, required-step/exception and API normalisation behavior.
 
 Exit gate: the Expeditor happy path, hold/resume path, required-step and authorised-exception hand-offs pass role, state, company-isolation, notification, customer-projection and API-adapter tests.
+
+### Phase 6 - Dispatch (version 4.2 complete in mock/API contract)
+
+- provide a desktop-optimised Dispatch queue with responsive cards for smaller screens;
+- show handed-off, ready-for-collection and out-for-delivery work, while retaining collected/delivered records long enough to perform the mandatory final completion action;
+- search and filter by order/job/PO/customer/contact/representative, route, status and priority;
+- capture the approved dispatch method, dates, driver/courier, tracking reference, package count, delivery note, recipient/collector, proof metadata, public message and separate internal note;
+- enforce collection and delivery as different controlled state paths;
+- prevent Dispatch from completing an order before collection or delivery has been confirmed;
+- append immutable Dispatch updates, workflow history and audit events for every action;
+- notify the customer and assigned representative for ready, dispatched, collected, delivered, completed and delivery-problem events;
+- remove internal Dispatch notes, problem details, internal actor IDs and unauthorised proof metadata from customer projections;
+- keep proof files metadata-only in mock mode and define private multipart/API and object-storage requirements for production.
+
+Exit gate: tests prove queue scope, action/state/route validation, proof validation, audit history, recipient notifications, customer redaction and both collection and delivery completion paths.
 
 ### Role and permission integration (version 2.7 complete)
 
@@ -559,13 +579,13 @@ Exit gate: components contain no direct role equality decisions, Buyer cannot di
 - canonicalize the selected representative through the approved area directory;
 - allocate and preserve a permanent mock RFQ reference;
 - store submission/assignment times, configured items, notes, priority, customer/company snapshots and safe document metadata;
-- make submission the first audit/history entry and assignment the single representative notification;
+- make submission the first audit/history entry and create distinct customer-submission and customer/representative-assignment notifications;
 - expose assigned RFQs through a dedicated mock/API service method;
 - add the required Sales inbox groups, search, priority, age, emergency, last-activity and open-RFQ presentation;
 - expose `Start Review` only for an assigned representative while the RFQ is `assigned_to_rep`;
 - retain later quotation, acceptance and conversion actions through a reusable workflow panel.
 
-Exit gate: submission and inbox tests prove company/representative validation, one notification, assignment isolation, permanent reference retention and the controlled Start Review transition.
+Exit gate: submission and inbox tests prove company/representative validation, distinct central notification events, assignment isolation, permanent reference retention and the controlled Start Review transition.
 
 ### Quotation confirmation and receipt acknowledgement (version 2.9 complete)
 
@@ -580,18 +600,20 @@ Exit gate: submission and inbox tests prove company/representative validation, o
 
 Exit gate: tests prove metadata/assignment/company rules, note and document projection, recipient-specific notifications, and that acknowledgement neither confirms a commercial commitment nor creates an order.
 
-### Phase 6 - PDFs, notification delivery and retention
+### Phase 7 - PDFs, notification delivery and retention (notification mock/API contract complete; PDF and retention pending)
 
 - adapt the existing PDF styling to an approved unpriced order summary;
 - provide authorised internal download and email actions through services;
 - record PDF generation, download and email audit events;
-- implement notification outbox/retry status;
+- completed in Prompt 9: central event catalogue, in-app inbox, mark-read/all, preferences, links, delivery statuses, simulated retry and audit;
+- completed in contract: recipient-specific notification/delivery/preference PostgreSQL structures and outbox/retry endpoints;
+- still required for production: approved Microsoft 365/SMTP and mobile-push workers, vault configuration, dead-letter operations and monitoring;
 - implement configurable retention, archive jobs, legal hold and archived-record queries;
 - preserve active/completed customer views while hiding archived records by default.
 
 Exit gate: documents never bypass scope checks, delivery failures are retryable, and retention tests prove no premature deletion.
 
-### Phase 7 - Private-cloud API and PostgreSQL staging implementation
+### Phase 8 - Private-cloud API and PostgreSQL staging implementation
 
 - implement the approved database migration and endpoints;
 - keep GitHub Pages on mock services;
@@ -602,7 +624,7 @@ Exit gate: documents never bypass scope checks, delivery failures are retryable,
 
 Exit gate: penetration/isolation, backup/restore, email, upload and audit tests pass in a non-production environment.
 
-### Phase 8 - Controlled pilot and production readiness
+### Phase 9 - Controlled pilot and production readiness
 
 - perform user acceptance with Customer, Sales, Planning, Expediting and Dispatch representatives;
 - validate accessibility, mobile responsiveness and performance;
@@ -637,9 +659,10 @@ The current SQL proposal already includes companies, branches, users, user-compa
 | Quotation metadata | Review the proposed `app.quotations` table: number/date/expiry rule, marked-by/time, separate notes, email confirmation, acknowledgement actor/time and customer-authorised evidence metadata. Store no pricing in this project. |
 | Planning | Proposed SQL now includes job/PO or authorised exception, notes, schedule, owner, branch, priority, document references and actor/timestamps. IT must still approve identifier uniqueness/format and who may authorise a PO exception. |
 | Expediting | Add server-owned progress-step configuration, structured update rows, public/internal message separation, estimate/delay fields, metadata references, updater/timestamp and controlled hand-off exception evidence. |
+| Dispatch | Proposed SQL now includes one current dispatch record plus append-only updates for route, dates, package/delivery references, recipient/collector, separate public/internal notes, problems and proof metadata. IT must approve branch scope, allowed methods, evidence retention and address visibility. |
 | Assignment/scope | Add staff branch/team scope tables for Planning, Expediting, Buyer and Dispatch. Update RLS so broad roles do not automatically see every company. |
 | Workflow events | Replace/extend `tracking_events` with entity type, previous/new state, action code, actor ID/role, customer visibility, internal note, public note, request ID and event version. |
-| Notifications | Add notification records, recipients, channels, read state, outbox jobs, attempts and failure codes. Use user/company/representative IDs, not untrusted addresses from the client. |
+| Notifications | Proposed SQL now contains recipient-specific notification, delivery and preference tables with exact in-app/email/push states, attempts and failure codes. IT must implement the worker and resolve user/company/representative IDs server-side. |
 | Documents | Add generated-document metadata and purpose. Keep bytes in private object storage; audit generation/download/email. |
 | Order summaries | Add generated artifact hash/template version and expiry if summaries are stored. Do not persist pricing content. |
 | Audit | Extend `audit_events` with actor role, entity company, before/after state or safe change summary, correlation/idempotency keys and append-only controls. |
@@ -666,6 +689,7 @@ Existing authentication, catalogue, draft, enquiry, order-read, document and gen
 | `GET /orders?queue=planning|expediting|dispatch` | Role/scoped queues | Server ignores unauthorised company/branch broadening filters |
 | `GET /planning/workspace-options` | Service-owned Planning users, locations and priorities | Requires `add_planning_information`; never accepts arbitrary browser-created identities |
 | `GET /expediting/workspace-options` | Server-owned progress steps, required hand-off subset, metadata types and due-soon policy | Requires Expediting queue or action permission; client labels and required flags are not authoritative |
+| `GET /dispatch/workspace-options` | Server-owned dispatch methods, evidence types and upload limits | Requires Dispatch queue/action permission; browser labels and file limits are not authoritative |
 | `GET /orders/{id}/allowed-actions` | Role/state-aware actions | Action codes, guards and current version |
 | `POST /orders/{id}/workflow-actions` with `complete_planning` | Structured Planning record | Job, PO/exception, notes, dates, owner, location, priority, references, submission date and expected version |
 | `POST /orders/{id}/workflow-actions` with `submit_to_expediting` | Planning handoff | Revalidates persisted plan/rep; returns updated order and queues customer/rep/Expeditor notifications |
@@ -673,12 +697,14 @@ Existing authentication, catalogue, draft, enquiry, order-read, document and gen
 | `POST /orders/{id}/workflow-actions` with `add_expediting_update` | Append same-status progress | Configured step, public message, optional internal note/estimate/delay/reference metadata and expected version |
 | `POST /orders/{id}/workflow-actions` with `place_on_hold` or `resume_order` | Controlled Expediting pause/resume | Public message, required hold reason, resume step and expected version |
 | `POST /orders/{id}/workflow-actions` with `complete_expediting` | Dispatch hand-off | Requires `ready_for_dispatch`, completion check and all required steps, or authorised exception reason/reference |
-| `POST /orders/{id}/actions/{actionCode}` | Approved fulfilment transition | Public note, optional internal note, expected version; server validates action |
-| `POST /orders/{id}/actions/confirm-dispatch` | Dispatch route | Delivery/collection method, approved reference/evidence metadata, expected version |
+| `POST /orders/{id}/workflow-actions` with a Dispatch action | Controlled route and fulfilment update | `mark_ready_for_collection`, `start_delivery`, `confirm_collection`, `confirm_delivery`, `complete_collection`, `complete_delivery` or `report_delivery_problem`; structured Dispatch fields, public/internal notes, optional evidence metadata, expected version and optional multipart proof |
 | `GET /enquiries/{id}/history` | Authorised RFQ business timeline | Visibility-filtered events |
 | `GET /orders/{id}/history` | Authorised order business timeline | Visibility-filtered events |
 | `GET /notifications` | User notification inbox | Unread/status/entity filters; company scope from session |
 | `POST /notifications/{id}/read` | Mark one notification read | Idempotent response |
+| `POST /notifications/read-all` | Mark authorised inbox read | Per-user read state; audited summary |
+| `GET/PUT /users/me/notification-preferences` | Read/replace preferences | Mandatory in-app/security categories; full validation |
+| `POST /notifications/{id}/deliveries/{deliveryId}/retry` | Queue failed provider delivery | Manager/Admin permission; outbox only; audited |
 | `GET /orders/{id}/summary.pdf` | Authorised unpriced PDF download | PDF stream; audited; `Cache-Control: no-store` |
 | `POST /orders/{id}/summary-email` | Email summary to an approved recipient policy | Server resolves recipients; queued delivery response |
 | `GET /audit-events` | Manager/admin audit review | Strict scopes, pagination and redaction |
@@ -777,7 +803,7 @@ Do not audit every draft keystroke. If draft history is required, use a separate
 
 ## 16. Recommended next phase
 
-Continue with the next approved operational-workspace prompt, expected to be the dedicated Dispatch experience, using the same queue/action/service pattern. Do not begin production integration. Phase 6 PDFs, durable notification delivery and retention still require owner approval of summary fields, recipients, retry policy and legal-hold rules.
+Continue only with the next approved prompt. Do not begin production integration. Real provider delivery, PDFs and retention still require owner/IT approval of recipients, templates, retry/dead-letter policy, summary fields and legal-hold rules.
 
 ## 17. Current-phase verification
 

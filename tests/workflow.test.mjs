@@ -45,6 +45,25 @@ const expeditingInput = (
     ...overrides,
   },
 });
+const dispatchInput = (overrides = {}) => ({
+  dispatchUpdate: {
+    method: 'company_delivery',
+    readyDate: '2026-07-22',
+    collectionDate: '',
+    deliveryDate: '',
+    courierOrDriver: 'Fabricated Test Courier',
+    trackingReference: 'TRACK-TEST-001',
+    numberOfPackages: 2,
+    deliveryNoteNumber: 'DN-TEST-001',
+    recipientName: '',
+    proofOfDelivery: null,
+    problemReason: '',
+    customerMessage: 'Your test order handover has been updated.',
+    internalNotes: 'Fabricated internal Dispatch note.',
+    customerVisible: true,
+    ...overrides,
+  },
+});
 
 assert.deepEqual(Object.keys(WORKFLOW_STATUS_DEFINITIONS.rfq), RFQ_STATUSES, 'RFQ status metadata must cover the controlled status list in order');
 assert.deepEqual(Object.keys(WORKFLOW_STATUS_DEFINITIONS.order), ORDER_STATUSES, 'order status metadata must cover the controlled status list in order');
@@ -68,7 +87,8 @@ rfq = result.entity;
 assert.equal(rfq.trackingStatus, 'submitted');
 assert.equal(rfq.submittedAt, fixedNow().toISOString());
 assert.equal(result.auditEvent.outcome, 'success');
-assert.equal(result.notification.required, false, 'submission confirmation is shown directly to the customer; representative notification is created after assignment');
+assert.equal(result.notification.required, true, 'RFQ submission must create the customer in-app confirmation event');
+assert.deepEqual(result.notification.recipients, ['customer']);
 await assert.rejects(
   async () => run({ ...rfq, id: 'rfq-other-company', companyId: 'other-company', trackingStatus: 'draft', version: 0 }, 'cancel_rfq', customer, { comment: 'Outside company.' }, 0),
   error => error instanceof ServiceError && error.code === 'COMPANY_SCOPE_VIOLATION',
@@ -79,7 +99,7 @@ result = run(rfq, 'assign_representative', system);
 rfq = result.entity;
 assert.equal(rfq.trackingStatus, 'assigned_to_rep');
 assert.equal(result.notification.required, true);
-assert.deepEqual(result.notification.recipients, ['assigned_representative']);
+assert.deepEqual(result.notification.recipients, ['customer', 'assigned_representative']);
 
 assert.equal(getAllowedWorkflowActions(rfq, otherRep).some(action => action.action === 'start_rep_review'), false, 'an unassigned representative must not receive the review action');
 await assert.rejects(
@@ -429,10 +449,105 @@ await assert.rejects(
   error => error instanceof ServiceError && error.code === 'INVALID_FULFILMENT_TRANSITION',
   'delivery orders cannot enter the collection path',
 );
-order = run(order, 'start_delivery', dispatch, { comment: 'Released to test courier.' }).entity;
-order = run(order, 'confirm_delivery', dispatch, { comment: 'Test delivery confirmed.' }).entity;
-order = run(order, 'complete_delivery', dispatch).entity;
+await assert.rejects(
+  async () => run(order, 'start_delivery', dispatch, dispatchInput({ readyDate: '', numberOfPackages: 0 })),
+  error => error instanceof ServiceError
+    && error.code === 'DISPATCH_DETAILS_INVALID'
+    && Boolean(error.fieldErrors.dispatchReadyDate)
+    && Boolean(error.fieldErrors.dispatchNumberOfPackages),
+  'Dispatch release requires a ready date and package count',
+);
+order = run(order, 'start_delivery', dispatch, dispatchInput({
+  customerMessage: 'Your order has left Rhomberg and is out for delivery.',
+})).entity;
+assert.equal(order.trackingStatus, 'out_for_delivery');
+assert.equal(order.dispatch.method, 'company_delivery');
+assert.equal(order.dispatch.numberOfPackages, 2);
+assert.equal(order.dispatch.internalNotes, 'Fabricated internal Dispatch note.');
+assert.equal(order.dispatch.updates.at(-1).action, 'start_delivery');
+const deliveryProblem = run(order, 'report_delivery_problem', dispatch, dispatchInput({
+  problemReason: 'Fabricated vehicle delay for workflow testing.',
+  customerMessage: 'A delivery problem was recorded and Dispatch is following up.',
+  internalNotes: 'Fabricated internal route escalation.',
+}));
+order = deliveryProblem.entity;
+assert.equal(order.trackingStatus, 'out_for_delivery', 'delivery problems must not skip or replace the delivery-confirmation stage');
+assert.equal(order.dispatch.currentProblemReason, 'Fabricated vehicle delay for workflow testing.');
+assert.equal(deliveryProblem.notification.required, true);
+await assert.rejects(
+  async () => run(order, 'confirm_delivery', dispatch, dispatchInput({
+    deliveryDate: '2026-07-21',
+    recipientName: 'Test Recipient',
+  })),
+  error => error instanceof ServiceError
+    && error.code === 'DISPATCH_DETAILS_INVALID'
+    && Boolean(error.fieldErrors.dispatchDeliveryDate),
+  'delivery confirmation cannot pre-date the ready date',
+);
+order = run(order, 'confirm_delivery', dispatch, dispatchInput({
+  deliveryDate: '2026-07-22',
+  recipientName: 'Test Recipient',
+  proofOfDelivery: {
+    type: 'signed_delivery_note',
+    reference: 'POD-TEST-001',
+    storageStatus: 'metadata_only',
+    customerVisible: true,
+  },
+  customerMessage: 'Your order was delivered successfully.',
+})).entity;
+assert.equal(order.trackingStatus, 'delivered');
+assert.equal(order.dispatch.recipientName, 'Test Recipient');
+assert.equal(order.dispatch.proofOfDelivery.reference, 'POD-TEST-001');
+order = run(order, 'complete_delivery', dispatch, dispatchInput({
+  customerMessage: 'Your delivered order is complete.',
+})).entity;
 assert.equal(order.trackingStatus, 'completed');
+assert.ok(order.trackingHistory.some(event => event.action === 'report_delivery_problem'));
+assert.ok(order.trackingHistory.some(event => event.action === 'complete_delivery'));
+
+let collectionOrder = {
+  ...exceptionHandoff.entity,
+  id: 'order-dispatch-collection-test',
+  fulfilment: 'collect',
+  trackingStatus: 'awaiting_dispatch',
+  status: 'Awaiting dispatch',
+  version: 2,
+  dispatch: undefined,
+  trackingHistory: [],
+};
+collectionOrder = run(collectionOrder, 'mark_ready_for_collection', dispatch, dispatchInput({
+  method: 'collection',
+  courierOrDriver: '',
+  trackingReference: '',
+  numberOfPackages: 1,
+  customerMessage: 'Your order is ready for collection.',
+})).entity;
+assert.equal(collectionOrder.trackingStatus, 'ready_for_collection');
+collectionOrder = run(collectionOrder, 'confirm_collection', dispatch, dispatchInput({
+  method: 'collection',
+  courierOrDriver: '',
+  trackingReference: '',
+  numberOfPackages: 1,
+  collectionDate: '2026-07-22',
+  recipientName: 'Test Collector',
+  proofOfDelivery: {
+    type: 'collection_confirmation',
+    reference: 'COLLECT-TEST-001',
+    storageStatus: 'metadata_only',
+    customerVisible: true,
+  },
+  customerMessage: 'Your order was collected successfully.',
+})).entity;
+assert.equal(collectionOrder.trackingStatus, 'collected');
+assert.equal(collectionOrder.dispatch.recipientName, 'Test Collector');
+collectionOrder = run(collectionOrder, 'complete_collection', dispatch, dispatchInput({
+  method: 'collection',
+  courierOrDriver: '',
+  trackingReference: '',
+  numberOfPackages: 1,
+  customerMessage: 'Your collected order is complete.',
+})).entity;
+assert.equal(collectionOrder.trackingStatus, 'completed');
 
 const overrideSource = { ...order, id: 'order-override-test', trackingStatus: 'awaiting_planning', status: 'Awaiting planning', version: 0, trackingHistory: [] };
 await assert.rejects(

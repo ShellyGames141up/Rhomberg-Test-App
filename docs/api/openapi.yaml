@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Rhomberg Instruments Private-Cloud API
-  version: 0.2.0-proposed
+  version: 0.4.0-proposed
   description: Proposed contract only. No production service is connected.
 servers:
   - url: /api/v1
@@ -462,6 +462,23 @@ paths:
                     $ref: '#/components/schemas/ExpeditingWorkspaceOptions'
         '403':
           $ref: '#/components/responses/ApiError'
+  /dispatch/workspace-options:
+    get:
+      operationId: getDispatchWorkspaceOptions
+      description: Requires view_dispatch_queue, confirm_collection or confirm_delivery. Returns server-owned handover methods, controlled proof types and the upload limit.
+      responses:
+        '200':
+          description: Authorised Dispatch reference data
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/DispatchWorkspaceOptions'
+        '403':
+          $ref: '#/components/responses/ApiError'
   /orders:
     get:
       operationId: listAuthorisedOrders
@@ -531,6 +548,18 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/WorkflowActionRequest'
+          multipart/form-data:
+            schema:
+              type: object
+              required: [payload]
+              properties:
+                payload:
+                  type: string
+                  description: JSON-encoded WorkflowActionRequest.
+                dispatchProof:
+                  type: string
+                  format: binary
+                  description: Optional PDF or image for a Dispatch confirmation; maximum 4 MB under the proposed policy.
       responses:
         '201':
           description: Controlled order action completed
@@ -710,6 +739,94 @@ paths:
                 properties:
                   data: { $ref: '#/components/schemas/Notification' }
         '404':
+          $ref: '#/components/responses/ApiError'
+  /notifications/read-all:
+    post:
+      operationId: markAllAuthorisedNotificationsRead
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      responses:
+        '200':
+          description: All unread notifications in the caller's authorised inbox marked as read
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [updatedCount, readAt]
+                    properties:
+                      updatedCount: { type: integer, minimum: 0 }
+                      readAt: { type: string, format: date-time }
+  /users/me/notification-preferences:
+    get:
+      operationId: getNotificationPreferences
+      responses:
+        '200':
+          description: Current user's notification delivery and category preferences
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/NotificationPreferences' }
+    put:
+      operationId: replaceNotificationPreferences
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NotificationPreferences' }
+      responses:
+        '200':
+          description: Preferences validated, replaced and audited
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/NotificationPreferences' }
+        '422':
+          $ref: '#/components/responses/ApiError'
+  /notifications/{notificationId}/deliveries/{deliveryId}/retry:
+    post:
+      operationId: retryNotificationDelivery
+      description: Manager or administrator only. Queues a retry; it never performs provider delivery inside the request.
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: deliveryId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '202':
+          description: Delivery retry accepted by the outbox
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/NotificationDelivery' }
+        '403':
+          $ref: '#/components/responses/ApiError'
+        '404':
+          $ref: '#/components/responses/ApiError'
+        '409':
           $ref: '#/components/responses/ApiError'
   /audit-events:
     get:
@@ -1107,7 +1224,7 @@ components:
         data:
           type: object
           additionalProperties: true
-          description: Action-specific values. mark_quoted uses QuotationConfirmation under data.quotation; accept_order uses OrderAcceptance under data.acceptance; complete_planning uses PlanningRecord under data.planning; Expediting actions use ExpeditingUpdate under data.expeditingUpdate and complete_expediting also uses ExpeditingHandoff.
+          description: Action-specific values. mark_quoted uses QuotationConfirmation under data.quotation; accept_order uses OrderAcceptance under data.acceptance; complete_planning uses PlanningRecord under data.planning; Expediting actions use ExpeditingUpdate under data.expeditingUpdate and complete_expediting also uses ExpeditingHandoff; Dispatch actions use DispatchUpdate under data.dispatchUpdate.
         expectedVersion: { type: integer, minimum: 0 }
     QuotationDocumentMetadata:
       type: object
@@ -1430,6 +1547,126 @@ components:
               id: { type: string, enum: [document, image, quality_record, other] }
               label: { type: string, maxLength: 100 }
         approachingCompletionDays: { type: integer, minimum: 1, maximum: 30 }
+    DispatchMethodCode:
+      type: string
+      enum: [collection, company_delivery, courier, third_party_delivery]
+    DispatchMethod:
+      type: object
+      additionalProperties: false
+      required: [id, label, fulfilment]
+      properties:
+        id: { $ref: '#/components/schemas/DispatchMethodCode' }
+        label: { type: string, maxLength: 100 }
+        fulfilment: { type: string, enum: [collect, delivery] }
+    DispatchProofTypeCode:
+      type: string
+      enum: [signed_delivery_note, collection_confirmation, courier_confirmation, photograph, other]
+    DispatchProof:
+      type: object
+      additionalProperties: false
+      required: [type, storageStatus, customerVisible]
+      properties:
+        type: { $ref: '#/components/schemas/DispatchProofTypeCode' }
+        reference: { type: string, maxLength: 240 }
+        fileName: { type: string, maxLength: 255, readOnly: true }
+        mimeType: { type: string, maxLength: 160, readOnly: true }
+        sizeBytes: { type: integer, minimum: 1, maximum: 4194304, readOnly: true }
+        storageStatus:
+          type: string
+          enum: [metadata_only, pending, stored, rejected]
+        customerVisible: { type: boolean }
+    DispatchUpdate:
+      type: object
+      additionalProperties: false
+      required: [method, customerMessage, customerVisible]
+      properties:
+        id: { type: string, format: uuid, readOnly: true }
+        action:
+          type: string
+          enum: [mark_ready_for_collection, start_delivery, confirm_collection, confirm_delivery, complete_collection, complete_delivery, report_delivery_problem]
+          readOnly: true
+        method: { $ref: '#/components/schemas/DispatchMethodCode' }
+        readyDate: { type: string, format: date }
+        collectionDate: { type: string, format: date }
+        deliveryDate: { type: string, format: date }
+        courierOrDriver: { type: string, maxLength: 160 }
+        trackingReference: { type: string, maxLength: 160 }
+        numberOfPackages: { type: integer, minimum: 1, maximum: 999 }
+        deliveryNoteNumber: { type: string, maxLength: 160 }
+        recipientName: { type: string, maxLength: 160 }
+        proofOfDelivery:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/DispatchProof'
+        problemReason:
+          type: string
+          maxLength: 1000
+          description: Internal operational detail; omitted from customer projections.
+        customerMessage: { type: string, minLength: 5, maxLength: 1000 }
+        internalNotes:
+          type: string
+          maxLength: 2000
+          description: Internal-only and omitted from customer projections.
+        customerVisible: { type: boolean, const: true }
+        updatedBy:
+          allOf:
+            - $ref: '#/components/schemas/ExpeditingUpdateActor'
+          readOnly: true
+        createdAt: { type: string, format: date-time, readOnly: true }
+    DispatchRecord:
+      type: object
+      additionalProperties: false
+      required: [method, receivedAt, updates]
+      properties:
+        method: { $ref: '#/components/schemas/DispatchMethodCode' }
+        readyDate: { type: string, format: date }
+        collectionDate: { type: string, format: date }
+        deliveryDate: { type: string, format: date }
+        courierOrDriver: { type: string, maxLength: 160 }
+        trackingReference: { type: string, maxLength: 160 }
+        numberOfPackages: { type: integer, minimum: 1, maximum: 999 }
+        deliveryNoteNumber: { type: string, maxLength: 160 }
+        recipientName: { type: string, maxLength: 160 }
+        proofOfDelivery:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/DispatchProof'
+        currentProblemReason:
+          type: string
+          maxLength: 1000
+          description: Internal-only and omitted from customer projections.
+        internalNotes:
+          type: string
+          maxLength: 2000
+          description: Internal-only and omitted from customer projections.
+        customerMessage: { type: string, maxLength: 1000 }
+        receivedAt: { type: string, format: date-time }
+        lastUpdatedAt: { type: string, format: date-time }
+        lastUpdatedBy:
+          allOf:
+            - $ref: '#/components/schemas/ExpeditingUpdateActor'
+          description: Internal actor ID must be omitted from customer projections.
+        updates:
+          type: array
+          items: { $ref: '#/components/schemas/DispatchUpdate' }
+    DispatchWorkspaceOptions:
+      type: object
+      additionalProperties: false
+      required: [methods, proofTypes, maxProofBytes]
+      properties:
+        methods:
+          type: array
+          items: { $ref: '#/components/schemas/DispatchMethod' }
+        proofTypes:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, label]
+            properties:
+              id: { $ref: '#/components/schemas/DispatchProofTypeCode' }
+              label: { type: string, maxLength: 100 }
+        maxProofBytes: { type: integer, minimum: 1, maximum: 4194304 }
     WorkflowActionDescriptor:
       type: object
       required: [action, label, fromStatus, requiresComment, generatesNotification, customerVisible]
@@ -1607,6 +1844,15 @@ components:
         expeditingStartedAt: { type: string, format: date-time }
         expeditingUpdatedAt: { type: string, format: date-time }
         submittedToDispatchAt: { type: string, format: date-time }
+        dispatch:
+          allOf:
+            - $ref: '#/components/schemas/DispatchRecord'
+          description: Internal roles receive the full record. Customer projections omit internal notes, problem details and internal actor IDs.
+        readyForCollectionAt: { type: string, format: date-time }
+        outForDeliveryAt: { type: string, format: date-time }
+        deliveredAt: { type: string, format: date-time }
+        collectedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
         items:
           type: array
           items: { $ref: '#/components/schemas/OrderItemSnapshot' }
@@ -1685,15 +1931,94 @@ components:
         data: { $ref: '#/components/schemas/CustomerPersonalisation' }
     Notification:
       type: object
-      required: [id, entityType, entityId, message, createdAt]
+      required: [id, eventType, category, title, entityType, entityId, reference, message, priority, link, deliveries, audit, createdAt]
       properties:
         id: { type: string, format: uuid }
+        eventType:
+          type: string
+          enum: [rfq_submitted, rfq_assigned, rfq_under_review, rfq_quoted, customer_acknowledgement, order_accepted, order_created, order_sent_to_planning, order_sent_to_expediting, customer_progress_update, order_delayed, order_on_hold, order_resumed, order_sent_to_dispatch, ready_for_collection, out_for_delivery, delivery_problem_reported, delivered, collected, completed, order_cancelled, rfq_cancelled, rfq_expired, workflow_override]
+        category:
+          type: string
+          enum: [rfqUpdates, quotationNotifications, orderProgress, delayNotifications, fulfilmentNotifications, accountSecurity, maintenanceNotices, companyAnnouncements]
+        title: { type: string, maxLength: 160 }
+        priority: { type: string, enum: [normal, high] }
         entityType: { type: string, enum: [rfq, order] }
         entityId: { type: string, format: uuid }
+        reference: { type: string }
         status: { type: string }
-        message: { type: string }
+        message:
+          type: string
+          maxLength: 2000
+          description: Recipient-safe rendered message. Internal message variants must never be returned to customers.
+        link: { $ref: '#/components/schemas/NotificationLink' }
+        deliveries:
+          type: array
+          items: { $ref: '#/components/schemas/NotificationDelivery' }
+        audit: { $ref: '#/components/schemas/NotificationAudit' }
         createdAt: { type: string, format: date-time }
         readAt: { type: [string, 'null'], format: date-time }
+    NotificationLink:
+      type: object
+      required: [entityType, entityId, reference]
+      properties:
+        entityType: { type: string, enum: [rfq, order] }
+        entityId: { type: string, format: uuid }
+        reference: { type: string }
+        targetView: { type: string, enum: [tracking, expeditor] }
+    NotificationDelivery:
+      type: object
+      required: [id, channel, status, attemptCount, maxAttempts, retryable]
+      properties:
+        id: { type: string, format: uuid }
+        channel: { type: string, enum: [in_app, email, push] }
+        status:
+          type: string
+          enum: [in_app, email_pending, email_sent, email_failed, push_pending, push_sent, push_failed]
+        attemptCount: { type: integer, minimum: 0 }
+        maxAttempts: { type: integer, minimum: 1, maximum: 20 }
+        retryable: { type: boolean }
+        nextRetryAt: { type: [string, 'null'], format: date-time }
+        lastAttemptAt: { type: [string, 'null'], format: date-time }
+        deliveredAt: { type: [string, 'null'], format: date-time }
+        lastErrorCode:
+          type: [string, 'null']
+          description: Safe provider-independent code; provider payloads and credentials are never exposed.
+    NotificationAudit:
+      type: object
+      required: [sourceAction, createdAt]
+      properties:
+        sourceAction: { type: string }
+        createdAt: { type: string, format: date-time }
+        actorDisplayName:
+          type: string
+          description: Omitted from customer projections when the actor identity is internal.
+    NotificationPreferences:
+      type: object
+      required: [schemaVersion, channels, categories]
+      properties:
+        schemaVersion: { type: integer, const: 1 }
+        channels:
+          type: object
+          required: [inApp, email, push]
+          properties:
+            inApp: { type: boolean, const: true }
+            email: { type: boolean }
+            push: { type: boolean }
+          additionalProperties: false
+        categories:
+          type: object
+          required: [rfqUpdates, quotationNotifications, orderProgress, delayNotifications, fulfilmentNotifications, accountSecurity, maintenanceNotices, companyAnnouncements]
+          properties:
+            rfqUpdates: { type: boolean }
+            quotationNotifications: { type: boolean }
+            orderProgress: { type: boolean }
+            delayNotifications: { type: boolean }
+            fulfilmentNotifications: { type: boolean }
+            accountSecurity: { type: boolean, const: true }
+            maintenanceNotices: { type: boolean, const: true }
+            companyAnnouncements: { type: boolean }
+          additionalProperties: false
+        updatedAt: { type: [string, 'null'], format: date-time }
     AuditEvent:
       type: object
       required: [id, action, outcome, entityType, entityId, actorRole, createdAt]

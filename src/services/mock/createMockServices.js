@@ -11,6 +11,20 @@ import {
   EXPEDITOR_PROGRESS_STEPS,
   REQUIRED_EXPEDITOR_STEP_IDS,
 } from '../../domain/expediting.js';
+import {
+  DISPATCH_METHODS,
+  DISPATCH_PROOF_TYPES,
+} from '../../domain/dispatch.js';
+import {
+  createDefaultNotificationPreferences,
+  createNotificationRecord,
+  messageForNotificationRecipient,
+  normaliseNotificationPreferences,
+  normaliseNotificationRecord,
+  notificationMatchesPreferences,
+  notificationRequestsForWorkflowAction,
+  retryMockDelivery,
+} from '../../domain/notifications.js';
 import { PLANNING_PRIORITIES } from '../../domain/planningQueue.js';
 import {
   createDeniedWorkflowAudit,
@@ -32,13 +46,16 @@ import {
 import { accountCan, PERMISSIONS, ServiceError, USER_ROLES, roleCan, toPublicAccount } from '../contracts.js';
 import {
   MAX_ACCEPTANCE_DOCUMENT_BYTES,
+  MAX_DISPATCH_PROOF_BYTES,
   MAX_PO_FILE_BYTES,
   MAX_QUOTATION_DOCUMENT_BYTES,
   validateOrderAcceptance,
   validatePersonalisation,
   validatePersonalisationImage,
+  validateNotificationPreferenceSettings,
   validatePlanningSubmission,
   validateCustomerAccountForRfq,
+  validateDispatchAction,
   validateEnquiry,
   validateExpeditingAction,
   validateQuotationConfirmation,
@@ -190,6 +207,52 @@ const toCustomerVisibleExpediting = expediting => {
   };
 };
 
+const toCustomerVisibleDispatch = dispatch => {
+  if (!dispatch) return undefined;
+  const safeProof = proof => proof && proof.customerVisible !== false ? {
+    type: proof.type,
+    reference: proof.reference,
+    fileName: proof.fileName,
+    mimeType: proof.mimeType,
+    sizeBytes: proof.sizeBytes,
+    storageStatus: proof.storageStatus,
+  } : undefined;
+  return {
+    method: dispatch.method,
+    readyDate: dispatch.readyDate,
+    collectionDate: dispatch.collectionDate,
+    deliveryDate: dispatch.deliveryDate,
+    courierOrDriver: dispatch.courierOrDriver,
+    trackingReference: dispatch.trackingReference,
+    numberOfPackages: dispatch.numberOfPackages,
+    deliveryNoteNumber: dispatch.deliveryNoteNumber,
+    recipientName: dispatch.recipientName,
+    proofOfDelivery: safeProof(dispatch.proofOfDelivery),
+    customerMessage: dispatch.customerMessage,
+    receivedAt: dispatch.receivedAt,
+    lastUpdatedAt: dispatch.lastUpdatedAt,
+    updates: (dispatch.updates || [])
+      .filter(update => update.customerVisible !== false)
+      .map(update => ({
+        id: update.id,
+        action: update.action,
+        method: update.method,
+        readyDate: update.readyDate,
+        collectionDate: update.collectionDate,
+        deliveryDate: update.deliveryDate,
+        courierOrDriver: update.courierOrDriver,
+        trackingReference: update.trackingReference,
+        numberOfPackages: update.numberOfPackages,
+        deliveryNoteNumber: update.deliveryNoteNumber,
+        recipientName: update.recipientName,
+        proofOfDelivery: safeProof(update.proofOfDelivery),
+        customerMessage: update.customerMessage,
+        updatedBy: update.updatedBy ? { displayName: update.updatedBy.displayName } : undefined,
+        createdAt: update.createdAt,
+      })),
+  };
+};
+
 const toCustomerVisibleRecord = enquiry => {
   const history = (enquiry.trackingHistory || []).filter(isCustomerVisibleEvent);
   const lastVisible = history.at(-1);
@@ -207,6 +270,7 @@ const toCustomerVisibleRecord = enquiry => {
     acceptedBy: undefined,
     planning: undefined,
     expediting: toCustomerVisibleExpediting(enquiry.expediting),
+    dispatch: toCustomerVisibleDispatch(enquiry.dispatch),
     internalJobNumber: undefined,
     customerPoNumber: undefined,
     workflowContext: undefined,
@@ -216,6 +280,12 @@ const toCustomerVisibleRecord = enquiry => {
     expeditingStartedBy: undefined,
     lastExpeditingUpdatedBy: undefined,
     submittedToDispatchBy: undefined,
+    readyForCollectionBy: undefined,
+    outForDeliveryBy: undefined,
+    deliveredBy: undefined,
+    collectedBy: undefined,
+    completedBy: undefined,
+    lastDispatchUpdatedBy: undefined,
     allowedWorkflowActions: [],
   };
 };
@@ -278,8 +348,11 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   };
   const readAuditEvents = () => store.get(STORE_KEYS.audit, []);
   const appendAuditEvent = event => store.set(STORE_KEYS.audit, [...readAuditEvents(), event]);
-  const readNotifications = () => store.get(STORE_KEYS.notifications, []);
-  const appendNotification = notification => store.set(STORE_KEYS.notifications, [...readNotifications(), notification]);
+  const readNotifications = () => store.get(STORE_KEYS.notifications, []).map(normaliseNotificationRecord);
+  const writeNotifications = notifications => store.set(STORE_KEYS.notifications, notifications.map(normaliseNotificationRecord));
+  const appendNotification = notification => writeNotifications([...readNotifications(), notification]);
+  const readNotificationPreferenceRecords = () => store.get(STORE_KEYS.notificationPreferences, {});
+  const writeNotificationPreferenceRecords = records => store.set(STORE_KEYS.notificationPreferences, records);
   const readPersonalisation = () => store.get(STORE_KEYS.personalisation, {});
   const writePersonalisation = records => store.set(STORE_KEYS.personalisation, records);
   const readMockImages = () => store.get(STORE_KEYS.mockImages, {});
@@ -343,24 +416,6 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     writeWorkflowState(state);
     return saved;
   };
-
-  const notificationForResult = (result, record) => ({
-    id: makeId('notification'),
-    entityId: record.id,
-    entityType: record.workflowType,
-    reference: record.reference,
-    companyId: record.companyId,
-    representativeId: record.selectedRep?.id || '',
-    status: result.entity.trackingStatus,
-    recipients: result.notification.recipients,
-    customerVisible: result.notification.customerVisible,
-    messages: result.notification.messages || {},
-    message: result.transition?.action === 'assign_representative'
-      ? `New RFQ ${record.reference} from ${record.company} is ready in your representative inbox.`
-      : result.notification.messages?.customer || result.notification.message,
-    createdAt: now().toISOString(),
-    readBy: [],
-  });
 
   const planningUsers = () => readAccounts()
     .filter(account => (
@@ -455,6 +510,45 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         },
       };
     }
+    if ([
+      'mark_ready_for_collection',
+      'start_delivery',
+      'confirm_collection',
+      'confirm_delivery',
+      'complete_collection',
+      'complete_delivery',
+      'report_delivery_problem',
+    ].includes(request.action)) {
+      if (
+        !accountCan(account, PERMISSIONS.CONFIRM_DELIVERY)
+        && !accountCan(account, PERMISSIONS.CONFIRM_COLLECTION)
+      ) {
+        throw new ServiceError('Your account cannot update Dispatch handovers.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const validated = validateDispatchAction(request.action, request.data);
+      const proofFile = validated.dispatchProofFile;
+      const proofOfDelivery = validated.dispatchUpdate.proofOfDelivery
+        ? {
+          ...validated.dispatchUpdate.proofOfDelivery,
+          ...(proofFile ? {
+            id: makeId('dispatch-proof'),
+            fileName: String(proofFile.name || 'dispatch-proof'),
+            mimeType: String(proofFile.type || 'application/octet-stream'),
+            sizeBytes: Number(proofFile.size || 0),
+            uploadedAt: now().toISOString(),
+          } : {}),
+        }
+        : null;
+      return {
+        ...request,
+        data: {
+          dispatchUpdate: {
+            ...validated.dispatchUpdate,
+            proofOfDelivery,
+          },
+        },
+      };
+    }
     const hasExpeditingPayload = Boolean(
       request.data?.expeditingUpdate
       || request.data?.expeditingCustomerMessage
@@ -477,10 +571,88 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   };
 
   const notificationMatchesAccount = (account, notification) => canAccessNotification(account, notification);
-  const notificationMessageForAccount = (account, notification) => {
-    if (account.role === USER_ROLES.CUSTOMER) return notification.messages?.customer || notification.message;
-    if (account.role === USER_ROLES.SALES_REPRESENTATIVE) return notification.messages?.assigned_representative || notification.message;
-    return notification.messages?.[account.role] || notification.messages?.internal || notification.message;
+  const notificationPreferencesForAccount = account => {
+    const stored = readNotificationPreferenceRecords()[account.id];
+    if (stored) return normaliseNotificationPreferences(stored);
+    const defaults = createDefaultNotificationPreferences();
+    if (account.role !== USER_ROLES.CUSTOMER) return defaults;
+    const personalisation = normaliseCustomerPersonalisation(readPersonalisation()[account.id]);
+    return normaliseNotificationPreferences({
+      ...defaults,
+      categories: personalisation.notificationPreferences,
+    });
+  };
+
+  const deliveryRecipientsForAccount = (account, notification) => {
+    if (account.role === USER_ROLES.CUSTOMER) return ['customer'];
+    if (account.role === USER_ROLES.SALES_REPRESENTATIVE) return ['assigned_representative', 'selected_representative'];
+    if (accountCan(account, PERMISSIONS.VIEW_ALL_RFQS) || accountCan(account, PERMISSIONS.VIEW_ALL_ORDERS)) {
+      return notification.recipients || [];
+    }
+    return [account.role];
+  };
+
+  const presentNotification = (account, notification, preferences = notificationPreferencesForAccount(account)) => {
+    const recipientKeys = deliveryRecipientsForAccount(account, notification);
+    const enabledChannels = new Set([
+      'in_app',
+      ...(preferences.channels.email ? ['email'] : []),
+      ...(preferences.channels.push ? ['push'] : []),
+    ]);
+    return {
+      ...notification,
+      message: messageForNotificationRecipient(notification, account.role),
+      messages: undefined,
+      deliveries: (notification.deliveries || []).filter(delivery => (
+        recipientKeys.includes(delivery.recipient) && enabledChannels.has(delivery.channel)
+      )),
+      readAt: (notification.readBy || []).includes(account.id)
+        ? notification.readAtBy?.[account.id] || notification.createdAt
+        : '',
+    };
+  };
+
+  const publishWorkflowNotifications = ({
+    action,
+    record,
+    createdOrder = null,
+    actor,
+    input = {},
+  }) => {
+    const occurredAt = now().toISOString();
+    const requests = notificationRequestsForWorkflowAction({
+      action,
+      record,
+      createdOrder,
+      input,
+    });
+    const created = requests.map(request => createNotificationRecord({
+      id: makeId('notification'),
+      actor,
+      occurredAt,
+      ...request,
+    }));
+    for (const notification of created) {
+      appendNotification(notification);
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'notification.created',
+        outcome: 'success',
+        entityType: notification.entityType,
+        entityId: notification.entityId,
+        companyId: notification.companyId,
+        actorId: actor?.id || 'workflow-service',
+        actorRole: actor?.role || SYSTEM_ACTOR_ROLE,
+        details: {
+          notificationId: notification.id,
+          eventType: notification.eventType,
+          recipients: notification.recipients,
+          deliveryStatuses: notification.deliveries.map(delivery => delivery.status),
+        },
+        createdAt: occurredAt,
+      });
+    }
+    return created;
   };
 
   const initialize = async () => {
@@ -517,6 +689,19 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         orders: migratedRecords.filter(record => record.workflowType === 'order'),
       };
     }
+    workflowState.orders = workflowState.orders.map(record => {
+      const currentSeed = record.isDemo
+        ? DEMO_ENQUIRIES.find(seed => seed.id === record.id && seed.workflowType === 'order')
+        : null;
+      if (!currentSeed) return record;
+      return {
+        ...record,
+        reference: currentSeed.reference || record.reference,
+        sourceRfqReference: record.sourceRfqReference || currentSeed.sourceRfqReference || '',
+        internalJobNumber: record.internalJobNumber || currentSeed.internalJobNumber || '',
+        customerPoNumber: record.customerPoNumber || currentSeed.customerPoNumber || '',
+      };
+    });
     if (!store.has(STORE_KEYS.seedVersion)) {
       for (const demo of DEMO_ENQUIRIES) {
         const record = normaliseEnquiry(demo);
@@ -528,6 +713,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     writeWorkflowState(workflowState);
     if (!store.has(STORE_KEYS.audit)) store.set(STORE_KEYS.audit, []);
     if (!store.has(STORE_KEYS.notifications)) store.set(STORE_KEYS.notifications, []);
+    if (!store.has(STORE_KEYS.notificationPreferences)) store.set(STORE_KEYS.notificationPreferences, {});
     if (!store.has(STORE_KEYS.personalisation)) store.set(STORE_KEYS.personalisation, {});
     if (!store.has(STORE_KEYS.mockImages)) store.set(STORE_KEYS.mockImages, {});
 
@@ -753,10 +939,16 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       });
       appendAuditEvent(submitted.auditEvent);
       appendAuditEvent(assigned.auditEvent);
-      for (const result of [submitted, assigned]) {
-        if (!result.notification.required) continue;
-        appendNotification(notificationForResult(result, result.entity));
-      }
+      publishWorkflowNotifications({
+        action: 'submit_rfq',
+        record: submitted.entity,
+        actor: customerActor,
+      });
+      publishWorkflowNotifications({
+        action: 'assign_representative',
+        record: assigned.entity,
+        actor: { id: 'mock-workflow-system', role: SYSTEM_ACTOR_ROLE, displayName: 'Workflow service' },
+      });
       let enquiry = saveEnquiry(assigned.entity);
 
       let delivery;
@@ -1000,9 +1192,13 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
           createdAt: now().toISOString(),
         });
       }
-      if (result.notification.required) {
-        appendNotification(notificationForResult(result, updated));
-      }
+      publishWorkflowNotifications({
+        action: request.action,
+        record: updated,
+        createdOrder,
+        actor,
+        input: request.data,
+      });
       return clone({
         ...presentRecord(account, updated),
         ...(createdOrder ? { createdOrder: presentRecord(account, createdOrder) } : {}),
@@ -1019,16 +1215,16 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   };
 
   const notifications = {
-    async list() {
+    async list(filters = {}) {
       const account = requireAccount();
+      const preferences = notificationPreferencesForAccount(account);
       const items = readNotifications()
         .filter(item => notificationMatchesAccount(account, item))
-        .map(item => ({
-          ...item,
-          message: notificationMessageForAccount(account, item),
-          messages: undefined,
-          readAt: (item.readBy || []).includes(account.id) ? item.readAtBy?.[account.id] || item.createdAt : '',
-        }))
+        .filter(item => notificationMatchesPreferences(item, preferences))
+        .map(item => presentNotification(account, item, preferences))
+        .filter(item => !filters.unreadOnly || !item.readAt)
+        .filter(item => !filters.entityType || item.entityType === filters.entityType)
+        .filter(item => !filters.eventType || item.eventType === filters.eventType)
         .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
       return clone(items);
     },
@@ -1044,8 +1240,134 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         readBy: [...new Set([...(items[index].readBy || []), account.id])],
         readAtBy: { ...(items[index].readAtBy || {}), [account.id]: readAt },
       };
-      store.set(STORE_KEYS.notifications, items);
-      return clone({ ...items[index], readAt });
+      writeNotifications(items);
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'notification.read',
+        outcome: 'success',
+        entityType: items[index].entityType,
+        entityId: items[index].entityId,
+        companyId: items[index].companyId,
+        actorId: account.id,
+        actorRole: account.role,
+        details: { notificationId },
+        createdAt: readAt,
+      });
+      return clone(presentNotification(account, items[index]));
+    },
+
+    async markAllRead() {
+      const account = requireAccount();
+      const readAt = now().toISOString();
+      const items = readNotifications();
+      let updatedCount = 0;
+      const updated = items.map(item => {
+        if (!notificationMatchesAccount(account, item) || (item.readBy || []).includes(account.id)) return item;
+        updatedCount += 1;
+        return {
+          ...item,
+          readBy: [...new Set([...(item.readBy || []), account.id])],
+          readAtBy: { ...(item.readAtBy || {}), [account.id]: readAt },
+        };
+      });
+      writeNotifications(updated);
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'notification.read_all',
+        outcome: 'success',
+        entityType: 'notification_inbox',
+        entityId: account.id,
+        companyId: account.companyId,
+        actorId: account.id,
+        actorRole: account.role,
+        details: { updatedCount },
+        createdAt: readAt,
+      });
+      return clone({ updatedCount, readAt });
+    },
+
+    async getPreferences() {
+      return clone(notificationPreferencesForAccount(requireAccount()));
+    },
+
+    async savePreferences(candidate) {
+      const account = requireAccount();
+      const saved = {
+        ...validateNotificationPreferenceSettings(candidate),
+        updatedAt: now().toISOString(),
+      };
+      const records = readNotificationPreferenceRecords();
+      records[account.id] = saved;
+      writeNotificationPreferenceRecords(records);
+      if (account.role === USER_ROLES.CUSTOMER) {
+        const personalisationRecords = readPersonalisation();
+        const current = normaliseCustomerPersonalisation(personalisationRecords[account.id]);
+        personalisationRecords[account.id] = {
+          ...current,
+          notificationPreferences: { ...saved.categories },
+          updatedAt: saved.updatedAt,
+        };
+        writePersonalisation(personalisationRecords);
+      }
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'notification.preferences_updated',
+        outcome: 'success',
+        entityType: 'user_preference',
+        entityId: account.id,
+        companyId: account.companyId,
+        actorId: account.id,
+        actorRole: account.role,
+        details: {
+          emailSimulation: saved.channels.email,
+          pushSimulation: saved.channels.push,
+          enabledCategories: Object.entries(saved.categories).filter(([, enabled]) => enabled).map(([category]) => category),
+        },
+        createdAt: saved.updatedAt,
+      });
+      return clone(saved);
+    },
+
+    async retryDelivery(notificationId, deliveryId) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)) {
+        throw new ServiceError('Your role cannot retry notification delivery.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const items = readNotifications();
+      const notificationIndex = items.findIndex(item => item.id === notificationId && notificationMatchesAccount(account, item));
+      if (notificationIndex < 0) throw new ServiceError('The notification could not be found.', { code: 'NOTIFICATION_NOT_FOUND', status: 404 });
+      const deliveryIndex = (items[notificationIndex].deliveries || []).findIndex(delivery => delivery.id === deliveryId);
+      if (deliveryIndex < 0) throw new ServiceError('The delivery attempt could not be found.', { code: 'NOTIFICATION_DELIVERY_NOT_FOUND', status: 404 });
+      const existingDelivery = items[notificationIndex].deliveries[deliveryIndex];
+      if (!existingDelivery.retryable) {
+        throw new ServiceError('Only a failed simulated delivery can be retried.', { code: 'NOTIFICATION_DELIVERY_NOT_RETRYABLE', status: 409 });
+      }
+      const retriedAt = now().toISOString();
+      const retried = retryMockDelivery(existingDelivery, retriedAt);
+      items[notificationIndex] = {
+        ...items[notificationIndex],
+        deliveries: items[notificationIndex].deliveries.map((delivery, index) => index === deliveryIndex ? retried : delivery),
+      };
+      writeNotifications(items);
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'notification.delivery_retry_requested',
+        outcome: retried.status.endsWith('_sent') ? 'success' : 'failed',
+        entityType: items[notificationIndex].entityType,
+        entityId: items[notificationIndex].entityId,
+        companyId: items[notificationIndex].companyId,
+        actorId: account.id,
+        actorRole: account.role,
+        details: {
+          notificationId,
+          deliveryId,
+          channel: retried.channel,
+          attemptCount: retried.attemptCount,
+          status: retried.status,
+        },
+        createdAt: retriedAt,
+      });
+      return clone(retried);
     },
   };
 
@@ -1082,6 +1404,24 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     },
   };
 
+  const dispatch = {
+    async getWorkspaceOptions() {
+      const account = requireAccount();
+      if (
+        !accountCan(account, PERMISSIONS.VIEW_DISPATCH_QUEUE)
+        && !accountCan(account, PERMISSIONS.CONFIRM_DELIVERY)
+        && !accountCan(account, PERMISSIONS.CONFIRM_COLLECTION)
+      ) {
+        throw new ServiceError('Your account cannot access Dispatch reference data.', { code: 'FORBIDDEN', status: 403 });
+      }
+      return clone({
+        methods: DISPATCH_METHODS,
+        proofTypes: DISPATCH_PROOF_TYPES,
+        maxProofBytes: MAX_DISPATCH_PROOF_BYTES,
+      });
+    },
+  };
+
   const personalisation = {
     async get() {
       const account = requireAccount();
@@ -1110,6 +1450,13 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const previous = normaliseCustomerPersonalisation(records[account.id]);
       records[account.id] = saved;
       writePersonalisation(records);
+      const notificationPreferenceRecords = readNotificationPreferenceRecords();
+      notificationPreferenceRecords[account.id] = {
+        ...normaliseNotificationPreferences(notificationPreferenceRecords[account.id] || createDefaultNotificationPreferences()),
+        categories: { ...saved.notificationPreferences },
+        updatedAt: saved.updatedAt,
+      };
+      writeNotificationPreferenceRecords(notificationPreferenceRecords);
       const retainedImageIds = new Set([saved.profileImage?.id, saved.companyLogo?.id].filter(Boolean));
       const removedImageIds = [previous.profileImage?.id, previous.companyLogo?.id]
         .filter((id, index, values) => id && values.indexOf(id) === index && !retainedImageIds.has(id));
@@ -1273,6 +1620,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     notifications,
     planning,
     expediting,
+    dispatch,
     personalisation,
     products: productService,
     preferences,
@@ -1281,6 +1629,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       maxPoFileBytes: MAX_PO_FILE_BYTES,
       maxQuotationDocumentBytes: MAX_QUOTATION_DOCUMENT_BYTES,
       maxAcceptanceDocumentBytes: MAX_ACCEPTANCE_DOCUMENT_BYTES,
+      maxDispatchProofBytes: MAX_DISPATCH_PROOF_BYTES,
       persistenceLabel: 'this browser',
     },
   };

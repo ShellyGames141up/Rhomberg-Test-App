@@ -62,6 +62,7 @@ export const PERMISSIONS = Object.freeze({
   ADMINISTER_USERS: 'administer_users',
   OVERRIDE_WORKFLOW: 'override_workflow',
   READ_AUDIT_HISTORY: 'read_audit_history',
+  RETRY_NOTIFICATION_DELIVERY: 'retry_notification_delivery',
   MANAGE_PRODUCTS: 'manage_products',
   VIEW_REPORTS: 'view_reports',
 });
@@ -147,6 +148,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.EMAIL_ORDER_SUMMARY,
     PERMISSIONS.OVERRIDE_WORKFLOW,
     PERMISSIONS.READ_AUDIT_HISTORY,
+    PERMISSIONS.RETRY_NOTIFICATION_DELIVERY,
     PERMISSIONS.VIEW_REPORTS,
   ),
   [USER_ROLES.ADMINISTRATOR]: permissionList(...Object.values(PERMISSIONS)),
@@ -185,6 +187,7 @@ export const WORKFLOW_ACTION_PERMISSIONS = Object.freeze({
   confirm_collection: PERMISSIONS.CONFIRM_COLLECTION,
   complete_delivery: PERMISSIONS.CONFIRM_DELIVERY,
   complete_collection: PERMISSIONS.CONFIRM_COLLECTION,
+  report_delivery_problem: PERMISSIONS.CONFIRM_DELIVERY,
   place_on_hold: PERMISSIONS.MANAGE_ORDER_HOLD,
   resume_order: PERMISSIONS.MANAGE_ORDER_HOLD,
   cancel_order: PERMISSIONS.CANCEL_ORDER,

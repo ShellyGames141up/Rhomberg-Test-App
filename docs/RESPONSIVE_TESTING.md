@@ -20,7 +20,7 @@
 - Long company/product names wrap with usable line height.
 - Minimum 44 px interactive targets on touch layouts.
 - Bottom navigation and forms respect safe-area insets.
-- Planning/Expediting desktop grids collapse into cards or fewer columns.
+- Planning/Expediting/Dispatch desktop grids collapse into cards or fewer columns.
 - Wizard steps remain horizontally scrollable without shrinking labels to illegibility.
 - Dialogues/screens remain usable in portrait and landscape.
 - Visible keyboard focus and readable colour contrast.
@@ -55,3 +55,12 @@ The review also confirmed:
 - no browser console errors were reported during the route and viewport checks.
 
 Automated checks and this Chromium review do not replace testing on physical iOS/Android devices, browser zoom, screen readers, Windows high-contrast mode or all 2560 × 1440 combinations.
+
+Prompt 10 added a focused Dispatch review on 27 July 2026:
+
+| Preview | Viewport reviewed | Result |
+| --- | --- | --- |
+| Internal Desktop · Dispatch | 1280 × 720 | Queue, filters, desktop table, fabricated records and role-specific navigation rendered with no horizontal document overflow |
+| Internal Desktop · Dispatch responsive fallback | 390 × 844 | Header row hides, order rows collapse to one-column labelled cards, the delivery detail/form remains reachable, and no horizontal document overflow was found |
+
+The Dispatch review also opened the fabricated out-for-delivery record, confirmed its structured action form, separate customer/internal messages, proof-metadata notice, history and audit surfaces, and found no browser console warnings or errors.

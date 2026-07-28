@@ -1,13 +1,16 @@
 import { ServiceError } from '../contracts.js';
 import {
   MAX_ACCEPTANCE_DOCUMENT_BYTES,
+  MAX_DISPATCH_PROOF_BYTES,
   MAX_PO_FILE_BYTES,
   MAX_QUOTATION_DOCUMENT_BYTES,
   validateEnquiry,
+  validateDispatchAction,
   validateExpeditingAction,
   validateOrderAcceptance,
   validatePersonalisation,
   validatePersonalisationImage,
+  validateNotificationPreferenceSettings,
   validatePlanningSubmission,
   validateQuotationConfirmation,
   validateRegistration,
@@ -23,6 +26,7 @@ export function createApiServices(config = {}) {
   const preferenceStore = createBrowserStore(config.storage);
   let draftSaveQueue = Promise.resolve();
   let expeditingWorkspaceOptions = null;
+  let dispatchWorkspaceOptions = null;
 
   const refreshCsrfToken = async () => {
     const result = await client.get('/auth/csrf-token');
@@ -166,6 +170,30 @@ export function createApiServices(config = {}) {
           data: validateExpeditingAction(request.action, request.data, expeditingWorkspaceOptions || {}),
         };
       }
+      if ([
+        'mark_ready_for_collection',
+        'start_delivery',
+        'confirm_collection',
+        'confirm_delivery',
+        'complete_collection',
+        'complete_delivery',
+        'report_delivery_problem',
+      ].includes(request.action)) {
+        const { dispatchUpdate, dispatchProofFile } = validateDispatchAction(
+          request.action,
+          request.data,
+          dispatchWorkspaceOptions || {},
+        );
+        request = { ...request, data: { dispatchUpdate } };
+        if (dispatchProofFile) {
+          const form = new FormData();
+          form.append('payload', JSON.stringify(request));
+          form.append('dispatchProof', dispatchProofFile, dispatchProofFile.name);
+          return client.post(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`, form, {
+            headers: { 'Idempotency-Key': idempotencyKey },
+          });
+        }
+      }
       return client.post(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`, request, {
         headers: { 'Idempotency-Key': idempotencyKey },
       });
@@ -179,6 +207,15 @@ export function createApiServices(config = {}) {
   const notifications = {
     list: filters => client.get('/notifications', { query: filters }),
     markRead: notificationId => client.post(`/notifications/${encodeURIComponent(notificationId)}/read`, {}),
+    markAllRead: () => client.post('/notifications/read-all', {}),
+    getPreferences: () => client.get('/users/me/notification-preferences'),
+    savePreferences(candidate) {
+      return client.put('/users/me/notification-preferences', validateNotificationPreferenceSettings(candidate));
+    },
+    retryDelivery: (notificationId, deliveryId) => client.post(
+      `/notifications/${encodeURIComponent(notificationId)}/deliveries/${encodeURIComponent(deliveryId)}/retry`,
+      {},
+    ),
   };
 
   const planning = {
@@ -189,6 +226,13 @@ export function createApiServices(config = {}) {
     async getWorkspaceOptions() {
       expeditingWorkspaceOptions = await client.get('/expediting/workspace-options');
       return expeditingWorkspaceOptions;
+    },
+  };
+
+  const dispatch = {
+    async getWorkspaceOptions() {
+      dispatchWorkspaceOptions = await client.get('/dispatch/workspace-options');
+      return dispatchWorkspaceOptions;
     },
   };
 
@@ -239,6 +283,7 @@ export function createApiServices(config = {}) {
     notifications,
     planning,
     expediting,
+    dispatch,
     personalisation,
     preferences,
     preview: {
@@ -246,6 +291,7 @@ export function createApiServices(config = {}) {
       maxPoFileBytes: MAX_PO_FILE_BYTES,
       maxQuotationDocumentBytes: MAX_QUOTATION_DOCUMENT_BYTES,
       maxAcceptanceDocumentBytes: MAX_ACCEPTANCE_DOCUMENT_BYTES,
+      maxDispatchProofBytes: MAX_DISPATCH_PROOF_BYTES,
       persistenceLabel: 'the secure company service',
     },
   };
