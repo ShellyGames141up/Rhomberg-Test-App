@@ -1,6 +1,17 @@
 import { useState } from 'react';
 
-export function Auth({ onSignIn, onCreateAccount, theme, onToggleTheme, registrationOptions, demoLogins, serviceMode }) {
+export function Auth({
+  onSignIn,
+  onCreateAccount,
+  theme,
+  onToggleTheme,
+  registrationOptions,
+  demoLogins,
+  serviceMode,
+  preview,
+  allowRegistration = true,
+  accessError = '',
+}) {
   const [tab, setTab] = useState('signin');
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
@@ -56,31 +67,31 @@ export function Auth({ onSignIn, onCreateAccount, theme, onToggleTheme, registra
           <img src="assets/images/rhomberg-gauge-mark.svg" alt="" />
           <img src="assets/images/rhomberg-wordmark-transparent.png" alt="Rhomberg Instruments" />
         </div>
-        <span className="preview-chip">{serviceMode === 'mock' ? 'Public test preview' : 'Private company service'}</span>
-        <h1 id="auth-title">{tab === 'signin' ? <>Welcome to Rhomberg<br /><em>Instruments.</em></> : <>Create your company<br /><em>workspace.</em></>}</h1>
-        <p className="auth-intro">Find the right instrument, submit clear RFQs and follow every saved request or order from one place.</p>
+        <span className="preview-chip">{__PUBLIC_PREVIEW__ && serviceMode === 'mock' ? 'Demo Preview' : 'Private company service'}{preview?.platform ? ` · ${preview.platform}` : ''}</span>
+        <h1 id="auth-title">{tab === 'signin' ? <>Welcome to {preview?.product || 'Rhomberg'}<br /><em>{preview?.platform || 'Instruments'}.</em></> : <>Create your company<br /><em>workspace.</em></>}</h1>
+        <p className="auth-intro">{preview?.customer ? 'Browse instruments, submit RFQs and follow customer-safe order progress.' : preview?.internal ? 'Open the authorised operational queue for your role and continue controlled workflow actions.' : 'Find the right instrument, submit clear RFQs and follow every saved request or order from one place.'}</p>
 
         <div className="auth-tabs" role="tablist" aria-label="Account access">
           <button type="button" role="tab" aria-selected={tab === 'signin'} className={tab === 'signin' ? 'active' : ''} onClick={() => { setTab('signin'); resetErrors(); }}>Sign in</button>
-          <button type="button" role="tab" aria-selected={tab === 'register'} className={tab === 'register' ? 'active' : ''} onClick={() => { setTab('register'); resetErrors(); }}>Create account</button>
+          {allowRegistration && <button type="button" role="tab" aria-selected={tab === 'register'} className={tab === 'register' ? 'active' : ''} onClick={() => { setTab('register'); resetErrors(); }}>Create account</button>}
         </div>
 
         {tab === 'signin' ? (
           <form className="auth-form" onSubmit={submitSignIn} noValidate>
             <FormField label="Email address" error={fieldErrors.email}><input name="email" type="email" autoComplete="email" required aria-invalid={Boolean(fieldErrors.email)} placeholder="name@company.co.za" /></FormField>
             <PasswordField name="password" label="Password" show={showPassword} onToggle={() => setShowPassword(value => !value)} error={fieldErrors.password} />
-            {error && <p className="form-error" role="alert">{error}</p>}
+            {(error || accessError) && <p className="form-error" role="alert">{error || accessError}</p>}
             <button className="primary-button full" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Sign in'} <span>{isSubmitting ? '•••' : '→'}</span></button>
-            {demoLogins.map(login => (
+            {__PUBLIC_PREVIEW__ && demoLogins.map(login => (
               <div className="demo-login-wrap" key={login.id}>
-                <button className={`demo-account ${login.id === 'expeditor' ? 'expeditor-demo' : ''}`} type="button" disabled={isSubmitting} onClick={() => useDemo(login)}>
+                <button className={`demo-account ${!login.id.includes('customer') ? 'internal-demo' : ''}`} type="button" disabled={isSubmitting} onClick={() => useDemo(login)}>
                   <span className="demo-avatar">{login.avatar}</span><span><strong>{login.label}</strong><small>{login.description}</small></span><i>›</i>
                 </button>
-                <p className="demo-credentials">{login.id === 'expeditor' ? 'Expeditor' : 'Demo'}: {login.email} · {login.password}</p>
+                <p className="demo-credentials">{login.id.includes('customer') ? 'Customer demo' : 'Internal test'}: {login.email} · {login.password}</p>
               </div>
             ))}
           </form>
-        ) : (
+        ) : allowRegistration ? (
           <form className="auth-form register-grid" onSubmit={submitRegister} noValidate>
             <FormField label="Company name" error={fieldErrors.company}><input name="company" required aria-invalid={Boolean(fieldErrors.company)} placeholder="Your company" /></FormField>
             <FormField label="Contact person" error={fieldErrors.contact}><input name="contact" autoComplete="name" required aria-invalid={Boolean(fieldErrors.contact)} placeholder="Full name" /></FormField>
@@ -93,9 +104,10 @@ export function Auth({ onSignIn, onCreateAccount, theme, onToggleTheme, registra
             {error && <p className="form-error" role="alert">{error}</p>}
             <button className="primary-button full" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Creating account…' : 'Create company account'} <span>{isSubmitting ? '•••' : '→'}</span></button>
           </form>
-        )}
+        ) : null}
 
-        <p className="preview-note"><span>i</span> {serviceMode === 'mock' ? 'Public test preview: use sample data only and do not upload confidential Purchase Orders. Accounts, RFQs and order updates are stored locally on this device.' : 'Private-cloud mode: access is controlled by the company service. Contact IT if you cannot access your authorised company.'}</p>
+        <p className="preview-note"><span>i</span> {__PUBLIC_PREVIEW__ && serviceMode === 'mock' ? 'Public test preview: use sample data only and do not upload confidential Purchase Orders. Accounts, RFQs and order updates are stored locally on this device.' : 'Private-cloud mode: access is controlled by the company service. Contact IT if you cannot access your authorised company.'}</p>
+        {__PUBLIC_PREVIEW__ && preview && <a className="preview-back-link" href="./">Back to all test previews</a>}
       </section>
     </main>
   );

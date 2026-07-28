@@ -1,42 +1,41 @@
-export function AppHeader({ account, onNavigate, onBack, backLabel, theme, onToggleTheme, serviceMode }) {
+import {
+  defaultViewForRole,
+  isInternalRole,
+  navigationItemsForRole,
+} from '../domain/accessControl.js';
+
+export function AppHeader({ account, onNavigate, onBack, backLabel, theme, onToggleTheme, serviceMode, preview, showThemeToggle = true, personalisation }) {
   const initials = account.contact.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
   return (
     <header className="app-header">
       {onBack ? (
         <button className="header-back" type="button" onClick={onBack} aria-label={backLabel || 'Go back'}><span>←</span></button>
       ) : (
-        <button className="mini-brand" type="button" onClick={() => onNavigate(account.role === 'customer' ? 'home' : 'expeditor')} aria-label="Rhomberg home">
-          <img src="assets/images/rhomberg-gauge-mark.svg" alt="" />
+        <button className="mini-brand" type="button" onClick={() => onNavigate(defaultViewForRole(account.role))} aria-label="Rhomberg home">
+          <img src={personalisation?.companyLogo?.previewUrl || 'assets/images/rhomberg-gauge-mark.svg'} alt="" className={personalisation?.companyLogo?.previewUrl ? 'customer-company-logo' : ''} />
           <span><strong>RHOMBERG</strong><small>INSTRUMENTS</small></span>
         </button>
       )}
       {onBack && <span className="header-context">{backLabel || 'Catalogue'}</span>}
       <div className="header-tools">
-        <button className="theme-toggle" type="button" onClick={onToggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}><span>{theme === 'dark' ? '☀' : '☾'}</span></button>
-        <span className="preview-status"><i /> {serviceMode === 'mock' ? 'Test' : 'Secure'}</span>
-        <button className="header-avatar" type="button" onClick={() => onNavigate('account')} aria-label="Open account">{initials}</button>
+        {showThemeToggle && <button className="theme-toggle" type="button" onClick={onToggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}><span>{theme === 'dark' ? '☀' : '☾'}</span></button>}
+        {__PUBLIC_PREVIEW__ ? <a className="preview-status" href="./" title="Back to all test previews"><i /> {serviceMode === 'mock' ? 'Demo Preview' : 'Secure'}{preview?.platform ? ` · ${preview.platform}` : ''}</a> : <span className="preview-status"><i /> Secure</span>}
+        <button className="header-avatar" type="button" onClick={() => onNavigate('account')} aria-label="Open account">{personalisation?.profileImage?.previewUrl ? <img src={personalisation.profileImage.previewUrl} alt="" style={{ objectPosition: `${personalisation.profileImage.position?.x || 50}% ${personalisation.profileImage.position?.y || 50}%` }} /> : initials}</button>
       </div>
     </header>
   );
 }
 
-export function BottomNav({ active, quantity, role, onNavigate }) {
-  const isStaff = role !== 'customer';
-  const items = isStaff
-    ? [['expeditor', '↻', 'Orders'], ['account', '○', 'Account']]
-    : [
-      ['home', '⌂', 'Home'],
-      ['catalogue', '◇', 'Catalogue'],
-      ['enquiry', '+', 'Enquire'],
-      ['tracking', '◎', 'Orders'],
-      ['account', '○', 'Account'],
-    ];
+export function BottomNav({ active, quantity, role, unreadCount = 0, onNavigate }) {
+  const isStaff = isInternalRole(role);
+  const items = navigationItemsForRole(role);
   return (
     <nav className={`bottom-nav ${isStaff ? 'expeditor-nav' : ''}`} aria-label="Main navigation">
-      {items.map(([id, glyph, label]) => (
+      {items.map(({ id, glyph, label }) => (
         <button key={id} type="button" className={`${active === id ? 'active' : ''} ${id === 'enquiry' ? 'nav-primary' : ''}`} onClick={() => onNavigate(id)}>
           <span className="nav-icon">{glyph}</span><small>{label}</small>
           {id === 'enquiry' && quantity > 0 && <b className="nav-badge">{quantity}</b>}
+          {id === 'notifications' && unreadCount > 0 && <b className="nav-badge notification-nav-badge">{Math.min(unreadCount, 99)}</b>}
         </button>
       ))}
     </nav>

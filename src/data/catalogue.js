@@ -37,18 +37,26 @@ const commonPressureRanges = [
 
 const highPressureRanges = [...commonPressureRanges.slice(0, -1), '0 to 1 600 bar', '0 to 2 500 bar', 'Custom range - sales review'];
 const lowPressureRanges = ['-1 to 0 kPa', '-2.5 to 0 kPa', '-6 to 0 kPa', '-10 to 0 kPa', '0 to 1 kPa', '0 to 2.5 kPa', '0 to 6 kPa', '0 to 10 kPa', '0 to 25 kPa', '0 to 40 kPa', 'Custom range - sales review'];
+const positivePressureRangesTo600Bar = commonPressureRanges.filter(range => !['Vacuum: -100 to 0 kPa', '0 to 1 000 bar'].includes(range));
+const positivePressureRangesTo2500Bar = highPressureRanges.filter(range => range !== 'Vacuum: -100 to 0 kPa');
+const rptRangesTo35Bar = ['0 to 100 kPa', '0 to 250 kPa', '0 to 600 kPa', '0 to 1 bar', '0 to 1.6 bar', '0 to 2.5 bar', '0 to 3.5 MPa', 'Custom range - sales review'];
+const rptRangesTo100Kpa = ['0 to 100 Pa', '0 to 250 Pa', '0 to 600 Pa', '0 to 1 kPa', '0 to 2.5 kPa', '0 to 6 kPa', '0 to 10 kPa', '0 to 25 kPa', '0 to 40 kPa', '0 to 60 kPa', '0 to 100 kPa', 'Custom range - sales review'];
+const rptFlushRangesFromOneBar = ['0 to 1 bar', '0 to 1.6 bar', '0 to 2.5 bar', '0 to 4 bar', '0 to 6 bar', '0 to 10 bar', '0 to 16 bar', '0 to 20 bar', '0 to 25 bar', '0 to 40 bar', '0 to 60 bar', '0 to 100 bar', '0 to 200 bar', '0 to 400 bar', '0 to 600 bar', 'Custom range - sales review'];
+const rptFlushRangesFromSixBar = rptFlushRangesFromOneBar.filter(range => !['0 to 1 bar', '0 to 1.6 bar', '0 to 2.5 bar', '0 to 4 bar'].includes(range));
 const temperatureRanges = ['-50 to 50 °C', '-40 to 40 °C', '-20 to 120 °C', '0 to 60 °C', '0 to 100 °C', '0 to 160 °C', '0 to 250 °C', '0 to 400 °C', '0 to 600 °C', 'Custom range - sales review'];
 
 const choice = (key, label, options, required = true, help = '') => ({ key, label, type: 'choice', options, required, help });
 const select = (key, label, options, required = true, help = '') => ({ key, label, type: 'select', options, required, help });
-const multiChoice = (key, label, options, required = false, help = '') => ({ key, label, type: 'multiChoice', options, required, help });
+const multiChoice = (key, label, options, required = false, help = '', exclusiveOption = '') => ({ key, label, type: 'multiChoice', options, required, help, exclusiveOption });
 const text = (key, label, placeholder, required = false, help = '') => ({ key, label, type: 'text', placeholder, required, help });
 const textarea = (key, label, placeholder, required = false, help = '', showWhen) => ({ key, label, type: 'textarea', placeholder, required, help, showWhen });
 const toggle = (key, label, help = '', showWhen) => ({ key, label, type: 'toggle', required: false, help, showWhen });
 
 const gaugeThreadSizes = ['1/8 inch', '1/4 inch', '3/8 inch', '1/2 inch'];
-const gaugeSystemMaterials = ['Brass system', '316L stainless steel system', 'Monel system - sales review'];
+const gaugeSystemMaterials = ['Brass system', '316L stainless steel system'];
+const noGaugeOption = 'No optional feature required';
 const gaugeOptionalFeatures = [
+  noGaugeOption,
   'Oil free / oxygen clean',
   'Secondary scale - psi',
   'Secondary scale - bar',
@@ -69,6 +77,46 @@ const gaugeOptionalFeatures = [
   'Zero adjuster',
   'Special option - describe in notes',
 ];
+const gaugeOptionsWithout = (...excluded) => gaugeOptionalFeatures.filter(option => !excluded.includes(option));
+const compactUtilityGaugeOptions = gaugeOptionsWithout(
+  'Internal overload stop',
+  'Female thread',
+  'No aluminium parts',
+  'Maximum drag pointer',
+  'Blow-out back with baffle',
+  'Red set pointer',
+  'Zero adjuster',
+);
+const restrictedDiaphragmGaugeOptions = gaugeOptionsWithout(
+  'Oil free / oxygen clean',
+  'Refrigeration scale',
+  'Retarded scale',
+  'Internal overload stop',
+  'Studs and bracket',
+  'Nickel-plated block',
+  'Snubber',
+  'Female thread',
+  'Stainless-steel movement in brass system',
+  'No aluminium parts',
+  'Blow-out back with baffle',
+  'Red set pointer',
+  'Zero adjuster',
+);
+const restrictedDifferentialGaugeOptions = gaugeOptionsWithout(
+  'Oil free / oxygen clean',
+  'Refrigeration scale',
+  'Retarded scale',
+  'Internal overload stop',
+  'Studs and bracket',
+  'Nickel-plated block',
+  'Snubber',
+  'Female thread',
+  'Stainless-steel movement in brass system',
+  'No aluminium parts',
+  'Blow-out back with baffle',
+  'Red set pointer',
+  'Zero adjuster',
+);
 
 const rptRanges = ['-1 bar', '0 to 1 bar', '0 to 1.6 bar', '0 to 2.5 bar', '0 to 4 bar', '0 to 6 bar', '0 to 10 bar', '0 to 16 bar', '0 to 20 bar', '0 to 25 bar', '0 to 40 bar', '0 to 60 bar', '0 to 100 bar', '0 to 200 bar', '0 to 400 bar', '0 to 600 bar', 'Compound or custom range - sales review'];
 const rptConnections = ['1/8 inch NPT', '1/4 inch NPT', '3/8 inch NPT', '1/2 inch NPT', '1/8 inch BSP', '1/4 inch BSP', '3/8 inch BSP', '1/2 inch BSP', '3/4 inch BSP', '1 inch BSP', '1/8 inch BSPT', '1/4 inch BSPT', '3/8 inch BSPT', '1/2 inch BSPT', '1 1/2 inch Tri-Clover', 'NW40 dairy'];
@@ -89,10 +137,21 @@ const pressureGaugeConfig = product => {
   const fields = [];
   if (product.caseModels) fields.push(choice('caseModel', 'Gauge construction', Object.keys(product.caseModels)));
 
+  const materialField = choice('material', 'System / wetted material', product.materialOptions || gaugeSystemMaterials);
   const dialField = choice('dialSize', 'Dial size', product.dialSizes || ['63 mm', '100 mm', '150 mm']);
-  fields.push(product.dialSizesBy ? withOptionsBy(dialField, product.dialSizesBy.key, product.dialSizesBy.map, product.dialSizes || []) : dialField);
-  fields.push(choice('material', 'System / wetted material', product.materialOptions || gaugeSystemMaterials));
-  fields.push(select('range', 'Pressure / measuring range', product.rangeOptions || commonPressureRanges, true, product.measuringRange));
+  if (product.dialSizesByMaterial) {
+    fields.push(materialField);
+    fields.push(withOptionsBy(dialField, 'material', product.dialSizesByMaterial, product.dialSizes || []));
+  } else {
+    fields.push(product.dialSizesBy ? withOptionsBy(dialField, product.dialSizesBy.key, product.dialSizesBy.map, product.dialSizes || []) : dialField);
+    fields.push(materialField);
+  }
+  if (product.diaphragmSizes) fields.push(choice('diaphragmSize', 'Diaphragm size', product.diaphragmSizes));
+  if (product.caseColourOptions) fields.push(choice('caseColour', 'Case colour', product.caseColourOptions));
+  const rangeField = select('range', 'Pressure / measuring range', product.rangeOptions || commonPressureRanges, true, product.measuringRange);
+  fields.push(product.rangeOptionsBy
+    ? withOptionsBy(rangeField, product.rangeOptionsBy.key, product.rangeOptionsBy.map, product.rangeOptions || commonPressureRanges)
+    : rangeField);
   fields.push(text('customRange', 'Describe the required range', 'Example: -1 to 15 bar, dual scale bar/psi', true, 'A representative will validate non-standard ranges.'));
 
   if (product.code === 'PBB') {
@@ -111,11 +170,15 @@ const pressureGaugeConfig = product => {
   fields.push(choice('threadType', 'Thread type', product.threadTypes || ['BSP', 'NPT', 'BSPT']));
   fields.push(choice('threadSize', 'Thread size', product.threadSizes || gaugeThreadSizes));
   fields.push(choice('fill', 'Dampening / fill', product.fillOptions || ['Dry', 'Glycerine filled', 'Silicone filled', 'Vibration-free movement']));
-  fields.push(choice('installationOption', 'Block / adaptor option', product.installationOptions || ['Standard - no modification', 'Block welded to case', 'Adaptor fitted', 'Centre-back option - where applicable']));
-  fields.push(choice('logo', 'Dial branding', ['Standard Rhomberg logo', 'Customer logo', 'No logo']));
-  fields.push(multiChoice('gaugeOptions', 'Optional gauge features', product.gaugeOptions || gaugeOptionalFeatures, false, 'Choose only the extras needed. Final compatibility is checked against the selected gauge.'));
+  if (product.installationOptions !== false) {
+    fields.push(choice('installationOption', 'Block / adaptor option', product.installationOptions || ['Standard - no modification', 'Block welded to case', 'Adaptor fitted', 'Centre-back option - where applicable']));
+  }
+  if (product.logoOptions !== false) fields.push(choice('logo', 'Dial branding', product.logoOptions || ['Standard Rhomberg logo', 'Customer logo']));
+  if (product.gaugeOptions !== false) {
+    fields.push(multiChoice('gaugeOptions', 'Optional gauge features', product.gaugeOptions || gaugeOptionalFeatures, true, 'Choose the extras needed, or explicitly select no optional feature. Final compatibility is checked against the selected gauge.', noGaugeOption));
+  }
   fields.push(choice('sanas', 'SANAS calibration', ['No SANAS certificate', 'SANAS calibration required']));
-  if (product.allowChemicalSeal !== false) {
+  if (product.gaugeFamily === 'process' && product.allowChemicalSeal !== false) {
     fields.push(toggle('chemicalSeal', 'I require a Chemical Seal', 'Seal selection is completed by Rhomberg after reviewing the application.'));
     fields.push(textarea('chemicalSealNotes', 'Chemical seal request details', 'Tell us about the medium, temperature, cleaning process or connection. Do not select a seal model.', false, 'Optional: share process details that will help the representative.', { key: 'chemicalSeal', value: true }));
   }
@@ -123,15 +186,24 @@ const pressureGaugeConfig = product => {
   return fields;
 };
 
-const pressureTransmitterConfig = product => [
-  select('range', 'Pressure / transducer range', product.rangeOptions || rptRanges, true, product.measuringRange),
-  choice('output', 'Output signal', product.outputs || ['4-20 mA', '0-5 V', '0-10 V', 'RS485']),
-  choice('processConnection', 'Process connection', product.connections || rptConnections),
-  choice('electricalConnection', 'Electrical connection', product.electrical || ['DIN Maxi connector', 'M12 4-pin connector', 'Cable outlet IP68', 'KSE head']),
-  choice('branding', 'Customer branding', ['Standard Rhomberg branding', 'Customer company logo', 'No logo']),
-  choice('sanas', 'SANAS calibration', ['No SANAS certificate', 'SANAS calibration required']),
-  textarea('specialRequirements', 'Special requirements', 'Hazardous area, display, HART, cable length or installation notes', false),
-];
+const pressureTransmitterConfig = product => {
+  const fields = [];
+  const rangeField = select('range', 'Pressure / transducer range', product.rangeOptions || rptRanges, true, product.measuringRange);
+  const connectionField = choice('processConnection', 'Process connection', product.connections || rptConnections);
+  if (product.rangeOptionsByConnection) {
+    fields.push(connectionField);
+    fields.push(withOptionsBy(rangeField, 'processConnection', product.rangeOptionsByConnection, product.rangeOptions || rptRanges));
+  } else {
+    fields.push(rangeField);
+    fields.push(connectionField);
+  }
+  fields.push(choice('output', 'Output signal', product.outputs || ['4-20 mA', '0-5 V', '0-10 V', 'RS485']));
+  fields.push(choice('electricalConnection', 'Electrical connection', product.electrical || ['DIN Maxi connector', 'M12 4-pin connector', 'Cable outlet IP68', 'KSE head']));
+  if (product.allowBranding !== false) fields.push(choice('branding', 'Customer branding', ['Standard Rhomberg branding', 'Customer company logo']));
+  fields.push(choice('sanas', 'SANAS calibration', ['No SANAS certificate', 'SANAS calibration required']));
+  fields.push(textarea('specialRequirements', 'Special requirements', 'Hazardous area, display, HART, cable length or installation notes', false));
+  return fields;
+};
 
 const digitalPressureConfig = product => product.code === 'DPG-S281' ? [
   choice('rangeUnit', 'Pressure unit', ['kPa', 'bar', 'MPa', 'psi', 'Pa']),
@@ -321,13 +393,13 @@ const defineProduct = input => {
     rules: {
       sanas: product.category === 'pressure',
       traceability: product.category === 'temperature',
-      chemicalSealRequest: product.category === 'pressure' && product.variant === 'gauge' && product.allowChemicalSeal !== false,
+      chemicalSealRequest: product.category === 'pressure' && product.variant === 'gauge' && product.gaugeFamily === 'process' && product.allowChemicalSeal !== false,
     },
   };
 };
 
 const pressureGauge = (code, name, overrides = {}) => defineProduct({
-  id: code.toLowerCase().replace(/[^a-z0-9]+/g, '-'), code, name, category: 'pressure', variant: 'gauge',
+  id: code.toLowerCase().replace(/[^a-z0-9]+/g, '-'), code, name, category: 'pressure', variant: 'gauge', gaugeFamily: 'process',
   pressureRange: 'Vacuum to 60 MPa', measuringRange: '-100/0 kPa to 0/600 bar', accuracy: '1.0-1.6% FSD',
   caseMaterial: 'Stainless steel or model-specific industrial case', wettedParts: 'Brass or stainless steel', ingress: 'Model dependent',
   positions: ['Bottom entry (A)', 'Back entry (D)'], threadSizes: ['1/8 inch', '1/4 inch', '3/8 inch', '1/2 inch'],
@@ -362,17 +434,32 @@ export const products = [
     description: 'A rugged fillable process gauge for vibration, pulsation and shock. The 100 mm and 150 mm versions include a 25 mm blow-out plug as an added safety feature.',
     pressureRange: 'Vacuum to 250 MPa (SS); vacuum to 60 MPa (brass)', measuringRange: '-100/0 kPa to 0/2 500 bar', rangeOptions: highPressureRanges,
     accuracy: '63 mm: 1.6% FSD; 100/150 mm: 1.0% FSD (0.5% optional)', caseMaterial: '304SS case and bezel (316SS on request)', wettedParts: 'Brass or 316L SS block and tube', ingress: 'IP67',
-    dialSizes: ['63 mm', '100 mm', '150 mm'], positions: ['Bottom (A)', 'Bottom + back flange (B)', 'Bottom + front flange (C)', 'Back (D)', 'Back + back flange (E)', 'Back + front flange (F)', 'Wide front flange (U)', 'Narrow front ring (V)'],
+    dialSizes: ['63 mm', '100 mm', '150 mm', '250 mm'],
+    dialSizesByMaterial: {
+      'Brass system': ['63 mm', '100 mm', '150 mm'],
+      '316L stainless steel system': ['63 mm', '100 mm', '150 mm', '250 mm'],
+    },
+    positions: ['Bottom (A)', 'Bottom + back flange (B)', 'Bottom + front flange (C)', 'Back (D)', 'Back + back flange (E)', 'Back + front flange (F)', 'Wide front flange (U)', 'Narrow front ring (V)'],
     positionsByDial: {
       '63 mm': ['Bottom (A)', 'Bottom + back flange (B)', 'Back (D)', 'Back + back flange (E)', 'Back + front flange (F)', 'Wide front flange (U)', 'Narrow front ring (V)'],
       '100 mm': ['Bottom (A)', 'Bottom + back flange (B)', 'Bottom + front flange (C)', 'Back (D)', 'Back + back flange (E)', 'Back + front flange (F)', 'Wide front flange (U)', 'Narrow front ring (V)'],
       '150 mm': ['Bottom (A)', 'Bottom + back flange (B)', 'Back (D)', 'Back + back flange (E)', 'Back + front flange (F)', 'Wide front flange (U)', 'Narrow front ring (V)'],
+      '250 mm': ['Bottom (A)', 'Back (D)'],
     },
-    materialOptions: ['Brass system', '316L stainless steel system', 'Monel system - sales review'], fillOptions: ['Dry', 'Glycerine filled', 'Silicone filled', 'Vibration-free movement'],
+    materialOptions: ['Brass system', '316L stainless steel system'], fillOptions: ['Dry', 'Glycerine filled', 'Silicone filled', 'Vibration-free movement'],
     temperature: 'Operating -25 to +60 °C; medium -25 to +85 °C',
   }),
-  pressureGauge('PBZ', 'Colour-coded process gauge', { image: productImage('pbz'), dialSizes: ['100 mm', '150 mm'], pressureRange: 'Vacuum to 60 MPa', measuringRange: '-100/0 kPa to 0/600 bar', caseMaterial: 'Colour-coded PBT case', positions: ['Bottom (A)', 'Bottom + back flange (B)'] }),
-  pressureGauge('PBX', 'Solid-front safety gauge', { image: productImage('pbx'), dialSizes: ['100 mm'], pressureRange: 'Vacuum to 100 MPa (SS)', measuringRange: '-100/0 kPa to 0/1 000 bar', caseMaterial: 'Black colour-coded PBT safety-pattern case', positions: ['Bottom (A)'], allowChemicalSeal: false }),
+  pressureGauge('PBZ', 'Colour-coded process gauge', {
+    image: productImage('pbz'), dialSizes: ['100 mm', '150 mm'], pressureRange: 'Vacuum to 60 MPa', measuringRange: '-100/0 kPa to 0/600 bar',
+    caseMaterial: 'Colour-coded PBT case', caseColourOptions: ['Black', 'Blue', 'Green', 'Red', 'Yellow', 'Custom colour - sales review'],
+    positions: ['Bottom (A)', 'Bottom + back flange (B)'], installationOptions: ['Standard - no modification', 'Adaptor fitted'],
+  }),
+  pressureGauge('PBX', 'Solid-front safety gauge', {
+    image: productImage('pbx'), dialSizes: ['57 mm', '100 mm'], pressureRange: 'Vacuum to 60 MPa', measuringRange: '-100 kPa to 60 MPa',
+    rangeOptions: commonPressureRanges.filter(range => range !== '0 to 1 000 bar'), caseMaterial: 'Black colour-coded PBT safety-pattern case',
+    materialOptions: ['Brass system', '316L stainless steel system'], positions: ['Bottom (A)'], fillOptions: ['Dry only'],
+    installationOptions: false, allowChemicalSeal: false,
+  }),
   pressureGauge('PCB / PCK', 'Capsule low-pressure gauge', {
     image: productImage('pcb'), rangeOptions: lowPressureRanges, dialSizes: ['63 mm', '68 mm', '100 mm', '150 mm'], pressureRange: 'Vacuum to 40 kPa', measuringRange: '-10 kPa to 0/40 kPa', accuracy: '1.6% FSD', caseMaterial: 'Stainless steel or mild steel case', fillOptions: ['Dry only'], allowChemicalSeal: false,
     caseModels: { 'PCB - polished 304 stainless case': true, 'PCK - black mild-steel case': true },
@@ -384,33 +471,135 @@ export const products = [
       '150 mm': ['Bottom (A)', 'Bottom + back flange (B)', 'Back (D)', 'Back + front flange (F)', 'Wide front flange (U)', 'Narrow front ring (V)'],
     },
   }),
-  pressureGauge('PBR', 'Heavy-duty process gauge', { image: productImage('pbr'), dialSizes: ['100 mm', '150 mm'], pressureRange: '600 kPa to 6 000 kPa', measuringRange: '0.6 to 60 bar', accuracy: '1.0% FSD', caseMaterial: 'Aluminium case', wettedParts: 'Brass internals' }),
-  pressureGauge('CBC', 'Simplex and duplex gauge', { image: productImage('cbc'), dialSizes: ['100 mm'], pressureRange: 'Vacuum to 60 MPa', measuringRange: '-100 kPa to 600 bar', accuracy: '1.0% FSD', caseMaterial: 'Black powder-coated aluminium', materialOptions: ['Brass duplex tube assembly'] }),
-  pressureGauge('BBR', 'Butterfly duplex gauge', { image: productImage('bbr'), dialSizes: ['150 mm'], pressureRange: 'Vacuum to 60 MPa', measuringRange: '-100 kPa to 600 bar', accuracy: '1.0% FSD', positions: ['Bottom centre (C)', 'Back + front flange (F)'] }),
-  pressureGauge('DBB', 'Differential pressure gauge', { image: productImage('dbb'), dialSizes: ['100 mm', '150 mm'], pressureRange: '100 to 6 000 kPa differential', measuringRange: '1 to 60 bar differential', accuracy: '1.6% FSD', caseMaterial: 'Stainless steel', wettedParts: 'Stainless steel' }),
-  pressureGauge('HGZ', 'Homogeniser gauge', { image: productImage('hgz'), dialSizes: ['100 mm', '150 mm'], pressureRange: '400 to 700 bar', measuringRange: '0/400 to 0/700 bar', accuracy: '1.6% FSD', caseMaterial: 'Stainless steel', wettedParts: 'Stainless steel', positions: ['Bottom (A)'], materialOptions: ['316L stainless steel system'] }),
-  pressureGauge('PBS', 'Solid stainless steel gauge', { image: productImage('pbs'), dialSizes: ['63 mm'], pressureRange: 'Vacuum to 60 MPa', measuringRange: '-100/0 kPa to 0/600 bar', caseMaterial: 'Polished 304 stainless steel', positions: ['Bottom (A)', 'Back (D)'] }),
-  pressureGauge('PBT', 'Turret-style process gauge', { dialSizes: ['100 mm', '150 mm'], caseMaterial: 'Turret-style stainless steel case' }),
-  pressureGauge('PDBH', 'Diaphragm pressure gauge', { image: productImage('pdbh'), dialSizes: ['100 mm', '150 mm'], rangeOptions: lowPressureRanges, pressureRange: '-100 to 2 500 kPa', measuringRange: '-1 to 25 bar', accuracy: '1.6% FSD', positions: ['Diaphragm lower connection'], threadSizes: ['1/2 inch'], fillOptions: ['Dry', 'Silicone filled'], allowChemicalSeal: false }),
-  pressureGauge('PBG', 'Filled stainless steel utility gauge', {
-    image: productImage('pbg'), dialSizes: ['52 mm', '63 mm', '100 mm'], pressureRange: 'Vacuum to 100 MPa (SS); vacuum to 60 MPa (brass)', measuringRange: '-100/0 kPa to 0/1 000 bar', rangeOptions: commonPressureRanges, accuracy: '1.6% FSD', caseMaterial: '304 stainless steel case', wettedParts: 'Stainless steel or brass internals', positions: ['Bottom (A)', 'Bottom + back flange (B)', 'Bottom + front flange (C)', 'Back (D)', 'Back + front flange (F)', 'Wide front flange (U)', 'Narrow front ring (V)'], fillOptions: ['Glycerine filled', 'Silicone filled'],
-    positionsByDial: { '52 mm': ['Back (D)'], '63 mm': ['Bottom (A)', 'Back (D)', 'Narrow front ring (V)'], '100 mm': ['Bottom (A)', 'Bottom + back flange (B)', 'Bottom + front flange (C)', 'Back (D)', 'Back + front flange (F)', 'Wide front flange (U)', 'Narrow front ring (V)'] },
+  pressureGauge('PBR', 'Heavy-duty process gauge', {
+    image: productImage('pbr'), dialSizes: ['100 mm', '150 mm'], pressureRange: '600 kPa to 6 000 kPa', measuringRange: '0.6 to 60 bar',
+    accuracy: '1.0% FSD', caseMaterial: 'Aluminium case', wettedParts: 'Brass internals', materialOptions: ['Brass system'],
   }),
-  pressureGauge('PBJ', 'Filled plastic-case utility gauge', { image: productImage('pbj'), dialSizes: ['63 mm', '80 mm'], pressureRange: 'Vacuum to 25 MPa', measuringRange: '-100/0 kPa to 0/250 bar', accuracy: '1.6% FSD', caseMaterial: 'Injection-moulded plastic case', wettedParts: 'Brass internals', positions: ['Bottom (A)'], fillOptions: ['Glycerine filled', 'Silicone filled'] }),
-  pressureGauge('PBK', 'Threaded light-industrial gauge', { image: productImage('pbk'), dialSizes: ['42 mm', '54 mm', '68 mm', '96 mm'], pressureRange: 'Vacuum to 60 MPa', measuringRange: '-100/0 kPa to 0/600 bar', accuracy: '1.6% FSD', caseMaterial: 'Threaded mild-steel case', positions: ['Bottom (A)', 'Back (D)', 'Narrow front ring (V) on selected sizes'], fillOptions: ['Dry'] }),
-  pressureGauge('PBU', 'Dry light-industrial gauge', { image: productImage('pbu'), dialSizes: ['42 mm', '54 mm', '63 mm', '96 mm', '100 mm', '125 mm'], pressureRange: 'Vacuum to 60 MPa', measuringRange: '-100/0 kPa to 0/600 bar', accuracy: '1.6% FSD', caseMaterial: 'Mild steel case with flat acrylic window', positions: ['Bottom (A)', 'Bottom + back flange (B)', 'Back (D)', 'Back + back flange (E)', 'Back + front flange (F)', 'Wide front flange (U)'], fillOptions: ['Dry'] }),
-  pressureGauge('PBN', 'Injection-moulded utility gauge', { image: productImage('pbn'), dialSizes: ['42 mm', '54 mm', '68 mm'], pressureRange: 'Vacuum to 60 MPa', measuringRange: '-100/0 kPa to 0/600 bar', accuracy: '1.6% FSD', caseMaterial: 'Injection-moulded black case', positions: ['Bottom (A)', 'Back (D)'], fillOptions: ['Dry'] }),
+  pressureGauge('CBC', 'Simplex and duplex gauge', {
+    image: productImage('cbc'), dialSizes: ['100 mm'], pressureRange: 'Vacuum to 60 MPa', measuringRange: '-100 kPa to 600 bar',
+    accuracy: '1.0% FSD', caseMaterial: 'Black powder-coated aluminium', materialOptions: ['Brass duplex tube assembly'],
+    fillOptions: ['Dry', 'Glycerine filled', 'Silicone filled'],
+    installationOptions: ['Standard - no modification', 'Block welded to case', 'Adaptor fitted'],
+    gaugeOptions: restrictedDifferentialGaugeOptions,
+  }),
+  pressureGauge('BBR', 'Butterfly duplex gauge', {
+    image: productImage('bbr'), dialSizes: ['150 mm'], pressureRange: 'Vacuum to 60 MPa', measuringRange: '-100 kPa to 600 bar',
+    rangeOptions: commonPressureRanges.filter(range => range !== '0 to 1 000 bar'), accuracy: '1.0% FSD',
+    positions: ['Bottom entry (A)'], fillOptions: ['Dry only'], installationOptions: false, gaugeOptions: false,
+  }),
+  pressureGauge('DBB', 'Differential pressure gauge', {
+    image: productImage('dbb'), dialSizes: ['100 mm', '150 mm'], pressureRange: '100 to 6 000 kPa differential', measuringRange: '1 to 60 bar differential',
+    accuracy: '1.6% FSD', caseMaterial: 'Stainless steel', wettedParts: 'Stainless steel',
+    fillOptions: ['Dry', 'Glycerine filled', 'Silicone filled'],
+    installationOptions: ['Standard - no modification', 'Block welded to case', 'Adaptor fitted'],
+    gaugeOptions: restrictedDifferentialGaugeOptions,
+  }),
+  pressureGauge('HGZ', 'Homogeniser gauge', { image: productImage('hgz'), dialSizes: ['100 mm', '150 mm'], pressureRange: '400 to 700 bar', measuringRange: '0/400 to 0/700 bar', accuracy: '1.6% FSD', caseMaterial: 'Stainless steel', wettedParts: 'Stainless steel', positions: ['Bottom (A)'], materialOptions: ['316L stainless steel system'] }),
+  pressureGauge('PBS', 'Solid stainless steel gauge', {
+    image: productImage('pbs'), gaugeFamily: 'utility', dialSizes: ['63 mm', '100 mm'],
+    rangeOptionsBy: { key: 'dialSize', map: { '63 mm': positivePressureRangesTo600Bar, '100 mm': positivePressureRangesTo2500Bar }, fallback: positivePressureRangesTo600Bar },
+    pressureRange: '63 mm: 0 to 60 MPa; 100 mm: 0 to 250 MPa', measuringRange: '0/600 bar or 0/2 500 bar by dial size',
+    caseMaterial: 'Polished 304 stainless steel', materialOptions: ['316L stainless steel system'],
+    positions: ['Bottom (A)', 'Back (D)'], installationOptions: ['Block welded to case'],
+  }),
+  pressureGauge('PDBH', 'Diaphragm pressure gauge', {
+    image: productImage('pdbh'), dialSizes: ['100 mm', '150 mm'], diaphragmSizes: ['100 mm'],
+    rangeOptions: ['-100 to 2 500 kPa'], pressureRange: '-100 to 2 500 kPa', measuringRange: '-1 to 25 bar',
+    accuracy: '1.6% FSD', materialOptions: ['316L stainless steel diaphragm system'],
+    positions: ['Bottom entry (A)'], threadSizes: ['1/2 inch'], fillOptions: ['Dry only'],
+    installationOptions: false, gaugeOptions: restrictedDiaphragmGaugeOptions, allowChemicalSeal: false,
+  }),
+  pressureGauge('PDBH Capsule', 'Low-pressure diaphragm capsule gauge', {
+    image: productImage('pdbh'), dialSizes: ['150 mm'], diaphragmSizes: ['100 mm', '150 mm'],
+    rangeOptions: ['-4 to 40 kPa'], pressureRange: '-4 to 40 kPa', measuringRange: '-40 to 400 mbar',
+    accuracy: '1.6% FSD', materialOptions: ['316L stainless steel diaphragm system'],
+    positions: ['Bottom entry (A)'], threadSizes: ['1/2 inch'], fillOptions: ['Dry only'],
+    installationOptions: false, gaugeOptions: restrictedDiaphragmGaugeOptions, allowChemicalSeal: false,
+  }),
+  pressureGauge('PBG', 'Filled stainless steel utility gauge', {
+    image: productImage('pbg'), gaugeFamily: 'utility', dialSizes: ['42 mm', '52 mm', '63 mm', '80 mm', '100 mm'],
+    dialSizesByMaterial: {
+      'Brass system': ['42 mm', '52 mm', '63 mm', '100 mm'],
+      '316L stainless steel system': ['52 mm', '63 mm', '80 mm', '100 mm'],
+    },
+    pressureRange: 'Vacuum to 100 MPa (SS); vacuum to 60 MPa (brass)', measuringRange: '-100/0 kPa to 0/1 000 bar', rangeOptions: commonPressureRanges,
+    accuracy: '1.6% FSD', caseMaterial: '304 stainless steel case', wettedParts: 'Stainless steel or brass internals',
+    positions: ['Bottom (A)', 'Bottom + back flange (B)', 'Bottom + front flange (C)', 'Back (D)', 'Back + front flange (F)', 'Wide front flange (U)', 'Narrow front ring (V)'],
+    fillOptions: ['Glycerine filled', 'Silicone filled'], gaugeOptions: gaugeOptionsWithout('Blow-out back with baffle'),
+    positionsByDial: {
+      '42 mm': ['Bottom (A)', 'Back (D)'],
+      '52 mm': ['Back (D)'],
+      '63 mm': ['Bottom (A)', 'Back (D)', 'Narrow front ring (V)'],
+      '80 mm': ['Bottom (A)', 'Back (D)'],
+      '100 mm': ['Bottom (A)', 'Bottom + back flange (B)', 'Bottom + front flange (C)', 'Back (D)', 'Back + front flange (F)', 'Wide front flange (U)', 'Narrow front ring (V)'],
+    },
+  }),
+  pressureGauge('PBJ', 'Filled plastic-case utility gauge', {
+    image: productImage('pbj'), gaugeFamily: 'utility', dialSizes: ['63 mm', '80 mm'], pressureRange: 'Vacuum to 25 MPa',
+    measuringRange: '-100/0 kPa to 0/250 bar', accuracy: '1.6% FSD', caseMaterial: 'Injection-moulded plastic case',
+    wettedParts: 'Brass internals', materialOptions: ['Brass system'], positions: ['Bottom (A)'],
+    fillOptions: ['Glycerine filled', 'Silicone filled'], installationOptions: ['Standard - no modification', 'Adaptor fitted'],
+    gaugeOptions: compactUtilityGaugeOptions,
+  }),
+  pressureGauge('PBK', 'Threaded light-industrial gauge', {
+    image: productImage('pbk'), gaugeFamily: 'utility', dialSizes: ['42 mm', '54 mm', '68 mm'], pressureRange: 'Vacuum to 60 MPa',
+    measuringRange: '-100/0 kPa to 0/600 bar', accuracy: '1.6% FSD', caseMaterial: 'Threaded mild-steel case',
+    materialOptions: ['Brass system'], positions: ['Bottom (A)', 'Back (D)', 'Narrow front ring (V) on selected sizes'],
+    fillOptions: ['Dry'], installationOptions: ['Standard - no modification', 'Adaptor fitted', 'Centre-back option - where applicable'],
+    gaugeOptions: compactUtilityGaugeOptions,
+  }),
+  pressureGauge('PBU', 'Dry light-industrial gauge', {
+    image: productImage('pbu'), gaugeFamily: 'utility', dialSizes: ['42 mm', '54 mm', '63 mm', '100 mm'], pressureRange: 'Vacuum to 60 MPa',
+    measuringRange: '-100/0 kPa to 0/600 bar', accuracy: '1.6% FSD', caseMaterial: 'Mild steel case with flat acrylic window',
+    positions: ['Bottom (A)', 'Bottom + back flange (B)', 'Back (D)', 'Back + back flange (E)', 'Back + front flange (F)', 'Wide front flange (U)'],
+    fillOptions: ['Dry'], installationOptions: ['Standard - no modification', 'Adaptor fitted', 'Centre-back option - where applicable'],
+    gaugeOptions: compactUtilityGaugeOptions,
+  }),
+  pressureGauge('PBN', 'Injection-moulded utility gauge', {
+    image: productImage('pbn'), gaugeFamily: 'utility', dialSizes: ['42 mm', '54 mm', '68 mm'], pressureRange: 'Vacuum to 60 MPa',
+    measuringRange: '-100/0 kPa to 0/600 bar', accuracy: '1.6% FSD', caseMaterial: 'Injection-moulded black case',
+    positions: ['Bottom (A)', 'Back (D)'], fillOptions: ['Dry'],
+    installationOptions: ['Standard - no modification', 'Adaptor fitted', 'Centre-back option - where applicable'],
+    gaugeOptions: compactUtilityGaugeOptions,
+  }),
   pressureInstrument('RDPG10', 'Reference digital pressure gauge', { image: productImage('rdpg10'), pressureRange: 'Vacuum to 1 000 bar', measuringRange: '-1/0 to 0/1 000 bar', accuracy: '0.2% FSD', caseMaterial: 'Anodised aluminium', outputs: ['Local digital display'], electrical: ['Battery powered'], connections: ['1/2 inch BSP', '1/2 inch NPT'] }),
   pressureInstrument('DPG-S281', 'Bluetooth digital pressure gauge', { image: productImage('dpg-s281'), pressureRange: 'Vacuum to 700 bar', measuringRange: '-1/0 to 0/700 bar', accuracy: '0.2% FSD', caseMaterial: 'TPE + ABS', outputs: ['Bluetooth app', 'Local display'] }),
   pressureInstrument('RPT1', 'Standard pressure transmitter', { image: productImage('rpt-series') }),
-  pressureInstrument('RPT3', 'Flush pressure transmitter', { image: productImage('rpt-series'), pressureRange: '1 to 600 bar', measuringRange: '1 to 600 bar', connections: ['1/2 inch flush', '3/4 inch flush', '1 inch flush'] }),
-  pressureInstrument('RPT4', 'Absolute pressure transmitter', { image: productImage('rpt-series'), pressureRange: '0.4 to 400 bar absolute', measuringRange: '0.4 to 400 bar absolute' }),
-  pressureInstrument('RPT5', 'Voltage-output transmitter', { image: productImage('rpt-series') }),
-  pressureInstrument('RPT106', 'Compact OEM pressure transmitter', { image: productImage('rpt106'), pressureRange: '-1 to 2 500 bar', measuringRange: '-1 to 2 500 bar', accuracy: '0.5% FSD', electrical: ['M12 4-pin connector'], connections: ['1/4 inch BSP', '1/4 inch NPT'], outputs: ['4-20 mA', '0-5 V', '0-10 V'] }),
-  pressureInstrument('RPT7', 'Differential pressure transmitter', { image: productImage('rpt-series'), pressureRange: '0 to 3.5 MPa differential', measuringRange: '0 to 35 bar differential' }),
-  pressureInstrument('RPT102 / 103', 'Ex ia smart pressure transmitter', { image: productImage('rpt102'), pressureRange: '-0.1 to 100 MPa', measuringRange: '-1 to 1 000 bar', outputs: ['4-20 mA', 'RS485', 'HART'] }),
-  pressureInstrument('RPT161 / 162', 'Air and process differential transmitter', { image: productImage('rpt161'), pressureRange: '0 to 100 kPa / 3.5 MPa differential', measuringRange: '0 to 1 bar / 35 bar differential' }),
-  pressureInstrument('RPT400 / 401', 'High-precision pressure transmitter', { image: productImage('rpt400-401'), accuracy: '0.075% FSD', outputs: ['4-20 mA', 'RS485', 'HART'] }),
+  pressureInstrument('RPTKZ', 'Compact aluminium-head pressure transmitter', {
+    image: productImage('rpt-series'), pressureRange: '-1 to 1 000 bar', measuringRange: '-1 to 1 000 bar',
+    accuracy: '0.25% FSD', connections: rptConnections.filter(connection => !['3/4 inch BSP', '1 inch BSP', '1 1/2 inch Tri-Clover', 'NW40 dairy'].includes(connection)),
+    electrical: ['KSE compact aluminium head'], outputs: ['4-20 mA'], allowBranding: false,
+    description: 'Compact aluminium-head pressure transmitter for precise industrial pressure measurement where a smaller termination head is preferred.',
+  }),
+  pressureInstrument('RPT3', 'Flush pressure transmitter', {
+    image: productImage('rpt-series'), pressureRange: '1 to 600 bar; 1/2 inch flush starts at 6 bar', measuringRange: '1 to 600 bar',
+    connections: ['1/2 inch flush', '3/4 inch flush', '1 inch flush'],
+    rangeOptions: rptFlushRangesFromOneBar,
+    rangeOptionsByConnection: {
+      '1/2 inch flush': rptFlushRangesFromSixBar,
+      '3/4 inch flush': rptFlushRangesFromOneBar,
+      '1 inch flush': rptFlushRangesFromOneBar,
+    },
+    allowBranding: false,
+  }),
+  pressureInstrument('RPT4', 'Absolute pressure transmitter', { image: productImage('rpt-series'), pressureRange: '0.4 to 400 bar absolute', measuringRange: '0.4 to 400 bar absolute', allowBranding: false }),
+  pressureInstrument('RPT5', 'Voltage-output transmitter', { image: productImage('rpt-series'), allowBranding: false }),
+  pressureInstrument('RPT106', 'Compact OEM pressure transmitter', { image: productImage('rpt106'), pressureRange: '-1 to 2 500 bar', measuringRange: '-1 to 2 500 bar', accuracy: '0.5% FSD', electrical: ['M12 4-pin connector'], connections: ['1/4 inch BSP', '1/4 inch NPT'], outputs: ['4-20 mA', '0-5 V', '0-10 V'], allowBranding: false }),
+  pressureInstrument('RPT7', 'Differential pressure transmitter', {
+    image: productImage('rpt-series'), pressureRange: '0 to 3.5 MPa differential', measuringRange: '0 to 35 bar differential',
+    rangeOptions: rptRangesTo35Bar, connections: ['1/4 inch BSP', '1/4 inch NPT', '1/2 inch BSP', '1/2 inch NPT', 'M20 x 1.5'],
+    allowBranding: false,
+  }),
+  pressureInstrument('RPT102 / 103', 'Ex ia smart pressure transmitter', { image: productImage('rpt102'), pressureRange: '-0.1 to 100 MPa', measuringRange: '-1 to 1 000 bar', outputs: ['4-20 mA', 'RS485', 'HART'], allowBranding: false }),
+  pressureInstrument('RPT161', 'Air differential pressure transmitter', {
+    image: productImage('rpt161'), pressureRange: '0 to 100 kPa differential', measuringRange: '0 to 100 kPa differential',
+    rangeOptions: rptRangesTo100Kpa, allowBranding: false,
+  }),
+  pressureInstrument('RPT162', 'Process differential pressure transmitter', {
+    image: productImage('rpt161'), pressureRange: '0 to 3.5 MPa differential', measuringRange: '0 to 35 bar differential',
+    rangeOptions: rptRangesTo35Bar, allowBranding: false,
+  }),
+  pressureInstrument('RPT400 / 401', 'High-precision pressure transmitter', { image: productImage('rpt400-401'), accuracy: '0.075% FSD', outputs: ['4-20 mA', 'RS485', 'HART'], allowBranding: false }),
 
   temperatureInstrument('TPS', 'Bi-metal dial thermometer', { image: productImage('tps'), measuringRange: '-50 to 500 °C', accuracy: 'Model dependent', sensor: 'Bi-metal element', dialSizes: ['63 mm', '76 mm', '100 mm', '125 mm', '150 mm'], mounting: ['Rigid back', 'Bottom entry', 'Every angle'], connections: ['1/4 inch BSP/NPT', '3/8 inch BSP/NPT', '1/2 inch BSP/NPT', '3/4 inch BSP/NPT', 'NW40 / NW50 dairy fitting'], probeDiameters: ['6 mm', '8 mm', '9.52 mm (3/8 inch)'] }),
   temperatureInstrument('TPB', 'Nitrogen gas-filled thermometer', { image: productImage('tpb'), measuringRange: '-50 to 600 °C', sensor: 'Nitrogen gas-filled system', remote: true, dialSizes: ['100 mm', '150 mm'], mounting: ['Rigid lower (AS)', 'Rigid back (DS)', 'Remote lower + back flange (BC)', 'Remote lower + front flange (CC)', 'Remote back + back flange (EC)', 'Remote back + front flange (FC)'], connections: ['1/4 inch BSP/NPT', '3/8 inch BSP/NPT', '1/2 inch BSP/NPT', '3/4 inch BSP/NPT'] }),

@@ -17,11 +17,18 @@ await build({
   sourcemap: false,
   jsx: 'automatic',
   target: ['es2020'],
+  define: { __PUBLIC_PREVIEW__: 'false' },
   plugins: [{
     name: 'select-private-cloud-services',
     setup(buildContext) {
       buildContext.onResolve({ filter: /^\.\/services\/index\.js$/ }, () => ({
         path: path.join(root, 'src/services/apiEntry.js'),
+      }));
+      buildContext.onResolve({ filter: /^\.\/apps\/PreviewLanding\.jsx$/ }, () => ({
+        path: path.join(root, 'src/apps/ProductionPreviewLanding.jsx'),
+      }));
+      buildContext.onResolve({ filter: /^\.\/shared\/platform\/previewConfig\.js$/ }, () => ({
+        path: path.join(root, 'src/shared/platform/productionPlatformConfig.js'),
       }));
     },
   }],
@@ -32,11 +39,31 @@ const apiBundle = await fs.readFile(path.join(output, 'app.js'), 'utf8');
 const forbiddenMockMarkers = [
   'Demo123',
   'Expedite123',
+  'Sales123',
+  'Planning123',
+  'Dispatch123',
+  'Buyer123',
+  'Manager123',
+  'Admin123',
   'formsubmit.co',
   'RQ-TEST',
   'company-demo-mining',
   'rhombergPreviewAccounts',
   'Ericuv@Rhom.co.za',
+  'Demo Preview',
+  'DEMO PREVIEW',
+  'View Demo Login',
+  'customer.demo@example.invalid',
+  'cape.demo@client.test',
+  'kzn.demo@client.test',
+  'sales.workflow@example.invalid',
+  'expeditor.workflow@example.invalid',
+  'planning.workflow@example.invalid',
+  'dispatch.workflow@example.invalid',
+  'buyer.workflow@example.invalid',
+  'manager.workflow@example.invalid',
+  'administrator.workflow@example.invalid',
+  'preview-landing',
 ];
 const leakedMarker = forbiddenMockMarkers.find(marker => apiBundle.toLowerCase().includes(marker.toLowerCase()));
 if (leakedMarker) throw new Error(`Production build contains mock-only marker: ${leakedMarker}`);
@@ -45,12 +72,15 @@ if ((await fs.readdir(output)).some(file => file.endsWith('.map'))) throw new Er
 for (const file of ['styles.css', 'runtime-config.js']) {
   await fs.copyFile(path.join(root, file), path.join(output, file));
 }
-const productionServiceWorker = (await fs.readFile(path.join(root, 'sw.js'), 'utf8'))
-  .replace('rhomberg-app-preview-v8', 'rhomberg-app-production-v8');
+const productionServiceWorkerSource = await fs.readFile(path.join(root, 'sw.js'), 'utf8');
+const productionServiceWorker = productionServiceWorkerSource
+  .replace(/rhomberg-app-preview-v(\d+)/, 'rhomberg-app-production-v$1')
+  .replace(/^\s*'\.\/preview\/.*\r?\n/gm, '');
+if (productionServiceWorker === productionServiceWorkerSource) throw new Error('Production service-worker cache name was not isolated from the preview cache.');
 await fs.writeFile(path.join(output, 'sw.js'), productionServiceWorker, 'utf8');
 const productionIndex = (await fs.readFile(path.join(root, 'index.html'), 'utf8'))
-  .replace('Public test preview of the Rhomberg Instruments mobile product catalogue and quote-request app.', 'Rhomberg Instruments private-cloud product catalogue, RFQ and order-tracking application.')
-  .replace('Rhomberg Instruments App | Test Preview', 'Rhomberg Instruments Private Cloud App');
+  .replace('Rhomberg Platform Preview Centre for four separate customer and internal demonstration interfaces.', 'Rhomberg Instruments private-cloud product catalogue, RFQ and order-tracking application.')
+  .replace('Rhomberg Platform Preview Centre', 'Rhomberg Instruments Private Cloud App');
 await fs.writeFile(path.join(output, 'index.html'), productionIndex, 'utf8');
 
 const productionManifest = (await fs.readFile(path.join(root, 'manifest.webmanifest'), 'utf8'))

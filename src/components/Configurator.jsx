@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { optionsForField, shouldShowField } from '../domain/productConfiguration.js';
+import { optionsForField, shouldShowField, toggleMultiChoiceOption } from '../domain/productConfiguration.js';
 import { LeadTimeNotice } from './Layout.jsx';
 
 const normaliseQuantity = value => Math.min(9999, Math.max(1, Math.trunc(Number(value) || 1)));
@@ -126,8 +126,8 @@ function ChoiceStep({ field, options, value, onChange }) {
 }
 
 function MultiChoiceStep({ field, options, value, onChange }) {
-  const toggleOption = option => onChange(value.includes(option) ? value.filter(item => item !== option) : [...value, option]);
-  return <div className="config-question"><QuestionHeader field={field} /><div className="choice-grid multi-choice-grid">{options.map(option => <button key={option} type="button" className={value.includes(option) ? 'selected' : ''} onClick={() => toggleOption(option)}><span>{value.includes(option) ? '✓' : ''}</span><strong>{option}</strong></button>)}</div><p className="multi-choice-hint">Select any that apply, or continue without choosing an extra.</p></div>;
+  const toggleOption = option => onChange(toggleMultiChoiceOption(field, value, option));
+  return <div className="config-question"><QuestionHeader field={field} /><div className="choice-grid multi-choice-grid">{options.map(option => <button key={option} type="button" className={value.includes(option) ? 'selected' : ''} onClick={() => toggleOption(option)}><span>{value.includes(option) ? '✓' : ''}</span><strong>{option}</strong></button>)}</div><p className="multi-choice-hint">{field.exclusiveOption ? `Choose any extras that apply, or select “${field.exclusiveOption}”.` : 'Choose any options that apply.'}</p></div>;
 }
 
 function SelectStep({ field, options, value, onChange }) {

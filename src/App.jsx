@@ -4,16 +4,70 @@ import { Auth } from './components/Auth.jsx';
 import { Catalogue } from './components/Catalogue.jsx';
 import { Configurator } from './components/Configurator.jsx';
 import { Enquiry } from './components/Enquiry.jsx';
+import { DispatchDashboard } from './components/DispatchDashboard.jsx';
 import { ExpeditorDashboard } from './components/ExpeditorDashboard.jsx';
 import { Home } from './components/Home.jsx';
 import { Intro } from './components/Intro.jsx';
 import { AppHeader, BottomNav, Toast } from './components/Layout.jsx';
+import { Notifications } from './components/Notifications.jsx';
+import { OperationalDashboard } from './components/OperationalDashboard.jsx';
 import { OrderTracking } from './components/OrderTracking.jsx';
+import { PlanningDashboard } from './components/PlanningDashboard.jsx';
 import { ProductDetail } from './components/ProductDetail.jsx';
-import { friendlyServiceError, PERMISSIONS, roleCan, services, USER_ROLES } from './services/index.js';
+import { SalesRepresentativeDashboard } from './components/SalesRepresentativeDashboard.jsx';
+import { CustomerPersonalisation } from './apps/customer/CustomerPersonalisation.jsx';
+import { PreviewLanding } from './apps/PreviewLanding.jsx';
+import { createDefaultNotificationPreferences } from './domain/notifications.js';
+import {
+  createDefaultCustomerPersonalisation,
+  customerPersonalisationCss,
+  normaliseCustomerPersonalisation,
+} from './shared/personalisation/personalisation.js';
+import {
+  filterDemoLoginsForPreview,
+  PREVIEW_BY_ID,
+  previewAllowsRole,
+  previewContextForPath,
+} from './shared/platform/previewConfig.js';
+import {
+  accountCan,
+  accountCanPerformWorkflow,
+  defaultViewForRole,
+  friendlyServiceError,
+  isInternalAccount,
+  normaliseViewForRole,
+  PERMISSIONS,
+  services,
+  usesDispatchWorkspace,
+  usesExpeditorWorkspace,
+  usesPlanningWorkspace,
+} from './services/index.js';
 
 const EMPTY_CATALOGUE = { categories: [], products: [], recommendedCategories: {} };
 const EMPTY_REGISTRATION = { areas: [], industries: [], branches: [], areaDirectory: {} };
+const EMPTY_PLANNING_OPTIONS = { users: [], locations: [], priorities: [] };
+const EMPTY_EXPEDITING_OPTIONS = { progressSteps: [], requiredStepIds: [], documentTypes: [], approachingCompletionDays: 3 };
+const EMPTY_DISPATCH_OPTIONS = { methods: [], proofTypes: [], maxProofBytes: 4 * 1024 * 1024 };
+const PUBLIC_PREVIEW = __PUBLIC_PREVIEW__;
+const DOCUMENT_PREVIEW_ID = globalThis.document?.querySelector?.('meta[name="rhomberg-preview"]')?.content || '';
+const PREVIEW_CONTEXT = PUBLIC_PREVIEW
+  ? (PREVIEW_BY_ID[DOCUMENT_PREVIEW_ID] || previewContextForPath(globalThis.location?.pathname || '/'))
+  : previewContextForPath('/preview/internal-desktop/');
+const listEnquiriesForAccount = signedInAccount => (
+  accountCan(signedInAccount, PERMISSIONS.VIEW_ASSIGNED_RFQS)
+    ? services.enquiries.listRepresentativeInbox()
+    : services.enquiries.list()
+);
+const canLoadExpeditingOptions = signedInAccount => (
+  accountCan(signedInAccount, PERMISSIONS.VIEW_EXPEDITING_QUEUE)
+  || accountCan(signedInAccount, PERMISSIONS.UPDATE_ORDER_PROGRESS)
+  || accountCan(signedInAccount, PERMISSIONS.MOVE_TO_DISPATCH)
+);
+const canLoadDispatchOptions = signedInAccount => (
+  accountCan(signedInAccount, PERMISSIONS.VIEW_DISPATCH_QUEUE)
+  || accountCan(signedInAccount, PERMISSIONS.CONFIRM_DELIVERY)
+  || accountCan(signedInAccount, PERMISSIONS.CONFIRM_COLLECTION)
+);
 
 export default function App() {
   const [introComplete, setIntroComplete] = useState(false);
@@ -23,6 +77,9 @@ export default function App() {
   const [account, setAccount] = useState(null);
   const [view, setView] = useState('home');
   const [theme, setTheme] = useState('light');
+  const [customerPersonalisation, setCustomerPersonalisation] = useState(createDefaultCustomerPersonalisation);
+  const [personalisationDeferred, setPersonalisationDeferred] = useState(false);
+  const [accessError, setAccessError] = useState('');
   const [catalogue, setCatalogue] = useState(EMPTY_CATALOGUE);
   const [registrationOptions, setRegistrationOptions] = useState(EMPTY_REGISTRATION);
   const [demoLogins, setDemoLogins] = useState([]);
@@ -32,6 +89,13 @@ export default function App() {
   const [editingLine, setEditingLine] = useState(null);
   const [draft, setDraft] = useState([]);
   const [enquiries, setEnquiries] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationPreferences, setNotificationPreferences] = useState(createDefaultNotificationPreferences);
+  const [notificationTarget, setNotificationTarget] = useState(null);
+  const [planningOptions, setPlanningOptions] = useState(EMPTY_PLANNING_OPTIONS);
+  const [expeditingOptions, setExpeditingOptions] = useState(EMPTY_EXPEDITING_OPTIONS);
+  const [dispatchOptions, setDispatchOptions] = useState(EMPTY_DISPATCH_OPTIONS);
   const [success, setSuccess] = useState(null);
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
@@ -44,7 +108,7 @@ export default function App() {
     (async () => {
       try {
         await services.initialize();
-        const [savedTheme, loadedCatalogue, loadedRegistration, loadedDemoLogins, session] = await Promise.all([
+        const [savedTheme, loadedCatalogue, loadedRegistration, loadedDemoLogins, savedSession] = await Promise.all([
           services.preferences.getTheme(),
           services.products.getCatalogue(),
           services.accounts.getRegistrationOptions(),
@@ -53,12 +117,41 @@ export default function App() {
         ]);
         if (!active) return;
 
+        let session = PREVIEW_CONTEXT.landing ? null : savedSession;
+        let previewAccessError = '';
+        if (session && !previewAllowsRole(PREVIEW_CONTEXT, session.role)) {
+          await services.auth.signOut();
+          previewAccessError = `${session.role.replaceAll('_', ' ')} accounts cannot enter ${PREVIEW_CONTEXT.displayName}. Choose a compatible preview or demo login.`;
+          session = null;
+        }
         let loadedDraft = [];
         let loadedEnquiries = [];
+        let loadedOrders = [];
+        let loadedNotifications = [];
+        let loadedNotificationPreferences = createDefaultNotificationPreferences();
+        let loadedPlanningOptions = EMPTY_PLANNING_OPTIONS;
+        let loadedExpeditingOptions = EMPTY_EXPEDITING_OPTIONS;
+        let loadedDispatchOptions = EMPTY_DISPATCH_OPTIONS;
+        let loadedPersonalisation = createDefaultCustomerPersonalisation();
         if (session) {
-          [loadedDraft, loadedEnquiries] = await Promise.all([
-            session.role === USER_ROLES.CUSTOMER ? services.enquiries.getDraft() : Promise.resolve([]),
-            services.enquiries.list(),
+          [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedPersonalisation] = await Promise.all([
+            accountCan(session, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
+            listEnquiriesForAccount(session),
+            services.orders.list(),
+            services.notifications.list(),
+            services.notifications.getPreferences(),
+            accountCan(session, PERMISSIONS.ADD_PLANNING_INFORMATION)
+              ? services.planning.getWorkspaceOptions()
+              : Promise.resolve(EMPTY_PLANNING_OPTIONS),
+            canLoadExpeditingOptions(session)
+              ? services.expediting.getWorkspaceOptions()
+              : Promise.resolve(EMPTY_EXPEDITING_OPTIONS),
+            canLoadDispatchOptions(session)
+              ? services.dispatch.getWorkspaceOptions()
+              : Promise.resolve(EMPTY_DISPATCH_OPTIONS),
+            PREVIEW_CONTEXT.customer
+              ? services.personalisation.get()
+              : Promise.resolve(createDefaultCustomerPersonalisation()),
           ]);
         }
         if (!active) return;
@@ -66,11 +159,19 @@ export default function App() {
         setTheme(savedTheme);
         setCatalogue(loadedCatalogue);
         setRegistrationOptions(loadedRegistration);
-        setDemoLogins(loadedDemoLogins);
+        setDemoLogins(PREVIEW_CONTEXT.landing ? loadedDemoLogins : filterDemoLoginsForPreview(loadedDemoLogins, PREVIEW_CONTEXT));
+        setAccessError(previewAccessError);
         setAccount(session);
+        setCustomerPersonalisation(normaliseCustomerPersonalisation(loadedPersonalisation));
         setDraft(loadedDraft);
         setEnquiries(loadedEnquiries);
-        setView(session && session.role !== USER_ROLES.CUSTOMER ? 'expeditor' : 'home');
+        setOrders(loadedOrders);
+        setNotifications(loadedNotifications);
+        setNotificationPreferences(loadedNotificationPreferences);
+        setPlanningOptions(loadedPlanningOptions);
+        setExpeditingOptions(loadedExpeditingOptions);
+        setDispatchOptions(loadedDispatchOptions);
+        setView(session ? defaultViewForRole(session.role) : 'home');
         setAppStatus('ready');
       } catch (error) {
         if (!active) return;
@@ -83,8 +184,19 @@ export default function App() {
   }, [retryToken]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
+    const systemTheme = globalThis.matchMedia?.('(prefers-color-scheme: dark)');
+    const applyTheme = () => {
+      const preference = account && PREVIEW_CONTEXT.customer
+        ? customerPersonalisation.appearanceMode
+        : theme;
+      document.documentElement.dataset.theme = preference === 'system'
+        ? (systemTheme?.matches ? 'dark' : 'light')
+        : preference;
+    };
+    applyTheme();
+    systemTheme?.addEventListener?.('change', applyTheme);
+    return () => systemTheme?.removeEventListener?.('change', applyTheme);
+  }, [account, customerPersonalisation.appearanceMode, theme]);
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
 
@@ -100,32 +212,76 @@ export default function App() {
     services.preferences.setTheme(next).catch(error => notify(friendlyServiceError(error, 'The theme changed, but the preference could not be saved.')));
   };
 
-  const isStaff = Boolean(account && account.role !== USER_ROLES.CUSTOMER);
-  const canUpdateTracking = Boolean(account && roleCan(account.role, PERMISSIONS.UPDATE_TRACKING));
+  const isStaff = isInternalAccount(account);
+  const isPlanningWorkspace = usesPlanningWorkspace(account);
+  const isExpeditorWorkspace = usesExpeditorWorkspace(account);
+  const isDispatchWorkspace = usesDispatchWorkspace(account);
+  const canPerformWorkflow = accountCanPerformWorkflow(account);
+  const personalisationStyle = useMemo(
+    () => PREVIEW_CONTEXT.customer ? customerPersonalisationCss(customerPersonalisation) : undefined,
+    [customerPersonalisation],
+  );
   const selectedProduct = catalogue.products.find(product => product.id === productId) || null;
   const selectedCategory = selectedProduct ? catalogue.categories.find(category => category.id === selectedProduct.category) || null : null;
-  const accountEnquiries = useMemo(() => {
+  const accountRecords = useMemo(() => {
     if (!account || isStaff) return [];
-    return enquiries.filter(enquiry => enquiry.companyId === account.companyId || enquiry.accountId === account.id);
-  }, [account, enquiries, isStaff]);
+    return [...enquiries, ...orders].filter(record => record.companyId === account.companyId || record.accountId === account.id);
+  }, [account, enquiries, isStaff, orders]);
+  const staffRecords = useMemo(() => [...enquiries, ...orders], [enquiries, orders]);
+  const unreadNotifications = notifications.filter(notification => !notification.readAt).length;
   const totalQuantity = draft.reduce((sum, line) => sum + line.quantity, 0);
-  const detailView = !isStaff && (view === 'product' || view === 'configurator');
+  const detailView = !isStaff && (view === 'product' || view === 'configurator' || view === 'settings');
 
   const loadAccountWorkspace = async signedInAccount => {
-    const [loadedDraft, loadedEnquiries] = await Promise.all([
-      signedInAccount.role === USER_ROLES.CUSTOMER ? services.enquiries.getDraft() : Promise.resolve([]),
-      services.enquiries.list(),
+    if (!previewAllowsRole(PREVIEW_CONTEXT, signedInAccount.role)) {
+      throw new Error(`This ${signedInAccount.role.replaceAll('_', ' ')} account is not supported in ${PREVIEW_CONTEXT.displayName}.`);
+    }
+    const [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedPersonalisation] = await Promise.all([
+      accountCan(signedInAccount, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
+      listEnquiriesForAccount(signedInAccount),
+      services.orders.list(),
+      services.notifications.list(),
+      services.notifications.getPreferences(),
+      accountCan(signedInAccount, PERMISSIONS.ADD_PLANNING_INFORMATION)
+        ? services.planning.getWorkspaceOptions()
+        : Promise.resolve(EMPTY_PLANNING_OPTIONS),
+      canLoadExpeditingOptions(signedInAccount)
+        ? services.expediting.getWorkspaceOptions()
+        : Promise.resolve(EMPTY_EXPEDITING_OPTIONS),
+      canLoadDispatchOptions(signedInAccount)
+        ? services.dispatch.getWorkspaceOptions()
+        : Promise.resolve(EMPTY_DISPATCH_OPTIONS),
+      PREVIEW_CONTEXT.customer
+        ? services.personalisation.get()
+        : Promise.resolve(createDefaultCustomerPersonalisation()),
     ]);
     setAccount(signedInAccount);
     setDraft(loadedDraft);
     setEnquiries(loadedEnquiries);
-    setView(signedInAccount.role !== USER_ROLES.CUSTOMER ? 'expeditor' : 'home');
+    setOrders(loadedOrders);
+    setNotifications(loadedNotifications);
+    setNotificationPreferences(loadedNotificationPreferences);
+    setPlanningOptions(loadedPlanningOptions);
+    setExpeditingOptions(loadedExpeditingOptions);
+    setDispatchOptions(loadedDispatchOptions);
+    setCustomerPersonalisation(normaliseCustomerPersonalisation(loadedPersonalisation));
+    setPersonalisationDeferred(false);
+    setView(defaultViewForRole(signedInAccount.role));
   };
 
   const login = async (email, password) => {
     try {
       const signedInAccount = await services.auth.signIn({ email, password });
+      if (!previewAllowsRole(PREVIEW_CONTEXT, signedInAccount.role)) {
+        await services.auth.signOut();
+        return {
+          ok: false,
+          message: `${signedInAccount.role.replaceAll('_', ' ')} accounts cannot enter ${PREVIEW_CONTEXT.displayName}. Return to the preview centre and choose a compatible interface.`,
+          fieldErrors: {},
+        };
+      }
       await loadAccountWorkspace(signedInAccount);
+      setAccessError('');
       return { ok: true };
     } catch (error) {
       return { ok: false, message: friendlyServiceError(error, 'The app could not sign you in. Please try again.'), fieldErrors: error?.fieldErrors || {} };
@@ -134,8 +290,12 @@ export default function App() {
 
   const register = async data => {
     try {
+      if (!PREVIEW_CONTEXT.customer) {
+        return { ok: false, message: 'Company account registration is available only in a Rhomberg Connect customer preview.', fieldErrors: {} };
+      }
       const created = await services.auth.register(data);
       await loadAccountWorkspace(created);
+      setAccessError('');
       return { ok: true };
     } catch (error) {
       return { ok: false, message: friendlyServiceError(error, 'The company account could not be created. Please try again.'), fieldErrors: error?.fieldErrors || {} };
@@ -143,8 +303,9 @@ export default function App() {
   };
 
   const navigate = target => {
-    const destination = isStaff && !['expeditor', 'account'].includes(target) ? 'expeditor' : target;
+    const destination = account ? normaliseViewForRole(account.role, target) : 'home';
     if (destination === 'catalogue') setCategoryId(null);
+    setNotificationTarget(null);
     setView(destination);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -193,13 +354,17 @@ export default function App() {
   const submitEnquiry = async details => {
     try {
       const result = await services.enquiries.submit(details, draft);
-      const updatedEnquiries = await services.enquiries.list();
+      const updatedEnquiries = await listEnquiriesForAccount(account);
+      const updatedNotifications = await services.notifications.list();
       setEnquiries(updatedEnquiries);
+      setNotifications(updatedNotifications);
       setDraft([]);
       const delivery = result.delivery || { ok: true };
       setSuccess({
         reference: result.enquiry.reference,
         firstName: account.contact.split(/\s+/)[0],
+        representative: result.enquiry.selectedRep?.name || 'your Rhomberg representative',
+        submittedAt: result.enquiry.submittedAt || result.enquiry.createdAt,
         recipient: delivery.recipient || 'Rhomberg sales',
         activationMayBeRequired: delivery.activationMayBeRequired,
         pricedPdfAttached: delivery.pricedPdfAttached,
@@ -218,11 +383,94 @@ export default function App() {
     }
   };
 
-  const updateTracking = async (enquiryId, status, note, actor) => {
-    const updated = await services.tracking.updateStatus(enquiryId, { status, note, actor });
-    setEnquiries(current => current.map(enquiry => enquiry.id === updated.id ? updated : enquiry));
-    notify(`${updated.reference} updated to ${updated.status}`);
+  const performWorkflowAction = async (recordId, action, comment, data, entityType, expectedVersion) => {
+    const result = await services.workflow.performAction(recordId, { action, comment, data, entityType, expectedVersion });
+    const { createdOrder, ...updated } = result;
+    if (updated.workflowType === 'order') {
+      setOrders(current => current.map(order => order.id === updated.id ? updated : order));
+    } else {
+      setEnquiries(current => current.map(enquiry => enquiry.id === updated.id ? updated : enquiry));
+    }
+    if (createdOrder) setOrders(current => [createdOrder, ...current.filter(order => order.id !== createdOrder.id)]);
+    services.notifications.list().then(setNotifications).catch(() => undefined);
+    notify(createdOrder ? `${updated.reference} converted to ${createdOrder.reference}` : `${updated.reference} updated to ${updated.status}`);
+    return result;
+  };
+
+  const markNotificationRead = async notificationId => {
+    const updated = await services.notifications.markRead(notificationId);
+    setNotifications(current => current.map(notification => notification.id === updated.id ? updated : notification));
     return updated;
+  };
+
+  const markAllNotificationsRead = async () => {
+    const result = await services.notifications.markAllRead();
+    setNotifications(await services.notifications.list());
+    notify(result.updatedCount ? `${result.updatedCount} notification${result.updatedCount === 1 ? '' : 's'} marked as read` : 'Inbox already up to date');
+    return result;
+  };
+
+  const saveNotificationPreferences = async candidate => {
+    const saved = await services.notifications.savePreferences(candidate);
+    setNotificationPreferences(saved);
+    setNotifications(await services.notifications.list());
+    if (PREVIEW_CONTEXT.customer) {
+      setCustomerPersonalisation(current => normaliseCustomerPersonalisation({
+        ...current,
+        notificationPreferences: saved.categories,
+      }));
+    }
+    notify('Notification preferences saved');
+    return saved;
+  };
+
+  const retryNotificationDelivery = async (notificationId, deliveryId) => {
+    const delivery = await services.notifications.retryDelivery(notificationId, deliveryId);
+    setNotifications(await services.notifications.list());
+    notify(delivery.status.endsWith('_sent') ? 'Simulated delivery retry completed' : 'Simulated delivery remains queued for retry');
+    return delivery;
+  };
+
+  const openNotificationRecord = notification => {
+    setNotificationTarget({
+      entityId: notification.entityId,
+      entityType: notification.entityType,
+      reference: notification.reference,
+      openedAt: Date.now(),
+    });
+    setView(isStaff ? notification.link?.internalView || 'expeditor' : notification.link?.customerView || 'tracking');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const saveCustomerPersonalisation = async candidate => {
+    try {
+      const saved = candidate.setupCompleted
+        ? await services.personalisation.complete(candidate)
+        : await services.personalisation.save(candidate);
+      setCustomerPersonalisation(normaliseCustomerPersonalisation(saved));
+      setNotificationPreferences(await services.notifications.getPreferences());
+      setView('home');
+      notify('Rhomberg Connect settings saved');
+      return saved;
+    } catch (error) {
+      throw new Error(friendlyServiceError(error, 'Your customer settings could not be saved. Please check the highlighted choices and try again.'));
+    }
+  };
+
+  const uploadCustomerImage = async (file, kind, position) => {
+    try {
+      return await services.personalisation.uploadImage(file, kind, position);
+    } catch (error) {
+      throw new Error(friendlyServiceError(error, 'The image could not be added. Please choose a supported image under 1 MB.'));
+    }
+  };
+
+  const removeCustomerImage = async imageId => {
+    try {
+      return await services.personalisation.removeImage(imageId);
+    } catch (error) {
+      throw new Error(friendlyServiceError(error, 'The image could not be removed.'));
+    }
   };
 
   const signOut = async () => {
@@ -231,6 +479,15 @@ export default function App() {
       setAccount(null);
       setDraft([]);
       setEnquiries([]);
+      setOrders([]);
+      setNotifications([]);
+      setNotificationPreferences(createDefaultNotificationPreferences());
+      setNotificationTarget(null);
+      setCustomerPersonalisation(createDefaultCustomerPersonalisation());
+      setPersonalisationDeferred(false);
+      setPlanningOptions(EMPTY_PLANNING_OPTIONS);
+      setExpeditingOptions(EMPTY_EXPEDITING_OPTIONS);
+      setDispatchOptions(EMPTY_DISPATCH_OPTIONS);
       setCategoryId(null);
       setProductId(null);
       setView('home');
@@ -239,13 +496,20 @@ export default function App() {
     }
   };
 
-  if (!introComplete) return <Intro onComplete={() => setIntroComplete(true)} />;
   if (appStatus === 'loading') return <AppLoading theme={theme} onToggleTheme={toggleTheme} />;
   if (appStatus === 'error') return <AppLoadError message={appError} onRetry={() => setRetryToken(value => value + 1)} />;
-  if (!account) return <Auth onSignIn={login} onCreateAccount={register} theme={theme} onToggleTheme={toggleTheme} registrationOptions={registrationOptions} demoLogins={demoLogins} serviceMode={services.mode} />;
+  if (PREVIEW_CONTEXT.landing) return <PreviewLanding demoLogins={demoLogins} serviceMode={services.mode} />;
+  if (PREVIEW_CONTEXT.unsupported) return <UnsupportedPreview />;
+  if (!introComplete) return <Intro onComplete={() => setIntroComplete(true)} />;
+  if (!account) return <Auth onSignIn={login} onCreateAccount={register} theme={theme} onToggleTheme={toggleTheme} registrationOptions={registrationOptions} demoLogins={demoLogins} serviceMode={services.mode} preview={PREVIEW_CONTEXT} allowRegistration={Boolean(PREVIEW_CONTEXT.customer)} accessError={accessError} />;
+  if (PREVIEW_CONTEXT.customer && !customerPersonalisation.setupCompleted && !personalisationDeferred) {
+    return <CustomerPersonalisation account={account} initialValue={customerPersonalisation} onSave={saveCustomerPersonalisation} onDefer={() => { setPersonalisationDeferred(true); notify('Setup saved for later'); }} onUploadImage={uploadCustomerImage} onRemoveImage={removeCustomerImage} />;
+  }
 
   const backFromDetail = () => {
-    if (view === 'configurator') {
+    if (view === 'settings') {
+      setView('account');
+    } else if (view === 'configurator') {
       setView(configOrigin === 'enquiry' ? 'enquiry' : 'product');
       setEditingLine(null);
     } else {
@@ -256,29 +520,47 @@ export default function App() {
   };
 
   return (
-    <div className="app-canvas">
-      <span className="desktop-caption">RHOMBERG INSTRUMENTS · {services.mode === 'mock' ? 'CONNECTED APP TEST' : 'PRIVATE CLOUD'}</span>
-      <div className={`app-shell ${isStaff ? 'expeditor-shell' : ''}`}>
-        <AppHeader account={account} onNavigate={navigate} onBack={detailView ? backFromDetail : null} backLabel={view === 'configurator' ? 'Product configuration' : selectedProduct?.code || 'Catalogue'} theme={theme} onToggleTheme={toggleTheme} serviceMode={services.mode} />
+    <div
+      className={`app-canvas platform-preview preview-${PREVIEW_CONTEXT.id} ${PREVIEW_CONTEXT.customer ? 'preview-connect' : 'preview-operations'}`}
+      style={personalisationStyle}
+      data-font-size={PREVIEW_CONTEXT.customer ? customerPersonalisation.fontSize : undefined}
+      data-density={PREVIEW_CONTEXT.customer ? customerPersonalisation.density : undefined}
+    >
+      <span className="desktop-caption">{PREVIEW_CONTEXT.product.toUpperCase()} · {PREVIEW_CONTEXT.platform.toUpperCase()} · {__PUBLIC_PREVIEW__ ? 'DEMO PREVIEW' : 'PRIVATE CLOUD'}</span>
+      <div className={`app-shell ${isStaff ? 'expeditor-shell' : ''} ${isPlanningWorkspace ? 'planning-shell' : ''} ${isExpeditorWorkspace ? 'expediting-workspace-shell' : ''} ${isDispatchWorkspace ? 'dispatch-workspace-shell' : ''}`}>
+        {__PUBLIC_PREVIEW__ && <div className="platform-preview-banner"><span><strong>{PREVIEW_CONTEXT.product}</strong> {PREVIEW_CONTEXT.platform}</span><a href="./">All previews</a></div>}
+        <AppHeader account={account} onNavigate={navigate} onBack={detailView ? backFromDetail : null} backLabel={view === 'settings' ? 'Customer settings' : view === 'configurator' ? 'Product configuration' : selectedProduct?.code || 'Catalogue'} theme={theme} onToggleTheme={toggleTheme} serviceMode={services.mode} preview={PREVIEW_CONTEXT} showThemeToggle={!PREVIEW_CONTEXT.customer} personalisation={PREVIEW_CONTEXT.customer ? customerPersonalisation : null} />
         <main className="app-main">
           {isStaff ? (
             <>
-              {view === 'expeditor' && <ExpeditorDashboard account={account} enquiries={enquiries} onUpdate={updateTracking} canUpdate={canUpdateTracking} serviceMode={services.mode} />}
-              {view === 'account' && <Account account={account} enquiries={enquiries} onSignOut={signOut} serviceMode={services.mode} />}
+              {view === 'expeditor' && (accountCan(account, PERMISSIONS.VIEW_ASSIGNED_RFQS)
+                && notificationTarget?.entityType !== 'order'
+                ? <SalesRepresentativeDashboard account={account} rfqs={enquiries} onAction={performWorkflowAction} serviceMode={services.mode} focusRecordId={notificationTarget?.entityId} />
+                : isPlanningWorkspace
+                  ? <PlanningDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} planningOptions={planningOptions} focusRecordId={notificationTarget?.entityId} />
+                  : isExpeditorWorkspace
+                    ? <ExpeditorDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} expeditingOptions={expeditingOptions} focusRecordId={notificationTarget?.entityId} />
+                    : isDispatchWorkspace
+                      ? <DispatchDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} />
+                      : <OperationalDashboard account={account} enquiries={staffRecords} onAction={performWorkflowAction} canUpdate={canPerformWorkflow} serviceMode={services.mode} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} />)}
+              {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
+              {view === 'account' && <Account account={account} enquiries={staffRecords} onSignOut={signOut} serviceMode={services.mode} />}
             </>
           ) : (
             <>
-              {view === 'home' && <Home account={account} enquiries={accountEnquiries} categories={catalogue.categories} recommendedCategories={catalogue.recommendedCategories} onNavigate={navigate} onCategory={openCategory} />}
+              {view === 'home' && <Home account={account} enquiries={accountRecords} categories={catalogue.categories} recommendedCategories={catalogue.recommendedCategories} onNavigate={navigate} onCategory={openCategory} />}
               {view === 'catalogue' && <Catalogue categories={catalogue.categories} products={catalogue.products} categoryId={categoryId} onCategory={setCategoryId} onProduct={openProduct} />}
               {view === 'product' && selectedProduct && <ProductDetail product={selectedProduct} category={selectedCategory} onConfigure={() => startConfigurator(null, 'product')} />}
               {view === 'configurator' && selectedProduct && <Configurator product={selectedProduct} existingLine={editingLine} onSave={saveConfiguredLine} onCancel={backFromDetail} />}
               {view === 'enquiry' && <Enquiry account={account} lines={draft} registrationOptions={registrationOptions} deliverySettings={services.preview} onAddProducts={() => navigate('catalogue')} onEdit={line => startConfigurator(line, 'enquiry')} onRemove={removeLine} onQuantity={updateQuantity} onSubmit={submitEnquiry} success={success} onCloseSuccess={() => { setSuccess(null); navigate('tracking'); }} />}
-              {view === 'tracking' && <OrderTracking account={account} enquiries={accountEnquiries} onStartEnquiry={() => navigate('enquiry')} serviceMode={services.mode} />}
-              {view === 'account' && <Account account={account} enquiries={accountEnquiries} onSignOut={signOut} serviceMode={services.mode} />}
+              {view === 'tracking' && <OrderTracking account={account} enquiries={accountRecords} onStartEnquiry={() => navigate('enquiry')} onAction={performWorkflowAction} serviceMode={services.mode} focusRecordId={notificationTarget?.entityId} />}
+              {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
+              {view === 'account' && <Account account={account} enquiries={accountRecords} onSignOut={signOut} serviceMode={services.mode} onOpenSettings={() => navigate('settings')} personalisation={customerPersonalisation} />}
+              {view === 'settings' && <CustomerPersonalisation account={account} initialValue={customerPersonalisation} mode="settings" onSave={saveCustomerPersonalisation} onCancel={() => navigate('account')} onUploadImage={uploadCustomerImage} onRemoveImage={removeCustomerImage} />}
             </>
           )}
         </main>
-        {!detailView && <BottomNav active={view} quantity={totalQuantity} role={account.role} onNavigate={navigate} />}
+        {!detailView && <BottomNav active={view} quantity={totalQuantity} role={account.role} unreadCount={unreadNotifications} onNavigate={navigate} />}
       </div>
       <Toast message={toast} />
     </div>
@@ -298,6 +580,19 @@ function AppLoadError({ message, onRetry }) {
   return (
     <main className="app-state-view">
       <section className="app-state-card is-error"><span className="state-error-mark">!</span><h1>The preview could not start</h1><p role="alert">{message}</p><button className="primary-button" type="button" onClick={onRetry}>Try again <span>→</span></button></section>
+    </main>
+  );
+}
+
+function UnsupportedPreview() {
+  return (
+    <main className="app-state-view">
+      <section className="app-state-card is-error">
+        <span className="state-error-mark">!</span>
+        <h1>This preview route is not supported</h1>
+        <p>The requested interface is not one of the four controlled Rhomberg test previews.</p>
+        <a className="primary-button" href="./">Return to the preview centre <span>→</span></a>
+      </section>
     </main>
   );
 }

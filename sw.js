@@ -1,11 +1,15 @@
-const CACHE_NAME = 'rhomberg-app-preview-v8';
+const CACHE_NAME = 'rhomberg-app-preview-v33';
 
 const APP_FILES = [
   './',
   './index.html',
-  './styles.css?v=8',
-  './runtime-config.js?v=8',
-  './app.js?v=8',
+  './styles.css?v=33',
+  './runtime-config.js?v=10',
+  './app.js?v=33',
+  './preview/customer-desktop/',
+  './preview/customer-mobile/',
+  './preview/internal-mobile/',
+  './preview/internal-desktop/',
   './manifest.webmanifest',
   './assets/images/rhomberg-gauge-mark.svg',
   './assets/images/rhomberg-wordmark-transparent.png',
@@ -58,11 +62,11 @@ self.addEventListener('fetch', event => {
         .then(response => {
           if (response.ok && response.headers.get('content-type')?.includes('text/html')) {
             const copy = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put('./index.html', copy));
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
           }
           return response;
         })
-        .catch(() => caches.match('./index.html'))
+        .catch(() => caches.match(event.request).then(cached => cached || caches.match('./index.html')))
     );
     return;
   }

@@ -9,4 +9,5 @@ Thumbs.db
 .netlify/
 private/
 dist/
+dist-previews/
 dist-production/

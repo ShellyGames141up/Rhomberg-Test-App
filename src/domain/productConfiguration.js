@@ -12,3 +12,16 @@ export const optionsForField = (field, values = {}) => {
   const dependency = values[field.optionsBy.key];
   return field.optionsBy.map?.[dependency] || field.optionsBy.fallback || field.options || [];
 };
+
+export const toggleMultiChoiceOption = (field, currentValue = [], option) => {
+  const selected = Array.isArray(currentValue) ? currentValue : [];
+  if (field.exclusiveOption && option === field.exclusiveOption) {
+    return selected.includes(option) ? [] : [option];
+  }
+  const withoutExclusive = field.exclusiveOption
+    ? selected.filter(item => item !== field.exclusiveOption)
+    : selected;
+  return withoutExclusive.includes(option)
+    ? withoutExclusive.filter(item => item !== option)
+    : [...withoutExclusive, option];
+};

@@ -1,11 +1,11 @@
 {
-  "name": "Rhomberg Instruments App",
-  "short_name": "Rhomberg",
-  "description": "A mobile catalogue, RFQ and order-tracking preview for Rhomberg Instruments.",
+  "name": "Rhomberg Platform Preview Centre",
+  "short_name": "Rhomberg Preview",
+  "description": "Four mock Rhomberg Connect and Rhomberg Operations interface previews.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "background_color": "#f4f7f8",
   "theme_color": "#073b53",
   "icons": [

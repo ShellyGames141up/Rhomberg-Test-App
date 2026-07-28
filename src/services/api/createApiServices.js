@@ -1,5 +1,22 @@
 import { ServiceError } from '../contracts.js';
-import { MAX_PO_FILE_BYTES, validateEnquiry, validateRegistration, validateSignIn, validateTrackingUpdate } from '../validation.js';
+import {
+  MAX_ACCEPTANCE_DOCUMENT_BYTES,
+  MAX_DISPATCH_PROOF_BYTES,
+  MAX_PO_FILE_BYTES,
+  MAX_QUOTATION_DOCUMENT_BYTES,
+  validateEnquiry,
+  validateDispatchAction,
+  validateExpeditingAction,
+  validateOrderAcceptance,
+  validatePersonalisation,
+  validatePersonalisationImage,
+  validateNotificationPreferenceSettings,
+  validatePlanningSubmission,
+  validateQuotationConfirmation,
+  validateRegistration,
+  validateSignIn,
+  validateWorkflowActionRequest,
+} from '../validation.js';
 import { createBrowserStore } from '../browserStore.js';
 import { THEME_PREFERENCE_KEY } from '../serviceKeys.js';
 import { HttpClient } from './HttpClient.js';
@@ -8,6 +25,8 @@ export function createApiServices(config = {}) {
   const client = new HttpClient({ baseUrl: config.apiBaseUrl, timeoutMs: config.requestTimeoutMs, fetchImplementation: config.fetchImplementation });
   const preferenceStore = createBrowserStore(config.storage);
   let draftSaveQueue = Promise.resolve();
+  let expeditingWorkspaceOptions = null;
+  let dispatchWorkspaceOptions = null;
 
   const refreshCsrfToken = async () => {
     const result = await client.get('/auth/csrf-token');
@@ -69,6 +88,7 @@ export function createApiServices(config = {}) {
 
   const enquiries = {
     list: filters => client.get('/enquiries', { query: filters }),
+    listRepresentativeInbox: filters => client.get('/enquiries/inbox', { query: filters }),
     getById: enquiryId => client.get(`/enquiries/${encodeURIComponent(enquiryId)}`),
     getDraft: () => client.get('/enquiry-drafts/current').then(result => result?.items || []),
     saveDraft(lines) {
@@ -90,14 +110,152 @@ export function createApiServices(config = {}) {
     },
   };
 
-  const tracking = {
+  const orders = {
     list: filters => client.get('/orders', { query: filters }),
-    async updateStatus(enquiryId, input) {
-      validateTrackingUpdate(input);
-      return client.post(`/enquiries/${encodeURIComponent(enquiryId)}/tracking-events`, input, {
-        headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `tracking-${Date.now()}` },
+    getById: orderId => client.get(`/orders/${encodeURIComponent(orderId)}`),
+  };
+
+  const workflow = {
+    async list(filters) {
+      const [rfqs, customerOrders] = await Promise.all([enquiries.list(filters), orders.list(filters)]);
+      return [...rfqs, ...customerOrders];
+    },
+    getAllowedActions(recordId, { entityType = 'rfq' } = {}) {
+      const resource = entityType === 'order' ? 'orders' : 'enquiries';
+      return client.get(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`);
+    },
+    async performAction(recordId, input) {
+      let request = validateWorkflowActionRequest(input);
+      const resource = input?.entityType === 'order' ? 'orders' : 'enquiries';
+      const idempotencyKey = globalThis.crypto?.randomUUID?.() || `workflow-${Date.now()}`;
+      if (request.action === 'mark_quoted') {
+        const { quotation, quotationDocumentFile } = validateQuotationConfirmation(request.data);
+        request = { ...request, data: { quotation } };
+        if (quotationDocumentFile) {
+          const form = new FormData();
+          form.append('payload', JSON.stringify(request));
+          form.append('quotationDocument', quotationDocumentFile, quotationDocumentFile.name);
+          return client.post(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`, form, {
+            headers: { 'Idempotency-Key': idempotencyKey },
+          });
+        }
+      }
+      if (request.action === 'accept_order') {
+        const { acceptance, acceptanceDocumentFile } = validateOrderAcceptance(request.data);
+        request = { ...request, data: { acceptance } };
+        if (acceptanceDocumentFile) {
+          const form = new FormData();
+          form.append('payload', JSON.stringify(request));
+          form.append('acceptanceDocument', acceptanceDocumentFile, acceptanceDocumentFile.name);
+          return client.post(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`, form, {
+            headers: { 'Idempotency-Key': idempotencyKey },
+          });
+        }
+      }
+      if (request.action === 'complete_planning') {
+        request = { ...request, data: validatePlanningSubmission(request.data) };
+      }
+      const hasExpeditingPayload = Boolean(
+        request.data?.expeditingUpdate
+        || request.data?.expeditingCustomerMessage
+        || request.data?.expeditingProgressStep
+        || request.data?.expeditingReadyExceptionAuthorised,
+      );
+      if (
+        ['start_expediting', 'add_expediting_update', 'complete_expediting'].includes(request.action)
+        || (['place_on_hold', 'resume_order'].includes(request.action) && hasExpeditingPayload)
+      ) {
+        request = {
+          ...request,
+          data: validateExpeditingAction(request.action, request.data, expeditingWorkspaceOptions || {}),
+        };
+      }
+      if ([
+        'mark_ready_for_collection',
+        'start_delivery',
+        'confirm_collection',
+        'confirm_delivery',
+        'complete_collection',
+        'complete_delivery',
+        'report_delivery_problem',
+      ].includes(request.action)) {
+        const { dispatchUpdate, dispatchProofFile } = validateDispatchAction(
+          request.action,
+          request.data,
+          dispatchWorkspaceOptions || {},
+        );
+        request = { ...request, data: { dispatchUpdate } };
+        if (dispatchProofFile) {
+          const form = new FormData();
+          form.append('payload', JSON.stringify(request));
+          form.append('dispatchProof', dispatchProofFile, dispatchProofFile.name);
+          return client.post(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`, form, {
+            headers: { 'Idempotency-Key': idempotencyKey },
+          });
+        }
+      }
+      return client.post(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`, request, {
+        headers: { 'Idempotency-Key': idempotencyKey },
       });
     },
+  };
+
+  const audit = {
+    list: filters => client.get('/audit-events', { query: filters }),
+  };
+
+  const notifications = {
+    list: filters => client.get('/notifications', { query: filters }),
+    markRead: notificationId => client.post(`/notifications/${encodeURIComponent(notificationId)}/read`, {}),
+    markAllRead: () => client.post('/notifications/read-all', {}),
+    getPreferences: () => client.get('/users/me/notification-preferences'),
+    savePreferences(candidate) {
+      return client.put('/users/me/notification-preferences', validateNotificationPreferenceSettings(candidate));
+    },
+    retryDelivery: (notificationId, deliveryId) => client.post(
+      `/notifications/${encodeURIComponent(notificationId)}/deliveries/${encodeURIComponent(deliveryId)}/retry`,
+      {},
+    ),
+  };
+
+  const planning = {
+    getWorkspaceOptions: () => client.get('/planning/workspace-options'),
+  };
+
+  const expediting = {
+    async getWorkspaceOptions() {
+      expeditingWorkspaceOptions = await client.get('/expediting/workspace-options');
+      return expeditingWorkspaceOptions;
+    },
+  };
+
+  const dispatch = {
+    async getWorkspaceOptions() {
+      dispatchWorkspaceOptions = await client.get('/dispatch/workspace-options');
+      return dispatchWorkspaceOptions;
+    },
+  };
+
+  const personalisation = {
+    get: () => client.get('/users/me/personalisation'),
+    save(candidate) {
+      validatePersonalisation(candidate);
+      return client.put('/users/me/personalisation', candidate);
+    },
+    complete(candidate) {
+      validatePersonalisation({ ...candidate, setupCompleted: true });
+      return client.put('/users/me/personalisation', { ...candidate, setupCompleted: true });
+    },
+    reset: options => client.post('/users/me/personalisation/reset', options || {}),
+    uploadImage(file, kind, position = { x: 50, y: 50 }) {
+      validatePersonalisationImage(file);
+      const form = new FormData();
+      form.append('kind', kind);
+      form.append('position', JSON.stringify(position));
+      form.append('image', file, file.name);
+      return client.post('/users/me/personalisation/images', form);
+    },
+    removeImage: imageId => client.delete(`/users/me/personalisation/images/${encodeURIComponent(imageId)}`),
   };
 
   const preferences = {
@@ -118,11 +276,22 @@ export function createApiServices(config = {}) {
     accounts,
     products,
     enquiries,
-    tracking,
+    orders,
+    workflow,
+    tracking: workflow,
+    audit,
+    notifications,
+    planning,
+    expediting,
+    dispatch,
+    personalisation,
     preferences,
     preview: {
       emailRecipient: '',
       maxPoFileBytes: MAX_PO_FILE_BYTES,
+      maxQuotationDocumentBytes: MAX_QUOTATION_DOCUMENT_BYTES,
+      maxAcceptanceDocumentBytes: MAX_ACCEPTANCE_DOCUMENT_BYTES,
+      maxDispatchProofBytes: MAX_DISPATCH_PROOF_BYTES,
       persistenceLabel: 'the secure company service',
     },
   };
