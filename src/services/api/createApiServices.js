@@ -6,6 +6,7 @@ import {
   MAX_QUOTATION_DOCUMENT_BYTES,
   validateEnquiry,
   validateDispatchAction,
+  validateDispatchReceipt,
   validateExpeditingAction,
   validateOrderAcceptance,
   validatePersonalisation,
@@ -20,6 +21,13 @@ import {
 import { createBrowserStore } from '../browserStore.js';
 import { THEME_PREFERENCE_KEY } from '../serviceKeys.js';
 import { HttpClient } from './HttpClient.js';
+import { MAX_CERTIFICATE_BYTES, validateCertificateUpload } from '../../domain/certification.js';
+import {
+  validateQaFailure,
+  validateQaPass,
+  validateQaRework,
+  validateQaStart,
+} from '../../domain/qualityAssurance.js';
 
 export function createApiServices(config = {}) {
   const client = new HttpClient({ baseUrl: config.apiBaseUrl, timeoutMs: config.requestTimeoutMs, fetchImplementation: config.fetchImplementation });
@@ -71,6 +79,14 @@ export function createApiServices(config = {}) {
     getCurrent: () => client.get('/companies/me'),
     getRegistrationOptions: () => client.get('/reference-data/registration'),
     listCompanies: () => client.get('/companies'),
+  };
+
+  const credentials = {
+    requestVerification: input => client.post('/auth/credential-changes/challenges', input),
+    confirmChange: input => client.post(
+      `/auth/credential-changes/challenges/${encodeURIComponent(input.challengeId)}/confirm`,
+      input,
+    ),
   };
 
   const products = {
@@ -156,6 +172,21 @@ export function createApiServices(config = {}) {
       }
       if (request.action === 'complete_planning') {
         request = { ...request, data: validatePlanningSubmission(request.data) };
+      }
+      if (request.action === 'start_qa' || request.action === 'start_qa_reinspection') {
+        request = { ...request, data: { qaStart: validateQaStart(request.data?.qaStart || request.data) } };
+      }
+      if (request.action === 'pass_qa') {
+        request = { ...request, data: { qaPass: validateQaPass(request.data?.qaPass || request.data) } };
+      }
+      if (request.action === 'fail_qa') {
+        request = { ...request, data: { qaFailure: validateQaFailure(request.data?.qaFailure || request.data) } };
+      }
+      if (request.action === 'resubmit_to_qa') {
+        request = { ...request, data: { qaRework: validateQaRework(request.data?.qaRework || request.data) } };
+      }
+      if (request.action === 'confirm_dispatch_receipt') {
+        request = { ...request, data: { dispatchReceipt: validateDispatchReceipt(request.data) } };
       }
       const hasExpeditingPayload = Boolean(
         request.data?.expeditingUpdate
@@ -300,6 +331,36 @@ export function createApiServices(config = {}) {
     },
   };
 
+  const laboratory = {
+    getWorkspaceOptions: () => client.get('/laboratory/workspace-options'),
+    listOrders: filters => client.get('/laboratory/orders', { query: filters }),
+    getDashboard: filters => client.get('/laboratory/dashboard', { query: filters }),
+    updateUnit: (orderId, unitId, action, input) => client.post(
+      `/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/actions/${encodeURIComponent(action)}`,
+      input,
+      { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `lab-unit-${Date.now()}` } },
+    ),
+    uploadCertificate(orderId, unitId, input) {
+      const metadata = validateCertificateUpload(input);
+      const form = new FormData();
+      form.append('metadata', JSON.stringify({ ...metadata, fileName: undefined, mimeType: undefined, sizeBytes: undefined }));
+      form.append('certificate', input.file, input.file.name);
+      return client.post(
+        `/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/certificate`,
+        form,
+        { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `certificate-${Date.now()}` } },
+      );
+    },
+    downloadCertificate: certificateId => client.get(`/certificates/${encodeURIComponent(certificateId)}/download`),
+    archiveCertificates: orderId => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/certificates/archive`, {}),
+  };
+
+  const qualityAssurance = {
+    getWorkspaceOptions: () => client.get('/quality-assurance/workspace-options'),
+    listOrders: filters => client.get('/quality-assurance/orders', { query: filters }),
+    getDashboard: filters => client.get('/quality-assurance/dashboard', { query: filters }),
+  };
+
   const personalisation = {
     get: () => client.get('/users/me/personalisation'),
     save(candidate) {
@@ -338,6 +399,7 @@ export function createApiServices(config = {}) {
     initialize: refreshCsrfToken,
     auth,
     accounts,
+    credentials,
     products,
     enquiries,
     orders,
@@ -350,6 +412,8 @@ export function createApiServices(config = {}) {
     notifications,
     planning,
     expediting,
+    laboratory,
+    qualityAssurance,
     dispatch,
     personalisation,
     preferences,
@@ -359,6 +423,7 @@ export function createApiServices(config = {}) {
       maxQuotationDocumentBytes: MAX_QUOTATION_DOCUMENT_BYTES,
       maxAcceptanceDocumentBytes: MAX_ACCEPTANCE_DOCUMENT_BYTES,
       maxDispatchProofBytes: MAX_DISPATCH_PROOF_BYTES,
+      maxCertificateBytes: MAX_CERTIFICATE_BYTES,
       persistenceLabel: 'the secure company service',
     },
   };

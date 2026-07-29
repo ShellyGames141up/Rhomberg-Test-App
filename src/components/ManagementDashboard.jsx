@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ORDER_STATUSES, RFQ_STATUSES, workflowStatusById } from '../domain/workflow.js';
-import { friendlyServiceError } from '../services/contracts.js';
+import { roleProfileFor } from '../domain/accessControl.js';
+import { accountCan, friendlyServiceError, PERMISSIONS } from '../services/contracts.js';
 
 const EMPTY_DASHBOARD = {
   metrics: {},
@@ -10,6 +11,13 @@ const EMPTY_DASHBOARD = {
   ordersByRepresentative: [],
   ordersByBranch: [],
   ordersByStatus: [],
+  phase21: {
+    products: { totalUnits: 0, byProduct: [], byCategory: [], byMonth: [], byYear: [], byRepresentative: [], byCompany: [] },
+    laboratory: {},
+    quality: {},
+    routing: {},
+    operations: {},
+  },
   filters: { statuses: [], branches: [] },
 };
 
@@ -51,6 +59,23 @@ function Breakdown({ title, items }) {
   );
 }
 
+function QuantityBreakdown({ title, items, empty = 'No unit-volume data is available.' }) {
+  const maximum = Math.max(1, ...items.map(item => item.quantity));
+  return (
+    <section className="management-breakdown quantity-breakdown">
+      <h2>{title}</h2>
+      {items.slice(0, 10).map(item => (
+        <div key={item.label}>
+          <span>{humanise(item.label)}</span>
+          <i><b style={{ width: `${Math.max(4, item.quantity / maximum * 100)}%` }} /></i>
+          <strong>{item.quantity}</strong>
+        </div>
+      ))}
+      {!items.length && <p>{empty}</p>}
+    </section>
+  );
+}
+
 export function ManagementDashboard({
   account,
   managementActions,
@@ -69,6 +94,9 @@ export function ManagementDashboard({
   const [openId, setOpenId] = useState('');
   const [actionState, setActionState] = useState({});
   const [busy, setBusy] = useState('');
+  const canReassign = accountCan(account, PERMISSIONS.REASSIGN_REPRESENTATIVE);
+  const canOverride = accountCan(account, PERMISSIONS.OVERRIDE_WORKFLOW);
+  const canManageRecords = canReassign || canOverride;
 
   const filters = useMemo(() => ({ search, status, branch }), [branch, search, status]);
   const load = async currentFilters => {
@@ -77,7 +105,7 @@ export function ManagementDashboard({
     try {
       const [nextDashboard, nextRepresentatives] = await Promise.all([
         managementActions.getDashboard(currentFilters),
-        managementActions.getRepresentativeOptions(),
+        canManageRecords ? managementActions.getRepresentativeOptions() : Promise.resolve([]),
       ]);
       setDashboard(nextDashboard);
       setRepresentatives(nextRepresentatives);
@@ -123,11 +151,13 @@ export function ManagementDashboard({
   }
 
   const metrics = dashboard.metrics || {};
+  const phase21 = dashboard.phase21 || EMPTY_DASHBOARD.phase21;
+  const dashboardLabel = roleProfileFor(account.role).dashboard?.eyebrow || 'Management oversight';
   return (
     <section className="app-screen management-screen" aria-labelledby="management-title">
       <header className="management-hero">
         <div>
-          <span className="eyebrow">{serviceMode === 'mock' ? 'Test · ' : ''}Management oversight</span>
+          <span className="eyebrow">{serviceMode === 'mock' ? 'Test · ' : ''}{dashboardLabel}</span>
           <h1 id="management-title">Workflow health.<br /><em>Decisions with evidence.</em></h1>
           <p>Operational totals use only records authorised for {account.contact}. Protected price-engine values are excluded from this workspace and its exports.</p>
         </div>
@@ -140,6 +170,8 @@ export function ManagementDashboard({
         <Metric label="RFQs quoted" value={metrics.quotedRfqs} />
         <Metric label="Awaiting Planning" value={metrics.awaitingPlanning} />
         <Metric label="In Expediting" value={metrics.inExpediting} />
+        <Metric label="In Laboratory" value={metrics.inLaboratory} />
+        <Metric label="In Quality Assurance" value={metrics.inQualityAssurance} />
         <Metric label="On hold" value={metrics.onHold} />
         <Metric label="Delayed" value={metrics.delayed} />
         <Metric label="In Dispatch" value={metrics.inDispatch} />
@@ -154,6 +186,35 @@ export function ManagementDashboard({
         <Breakdown title="Orders by branch" items={dashboard.ordersByBranch || []} />
         <Breakdown title="Orders by status" items={dashboard.ordersByStatus || []} />
       </div>
+
+      <section className="management-analytics-block">
+        <div className="management-section-heading">
+          <div><span className="eyebrow">Quantity-based demand</span><h2>{phase21.products.totalUnits || 0} ordered units across authorised records</h2></div>
+          <small>Counts physical units, not order lines · no pricing</small>
+        </div>
+        <div className="management-breakdowns">
+          <QuantityBreakdown title="Units by product" items={phase21.products.byProduct || []} />
+          <QuantityBreakdown title="Units by representative" items={phase21.products.byRepresentative || []} />
+          <QuantityBreakdown title="Monthly unit volume" items={phase21.products.byMonth || []} />
+        </div>
+        <div className="management-metrics compact" aria-label="Laboratory and quality metrics">
+          <Metric label="SANAS orders" value={phase21.routing.sanasOrders} />
+          <Metric label="Traceable orders" value={phase21.routing.traceableOrders} />
+          <Metric label="Lab certificates pending" value={phase21.laboratory.certificatesPending} />
+          <Metric label="QA pass rate" value={`${phase21.quality.passRate || 0}%`} />
+          <Metric label="QA first-time pass" value={`${phase21.quality.firstTimePassRate || 0}%`} />
+          <Metric label="QA rework rate" value={`${phase21.quality.reworkRate || 0}%`} />
+          <Metric label="QA failures" value={phase21.quality.failureCount} />
+          <Metric label="QA rework cycles" value={phase21.quality.reworkCycles} />
+          <Metric label="SANAS certificates" value={phase21.operations.sanasCertificates} />
+          <Metric label="Traceable certificates" value={phase21.operations.traceableCertificates} />
+          <Metric label="Dispatch completion" value={`${phase21.operations.dispatchCompletionRate || 0}%`} />
+          <Metric label="Average Lab time" value={`${phase21.operations.averageLaboratoryHours || 0}h`} />
+          <Metric label="Average QA time" value={`${phase21.operations.averageQaHours || 0}h`} />
+          <Metric label="Average Dispatch time" value={`${phase21.operations.averageDispatchHours || 0}h`} />
+          <Metric label="Revenue" value="Not enabled" detail="Protected future placeholder" />
+        </div>
+      </section>
 
       <div className="management-toolbar">
         <label><span>Search authorised records</span><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Reference, company, contact, job, PO or representative…" /></label>
@@ -197,6 +258,8 @@ export function ManagementDashboard({
               )}
               onOpenAudit={() => onOpenAudit?.(record)}
               busy={busy}
+              canReassign={canReassign}
+              canOverride={canOverride}
             />
           ))}
           {!dashboard.records.length && <div className="management-empty"><strong>No authorised records match</strong><p>Clear the search or broaden the status and branch filters.</p></div>}
@@ -232,6 +295,8 @@ function ManagementRecord({
   onOverride,
   onOpenAudit,
   busy,
+  canReassign,
+  canOverride,
 }) {
   const statuses = record.workflowType === 'order' ? ORDER_STATUSES : RFQ_STATUSES;
   const timeline = [...(record.trackingHistory || [])].reverse().slice(0, 6);
@@ -252,20 +317,20 @@ function ManagementRecord({
             <div><dt>Original RFQ</dt><dd>{record.sourceRfqReference || (record.workflowType === 'rfq' ? record.reference : 'Not recorded')}</dd></div>
             <div><dt>Priority</dt><dd>{record.emergency === 'yes' ? 'Emergency' : humanise(record.priority || 'standard')}</dd></div>
           </dl>
-          <div className="management-actions">
-            <section>
+          {(canReassign || canOverride) && <div className="management-actions">
+            {canReassign && <section>
               <h3>Reassign representative</h3>
               <label><span>Representative</span><select value={values.representativeId || record.selectedRep?.id || ''} onChange={event => set('representativeId', event.target.value)}><option value="">Select representative</option>{representatives.map(rep => <option key={rep.id} value={rep.id}>{rep.name} · {rep.branchName}</option>)}</select></label>
               <label><span>Reason</span><textarea rows="2" value={values.reason || ''} onChange={event => set('reason', event.target.value)} placeholder="Required for the immutable audit history" /></label>
               <button className="secondary-button" type="button" disabled={Boolean(busy)} onClick={onReassign}>Save reassignment</button>
-            </section>
-            <section>
+            </section>}
+            {canOverride && <section>
               <h3>Approve workflow override</h3>
               <label><span>Target status</span><select value={values.targetStatus || ''} onChange={event => set('targetStatus', event.target.value)}><option value="">Select controlled target</option>{statuses.filter(item => item !== record.trackingStatus && item !== 'draft' && item !== 'archived').map(item => <option key={item} value={item}>{humanise(item)}</option>)}</select></label>
               <label><span>Approval reason</span><textarea rows="2" value={values.overrideReason || ''} onChange={event => set('overrideReason', event.target.value)} placeholder="Explain why the normal sequence must be overridden" /></label>
               <button className="secondary-button" type="button" disabled={Boolean(busy)} onClick={onOverride}>Approve and apply override</button>
-            </section>
-          </div>
+            </section>}
+          </div>}
           <section className="management-timeline">
             <div><h3>Recent timeline</h3><button type="button" onClick={onOpenAudit}>Review full audit history</button></div>
             {timeline.map(event => <p key={event.id}><i /><span><strong>{workflowStatusById(event.toStatus || event.status, event.entityType)?.label || humanise(event.toStatus || event.status)}</strong><small>{event.note || event.customerDescription}</small></span><time>{formatDate(event.createdAt)}</time></p>)}

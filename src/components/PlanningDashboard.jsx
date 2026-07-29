@@ -10,6 +10,7 @@ import {
   planningQueueCounts,
 } from '../domain/planningQueue.js';
 import { statusById } from '../domain/tracking.js';
+import { orderRequiresLaboratory } from '../domain/certification.js';
 import { OrderSummaryPanel } from './OrderSummaryPanel.jsx';
 import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
 
@@ -151,6 +152,7 @@ function PlanningOrder({ order, expanded, onToggle, onAction, account, planningO
   const planning = order.planning || {};
   const customerPo = planning.customerPoNumber || order.customerPoNumber || order.poNumber || '';
   const lineItems = (order.items || []).length;
+  const laboratoryRoute = orderRequiresLaboratory(order);
 
   return (
     <article className={`planning-order ${expanded ? 'is-open' : ''} ${order.emergency === 'yes' ? 'is-emergency' : ''}`} role="rowgroup" id={`planning-order-${order.id}`}>
@@ -202,6 +204,15 @@ function PlanningOrder({ order, expanded, onToggle, onAction, account, planningO
 
           {documentActions && <OrderSummaryPanel order={order} serviceMode={serviceMode} {...documentActions} />}
 
+          {primaryAction?.action === 'submit_to_expediting' && (
+            <p className="planning-route-notice">
+              <strong>{laboratoryRoute ? 'Laboratory route' : 'Standard route'}</strong>
+              {laboratoryRoute
+                ? 'SANAS or Traceable calibration was selected. Planning will route this order to the Laboratory, and it will not enter the standard QA queue.'
+                : 'This order will move to Expediting and then Quality Assurance before Dispatch.'}
+            </p>
+          )}
+
           {primaryAction ? (
             <WorkflowActionPanel
               key={`${order.id}-${primaryAction.action}-${order.version}`}
@@ -211,8 +222,8 @@ function PlanningOrder({ order, expanded, onToggle, onAction, account, planningO
               onAction={onAction}
               account={account}
               planningOptions={planningOptions}
-              title={primaryAction.action === 'complete_planning' ? 'Complete the Planning record' : 'Move this order forward'}
-              description={primaryAction.action === 'complete_planning' ? 'Required fields are checked before the plan can be saved' : 'This controlled action records the user, date, time and audit history'}
+              title={primaryAction.action === 'complete_planning' ? 'Complete the Planning record' : laboratoryRoute ? 'Route to Laboratory' : 'Route to Expediting'}
+              description={primaryAction.action === 'complete_planning' ? 'Required fields are checked before the plan can be saved' : 'This controlled action records the user, date, time, selected route and audit history'}
             />
           ) : (
             <p className="tracking-storage-note expeditor-readonly-note"><span>i</span><span><strong>No Planning action is available.</strong> This order may require a different authorised role or a refreshed record.</span></p>

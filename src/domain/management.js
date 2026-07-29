@@ -1,7 +1,18 @@
+import { buildPhase21Analytics } from './analytics.js';
+
 const RFQ_TERMINAL = new Set(['cancelled', 'expired', 'converted_to_order']);
 const ORDER_TERMINAL = new Set(['completed', 'cancelled', 'archived']);
 const DISPATCH_STATUSES = new Set(['awaiting_dispatch', 'ready_for_collection', 'out_for_delivery', 'delivered', 'collected']);
 const EXPEDITING_STATUSES = new Set(['submitted_to_expediting', 'expediting_in_progress']);
+const LAB_STATUSES = new Set([
+  'awaiting_lab', 'lab_received', 'calibration_in_progress', 'calibration_on_hold',
+  'calibration_completed', 'awaiting_lab_release', 'awaiting_lab_receipt_expediting',
+  'awaiting_lab_receipt_dispatch',
+]);
+const QA_STATUSES = new Set([
+  'awaiting_qa', 'qa_in_progress', 'qa_failed', 'returned_to_expediting',
+  'qa_reinspection_required', 'qa_passed',
+]);
 const INTERNAL_ONLY_FIELDS = new Set([
   'price',
   'unitPrice',
@@ -122,6 +133,7 @@ export const buildManagementDashboard = ({
       outcome: event.outcome,
       timestamp: event.timestamp || event.createdAt,
     }));
+  const phase21 = buildPhase21Analytics(authorised);
 
   return {
     generatedAt: now.toISOString(),
@@ -131,6 +143,8 @@ export const buildManagementDashboard = ({
       quotedRfqs: rfqs.filter(rfq => ['quoted', 'awaiting_customer_acceptance'].includes(rfq.trackingStatus)).length,
       awaitingPlanning: orders.filter(order => order.trackingStatus === 'awaiting_planning').length,
       inExpediting: orders.filter(order => EXPEDITING_STATUSES.has(order.trackingStatus)).length,
+      inLaboratory: orders.filter(order => LAB_STATUSES.has(order.trackingStatus)).length,
+      inQualityAssurance: orders.filter(order => QA_STATUSES.has(order.trackingStatus)).length,
       onHold: orders.filter(order => order.trackingStatus === 'on_hold').length,
       delayed: activeOrders.filter(order => recordIsDelayed(order, now)).length,
       inDispatch: orders.filter(order => DISPATCH_STATUSES.has(order.trackingStatus)).length,
@@ -145,6 +159,7 @@ export const buildManagementDashboard = ({
     ordersByRepresentative: groupCounts(orders, order => order.selectedRep?.name),
     ordersByBranch: groupCounts(orders, order => order.selectedRep?.branchName),
     ordersByStatus: groupCounts(orders, order => order.trackingStatus),
+    phase21,
     filters: {
       statuses: [...new Set(authorised.map(record => record.trackingStatus).filter(Boolean))].sort(),
       branches: [...new Map(authorised

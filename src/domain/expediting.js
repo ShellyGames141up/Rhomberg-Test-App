@@ -133,17 +133,23 @@ export const REQUIRED_EXPEDITOR_STEP_IDS = Object.freeze(
 );
 
 export const EXPEDITOR_QUEUE_STATUSES = Object.freeze([
+  'awaiting_lab_receipt_expediting',
   'submitted_to_expediting',
   'expediting_in_progress',
+  'returned_to_expediting',
+  'awaiting_qa',
   'awaiting_dispatch',
 ]);
 
 export const EXPEDITOR_QUEUE_FILTERS = Object.freeze([
   { id: 'all', label: 'All Expediting work' },
+  { id: 'laboratory_receipt', label: 'Laboratory receipt' },
   { id: 'newly_submitted', label: 'Newly submitted' },
   { id: 'in_progress', label: 'In progress' },
+  { id: 'qa_rework', label: 'QA corrective work' },
   { id: 'on_hold', label: 'On hold' },
   { id: 'approaching_completion', label: 'Approaching completion' },
+  { id: 'at_qa', label: 'At Quality Assurance' },
   { id: 'awaiting_dispatch', label: 'Awaiting dispatch' },
   { id: 'priority', label: 'Priority & emergency' },
 ]);
@@ -250,10 +256,13 @@ const searchableText = order => [
 
 const matchesFilter = (order, filter, now) => {
   if (filter === 'all') return EXPEDITOR_QUEUE_STATUSES.includes(order?.trackingStatus) || isExpeditingHold(order);
+  if (filter === 'laboratory_receipt') return order?.trackingStatus === 'awaiting_lab_receipt_expediting';
   if (filter === 'newly_submitted') return order?.trackingStatus === 'submitted_to_expediting';
   if (filter === 'in_progress') return order?.trackingStatus === 'expediting_in_progress';
+  if (filter === 'qa_rework') return ['qa_failed', 'returned_to_expediting'].includes(order?.trackingStatus);
   if (filter === 'on_hold') return isExpeditingHold(order);
   if (filter === 'approaching_completion') return isApproachingEstimatedCompletion(order, now);
+  if (filter === 'at_qa') return order?.trackingStatus === 'awaiting_qa';
   if (filter === 'awaiting_dispatch') return order?.trackingStatus === 'awaiting_dispatch';
   if (filter === 'priority') return expeditorOrderPriority(order) !== 'standard' || order?.emergency === 'yes';
   return false;
@@ -290,10 +299,13 @@ export const filterExpeditorOrders = (
 
 export const expeditorQueueCounts = (orders, now = new Date()) => ({
   all: filterExpeditorOrders(orders, { filter: 'all' }, now).length,
+  laboratoryReceipt: filterExpeditorOrders(orders, { filter: 'laboratory_receipt' }, now).length,
   newlySubmitted: filterExpeditorOrders(orders, { filter: 'newly_submitted' }, now).length,
   inProgress: filterExpeditorOrders(orders, { filter: 'in_progress' }, now).length,
+  qaRework: filterExpeditorOrders(orders, { filter: 'qa_rework' }, now).length,
   onHold: filterExpeditorOrders(orders, { filter: 'on_hold' }, now).length,
   approachingCompletion: filterExpeditorOrders(orders, { filter: 'approaching_completion' }, now).length,
+  atQa: filterExpeditorOrders(orders, { filter: 'at_qa' }, now).length,
   awaitingDispatch: filterExpeditorOrders(orders, { filter: 'awaiting_dispatch' }, now).length,
   priority: filterExpeditorOrders(orders, { filter: 'priority' }, now).length,
 });

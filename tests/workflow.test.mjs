@@ -26,6 +26,7 @@ const assignedRep = { id: 'rep-user-test', role: USER_ROLES.SALES_REPRESENTATIVE
 const otherRep = { ...assignedRep, id: 'rep-user-other', representativeId: 'REP-OTHER' };
 const planning = { id: 'planning-test', role: USER_ROLES.PLANNING, companyId: 'company-rhomberg', displayName: 'Planning Test' };
 const expeditor = { id: 'expeditor-test', role: USER_ROLES.EXPEDITOR, companyId: 'company-rhomberg', displayName: 'Expeditor Test' };
+const quality = { id: 'quality-test', role: USER_ROLES.QUALITY_ASSURANCE, companyId: 'company-rhomberg', displayName: 'Quality Test' };
 const dispatch = { id: 'dispatch-test', role: USER_ROLES.DISPATCH, companyId: 'company-rhomberg', displayName: 'Dispatch Test' };
 const manager = { id: 'manager-test', role: USER_ROLES.MANAGER, companyId: 'company-rhomberg', displayName: 'Manager Test' };
 const system = { id: 'workflow-system', role: SYSTEM_ACTOR_ROLE, displayName: 'Workflow service' };
@@ -418,11 +419,18 @@ result = run(order, 'complete_expediting', expeditor, {
   expeditingHandoff: { completionCheckConfirmed: true, authorisedException: false },
 });
 order = result.entity;
-assert.equal(order.trackingStatus, 'awaiting_dispatch');
+assert.equal(order.trackingStatus, 'awaiting_qa');
 assert.equal(order.expediting.currentStep, 'ready_for_dispatch');
-assert.deepEqual(result.notification.recipients, ['customer', 'assigned_representative', 'dispatch']);
+assert.deepEqual(result.notification.recipients, ['customer', 'assigned_representative', 'quality_assurance']);
 assert.equal(result.notification.message, 'Your order has completed Expediting and is moving to Dispatch.');
-assert.ok(result.notification.messages.dispatch.includes('Dispatch queue'));
+order = run(order, 'start_qa', quality).entity;
+assert.equal(order.trackingStatus, 'qa_in_progress');
+order = run(order, 'pass_qa', quality, {
+  qaPass: { customerMessage: 'Your instruments passed the final quality inspection.' },
+}).entity;
+assert.equal(order.trackingStatus, 'qa_passed');
+order = run(order, 'release_qa_order', quality).entity;
+assert.equal(order.trackingStatus, 'awaiting_dispatch');
 const exceptionHandoffSource = {
   ...order,
   id: 'order-expediting-exception-test',
@@ -446,7 +454,7 @@ const exceptionHandoff = run(exceptionHandoffSource, 'complete_expediting', expe
     exceptionAuthorisationReference: 'MGR-TEST-001',
   },
 });
-assert.equal(exceptionHandoff.entity.trackingStatus, 'awaiting_dispatch');
+assert.equal(exceptionHandoff.entity.trackingStatus, 'awaiting_qa');
 assert.equal(exceptionHandoff.entity.expediting.handoffException.authorisationReference, 'MGR-TEST-001');
 await assert.rejects(
   async () => run(order, 'confirm_delivery', dispatch, { comment: 'Attempted skip.' }),
@@ -458,6 +466,18 @@ await assert.rejects(
   error => error instanceof ServiceError && error.code === 'INVALID_FULFILMENT_TRANSITION',
   'delivery orders cannot enter the collection path',
 );
+order = run(order, 'confirm_dispatch_receipt', dispatch, {
+  dispatchReceipt: {
+    sourceDepartment: 'quality_assurance',
+    numberOfPackages: 2,
+    customerMessage: 'Your order has been received by Dispatch and is being prepared for handover.',
+    internalNote: 'Fabricated receipt note.',
+  },
+}).entity;
+assert.equal(order.trackingStatus, 'awaiting_dispatch');
+assert.equal(order.dispatch.sourceDepartment, 'quality_assurance');
+assert.equal(order.dispatch.numberOfPackages, 2);
+assert.ok(order.dispatch.receivedAt);
 await assert.rejects(
   async () => run(order, 'start_delivery', dispatch, dispatchInput({ readyDate: '', numberOfPackages: 0 })),
   error => error instanceof ServiceError
@@ -524,6 +544,13 @@ let collectionOrder = {
   dispatch: undefined,
   trackingHistory: [],
 };
+collectionOrder = run(collectionOrder, 'confirm_dispatch_receipt', dispatch, {
+  dispatchReceipt: {
+    sourceDepartment: 'quality_assurance',
+    numberOfPackages: 1,
+    customerMessage: 'Your order has been received by Dispatch and is being prepared for collection.',
+  },
+}).entity;
 collectionOrder = run(collectionOrder, 'mark_ready_for_collection', dispatch, dispatchInput({
   method: 'collection',
   courierOrDriver: '',

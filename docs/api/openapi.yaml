@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Rhomberg Instruments Private-Cloud API
-  version: 0.6.0-proposed
+  version: 0.7.0-proposed
   description: |
     Proposed production contract for the completed RFQ-to-order workflow.
     No production service or database is connected. All examples are fabricated.
@@ -1929,6 +1929,336 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/ApiError' }
 
+  /laboratory/orders:
+    get:
+      operationId: listLaboratoryOrders
+      summary: List the caller's SANAS and Traceable Laboratory queue
+      description: Requires view_lab_queue. The server excludes ordinary non-certification orders.
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: period, in: query, schema: { type: string, pattern: '^\d{4}-\d{2}$' } }
+        - $ref: '#/components/parameters/Search'
+      responses:
+        '200':
+          description: Company- and queue-scoped Laboratory orders
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/LaboratoryOrder' } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /laboratory/orders/{orderId}/receive:
+    post:
+      operationId: receiveLaboratoryOrder
+      summary: Confirm physical receipt by the Laboratory
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion]
+              properties:
+                expectedVersion: { type: integer, minimum: 1 }
+                internalNote: { type: string, maxLength: 2000 }
+            example: { expectedVersion: 4, internalNote: Fabricated sealed-box receipt note. }
+      responses:
+        '200': { description: Lab order and unit receipt recorded, content: { application/json: { schema: { $ref: '#/components/schemas/LaboratoryOrder' } } } }
+        '409': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /laboratory/units/{unitId}:
+    patch:
+      operationId: updateCalibrationUnit
+      summary: Update one unit's calibration status or serial metadata
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/UnitId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion]
+              properties:
+                expectedVersion: { type: integer, minimum: 1 }
+                status: { type: string, enum: [lab_received, calibration_in_progress, calibration_on_hold, calibration_completed, awaiting_lab_release, released_from_lab] }
+                serialNumber: { type: string, maxLength: 120 }
+                customerMessage: { type: string, maxLength: 1000 }
+                internalNote: { type: string, maxLength: 2000 }
+      responses:
+        '200': { description: Updated unit, content: { application/json: { schema: { $ref: '#/components/schemas/CalibrationUnit' } } } }
+        '409': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /laboratory/orders/{orderId}/release:
+    post:
+      operationId: releaseLaboratoryOrder
+      summary: Record physical release while leaving certificate work active
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [receivingDepartment, expectedVersion]
+              properties:
+                receivingDepartment: { type: string, enum: [expediting, dispatch] }
+                expectedVersion: { type: integer, minimum: 1 }
+                internalNote: { type: string, maxLength: 2000 }
+      responses:
+        '200': { description: Physical release recorded; pending certificates remain queued }
+        '409': { $ref: '#/components/responses/ApiError' }
+  /laboratory/orders/{orderId}/confirm-receipt:
+    post:
+      operationId: confirmReceiptFromLaboratory
+      summary: Confirm Expediting or Dispatch received a Laboratory order
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [receivingDepartment, expectedVersion]
+              properties:
+                receivingDepartment: { type: string, enum: [expediting, dispatch] }
+                expectedVersion: { type: integer, minimum: 1 }
+                customerMessage: { type: string, maxLength: 1000 }
+                internalNote: { type: string, maxLength: 2000 }
+      responses:
+        '200': { description: Department receipt, notifications and audit recorded atomically }
+        '409': { $ref: '#/components/responses/ApiError' }
+  /laboratory/certificates:
+    post:
+      operationId: uploadUnitCertificate
+      summary: Upload one PDF certificate for one certified physical unit
+      description: Requires upload_certificate. One active certificate per unit is enforced server-side.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [unitId, orderId, orderItemId, certificateNumber, certificateType, certificateDate, file]
+              properties:
+                unitId: { type: string, format: uuid }
+                orderId: { type: string, format: uuid }
+                orderItemId: { type: string, format: uuid }
+                certificateNumber: { type: string, maxLength: 120 }
+                certificateType: { type: string, enum: [sanas, traceable] }
+                certificateDate: { type: string, format: date }
+                expiryDate: { type: string, format: date }
+                resultSummary: { type: string, maxLength: 2000 }
+                serialNumber: { type: string, maxLength: 120 }
+                internalNote: { type: string, maxLength: 2000 }
+                file: { type: string, format: binary, description: PDF only; production limit configured by IT }
+      responses:
+        '201': { description: Certificate stored, linked, audited and notification queued, content: { application/json: { schema: { $ref: '#/components/schemas/Certificate' } } } }
+        '409': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /laboratory/certificates/{certificateId}/download:
+    post:
+      operationId: createCertificateDownload
+      summary: Create a short-lived audited certificate download
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/CertificateId' }]
+      responses:
+        '200':
+          description: Authorised, expiring download
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [downloadUrl, expiresAt]
+                properties:
+                  downloadUrl: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /laboratory/tasks/{taskId}/archive:
+    post:
+      operationId: archiveLaboratoryTask
+      summary: Archive a physically released task only after every unit certificate is complete
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/LabTaskId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason, expectedVersion]
+              properties:
+                reason: { type: string, minLength: 10, maxLength: 1000 }
+                expectedVersion: { type: integer, minimum: 1 }
+      responses:
+        '200': { description: Laboratory task archived }
+        '409': { $ref: '#/components/responses/ApiError' }
+  /quality/orders:
+    get:
+      operationId: listQualityOrders
+      summary: List non-Lab orders in the authorised QA queue
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: period, in: query, schema: { type: string, pattern: '^\d{4}-\d{2}$' } }
+        - $ref: '#/components/parameters/Search'
+      responses:
+        '200':
+          description: QA queue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/QualityTask' } }
+  /quality/orders/{orderId}/actions:
+    post:
+      operationId: performQualityAction
+      summary: Start, pass, fail, or release a controlled QA inspection
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QualityActionRequest' }
+            examples:
+              fail:
+                value:
+                  action: fail_qa
+                  expectedVersion: 8
+                  data:
+                    problemCategory: leakage
+                    problemDescription: Fabricated test leak detected during final inspection.
+                    affectedOrderItemId: 00000000-0000-4000-8000-000000000401
+                    severity: high
+                    dateFound: '2026-07-29'
+                    returnDestination: assembly
+                    customerMessage: A quality issue was identified and the order has been returned for correction.
+                    internalNote: Fabricated QA detail.
+      responses:
+        '200': { description: QA state, immutable inspection history, notifications and audit updated }
+        '409': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /quality/orders/{orderId}/rework:
+    post:
+      operationId: updateQualityRework
+      summary: Track correction or resubmit an order for QA reinspection
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, expectedVersion]
+              properties:
+                action: { type: string, enum: [start_rework, update_rework, resubmit_to_qa] }
+                expectedVersion: { type: integer, minimum: 1 }
+                correctionStage: { type: string, maxLength: 160 }
+                estimatedCorrectionDate: { type: string, format: date }
+                customerMessage: { type: string, maxLength: 1000 }
+                internalNote: { type: string, maxLength: 2000 }
+      responses:
+        '200': { description: Rework cycle updated without overwriting prior QA attempts }
+        '409': { $ref: '#/components/responses/ApiError' }
+  /dispatch/orders/{orderId}/receive:
+    post:
+      operationId: confirmDispatchReceipt
+      summary: Separately confirm physical receipt of any order entering Dispatch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DispatchReceiptRequest' }
+            example:
+              sourceDepartment: quality_assurance
+              numberOfPackages: 2
+              customerMessage: Your order has been received by Dispatch and is being prepared for handover.
+              internalNote: Fabricated sealed-carton receipt note.
+              expectedVersion: 12
+      responses:
+        '200': { description: Receipt and all authorised timelines recorded atomically }
+        '409': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /auth/credential-changes/challenge:
+    post:
+      operationId: requestCredentialChangeChallenge
+      summary: Issue a short-lived, one-time verification challenge
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CredentialChallengeRequest' }
+            example: { realm: internal, changeType: password }
+      responses:
+        '201': { description: Verification delivery queued, content: { application/json: { schema: { $ref: '#/components/schemas/CredentialChallenge' } } } }
+        '429': { $ref: '#/components/responses/ApiError' }
+  /auth/credential-changes/confirm:
+    post:
+      operationId: confirmCredentialChange
+      summary: Consume a valid code and apply the credential change
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CredentialChangeConfirmation' }
+            example:
+              requestId: 00000000-0000-4000-8000-000000000701
+              verificationCode: '123456'
+              newPassword: Example-Only-Strong-Password-47!
+      responses:
+        '200': { description: Credential changed, challenge invalidated and sessions revoked }
+        '401': { $ref: '#/components/responses/ApiError' }
+        '409': { $ref: '#/components/responses/ApiError' }
+  /analytics/operations:
+    get:
+      operationId: getOperationalAnalytics
+      summary: Return permission-filtered, pricing-safe operational analytics
+      parameters:
+        - { name: period, in: query, schema: { type: string, pattern: '^\d{4}(-\d{2})?$' } }
+        - { name: branchId, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Operational metrics authorised for the caller
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationalAnalytics' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /companies/{companyId}/representative-assignment:
+    put:
+      operationId: assignDedicatedRepresentative
+      summary: Assign or reassign a company's dedicated representative
+      description: Customer users cannot call this endpoint. Branch eligibility and audit creation are server enforced.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/CompanyId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [representativeId, reason]
+              properties:
+                representativeId: { type: string, format: uuid }
+                reason: { type: string, minLength: 10, maxLength: 1000 }
+      responses:
+        '200': { description: Dedicated assignment saved and audited }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ApiError' }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -1962,6 +2292,21 @@ components:
       schema: { type: string, format: uuid }
     OverrideId:
       name: overrideId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UnitId:
+      name: unitId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CertificateId:
+      name: certificateId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    LabTaskId:
+      name: taskId
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -2024,6 +2369,140 @@ components:
               message: You do not have access to this record.
               correlationId: corr-demo-403
   schemas:
+    CalibrationUnit:
+      type: object
+      required: [id, orderId, orderItemId, unitSequence, productModel, calibrationType, status, certificateStatus]
+      properties:
+        id: { type: string, format: uuid }
+        orderId: { type: string, format: uuid }
+        orderItemId: { type: string, format: uuid }
+        unitSequence: { type: integer, minimum: 1 }
+        productModel: { type: string }
+        productDescription: { type: string }
+        serialNumber: { type: string, nullable: true }
+        calibrationType: { type: string, enum: [sanas, traceable] }
+        urgent: { type: boolean }
+        status: { type: string }
+        certificateStatus: { type: string }
+        receivedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        releasedAt: { type: string, format: date-time, nullable: true }
+    LaboratoryOrder:
+      type: object
+      required: [id, reference, companyId, routing, units]
+      properties:
+        id: { type: string, format: uuid }
+        reference: { type: string, example: OR-DEMO-2101 }
+        sourceRfqReference: { type: string, example: RFQ-DEMO-2101 }
+        companyId: { type: string, format: uuid }
+        companyName: { type: string, example: Fabricated Cape Engineering }
+        internalJobNumber: { type: string, example: JOB-DEMO-2101 }
+        customerPoNumber: { type: string, example: PO-DEMO-2101 }
+        trackingStatus: { type: string }
+        routing:
+          type: object
+          properties:
+            requiresLaboratory: { type: boolean }
+            certificateTypes: { type: array, items: { type: string, enum: [sanas, traceable] } }
+        units: { type: array, items: { $ref: '#/components/schemas/CalibrationUnit' } }
+    Certificate:
+      type: object
+      required: [id, unitId, orderId, certificateNumber, certificateType, certificateDate, uploadedAt]
+      properties:
+        id: { type: string, format: uuid }
+        unitId: { type: string, format: uuid }
+        orderId: { type: string, format: uuid }
+        orderItemId: { type: string, format: uuid }
+        certificateNumber: { type: string, example: CERT-DEMO-2101 }
+        certificateType: { type: string, enum: [sanas, traceable] }
+        certificateDate: { type: string, format: date }
+        uploadDate: { type: string, format: date-time }
+        downloadAuthorised: { type: boolean }
+    QualityTask:
+      type: object
+      required: [id, orderId, status, inspectionCount, reworkCount]
+      properties:
+        id: { type: string, format: uuid }
+        orderId: { type: string, format: uuid }
+        status: { type: string }
+        inspectionCount: { type: integer, minimum: 0 }
+        reworkCount: { type: integer, minimum: 0 }
+        previousFailures: { type: array, items: { type: object, additionalProperties: true } }
+    QualityActionRequest:
+      type: object
+      additionalProperties: false
+      required: [action, expectedVersion, data]
+      properties:
+        action: { type: string, enum: [start_qa, pass_qa, fail_qa, release_qa_order] }
+        expectedVersion: { type: integer, minimum: 1 }
+        data:
+          type: object
+          properties:
+            inspectionDate: { type: string, format: date }
+            checklistConfirmed: { type: boolean }
+            meetsRequirements: { type: boolean }
+            problemCategory: { type: string }
+            problemDescription: { type: string }
+            otherExplanation: { type: string }
+            affectedOrderItemId: { type: string, format: uuid }
+            severity: { type: string, enum: [low, medium, high, critical] }
+            dateFound: { type: string, format: date }
+            returnDestination: { type: string }
+            customerMessage: { type: string }
+            internalNote: { type: string }
+    DispatchReceiptRequest:
+      type: object
+      additionalProperties: false
+      required: [sourceDepartment, numberOfPackages, customerMessage, expectedVersion]
+      properties:
+        sourceDepartment: { type: string, enum: [laboratory, quality_assurance, expediting, planning, authorised_exception] }
+        numberOfPackages: { type: integer, minimum: 1, maximum: 999 }
+        exceptionReason: { type: string, minLength: 10, maxLength: 1000 }
+        customerMessage: { type: string, minLength: 5, maxLength: 1000 }
+        internalNote: { type: string, maxLength: 2000 }
+        expectedVersion: { type: integer, minimum: 1 }
+    CredentialChallengeRequest:
+      type: object
+      additionalProperties: false
+      required: [realm, changeType]
+      properties:
+        realm: { type: string, enum: [customer, internal] }
+        changeType: { type: string, enum: [username, password] }
+    CredentialChallenge:
+      type: object
+      required: [requestId, expiresAt, attemptsRemaining, delivery]
+      properties:
+        requestId: { type: string, format: uuid }
+        expiresAt: { type: string, format: date-time }
+        attemptsRemaining: { type: integer, minimum: 0 }
+        delivery: { type: string, enum: [email_pending] }
+        developmentCode:
+          type: string
+          description: Present only in an explicitly enabled non-production mock environment.
+    CredentialChangeConfirmation:
+      type: object
+      additionalProperties: false
+      required: [requestId, verificationCode]
+      properties:
+        requestId: { type: string, format: uuid }
+        verificationCode: { type: string, pattern: '^\d{6}$' }
+        newUsername: { type: string, minLength: 4, maxLength: 80 }
+        newPassword: { type: string, minLength: 12, maxLength: 128, writeOnly: true }
+    OperationalAnalytics:
+      type: object
+      required: [generatedAt, period, totals, stageAverages, products, representatives]
+      properties:
+        generatedAt: { type: string, format: date-time }
+        period: { type: string }
+        totals: { type: object, additionalProperties: { type: number } }
+        stageAverages: { type: object, additionalProperties: { type: number } }
+        products: { type: array, items: { type: object, additionalProperties: true } }
+        representatives: { type: array, items: { type: object, additionalProperties: true } }
+        revenue:
+          type: object
+          description: Placeholder only; omitted unless an explicit protected-pricing permission and approved backend source exist.
+          properties:
+            enabled: { type: boolean, const: false }
     Role:
       type: string
       enum: [customer, sales_representative, planning, expeditor, dispatch, buyer, manager, administrator]

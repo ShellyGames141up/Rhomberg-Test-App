@@ -1,5 +1,18 @@
 # Production API and PostgreSQL Specification
 
+## Phase 21 extension
+
+The proposed model and OpenAPI contract now include the certification, Laboratory, Quality Assurance, department-receipt, credential-verification and operational-analytics boundaries described in:
+
+- `docs/DATABASE_SCHEMA.md`
+- `docs/API_CONTRACT.md`
+- `docs/LAB_WORKFLOW.md`
+- `docs/CERTIFICATE_WORKFLOW.md`
+- `docs/QA_WORKFLOW.md`
+- `docs/DISPATCH_WORKFLOW.md`
+
+The SQL proposal adds per-unit calibration/certificate constraints, immutable certificate/inspection history, company-scoped Lab/QA records, separate physical receipts, one-time credential challenges and pricing-safe aggregates. No production connection or migration has been created.
+
 Status: design proposal only
 Specification version: 0.6
 Last updated: 29 July 2026

@@ -50,7 +50,11 @@ const validateDocumentMetadata = (file, field) => {
 
 export function validateSignIn({ email, password }) {
   const errors = {};
-  if (!emailPattern.test(present(email))) errors.email = 'Enter a valid email address.';
+  const identifier = present(email);
+  const usernamePattern = /^[a-zA-Z][a-zA-Z0-9._-]{2,39}$/;
+  if (!emailPattern.test(identifier) && !usernamePattern.test(identifier)) {
+    errors.email = 'Enter a valid email address or sign-in name.';
+  }
   if (!present(password)) errors.password = 'Enter your password.';
   if (Object.keys(errors).length) throwValidation(errors, 'Check your sign-in details.');
 }
@@ -519,6 +523,42 @@ const dispatchValue = (data, field, legacyField) => (
   ?? data?.[legacyField]
   ?? data?.[field]
 );
+
+export function validateDispatchReceipt(data = {}) {
+  const input = data.dispatchReceipt || data;
+  const sourceDepartment = present(input.sourceDepartment || data.dispatchReceiptSourceDepartment);
+  const numberOfPackages = Number(input.numberOfPackages ?? data.dispatchReceiptNumberOfPackages);
+  const internalNote = present(input.internalNote || data.dispatchReceiptInternalNote);
+  const exceptionReason = present(input.exceptionReason || data.dispatchReceiptExceptionReason);
+  const customerMessage = present(
+    input.customerMessage
+    || data.dispatchReceiptCustomerMessage
+    || 'Your order has been received by Dispatch and is being prepared for handover.',
+  );
+  const allowedSources = ['laboratory', 'quality_assurance', 'expediting', 'planning', 'authorised_exception'];
+  const errors = {};
+  if (!allowedSources.includes(sourceDepartment)) {
+    errors.dispatchReceiptSourceDepartment = 'Select the department that handed the order to Dispatch.';
+  }
+  if (!Number.isInteger(numberOfPackages) || numberOfPackages < 1 || numberOfPackages > 999) {
+    errors.dispatchReceiptNumberOfPackages = 'Enter a package quantity between 1 and 999.';
+  }
+  if (sourceDepartment === 'authorised_exception' && exceptionReason.length < 10) {
+    errors.dispatchReceiptExceptionReason = 'Explain the authorised exception in at least 10 characters.';
+  }
+  if (internalNote.length > 2000) errors.dispatchReceiptInternalNote = 'Keep the internal note below 2,000 characters.';
+  if (customerMessage.length < 5 || customerMessage.length > 1000) {
+    errors.dispatchReceiptCustomerMessage = 'Enter a clear customer message below 1,000 characters.';
+  }
+  if (Object.keys(errors).length) throwValidation(errors, 'Check the Dispatch receipt information.');
+  return {
+    sourceDepartment,
+    numberOfPackages,
+    internalNote,
+    exceptionReason,
+    customerMessage,
+  };
+}
 
 export function validateDispatchAction(
   action,

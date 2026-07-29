@@ -7,7 +7,15 @@ const formatDate = value => new Date(value).toLocaleString('en-ZA', {
   day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
 });
 
-export function OrderTracking({ account, enquiries, onStartEnquiry, onAction, serviceMode, focusRecordId = '' }) {
+export function OrderTracking({
+  account,
+  enquiries,
+  onStartEnquiry,
+  onAction,
+  serviceMode,
+  certificateActions,
+  focusRecordId = '',
+}) {
   const ordered = useMemo(() => [...enquiries].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)), [enquiries]);
   const [openId, setOpenId] = useState(null);
   const activeCount = ordered.filter(enquiry => !TERMINAL_STATUSES.has(enquiry.trackingStatus)).length;
@@ -31,7 +39,15 @@ export function OrderTracking({ account, enquiries, onStartEnquiry, onAction, se
       {ordered.length ? (
         <div className="tracking-list">
           {ordered.map(enquiry => (
-            <TrackingCard key={enquiry.id} enquiry={enquiry} expanded={openId === enquiry.id} onToggle={() => setOpenId(current => current === enquiry.id ? null : enquiry.id)} onAction={onAction} serviceMode={serviceMode} />
+            <TrackingCard
+              key={enquiry.id}
+              enquiry={enquiry}
+              expanded={openId === enquiry.id}
+              onToggle={() => setOpenId(current => current === enquiry.id ? null : enquiry.id)}
+              onAction={onAction}
+              serviceMode={serviceMode}
+              certificateActions={certificateActions}
+            />
           ))}
         </div>
       ) : (
@@ -43,7 +59,7 @@ export function OrderTracking({ account, enquiries, onStartEnquiry, onAction, se
   );
 }
 
-function TrackingCard({ enquiry, expanded, onToggle, onAction, serviceMode }) {
+function TrackingCard({ enquiry, expanded, onToggle, onAction, serviceMode, certificateActions }) {
   const status = statusById(enquiry.trackingStatus, enquiry.workflowType);
   const progress = progressForStatus(enquiry.trackingStatus, enquiry.workflowType);
   const totalQuantity = (enquiry.items || []).reduce((sum, item) => sum + Number(item.quantity || 1), 0);
@@ -71,6 +87,13 @@ function TrackingCard({ enquiry, expanded, onToggle, onAction, serviceMode }) {
             <h3>Requested instruments</h3>
             {(enquiry.items || []).map(item => <span key={item.lineId}><img src={item.image} alt="" /><b>{item.code}</b><small>{item.name}</small><strong>× {item.quantity}</strong></span>)}
           </div>
+          {isOrder && enquiry.laboratory?.units?.length > 0 && (
+            <CustomerCertificatePanel
+              units={enquiry.laboratory.units}
+              certificateActions={certificateActions}
+              serviceMode={serviceMode}
+            />
+          )}
           <div className="tracking-timeline" aria-label="Customer-visible order timeline">
             <h3>Order timeline</h3>
             {history.map((event, index) => {
@@ -81,6 +104,59 @@ function TrackingCard({ enquiry, expanded, onToggle, onAction, serviceMode }) {
         </div>
       )}
     </article>
+  );
+}
+
+function CustomerCertificatePanel({ units, certificateActions, serviceMode }) {
+  const [downloadingId, setDownloadingId] = useState('');
+  const [error, setError] = useState('');
+  const available = units.filter(unit => unit.certificateId);
+
+  const download = async unit => {
+    if (!certificateActions?.downloadCertificate || !unit.certificateId || downloadingId) return;
+    setError('');
+    setDownloadingId(unit.certificateId);
+    try {
+      const certificate = await certificateActions.downloadCertificate(unit.certificateId);
+      const downloadUrl = certificate.downloadUrl || certificate.dataUrl;
+      if (!downloadUrl) throw new Error('The certificate file is not available in this preview.');
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = certificate.fileName || `${unit.certificateNumber || 'calibration-certificate'}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (downloadError) {
+      setError(downloadError?.message || 'The certificate could not be downloaded. Please try again.');
+    } finally {
+      setDownloadingId('');
+    }
+  };
+
+  return (
+    <section className="customer-certificate-panel" aria-label="Calibration certificates">
+      <header>
+        <span>CERT</span>
+        <div>
+          <small>Unit-level controlled documents</small>
+          <h3>Calibration certificates</h3>
+        </div>
+        <strong>{available.length}/{units.length} available</strong>
+      </header>
+      <div>
+        {units.map(unit => (
+          <article key={unit.id}>
+            <span><small>{unit.certificationType === 'sanas' ? 'SANAS' : 'Traceable'}</small><strong>{unit.productCode} · Unit {unit.unitNumber}</strong></span>
+            <span><small>Certificate</small><strong>{unit.certificateNumber || 'Pending Laboratory release'}</strong></span>
+            {unit.certificateId
+              ? <button type="button" onClick={() => download(unit)} disabled={Boolean(downloadingId)}>{downloadingId === unit.certificateId ? 'Preparing…' : 'Download PDF'}</button>
+              : <em>Not yet available</em>}
+          </article>
+        ))}
+      </div>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <p>{serviceMode === 'mock' ? 'Demo certificates are stored only in this browser. Every download still creates an audit-history entry.' : 'Downloads are authorised against your company account and recorded in the audit history.'}</p>
+    </section>
   );
 }
 

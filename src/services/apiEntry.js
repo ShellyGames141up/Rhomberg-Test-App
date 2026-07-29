@@ -24,6 +24,8 @@ export {
   roleProfileFor,
   usesDispatchWorkspace,
   usesExpeditorWorkspace,
+  usesLaboratoryWorkspace,
   usesPlanningWorkspace,
+  usesQualityWorkspace,
 } from '../domain/accessControl.js';
 export { MAX_PO_FILE_BYTES } from './validation.js';

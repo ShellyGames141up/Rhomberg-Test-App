@@ -82,8 +82,13 @@ assert.equal(usesDispatchWorkspace({ role: USER_ROLES.EXPEDITOR }), false);
 
 assert.deepEqual(
   ROLE_PERMISSIONS[USER_ROLES.BUYER],
-  [PERMISSIONS.ACCESS_INTERNAL_WORKSPACE, PERMISSIONS.READ_CATALOGUE],
-  'Buyer must remain prepared but operationally inactive',
+  [
+    PERMISSIONS.ACCESS_INTERNAL_WORKSPACE,
+    PERMISSIONS.READ_CATALOGUE,
+    PERMISSIONS.CHANGE_OWN_USERNAME,
+    PERMISSIONS.CHANGE_OWN_PASSWORD,
+  ],
+  'Buyer must remain operationally inactive while retaining personal account-security controls',
 );
 assert.ok(roleCan(USER_ROLES.MANAGER, PERMISSIONS.VIEW_ALL_ORDERS));
 assert.ok(roleCan(USER_ROLES.MANAGER, PERMISSIONS.OVERRIDE_WORKFLOW));
@@ -160,7 +165,9 @@ assert.ok(canAccessRecord(manager, orderAt('archived')));
 assert.deepEqual(Object.keys(ORDER_QUEUE_SCOPES).sort(), [
   PERMISSIONS.VIEW_DISPATCH_QUEUE,
   PERMISSIONS.VIEW_EXPEDITING_QUEUE,
+  PERMISSIONS.VIEW_LAB_QUEUE,
   PERMISSIONS.VIEW_PLANNING_QUEUE,
+  PERMISSIONS.VIEW_QA_QUEUE,
 ].sort());
 
 const customerNotification = {

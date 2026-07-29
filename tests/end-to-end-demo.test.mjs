@@ -311,7 +311,7 @@ assert.ok(representativeProgressNotifications.some(item => (
 )));
 assert.ok(representativeProgressNotifications.length >= 5, 'the representative must receive the customer-visible progress updates');
 
-// 14. Expediting completes its required checks and hands the order to Dispatch.
+// 14. Expediting completes its required checks and hands the standard order to QA.
 await services.auth.signOut();
 await services.auth.signIn({
   email: 'expeditor.workflow@example.invalid',
@@ -323,11 +323,41 @@ order = await services.workflow.performAction(order.id, {
   action: 'complete_expediting',
   comment: '',
   data: {
-    expeditingCustomerMessage: 'Your demonstration order is moving to Dispatch.',
+    expeditingCustomerMessage: 'Your demonstration order is moving to Quality Assurance.',
     expeditingInternalNote: 'Fabricated internal hand-off check completed.',
     expeditingEstimatedCompletionDate: '2026-08-08',
     expeditingCompletionCheckConfirmed: true,
   },
+  expectedVersion: order.version,
+});
+assert.equal(order.trackingStatus, 'awaiting_qa');
+
+// 14a. QA completes the controlled inspection and releases the order to Dispatch.
+await services.auth.signOut();
+await services.auth.signIn({
+  email: 'quality.workflow@example.invalid',
+  password: 'Quality123!',
+});
+order = (await services.qualityAssurance.listOrders()).find(item => item.id === orderId);
+order = await services.workflow.performAction(order.id, {
+  entityType: 'order',
+  action: 'start_qa',
+  comment: '',
+  data: { qaStart: { checklistReference: 'QA-DEMO-E2E-001', internalNote: 'Fabricated QA intake note.' } },
+  expectedVersion: order.version,
+});
+order = await services.workflow.performAction(order.id, {
+  entityType: 'order',
+  action: 'pass_qa',
+  comment: '',
+  data: { qaPass: { customerMessage: 'Your demonstration order passed final quality inspection.', internalNote: 'Fabricated QA pass note.' } },
+  expectedVersion: order.version,
+});
+order = await services.workflow.performAction(order.id, {
+  entityType: 'order',
+  action: 'release_qa_order',
+  comment: '',
+  data: {},
   expectedVersion: order.version,
 });
 assert.equal(order.trackingStatus, 'awaiting_dispatch');
@@ -342,6 +372,17 @@ assert.ok((await services.notifications.list()).some(item => (
   item.entityId === orderId && item.eventType === 'order_sent_to_dispatch'
 )));
 order = (await services.orders.list()).find(item => item.id === orderId);
+order = await services.workflow.performAction(order.id, {
+  entityType: 'order',
+  action: 'confirm_dispatch_receipt',
+  comment: '',
+  data: {
+    sourceDepartment: 'quality_assurance',
+    numberOfPackages: 2,
+    internalNote: 'Fabricated QA-to-Dispatch handover confirmation.',
+  },
+  expectedVersion: order.version,
+});
 order = await services.workflow.performAction(order.id, {
   entityType: 'order',
   action: 'mark_ready_for_collection',
@@ -461,6 +502,9 @@ for (const action of [
   'workflow.start_expediting',
   'workflow.add_expediting_update',
   'workflow.complete_expediting',
+  'workflow.start_qa',
+  'workflow.pass_qa',
+  'workflow.release_qa_order',
   'workflow.mark_ready_for_collection',
   'workflow.confirm_collection',
   'workflow.complete_collection',

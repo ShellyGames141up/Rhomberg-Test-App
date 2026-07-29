@@ -14,6 +14,7 @@ export const DISPATCH_PROOF_TYPES = Object.freeze([
 ]);
 
 export const DISPATCH_PRIMARY_QUEUE_STATUSES = Object.freeze([
+  'awaiting_lab_receipt_dispatch',
   'awaiting_dispatch',
   'ready_for_collection',
   'out_for_delivery',
@@ -31,6 +32,7 @@ export const DISPATCH_QUEUE_STATUSES = Object.freeze([
 
 export const DISPATCH_QUEUE_FILTERS = Object.freeze([
   Object.freeze({ id: 'all', label: 'All Dispatch work' }),
+  Object.freeze({ id: 'laboratory_receipt', label: 'Laboratory receipt' }),
   Object.freeze({ id: 'awaiting_dispatch', label: 'Awaiting Dispatch' }),
   Object.freeze({ id: 'collection', label: 'Collection orders' }),
   Object.freeze({ id: 'delivery', label: 'Delivery orders' }),
@@ -57,9 +59,6 @@ export const dispatchProofTypeById = id => (
 
 export const dispatchReceivedAt = order => (
   order?.dispatch?.receivedAt
-  || order?.submittedToDispatchAt
-  || order?.updatedAt
-  || order?.createdAt
   || ''
 );
 
@@ -83,7 +82,13 @@ export const dispatchOrderPriority = order => (
 );
 
 export const dispatchOrderAgeDays = (order, now = new Date()) => {
-  const received = new Date(dispatchReceivedAt(order));
+  const received = new Date(
+    dispatchReceivedAt(order)
+    || order?.dispatch?.submittedAt
+    || order?.submittedToDispatchAt
+    || order?.updatedAt
+    || order?.createdAt,
+  );
   if (Number.isNaN(received.getTime())) return 0;
   return Math.max(0, Math.floor((now.getTime() - received.getTime()) / 86400000));
 };
@@ -126,6 +131,7 @@ const searchableText = order => [
 
 const matchesFilter = (order, filter) => {
   if (filter === 'all') return true;
+  if (filter === 'laboratory_receipt') return dispatchStageFor(order) === 'awaiting_lab_receipt_dispatch';
   if (filter === 'awaiting_dispatch') return dispatchStageFor(order) === 'awaiting_dispatch';
   if (filter === 'collection') return order?.fulfilment === 'collect';
   if (filter === 'delivery') return order?.fulfilment === 'delivery';
@@ -168,6 +174,7 @@ export const dispatchQueueCounts = orders => {
   const queue = (orders || []).filter(isDispatchQueueOrder);
   return {
     all: queue.length,
+    laboratoryReceipt: queue.filter(order => dispatchStageFor(order) === 'awaiting_lab_receipt_dispatch').length,
     awaitingDispatch: queue.filter(order => dispatchStageFor(order) === 'awaiting_dispatch').length,
     collection: queue.filter(order => order.fulfilment === 'collect').length,
     delivery: queue.filter(order => order.fulfilment === 'delivery').length,

@@ -78,7 +78,7 @@ export function Auth({
 
         {tab === 'signin' ? (
           <form className="auth-form" onSubmit={submitSignIn} noValidate>
-            <FormField label="Email address" error={fieldErrors.email}><input name="email" type="email" autoComplete="email" required aria-invalid={Boolean(fieldErrors.email)} placeholder="name@company.co.za" /></FormField>
+            <FormField label="Email or sign-in name" error={fieldErrors.email}><input name="email" type="text" autoComplete="username" required aria-invalid={Boolean(fieldErrors.email)} placeholder="name@company.co.za or username" /></FormField>
             <PasswordField name="password" label="Password" show={showPassword} onToggle={() => setShowPassword(value => !value)} error={fieldErrors.password} />
             {(error || accessError) && <p className="form-error" role="alert">{error || accessError}</p>}
             <button className="primary-button full" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Sign in'} <span>{isSubmitting ? '•••' : '→'}</span></button>

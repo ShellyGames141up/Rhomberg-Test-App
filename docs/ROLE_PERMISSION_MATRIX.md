@@ -10,8 +10,14 @@ Management oversight requires `view_reports`. Representative reassignment, workf
 | --- | :---: | :---: | :---: | --- |
 | Customer | Yes | No | No | Authorised company only |
 | Sales representative | No | Yes | Yes | Assigned RFQs/orders |
+| Sales manager | No | Yes | Yes | Representative-focused scope authorised by management policy |
+| Company owner | No | Yes | Yes | Company-wide pricing-safe operational scope |
 | Planning | No | No | Yes | Planning-stage queue |
 | Expeditor | No | Yes | Yes | Expediting-stage queue |
+| Laboratory user | No | No | Yes | SANAS/Traceable queue and unit records only |
+| Laboratory manager | No | No | Yes | Laboratory queue, archive and reporting controls |
+| Quality Assurance | No | No | Yes | Non-Laboratory QA queue only |
+| Quality manager | No | No | Yes | QA queue and process-trend reporting |
 | Dispatch | No | No | Yes | Dispatch-stage queue |
 | Buyer | No | No | Prepared/inactive | No active operational queue |
 | Manager | No | Yes | Yes | Approved wider operational scope |
@@ -41,3 +47,18 @@ Customers receive only their own company’s customer-visible handover data. Rep
 All signed-in roles receive only the notification rows produced for their existing record scope. Customers remain company-scoped; representatives remain assignment-scoped; Planning, Expediting and Dispatch remain queue-scoped. Managers and Administrators can inspect wider operational notification state because they already hold wider RFQ/order view permissions.
 
 `retry_notification_delivery` is granted to Manager and Administrator only. It queues a failed email/push delivery for the background worker and never changes an RFQ/order status. Every retry is audited. Buyer has no workflow notification queue while its workflow remains inactive.
+
+## Phase 21 specialised permissions
+
+| Capability | Customer | Rep | Lab | QA | Dispatch | Manager/Admin |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: |
+| View Lab queue / update calibration | No | Status only | Yes | No | Status only | Yes |
+| Upload unit certificate | No | No | Yes | No | No | Yes |
+| Download certificate PDF | Own company | No | Yes | No | No | Yes |
+| View QA queue / inspect | No | Status only | No | Yes | Status only | Yes |
+| Create QA failure/rework | No | No | No | Yes | No | Yes |
+| Confirm Dispatch receipt | No | No | No | No | Yes | Yes |
+| Change own verified credentials | Yes | Yes | Yes | Yes | Yes | Yes |
+| Reassign dedicated representative | No | No | No | No | No | Authorised manager/admin |
+
+The table is explanatory. `src/services/contracts.js`, service scoping and workflow guards are canonical. A role never grants cross-company access by itself.

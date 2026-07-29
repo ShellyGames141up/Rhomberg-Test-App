@@ -72,3 +72,40 @@ These are public-preview demonstration identities only. They are not production 
 - The preview simulates email/push delivery states and does not contact a provider.
 - Do not describe customer quotation acknowledgement as payment or order acceptance.
 - The browser preview’s data is demonstration storage on that browser. The proposed backend specification is not connected.
+
+## Phase 21 fabricated demonstrations
+
+Use the internal desktop preview for Laboratory and QA. These scenarios are also exercised by `tests/phase21.test.mjs`. All names, references and files must remain fabricated.
+
+### Scenario A — SANAS order
+
+| Step | Role/account | Action | Expected result |
+| --- | --- | --- | --- |
+| A1 | Planning | Open seeded SANAS order `OR-LAB-2101` and submit its certified route. | Laboratory receives one unit task per quantity; QA does not receive it. |
+| A2 | Laboratory (`laboratory.workflow@example.invalid`) | Confirm receipt; start and complete each calibration unit. | Customer, assigned representative and Expeditor receive scoped safe updates; internal notes stay internal. |
+| A3 | Laboratory | Release physically to Dispatch while certificates remain pending. | Order movement continues; permanent certificate queue still lists every pending unit. |
+| A4 | Dispatch | Confirm receipt from Laboratory. | Custody, source, packages, audit and safe timelines are recorded. |
+| A5 | Laboratory | Upload a fabricated PDF with a unique number for every unit. | Each unit becomes certificate-complete; duplicate unit upload is rejected. |
+| A6 | Customer | Download only the certificate belonging to the authorised demo company. | Audited download succeeds; another company and a sales representative are denied. |
+| A7 | Laboratory manager | Archive the Laboratory task. | Archive succeeds only after physical release and all unit PDFs; legal hold/investigation blocks it. |
+
+### Scenario B — Traceable order
+
+Repeat A1–A7 with seeded Traceable order `OR-LAB-2102`, selecting certificate type `traceable`. Verify the monthly tracker counts certificates per unit—not per order—and that the ordinary QA queue excludes the order.
+
+### Scenario C — non-Lab QA failure and reinspection
+
+| Step | Role/account | Action | Expected result |
+| --- | --- | --- | --- |
+| C1 | Expeditor | Complete standard production and submit seeded order `OR-QA-2103` to QA. | Status is `awaiting_qa`; Laboratory does not receive it. |
+| C2 | QA (`quality.workflow@example.invalid`) | Start inspection and report a fabricated leakage problem for an affected line, returning it to Assembly. | Immutable failed inspection and rework cycle are created; customer, representative and Expeditor receive safe notifications. |
+| C3 | Expeditor | Track correction and resubmit to QA. | Status becomes `qa_reinspection_required`; original failure remains. |
+| C4 | QA | Start reinspection, confirm checklist/requirements, pass and release. | Second attempt passes; order becomes `awaiting_dispatch`. |
+| C5 | Dispatch | Confirm physical receipt, then complete collection or delivery. | Dispatch actions are blocked before receipt; afterwards the normal handover completes. |
+
+### Credential and branch checks
+
+- Customer and internal accounts cannot cross authentication realms.
+- Request a demo credential change, use the labelled mock code once, and verify expiry/reuse rejection.
+- Durban shows Dawie and Nadia only; Port Elizabeth shows Carmen only.
+- A dedicated company representative is reused on later RFQs; only authorised management can reassign it.

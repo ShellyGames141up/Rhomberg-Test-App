@@ -21,6 +21,15 @@ const EXPEDITING_ACTIONS = new Set([
   'complete_expediting',
 ]);
 
+const QA_REWORK_ACTIONS = new Set([
+  'start_qa_rework',
+  'resubmit_to_qa',
+]);
+
+const DISPATCH_RECEIPT_ACTIONS = new Set([
+  'confirm_dispatch_receipt',
+]);
+
 const usesExpeditingFields = (record, action) => (
   EXPEDITING_ACTIONS.has(action)
   && (!['place_on_hold', 'resume_order'].includes(action) || isExpeditingOwnedOrder(record))
@@ -69,6 +78,27 @@ export function WorkflowActionPanel({
         submittedData = expeditingActionDataFor(record, expeditingOptions, actionId, actionData);
       } else if (usesDispatchFields(record, actionId)) {
         submittedData = dispatchActionDataFor(record, dispatchOptions, actionId, actionData);
+      } else if (QA_REWORK_ACTIONS.has(actionId)) {
+        submittedData = {
+          qaRework: {
+            correctiveAction: String(actionData.correctiveAction || '').trim(),
+            customerMessage: String(actionData.customerMessage || '').trim(),
+            internalNote: String(actionData.internalNote || '').trim(),
+          },
+        };
+      } else if (DISPATCH_RECEIPT_ACTIONS.has(actionId)) {
+        const sourceDepartment = actionData.sourceDepartment
+          || record.dispatch?.sourceDepartment
+          || (record.routing?.requiresLaboratory ? 'laboratory' : 'quality_assurance');
+        submittedData = {
+          dispatchReceipt: {
+            sourceDepartment: String(sourceDepartment).trim(),
+            numberOfPackages: Number(actionData.numberOfPackages || record.dispatch?.numberOfPackages || 1),
+            exceptionReason: String(actionData.exceptionReason || '').trim(),
+            customerMessage: String(actionData.customerMessage || 'Your order has been received by Dispatch and is being prepared for handover.').trim(),
+            internalNote: String(actionData.internalNote || '').trim(),
+          },
+        };
       }
       const saved = await onAction(
         record.id,
@@ -101,7 +131,7 @@ export function WorkflowActionPanel({
         <p className="workflow-selected-action"><span>Next action</span><strong>{action.label}</strong><small>{action.toStatus ? statusById(action.toStatus, record.workflowType).label : ''}</small></p>
       )}
       <WorkflowActionFields action={action} data={actionData} onChange={setActionData} errors={fieldErrors} record={record} account={account} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} />
-      {!['mark_quoted', 'accept_order', 'complete_planning'].includes(action.action) && !usesExpeditingFields(record, action.action) && !usesDispatchFields(record, action.action) && <label className="form-field"><span>Workflow comment {action.requiresComment ? <b>Required</b> : <i>Optional</i>}</span><textarea rows="3" value={note} onChange={event => setNote(event.target.value)} placeholder="Add a clear update for the audit history and customer timeline." />{fieldErrors.comment && <small className="field-error">{fieldErrors.comment}</small>}</label>}
+      {!['mark_quoted', 'accept_order', 'complete_planning'].includes(action.action) && !usesExpeditingFields(record, action.action) && !usesDispatchFields(record, action.action) && !QA_REWORK_ACTIONS.has(action.action) && !DISPATCH_RECEIPT_ACTIONS.has(action.action) && <label className="form-field"><span>Workflow comment {action.requiresComment ? <b>Required</b> : <i>Optional</i>}</span><textarea rows="3" value={note} onChange={event => setNote(event.target.value)} placeholder="Add a clear update for the audit history and customer timeline." />{fieldErrors.comment && <small className="field-error">{fieldErrors.comment}</small>}</label>}
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="expeditor-update-actions"><button className="primary-button" type="button" onClick={save} disabled={isSaving || !actionId}>{isSaving ? 'Saving…' : action.label} <span>{isSaving ? '•••' : '→'}</span></button></div>
     </div>
@@ -119,6 +149,41 @@ function WorkflowActionFields({ action, data, onChange, errors = {}, record, acc
   }
   if (action.action === 'complete_planning') {
     return <PlanningFields record={record} account={account} options={planningOptions} data={data} onChange={onChange} errors={errors} />;
+  }
+  if (QA_REWORK_ACTIONS.has(action.action)) {
+    if (action.action === 'start_qa_rework') {
+      return <p className="workflow-helper"><strong>Controlled corrective-work receipt.</strong> This records that Expediting accepted the failed order for correction. The original inspection result remains immutable.</p>;
+    }
+    return (
+      <div className="quotation-confirmation-fields qa-rework-fields">
+        <p className="workflow-helper"><strong>Return for reinspection.</strong> Record the corrective work completed. Internal detail remains restricted from customers.</p>
+        <label className="form-field"><span>Corrective action <b>Required</b></span><textarea rows="3" value={data.correctiveAction || ''} onChange={event => set('correctiveAction', event.target.value)} placeholder="Describe the completed correction." />{errors.correctiveAction && <small className="field-error">{errors.correctiveAction}</small>}</label>
+        <label className="form-field"><span>Customer-facing update <i>Optional</i></span><textarea rows="2" value={data.customerMessage || ''} onChange={event => set('customerMessage', event.target.value)} placeholder="Example: Corrective work is complete and reinspection is queued." />{errors.customerMessage && <small className="field-error">{errors.customerMessage}</small>}</label>
+        <label className="form-field"><span>Internal rework note <i>Optional</i></span><textarea rows="2" value={data.internalNote || ''} onChange={event => set('internalNote', event.target.value)} placeholder="Restricted operational detail." />{errors.internalNote && <small className="field-error">{errors.internalNote}</small>}</label>
+      </div>
+    );
+  }
+  if (DISPATCH_RECEIPT_ACTIONS.has(action.action)) {
+    const defaultSource = record.dispatch?.sourceDepartment
+      || (record.routing?.requiresLaboratory ? 'laboratory' : 'quality_assurance');
+    const sourceDepartment = data.sourceDepartment ?? defaultSource;
+    const numberOfPackages = data.numberOfPackages ?? record.dispatch?.numberOfPackages ?? 1;
+    const customerMessage = data.customerMessage
+      ?? 'Your order has been received by Dispatch and is being prepared for handover.';
+    return (
+      <div className="quotation-confirmation-fields dispatch-receipt-fields">
+        <p className="workflow-helper"><strong>Separate receipt control.</strong> Confirm the physical handover before Dispatch prepares collection or delivery.</p>
+        <div className="form-grid">
+          <label className="form-field"><span>Source department <b>Required</b></span><select value={sourceDepartment} onChange={event => set('sourceDepartment', event.target.value)}><option value="">Select source</option><option value="laboratory">Laboratory</option><option value="quality_assurance">Quality Assurance</option><option value="expediting">Expediting</option><option value="planning">Planning</option><option value="authorised_exception">Authorised exception</option></select>{errors.dispatchReceiptSourceDepartment && <small className="field-error">{errors.dispatchReceiptSourceDepartment}</small>}</label>
+          <label className="form-field"><span>Number of packages <b>Required</b></span><input type="number" min="1" max="999" value={numberOfPackages} onChange={event => set('numberOfPackages', event.target.value)} />{errors.dispatchReceiptNumberOfPackages && <small className="field-error">{errors.dispatchReceiptNumberOfPackages}</small>}</label>
+        </div>
+        {sourceDepartment === 'authorised_exception' && <label className="form-field"><span>Exception reason <b>Required</b></span><textarea rows="3" value={data.exceptionReason || ''} onChange={event => set('exceptionReason', event.target.value)} placeholder="Record the authorised direct-to-Dispatch reason." />{errors.dispatchReceiptExceptionReason && <small className="field-error">{errors.dispatchReceiptExceptionReason}</small>}</label>}
+        <div className="form-grid">
+          <label className="form-field"><span>Customer-facing message <b>Required</b></span><textarea rows="3" value={customerMessage} onChange={event => set('customerMessage', event.target.value)} />{errors.dispatchReceiptCustomerMessage && <small className="field-error">{errors.dispatchReceiptCustomerMessage}</small>}</label>
+          <label className="form-field"><span>Internal receipt note <i>Optional</i></span><textarea rows="3" value={data.internalNote || ''} onChange={event => set('internalNote', event.target.value)} placeholder="Packaging or handover detail; never shown to customers." />{errors.dispatchReceiptInternalNote && <small className="field-error">{errors.dispatchReceiptInternalNote}</small>}</label>
+        </div>
+      </div>
+    );
   }
   if (action.action === 'mark_quoted') {
     const hasDocumentEvidence = Boolean(data.quotationDocumentFile || String(data.quotationDocumentReference || '').trim());

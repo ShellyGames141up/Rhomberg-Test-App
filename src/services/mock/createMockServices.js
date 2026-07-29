@@ -16,6 +16,28 @@ import {
   DISPATCH_PROOF_TYPES,
 } from '../../domain/dispatch.js';
 import {
+  allRequiredCertificatesPresent,
+  certificateQueueForOrders,
+  ensureLaboratoryRecord,
+  laboratoryMetrics,
+  MAX_CERTIFICATE_BYTES,
+  orderRequiresLaboratory,
+  validateCertificateUpload,
+  validateLaboratoryUnitUpdate,
+} from '../../domain/certification.js';
+import {
+  QA_PROBLEM_CATEGORIES,
+  QA_REWORK_DESTINATIONS,
+  QA_SEVERITIES,
+  orderRequiresQualityAssurance,
+  qualityMetrics,
+  validateQaFailure,
+  validateQaPass,
+  validateQaRework,
+  validateQaStart,
+} from '../../domain/qualityAssurance.js';
+import { buildPhase21Analytics } from '../../domain/analytics.js';
+import {
   createDefaultNotificationPreferences,
   createNotificationRecord,
   messageForNotificationRecipient,
@@ -72,6 +94,7 @@ import {
   validatePlanningSubmission,
   validateCustomerAccountForRfq,
   validateDispatchAction,
+  validateDispatchReceipt,
   validateEnquiry,
   validateExpeditingAction,
   validateQuotationConfirmation,
@@ -84,16 +107,23 @@ import { createBrowserStore } from '../browserStore.js';
 import {
   ADMINISTRATOR_ACCOUNT,
   BUYER_ACCOUNT,
+  COMPANY_OWNER_ACCOUNT,
   DEMO_ACCOUNT,
   DEMO_ENQUIRIES,
   DEMO_LOGINS,
   DISPATCH_ACCOUNT,
   EXPEDITOR_ACCOUNT,
   EXTRA_DEMO_ACCOUNTS,
+  LAB_ACCOUNT,
+  LAB_MANAGER_ACCOUNT,
   LEGACY_STORE_KEYS,
   MANAGER_ACCOUNT,
+  PHASE21_DEMO_ORDERS,
   PLANNING_ACCOUNT,
+  QA_ACCOUNT,
+  QA_MANAGER_ACCOUNT,
   SALES_ACCOUNT,
+  SALES_MANAGER_ACCOUNT,
   STORE_KEYS,
 } from './seedData.js';
 
@@ -127,6 +157,8 @@ const normaliseAccount = account => {
   return {
     ...account,
     role,
+    authRealm: account.authRealm || (role === USER_ROLES.CUSTOMER ? 'customer' : 'internal'),
+    signInName: account.signInName || '',
     companyId: account.companyId || (roleCan(role, PERMISSIONS.ACCESS_CUSTOMER_WORKSPACE) ? account.id : 'company-rhomberg'),
   };
 };
@@ -299,6 +331,57 @@ const toCustomerVisibleDispatch = dispatch => {
   };
 };
 
+const toCustomerVisibleLaboratory = laboratory => {
+  if (!laboratory) return undefined;
+  return {
+    status: laboratory.status,
+    currentMessage: laboratory.currentMessage,
+    receivedAt: laboratory.receivedAt,
+    releasedAt: laboratory.releasedAt,
+    lastUpdatedAt: laboratory.lastUpdatedAt,
+    units: (laboratory.units || []).map(unit => ({
+      id: unit.id,
+      productCode: unit.productCode,
+      productName: unit.productName,
+      unitNumber: unit.unitNumber,
+      quantityInLine: unit.quantityInLine,
+      certificationType: unit.certificationType,
+      status: unit.status,
+      certificateStatus: unit.certificateStatus,
+      certificateId: unit.certificateId,
+      certificateNumber: unit.certificateNumber,
+      certificateUploadedAt: unit.certificateUploadedAt || unit.certificate?.uploadedAt || '',
+      customerVisibleMessage: unit.customerVisibleMessage,
+      updatedAt: unit.updatedAt,
+    })),
+    updates: (laboratory.updates || [])
+      .filter(update => update.customerVisible !== false)
+      .map(update => ({
+        id: update.id,
+        action: update.action,
+        message: update.customerMessage,
+        createdAt: update.createdAt,
+      })),
+  };
+};
+
+const toCustomerVisibleQuality = qualityAssurance => {
+  if (!qualityAssurance) return undefined;
+  return {
+    attempt: qualityAssurance.attempt,
+    reworkCycle: qualityAssurance.reworkCycle,
+    customerMessage: qualityAssurance.customerMessage,
+    lastUpdatedAt: qualityAssurance.lastUpdatedAt,
+    inspections: (qualityAssurance.inspections || []).map(inspection => ({
+      id: inspection.id,
+      attempt: inspection.attempt,
+      result: inspection.result,
+      customerMessage: inspection.customerMessage,
+      createdAt: inspection.createdAt,
+    })),
+  };
+};
+
 const CUSTOMER_RESTRICTED_FIELD_TOKENS = new Set([
   'audit',
   'cost',
@@ -436,6 +519,12 @@ const toCustomerVisibleRecord = enquiry => {
     acceptedBy: undefined,
     planning: undefined,
     expediting: toCustomerVisibleExpediting(enquiry.expediting),
+    laboratory: toCustomerVisibleLaboratory(enquiry.laboratory),
+    qualityAssurance: toCustomerVisibleQuality(enquiry.qualityAssurance),
+    routing: enquiry.routing ? {
+      requiresLaboratory: enquiry.routing.requiresLaboratory === true,
+      certificationTypes: [...(enquiry.routing.certificationTypes || [])],
+    } : undefined,
     dispatch: toCustomerVisibleDispatch(enquiry.dispatch),
     internalJobNumber: undefined,
     customerPoNumber: undefined,
@@ -572,6 +661,12 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   const writePersonalisation = records => store.set(STORE_KEYS.personalisation, records);
   const readMockImages = () => store.get(STORE_KEYS.mockImages, {});
   const writeMockImages = records => store.set(STORE_KEYS.mockImages, records);
+  const readCertificateFiles = () => store.get(STORE_KEYS.certificateFiles, {});
+  const writeCertificateFiles = records => store.set(STORE_KEYS.certificateFiles, records);
+  const readCredentialChallenges = () => store.get(STORE_KEYS.credentialChallenges, []);
+  const writeCredentialChallenges = records => store.set(STORE_KEYS.credentialChallenges, records);
+  const readCustomerRepresentativeAssignments = () => store.get(STORE_KEYS.customerRepresentativeAssignments, {});
+  const writeCustomerRepresentativeAssignments = records => store.set(STORE_KEYS.customerRepresentativeAssignments, records);
   const presentPersonalisation = record => {
     const images = readMockImages();
     const hydrate = image => image ? { ...image, previewUrl: images[image.id]?.dataUrl || '' } : null;
@@ -735,6 +830,21 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         },
       };
     }
+    if (request.action === 'start_qa' || request.action === 'start_qa_reinspection') {
+      return { ...request, data: { qaStart: validateQaStart(request.data?.qaStart || request.data) } };
+    }
+    if (request.action === 'pass_qa') {
+      return { ...request, data: { qaPass: validateQaPass(request.data?.qaPass || request.data) } };
+    }
+    if (request.action === 'fail_qa') {
+      return { ...request, data: { qaFailure: validateQaFailure(request.data?.qaFailure || request.data) } };
+    }
+    if (request.action === 'resubmit_to_qa') {
+      return { ...request, data: { qaRework: validateQaRework(request.data?.qaRework || request.data) } };
+    }
+    if (request.action === 'confirm_dispatch_receipt') {
+      return { ...request, data: { dispatchReceipt: validateDispatchReceipt(request.data) } };
+    }
     if ([
       'mark_ready_for_collection',
       'start_delivery',
@@ -793,6 +903,196 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       };
     }
     return request;
+  };
+
+  const actorSnapshot = account => ({
+    id: account.id,
+    role: account.role,
+    displayName: account.contact || account.company || account.role,
+  });
+
+  const applyPhase21WorkflowData = (entity, action, data, account) => {
+    const occurredAt = now().toISOString();
+    let updated = { ...entity };
+    if (action === 'submit_to_expediting') {
+      updated = orderRequiresLaboratory(updated)
+        ? ensureLaboratoryRecord(updated)
+        : {
+          ...updated,
+          routing: {
+            ...(updated.routing || {}),
+            requiresLaboratory: false,
+            certificationTypes: [],
+            qaRequired: true,
+            route: 'planning_expediting_qa_dispatch',
+          },
+        };
+    }
+    if ([
+      'receive_lab_order',
+      'start_lab_calibration',
+      'hold_lab_calibration',
+      'resume_lab_calibration',
+      'complete_lab_calibration',
+      'mark_lab_ready_for_release',
+      'release_from_lab',
+    ].includes(action)) {
+      updated = ensureLaboratoryRecord(updated);
+      const statusByAction = {
+        receive_lab_order: 'received',
+        start_lab_calibration: 'calibration_in_progress',
+        hold_lab_calibration: 'calibration_on_hold',
+        resume_lab_calibration: 'calibration_in_progress',
+        complete_lab_calibration: 'calibration_completed',
+        mark_lab_ready_for_release: 'awaiting_release',
+        release_from_lab: 'released',
+      };
+      const update = {
+        id: makeId('laboratory-update'),
+        action,
+        status: statusByAction[action],
+        customerMessage: String(data?.labUpdate?.customerMessage || data?.comment || '').trim(),
+        internalNote: String(data?.labUpdate?.internalNote || '').trim(),
+        customerVisible: action !== 'mark_lab_ready_for_release',
+        updatedBy: actorSnapshot(account),
+        createdAt: occurredAt,
+      };
+      updated.laboratory = {
+        ...updated.laboratory,
+        status: statusByAction[action],
+        currentMessage: update.customerMessage || updated.laboratory.currentMessage || '',
+        receivedAt: action === 'receive_lab_order' ? occurredAt : updated.laboratory.receivedAt,
+        receivedBy: action === 'receive_lab_order' ? actorSnapshot(account) : updated.laboratory.receivedBy,
+        releasedAt: action === 'release_from_lab' ? occurredAt : updated.laboratory.releasedAt,
+        releasedBy: action === 'release_from_lab' ? actorSnapshot(account) : updated.laboratory.releasedBy,
+        releaseNote: action === 'release_from_lab' ? String(data?.labRelease?.note || '').trim() : updated.laboratory.releaseNote,
+        releaseDestination: action === 'release_from_lab' ? data?.labRelease?.destination : updated.laboratory.releaseDestination,
+        updates: [...(updated.laboratory.updates || []), update],
+        lastUpdatedAt: occurredAt,
+      };
+      if (action === 'receive_lab_order') {
+        updated.laboratory.units = updated.laboratory.units.map(unit => ({
+          ...unit,
+          status: unit.status === 'awaiting_lab' ? 'received' : unit.status,
+          receivedAt: unit.receivedAt || occurredAt,
+          updatedAt: occurredAt,
+          updatedBy: actorSnapshot(account),
+        }));
+      }
+      if (action === 'release_from_lab') {
+        updated.laboratory.units = updated.laboratory.units.map(unit => ({
+          ...unit,
+          status: 'released',
+          movementStatus: 'released',
+          releasedAt: unit.releasedAt || occurredAt,
+          updatedAt: occurredAt,
+        }));
+      }
+    }
+    if (['confirm_lab_receipt_expediting', 'confirm_lab_receipt_dispatch'].includes(action)) {
+      updated = ensureLaboratoryRecord(updated);
+      const receivingDepartment = action === 'confirm_lab_receipt_dispatch' ? 'dispatch' : 'expediting';
+      const receipt = {
+        id: makeId('laboratory-receipt'),
+        receivingDepartment,
+        receivedAt: occurredAt,
+        receivedBy: actorSnapshot(account),
+      };
+      updated.laboratory = {
+        ...updated.laboratory,
+        movementStatus: 'released_from_lab',
+        receivingDepartment,
+        receivedAfterLabAt: occurredAt,
+        receivedAfterLabBy: actorSnapshot(account),
+        receipts: [...(updated.laboratory.receipts || []), receipt],
+        units: updated.laboratory.units.map(unit => ({
+          ...unit,
+          movementStatus: 'received_after_lab',
+          receivedAfterLabAt: occurredAt,
+          receivedAfterLabBy: actorSnapshot(account),
+        })),
+        lastUpdatedAt: occurredAt,
+      };
+    }
+    if (['start_qa', 'start_qa_reinspection', 'pass_qa', 'fail_qa', 'start_qa_rework', 'resubmit_to_qa', 'release_qa_order'].includes(action)) {
+      const previous = updated.qualityAssurance || { attempt: 0, reworkCycle: 0, inspections: [], reworkHistory: [] };
+      const isInspectionStart = ['start_qa', 'start_qa_reinspection'].includes(action);
+      const attempt = isInspectionStart ? Number(previous.attempt || 0) + 1 : Number(previous.attempt || 1);
+      let inspections = [...(previous.inspections || [])];
+      if (action === 'pass_qa') {
+        inspections.push({
+          id: makeId('qa-inspection'),
+          attempt,
+          result: 'passed',
+          ...data.qaPass,
+          inspectedBy: actorSnapshot(account),
+          createdAt: occurredAt,
+        });
+      }
+      if (action === 'fail_qa') {
+        inspections.push({
+          id: makeId('qa-inspection'),
+          attempt,
+          result: 'failed',
+          ...data.qaFailure,
+          inspectedBy: actorSnapshot(account),
+          createdAt: occurredAt,
+        });
+      }
+      const reworkCycle = action === 'start_qa_rework' ? Number(previous.reworkCycle || 0) + 1 : Number(previous.reworkCycle || 0);
+      const reworkHistory = [...(previous.reworkHistory || [])];
+      if (action === 'start_qa_rework') {
+        reworkHistory.push({
+          id: makeId('qa-rework'),
+          cycle: reworkCycle,
+          status: 'in_progress',
+          problem: previous.currentProblem ? { ...previous.currentProblem } : null,
+          responsibleDepartment: previous.currentProblem?.reworkDestination || 'expediting',
+          startedBy: actorSnapshot(account),
+          startedAt: occurredAt,
+        });
+      }
+      if (action === 'resubmit_to_qa') {
+        const index = reworkHistory.findLastIndex(item => Number(item.cycle) === Number(reworkCycle));
+        const completed = {
+          ...(index >= 0 ? reworkHistory[index] : { id: makeId('qa-rework'), cycle: reworkCycle }),
+          ...data.qaRework,
+          status: 'completed',
+          completedBy: actorSnapshot(account),
+          completedAt: occurredAt,
+        };
+        if (index >= 0) reworkHistory[index] = completed;
+        else reworkHistory.push(completed);
+      }
+      updated.qualityAssurance = {
+        ...previous,
+        attempt,
+        reworkCycle,
+        inspections,
+        reworkHistory,
+        currentProblem: action === 'fail_qa' ? { ...data.qaFailure } : (action === 'pass_qa' ? null : previous.currentProblem || null),
+        customerMessage: data.qaFailure?.customerMessage || data.qaPass?.customerMessage || data.qaRework?.customerMessage || previous.customerMessage || '',
+        lastUpdatedAt: occurredAt,
+        lastUpdatedBy: actorSnapshot(account),
+        ...(isInspectionStart ? {
+          startedAt: occurredAt,
+          startedBy: actorSnapshot(account),
+          checklistReference: data.qaStart?.checklistReference || previous.checklistReference || '',
+        } : {}),
+        ...(action === 'release_qa_order' ? {
+          handoverStatus: 'handed_to_dispatch',
+          handedToDispatchAt: occurredAt,
+          handedToDispatchBy: actorSnapshot(account),
+        } : {}),
+      };
+      updated.routing = {
+        ...(updated.routing || {}),
+        requiresLaboratory: false,
+        qaRequired: true,
+        route: 'planning_expediting_qa_dispatch',
+      };
+    }
+    return updated;
   };
 
   const notificationMatchesAccount = (account, notification) => canAccessNotification(account, notification);
@@ -906,14 +1206,26 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       SALES_ACCOUNT,
       PLANNING_ACCOUNT,
       EXPEDITOR_ACCOUNT,
+      LAB_ACCOUNT,
+      LAB_MANAGER_ACCOUNT,
+      QA_ACCOUNT,
+      QA_MANAGER_ACCOUNT,
       DISPATCH_ACCOUNT,
       BUYER_ACCOUNT,
+      SALES_MANAGER_ACCOUNT,
+      COMPANY_OWNER_ACCOUNT,
       MANAGER_ACCOUNT,
       ADMINISTRATOR_ACCOUNT,
       ...EXTRA_DEMO_ACCOUNTS,
     ]) {
       const index = accounts.findIndex(account => account.id === seed.id || account.email?.toLowerCase() === seed.email.toLowerCase());
-      if (index >= 0) accounts[index] = normaliseAccount({ ...accounts[index], ...seed });
+      if (index >= 0) accounts[index] = normaliseAccount({
+        ...accounts[index],
+        ...seed,
+        password: accounts[index].password || seed.password,
+        signInName: accounts[index].signInName || seed.signInName || '',
+        passwordChangedAt: accounts[index].passwordChangedAt || '',
+      });
       else accounts.push(normaliseAccount(seed));
     }
     writeAccounts(accounts);
@@ -945,13 +1257,16 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       };
     });
     if (!store.has(STORE_KEYS.seedVersion)) {
-      for (const demo of DEMO_ENQUIRIES) {
+      for (const demo of [...DEMO_ENQUIRIES, ...PHASE21_DEMO_ORDERS]) {
         const record = normaliseEnquiry(demo);
         const collection = record.workflowType === 'order' ? workflowState.orders : workflowState.enquiries;
         if (!collection.some(existing => existing.id === record.id)) collection.push(record);
       }
       store.set(STORE_KEYS.seedVersion, true);
     }
+    workflowState.orders = workflowState.orders.map(order => (
+      orderRequiresLaboratory(order) ? ensureLaboratoryRecord(order) : order
+    ));
     writeWorkflowState(workflowState);
     if (!store.has(STORE_KEYS.audit)) store.set(STORE_KEYS.audit, []);
     if (!store.has(STORE_KEYS.orderDocuments)) store.set(STORE_KEYS.orderDocuments, []);
@@ -964,6 +1279,22 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     if (!store.has(STORE_KEYS.notificationPreferences)) store.set(STORE_KEYS.notificationPreferences, {});
     if (!store.has(STORE_KEYS.personalisation)) store.set(STORE_KEYS.personalisation, {});
     if (!store.has(STORE_KEYS.mockImages)) store.set(STORE_KEYS.mockImages, {});
+    if (!store.has(STORE_KEYS.certificateFiles)) store.set(STORE_KEYS.certificateFiles, {});
+    if (!store.has(STORE_KEYS.credentialChallenges)) store.set(STORE_KEYS.credentialChallenges, []);
+    if (!store.has(STORE_KEYS.customerRepresentativeAssignments)) {
+      const assignments = {};
+      for (const record of [...workflowState.enquiries, ...workflowState.orders]) {
+        if (record.companyId && record.representativeId && !assignments[record.companyId]) {
+          assignments[record.companyId] = {
+            companyId: record.companyId,
+            representativeId: record.representativeId,
+            assignedAt: record.assignedAt || record.createdAt,
+            source: 'seed_or_existing_record',
+          };
+        }
+      }
+      writeCustomerRepresentativeAssignments(assignments);
+    }
 
     if (!store.has(STORE_KEYS.session)) {
       const legacySession = store.get(LEGACY_STORE_KEYS.session, null);
@@ -981,8 +1312,12 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
 
     async signIn(credentials) {
       validateSignIn(credentials);
-      const email = credentials.email.trim().toLowerCase();
-      const matched = readAccounts().find(account => account.email.toLowerCase() === email && account.password === credentials.password);
+      const identifier = credentials.email.trim().toLowerCase();
+      const matched = readAccounts().find(account => (
+        (account.email.toLowerCase() === identifier || account.signInName?.toLowerCase() === identifier)
+        && account.password === credentials.password
+        && (!credentials.realm || account.authRealm === credentials.realm)
+      ));
       if (!matched) throw new ServiceError('The email address or password does not match a preview account.', { code: 'INVALID_CREDENTIALS', status: 401 });
       store.set(STORE_KEYS.session, { accountId: matched.id, signedInAt: now().toISOString() });
       return toPublicAccount(matched);
@@ -1006,6 +1341,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         area: data.area,
         industry: data.industry,
         role: USER_ROLES.CUSTOMER,
+        authRealm: 'customer',
         password: data.password,
         createdAt: now().toISOString(),
       });
@@ -1053,6 +1389,165 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         return [{ id: account.companyId, name: account.company, area: account.area, industry: account.industry }];
       }
       throw new ServiceError('Your role is not permitted to view company accounts.', { code: 'FORBIDDEN', status: 403 });
+    },
+  };
+
+  const credentials = {
+    async requestVerification({ changeType } = {}) {
+      const account = requireAccount();
+      if (!['username', 'password'].includes(changeType)) {
+        throw new ServiceError('Choose a username or password change.', {
+          code: 'CREDENTIAL_CHANGE_TYPE_INVALID',
+          status: 422,
+          fieldErrors: { changeType: 'Choose a supported credential change.' },
+        });
+      }
+      const requestedAt = now();
+      const recent = readCredentialChallenges().filter(challenge => (
+        challenge.accountId === account.id
+        && requestedAt - new Date(challenge.createdAt) < 60 * 60 * 1000
+      ));
+      if (recent.length >= 3) {
+        throw new ServiceError('Too many verification requests. Wait before trying again.', {
+          code: 'CREDENTIAL_VERIFICATION_RATE_LIMITED',
+          status: 429,
+        });
+      }
+      const challenge = {
+        id: makeId('credential-challenge'),
+        accountId: account.id,
+        authRealm: account.authRealm,
+        changeType,
+        code: String(Math.floor(100000 + Math.random() * 900000)),
+        attempts: 0,
+        maxAttempts: 5,
+        createdAt: requestedAt.toISOString(),
+        expiresAt: new Date(requestedAt.getTime() + 10 * 60 * 1000).toISOString(),
+        usedAt: '',
+      };
+      writeCredentialChallenges([...readCredentialChallenges(), challenge]);
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'authentication.credential_verification_requested',
+        outcome: 'success',
+        entityType: 'user',
+        entityId: account.id,
+        companyId: account.companyId,
+        actorId: account.id,
+        actorRole: account.role,
+        details: { changeType, simulatedEmail: true },
+        immutable: true,
+        createdAt: challenge.createdAt,
+      });
+      const [localPart, domain] = account.email.split('@');
+      const maskedEmail = `${localPart.slice(0, 2)}***@${domain}`;
+      return clone({
+        challengeId: challenge.id,
+        changeType,
+        maskedEmail,
+        expiresAt: challenge.expiresAt,
+        maxAttempts: challenge.maxAttempts,
+        deliveryStatus: 'email_sent_simulated',
+        demoVerificationCode: challenge.code,
+      });
+    },
+
+    async confirmChange({ challengeId, code, newUsername, newPassword } = {}) {
+      const account = requireAccount();
+      const challenges = readCredentialChallenges();
+      const index = challenges.findIndex(challenge => challenge.id === challengeId && challenge.accountId === account.id);
+      if (index < 0) throw new ServiceError('The verification request could not be found.', { code: 'CREDENTIAL_CHALLENGE_NOT_FOUND', status: 404 });
+      const challenge = challenges[index];
+      const occurredAt = now();
+      if (challenge.usedAt) throw new ServiceError('This verification code has already been used.', { code: 'CREDENTIAL_CODE_ALREADY_USED', status: 409 });
+      if (occurredAt > new Date(challenge.expiresAt)) throw new ServiceError('The verification code has expired. Request a new one.', { code: 'CREDENTIAL_CODE_EXPIRED', status: 410 });
+      if (challenge.attempts >= challenge.maxAttempts) throw new ServiceError('The verification request is locked after too many attempts.', { code: 'CREDENTIAL_CHALLENGE_LOCKED', status: 423 });
+      if (String(code || '').trim() !== challenge.code) {
+        challenges[index] = { ...challenge, attempts: challenge.attempts + 1 };
+        writeCredentialChallenges(challenges);
+        appendAuditEvent({
+          id: makeId('audit'),
+          action: 'authentication.credential_verification_failed',
+          outcome: 'denied',
+          entityType: 'user',
+          entityId: account.id,
+          companyId: account.companyId,
+          actorId: account.id,
+          actorRole: account.role,
+          details: { changeType: challenge.changeType, attempts: challenge.attempts + 1 },
+          immutable: true,
+          createdAt: occurredAt.toISOString(),
+        });
+        throw new ServiceError('The verification code is incorrect.', {
+          code: 'CREDENTIAL_CODE_INVALID',
+          status: 422,
+          fieldErrors: { verificationCode: 'Check the six-digit code and try again.' },
+        });
+      }
+      const allAccounts = readAccounts();
+      const accountIndex = allAccounts.findIndex(item => item.id === account.id);
+      let updated;
+      if (challenge.changeType === 'username') {
+        const username = String(newUsername || '').trim();
+        if (!/^[a-zA-Z][a-zA-Z0-9._-]{2,39}$/.test(username)) {
+          throw new ServiceError('Use 3–40 characters, beginning with a letter.', {
+            code: 'USERNAME_INVALID',
+            status: 422,
+            fieldErrors: { newUsername: 'Use letters, numbers, dots, underscores or hyphens.' },
+          });
+        }
+        if (allAccounts.some(item => item.id !== account.id && item.signInName?.toLowerCase() === username.toLowerCase())) {
+          throw new ServiceError('That username is already in use.', {
+            code: 'USERNAME_EXISTS',
+            status: 409,
+            fieldErrors: { newUsername: 'Choose a different username.' },
+          });
+        }
+        updated = { ...allAccounts[accountIndex], signInName: username, usernameChangedAt: occurredAt.toISOString() };
+      } else {
+        const password = String(newPassword || '');
+        const strong = password.length >= 10
+          && /[a-z]/.test(password)
+          && /[A-Z]/.test(password)
+          && /\d/.test(password)
+          && /[^a-zA-Z0-9]/.test(password);
+        if (!strong) {
+          throw new ServiceError('Use at least 10 characters with upper-case, lower-case, number and symbol.', {
+            code: 'PASSWORD_WEAK',
+            status: 422,
+            fieldErrors: { newPassword: 'Use a stronger password.' },
+          });
+        }
+        if (password === allAccounts[accountIndex].password) {
+          throw new ServiceError('Choose a password that is different from the current password.', {
+            code: 'PASSWORD_REUSED',
+            status: 422,
+            fieldErrors: { newPassword: 'Choose a new password.' },
+          });
+        }
+        updated = { ...allAccounts[accountIndex], password, passwordChangedAt: occurredAt.toISOString() };
+      }
+      allAccounts[accountIndex] = updated;
+      writeAccounts(allAccounts);
+      challenges[index] = { ...challenge, code: '', usedAt: occurredAt.toISOString(), attempts: challenge.attempts + 1 };
+      writeCredentialChallenges(challenges);
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: `authentication.${challenge.changeType}_changed`,
+        outcome: 'success',
+        entityType: 'user',
+        entityId: account.id,
+        companyId: account.companyId,
+        actorId: account.id,
+        actorRole: account.role,
+        fieldsChanged: [challenge.changeType === 'username' ? 'signInName' : 'passwordHash'],
+        details: { authRealm: account.authRealm, sessionsInvalidated: challenge.changeType === 'password' },
+        immutable: true,
+        createdAt: occurredAt.toISOString(),
+      });
+      const sessionEnded = challenge.changeType === 'password';
+      if (sessionEnded) store.remove(STORE_KEYS.session);
+      return clone({ account: toPublicAccount(updated), sessionEnded });
     },
   };
 
@@ -1120,7 +1615,13 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       validateEnquiry(details, lines);
       validateConfiguredProducts(lines);
       const representativeDirectory = representativesForArea(details.area);
-      const selectedRepresentative = validateRepresentativeAssignment(details.selectedRep, representativeDirectory.representatives);
+      const companyAssignments = readCustomerRepresentativeAssignments();
+      const existingAssignment = companyAssignments[account.companyId];
+      const dedicatedRepresentative = existingAssignment
+        ? representativeById(existingAssignment.representativeId)
+        : null;
+      const selectedRepresentative = dedicatedRepresentative
+        || validateRepresentativeAssignment(details.selectedRep, representativeDirectory.representatives);
       const submissionKey = String(details?.submissionKey || '').trim();
       if (!submissionKey || submissionKey.length < 8 || submissionKey.length > 160) {
         throw new ServiceError('Refresh the RFQ form and try again.', {
@@ -1146,8 +1647,31 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const createdAt = now().toISOString();
       const assignedRepresentative = {
         ...clone(selectedRepresentative),
-        branchName: representativeDirectory.branch.name,
+        branchName: branches.find(branch => branch.id === selectedRepresentative.branchId)?.name
+          || representativeDirectory.branch.name,
       };
+      if (!existingAssignment) {
+        companyAssignments[account.companyId] = {
+          companyId: account.companyId,
+          representativeId: assignedRepresentative.id,
+          assignedAt: createdAt,
+          assignedBy: 'customer_first_rfq',
+        };
+        writeCustomerRepresentativeAssignments(companyAssignments);
+        appendAuditEvent({
+          id: makeId('audit'),
+          action: 'company.representative_assigned',
+          outcome: 'success',
+          entityType: 'company',
+          entityId: account.companyId,
+          companyId: account.companyId,
+          actorId: account.id,
+          actorRole: account.role,
+          fieldsChanged: ['representativeId'],
+          immutable: true,
+          createdAt,
+        });
+      }
       const documentMetadata = poFile ? [{
         id: makeId('document'),
         documentType: 'purchase_order',
@@ -1475,7 +1999,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         appendAuditEvent(createDeniedWorkflowAudit({ entity: existing, action: request.action, actor, error, now }));
         throw error;
       }
-      const updated = normaliseEnquiry(result.entity);
+      const updated = normaliseEnquiry(applyPhase21WorkflowData(result.entity, request.action, request.data, account));
       located.collection[located.index] = updated;
       let createdOrder = null;
       if (isAcceptanceConversion) {
@@ -2083,6 +2607,15 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       });
       located.collection[located.index] = updated;
       writeWorkflowState(state);
+      const assignments = readCustomerRepresentativeAssignments();
+      assignments[updated.companyId] = {
+        companyId: updated.companyId,
+        representativeId: representative.id,
+        assignedAt: updatedAt,
+        assignedBy: account.id,
+        reason: reassignmentReason,
+      };
+      writeCustomerRepresentativeAssignments(assignments);
       appendAuditEvent({
         id: makeId('audit'),
         eventType: 'representative_reassigned',
@@ -2096,7 +2629,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         actorId: account.id,
         actorDisplayName: account.contact,
         actorRole: account.role,
-        fieldsChanged: ['selectedRep', 'representativeId'],
+        fieldsChanged: ['selectedRep', 'representativeId', 'companyRepresentativeAssignment'],
         reason: reassignmentReason,
         details: {
           previousRepresentativeId: previousRepresentative?.id || '',
@@ -2435,6 +2968,345 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     },
   };
 
+  const laboratory = {
+    async getWorkspaceOptions() {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.VIEW_LAB_QUEUE)) {
+        throw new ServiceError('Your account cannot access the Laboratory workspace.', { code: 'FORBIDDEN', status: 403 });
+      }
+      return clone({
+        certificationTypes: [
+          { id: 'sanas', label: 'SANAS calibration' },
+          { id: 'traceable', label: 'Traceable calibration' },
+        ],
+        maxCertificateBytes: MAX_CERTIFICATE_BYTES,
+        certificateMimeTypes: ['application/pdf'],
+        releaseDestinations: [
+          { id: 'expediting', label: 'Expediting' },
+          { id: 'dispatch', label: 'Dispatch' },
+        ],
+      });
+    },
+
+    async listOrders() {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.VIEW_LAB_QUEUE)) {
+        throw new ServiceError('Your account cannot access the Laboratory queue.', { code: 'FORBIDDEN', status: 403 });
+      }
+      return clone(readAllOrders()
+        .filter(order => orderRequiresLaboratory(order) && canReadRecord(account, order))
+        .map(order => ({ ...order, allowedWorkflowActions: getAllowedWorkflowActions(order, createWorkflowActor(account)) })));
+    },
+
+    async getDashboard() {
+      const orders = await laboratory.listOrders();
+      return clone({
+        metrics: laboratoryMetrics(orders),
+        orders,
+        certificateQueue: certificateQueueForOrders(orders),
+      });
+    },
+
+    async updateUnit(orderId, unitId, action, input = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.UPDATE_LAB_WORK)) {
+        throw new ServiceError('Your account cannot update Laboratory units.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const order = readAllOrders().find(item => item.id === orderId);
+      if (!order || !canReadRecord(account, order) || !orderRequiresLaboratory(order)) {
+        throw new ServiceError('The Laboratory order was not found.', { code: 'LAB_ORDER_NOT_FOUND', status: 404 });
+      }
+      if (!['calibration_in_progress', 'calibration_on_hold'].includes(order.trackingStatus)) {
+        throw new ServiceError('Start Laboratory calibration before updating physical units.', { code: 'LAB_ORDER_NOT_ACTIVE', status: 409 });
+      }
+      const prepared = ensureLaboratoryRecord(order);
+      const index = prepared.laboratory.units.findIndex(unit => unit.id === unitId);
+      if (index < 0) throw new ServiceError('The physical unit task was not found.', { code: 'LAB_UNIT_NOT_FOUND', status: 404 });
+      const allowed = {
+        start: ['awaiting_lab', 'received'],
+        hold: ['calibration_in_progress'],
+        resume: ['calibration_on_hold'],
+        complete: ['calibration_in_progress'],
+      };
+      if (!allowed[action]?.includes(prepared.laboratory.units[index].status)) {
+        throw new ServiceError('That unit action is not available at its current stage.', { code: 'LAB_UNIT_TRANSITION_INVALID', status: 409 });
+      }
+      const details = validateLaboratoryUnitUpdate(input, { requireResult: action === 'complete' });
+      const occurredAt = now().toISOString();
+      const statusByAction = {
+        start: 'calibration_in_progress',
+        hold: 'calibration_on_hold',
+        resume: 'calibration_in_progress',
+        complete: 'calibration_completed',
+      };
+      const previous = prepared.laboratory.units[index];
+      const unit = {
+        ...previous,
+        ...details,
+        customerVisibleMessage: details.customerMessage || previous.customerVisibleMessage,
+        status: statusByAction[action],
+        certificateStatus: action === 'complete' ? 'pending' : previous.certificateStatus,
+        startedAt: action === 'start' ? occurredAt : previous.startedAt,
+        completedAt: action === 'complete' ? occurredAt : previous.completedAt,
+        updatedAt: occurredAt,
+        updatedBy: actorSnapshot(account),
+      };
+      const units = [...prepared.laboratory.units];
+      units[index] = unit;
+      const updated = saveOrder({
+        ...prepared,
+        version: Number(prepared.version || 0) + 1,
+        updatedAt: occurredAt,
+        laboratory: {
+          ...prepared.laboratory,
+          units,
+          lastUpdatedAt: occurredAt,
+        },
+      });
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: `laboratory.unit_${action}`,
+        outcome: 'success',
+        entityType: 'laboratory_unit',
+        entityId: unit.id,
+        companyId: updated.companyId,
+        reference: updated.reference,
+        actorId: account.id,
+        actorRole: account.role,
+        fieldsChanged: ['laboratory.units'],
+        details: { orderId, unitNumber: unit.unitNumber, certificationType: unit.certificationType },
+        immutable: true,
+        createdAt: occurredAt,
+      });
+      publishWorkflowNotifications({
+        action: 'laboratory_progress_updated',
+        record: updated,
+        actor: createWorkflowActor(account),
+        input: { customerMessage: unit.customerVisibleMessage || 'Laboratory progress was updated.' },
+      });
+      return clone(unit);
+    },
+
+    async uploadCertificate(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.MANAGE_CERTIFICATES)) {
+        throw new ServiceError('Your account cannot upload certificates.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const order = readAllOrders().find(item => item.id === orderId);
+      if (!order || !canReadRecord(account, order) || !orderRequiresLaboratory(order)) {
+        throw new ServiceError('The Laboratory order was not found.', { code: 'LAB_ORDER_NOT_FOUND', status: 404 });
+      }
+      const prepared = ensureLaboratoryRecord(order);
+      const index = prepared.laboratory.units.findIndex(unit => unit.id === unitId);
+      if (index < 0) throw new ServiceError('The physical unit task was not found.', { code: 'LAB_UNIT_NOT_FOUND', status: 404 });
+      const unit = prepared.laboratory.units[index];
+      if (
+        !unit.completedAt
+        && !['calibration_completed', 'certificate_uploaded', 'released'].includes(unit.status)
+      ) {
+        throw new ServiceError('Complete this physical unit before uploading its certificate.', { code: 'LAB_UNIT_NOT_COMPLETE', status: 409 });
+      }
+      if (unit.certificateId) {
+        throw new ServiceError('This physical unit already has its required certificate.', {
+          code: 'DUPLICATE_UNIT_CERTIFICATE',
+          status: 409,
+          fieldErrors: { certificateFile: 'Each physical unit accepts one final certificate in this phase.' },
+        });
+      }
+      const existingCertificates = certificateQueueForOrders(readAllOrders())
+        .filter(item => item.certificateId)
+        .map(item => ({ id: item.certificateId, certificateNumber: item.certificateNumber }));
+      const certificate = validateCertificateUpload(input, existingCertificates);
+      const occurredAt = now().toISOString();
+      const certificateId = makeId('certificate');
+      const dataUrl = await fileToDataUrl(input.file);
+      const files = readCertificateFiles();
+      files[certificateId] = {
+        id: certificateId,
+        orderId,
+        unitId,
+        companyId: order.companyId,
+        dataUrl,
+        createdAt: occurredAt,
+      };
+      writeCertificateFiles(files);
+      const units = [...prepared.laboratory.units];
+      units[index] = {
+        ...unit,
+        status: unit.movementStatus === 'released' || unit.status === 'released'
+          ? 'released'
+          : 'certificate_uploaded',
+        certificateStatus: 'uploaded',
+        certificateId,
+        certificateNumber: certificate.certificateNumber,
+        certificate: {
+          id: certificateId,
+          ...certificate,
+          certificationType: unit.certificationType,
+          unitId,
+          orderId,
+          companyId: order.companyId,
+          uploadedAt: occurredAt,
+          uploadedBy: actorSnapshot(account),
+          storageStatus: 'browser_mock',
+          customerVisible: true,
+        },
+        certificateUploadedAt: occurredAt,
+        updatedAt: occurredAt,
+      };
+      const updated = saveOrder({
+        ...prepared,
+        version: Number(prepared.version || 0) + 1,
+        updatedAt: occurredAt,
+        laboratory: { ...prepared.laboratory, units, lastUpdatedAt: occurredAt },
+      });
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'laboratory.certificate_uploaded',
+        outcome: 'success',
+        entityType: 'certificate',
+        entityId: certificateId,
+        companyId: updated.companyId,
+        reference: updated.reference,
+        actorId: account.id,
+        actorRole: account.role,
+        fieldsChanged: ['laboratory.units.certificate'],
+        documentMetadata: [{ id: certificateId, fileName: certificate.fileName, mimeType: certificate.mimeType, sizeBytes: certificate.sizeBytes }],
+        immutable: true,
+        createdAt: occurredAt,
+      });
+      publishWorkflowNotifications({
+        action: 'certificate_uploaded',
+        record: updated,
+        actor: createWorkflowActor(account),
+        input: {
+          customerMessage: `Certificate ${certificate.certificateNumber} is ready for ${unit.productCode} unit ${unit.unitNumber}.`,
+        },
+      });
+      return clone(units[index].certificate);
+    },
+
+    async downloadCertificate(certificateId) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.DOWNLOAD_CERTIFICATES)) {
+        throw new ServiceError('Your account cannot download calibration certificates.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const order = readAllOrders().find(item => (
+        (item.laboratory?.units || []).some(unit => unit.certificateId === certificateId)
+        && canReadRecord(account, item)
+      ));
+      const unit = order?.laboratory?.units?.find(item => item.certificateId === certificateId);
+      const file = readCertificateFiles()[certificateId];
+      if (!order || !unit?.certificate || !file) {
+        throw new ServiceError('The certificate was not found for your authorised records.', { code: 'CERTIFICATE_NOT_FOUND', status: 404 });
+      }
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'laboratory.certificate_downloaded',
+        outcome: 'success',
+        entityType: 'certificate',
+        entityId: certificateId,
+        companyId: order.companyId,
+        reference: order.reference,
+        actorId: account.id,
+        actorRole: account.role,
+        immutable: true,
+        createdAt: now().toISOString(),
+      });
+      return clone({ ...unit.certificate, dataUrl: file.dataUrl });
+    },
+
+    async archiveCertificates(orderId) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.RELEASE_LAB_ORDER)) {
+        throw new ServiceError('Only authorised managers can archive Laboratory certificates.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const order = readAllOrders().find(item => item.id === orderId);
+      if (!order || !canReadRecord(account, order)) throw new ServiceError('The order was not found.', { code: 'ORDER_NOT_FOUND', status: 404 });
+      if (order.legalHold?.active || order.investigationFlag === true) {
+        throw new ServiceError('This Laboratory task is protected by a legal hold or investigation flag.', {
+          code: 'CERTIFICATE_ARCHIVE_LEGAL_HOLD',
+          status: 409,
+        });
+      }
+      const occurredAt = now().toISOString();
+      const prepared = ensureLaboratoryRecord(order);
+      if (!prepared.laboratory?.releasedAt || !prepared.laboratory.units.every(unit => (
+        unit.completedAt && (unit.releasedAt || unit.movementStatus === 'released' || unit.status === 'released')
+      ))) {
+        throw new ServiceError('Complete and physically release every Laboratory unit before archiving the task.', {
+          code: 'CERTIFICATE_ARCHIVE_UNIT_ACTIVE',
+          status: 409,
+        });
+      }
+      if (!allRequiredCertificatesPresent(prepared)) {
+        throw new ServiceError('Upload one certificate PDF for every required physical unit before archiving.', {
+          code: 'CERTIFICATE_ARCHIVE_PENDING',
+          status: 409,
+        });
+      }
+      const updated = saveOrder({
+        ...prepared,
+        version: Number(prepared.version || 0) + 1,
+        updatedAt: occurredAt,
+        laboratory: {
+          ...prepared.laboratory,
+          status: 'lab_archived',
+          archivedAt: occurredAt,
+          archivedBy: actorSnapshot(account),
+          units: prepared.laboratory.units.map(unit => ({
+            ...unit,
+            certificateStatus: unit.certificateId ? 'archived' : unit.certificateStatus,
+            archivedAt: occurredAt,
+            certificate: unit.certificate ? { ...unit.certificate, archivedAt: occurredAt } : unit.certificate,
+          })),
+        },
+      });
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'laboratory.certificates_archived',
+        outcome: 'success',
+        entityType: 'order',
+        entityId: orderId,
+        companyId: order.companyId,
+        actorId: account.id,
+        actorRole: account.role,
+        immutable: true,
+        createdAt: occurredAt,
+      });
+      return clone(updated.laboratory.units);
+    },
+  };
+
+  const qualityAssurance = {
+    async getWorkspaceOptions() {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.VIEW_QA_QUEUE)) {
+        throw new ServiceError('Your account cannot access the Quality Assurance workspace.', { code: 'FORBIDDEN', status: 403 });
+      }
+      return clone({
+        problemCategories: QA_PROBLEM_CATEGORIES,
+        severities: QA_SEVERITIES,
+        reworkDestinations: QA_REWORK_DESTINATIONS,
+      });
+    },
+
+    async listOrders() {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.VIEW_QA_QUEUE)) {
+        throw new ServiceError('Your account cannot access the Quality Assurance queue.', { code: 'FORBIDDEN', status: 403 });
+      }
+      return clone(readAllOrders()
+        .filter(order => orderRequiresQualityAssurance(order) && canReadRecord(account, order))
+        .map(order => ({ ...order, allowedWorkflowActions: getAllowedWorkflowActions(order, createWorkflowActor(account)) })));
+    },
+
+    async getDashboard() {
+      const orders = await qualityAssurance.listOrders();
+      return clone({ metrics: qualityMetrics(orders), orders });
+    },
+  };
+
   const personalisation = {
     async get() {
       const account = requireAccount();
@@ -2625,6 +3497,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     initialize,
     auth,
     accounts,
+    credentials,
     enquiries,
     orders,
     workflow,
@@ -2636,6 +3509,8 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     notifications,
     planning,
     expediting,
+    laboratory,
+    qualityAssurance,
     dispatch,
     personalisation,
     products: productService,
@@ -2646,6 +3521,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       maxQuotationDocumentBytes: MAX_QUOTATION_DOCUMENT_BYTES,
       maxAcceptanceDocumentBytes: MAX_ACCEPTANCE_DOCUMENT_BYTES,
       maxDispatchProofBytes: MAX_DISPATCH_PROOF_BYTES,
+      maxCertificateBytes: MAX_CERTIFICATE_BYTES,
       persistenceLabel: 'this browser',
     },
   };

@@ -17,7 +17,7 @@ assert.deepEqual(
 );
 assert.deepEqual(
   DISPATCH_PRIMARY_QUEUE_STATUSES,
-  ['awaiting_dispatch', 'ready_for_collection', 'out_for_delivery'],
+  ['awaiting_lab_receipt_dispatch', 'awaiting_dispatch', 'ready_for_collection', 'out_for_delivery'],
   'the primary Dispatch queue must use the approved statuses in order',
 );
 assert.deepEqual(
@@ -124,6 +124,7 @@ assert.deepEqual(
 
 assert.deepEqual(dispatchQueueCounts(orders), {
   all: 5,
+  laboratoryReceipt: 0,
   awaitingDispatch: 1,
   collection: 2,
   delivery: 3,

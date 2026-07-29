@@ -116,7 +116,7 @@ for (const path of requiredPaths) {
   assert.ok(openapi.includes(`  ${path}`), `OpenAPI proposal must define ${path.slice(0, -1)}`);
 }
 
-assert.ok(openapi.includes('version: 0.6.0-proposed'));
+assert.ok(openapi.includes('version: 0.7.0-proposed'));
 assert.ok(openapi.includes('All examples are fabricated.'));
 assert.equal(openapi.includes('cookieSession'), false, 'OpenAPI must not reference the retired cookieSession security name');
 assert.equal(openapi.includes('csrfToken: []'), false, 'OpenAPI must not reference the retired csrfToken security name');

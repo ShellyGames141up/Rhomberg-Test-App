@@ -52,10 +52,7 @@ const nearestBranchByArea = {
   Limpopo: 'johannesburg',
   Mpumalanga: 'johannesburg',
   'North West': 'johannesburg',
-  // Durban currently has no assigned sales representatives, so KZN RFQs route
-  // to the Johannesburg sales team while the Durban office remains available
-  // as a contact branch.
-  'KwaZulu-Natal': 'johannesburg',
+  'KwaZulu-Natal': 'durban',
   'Eastern Cape': 'port-elizabeth',
   International: 'cape-town',
 };

@@ -53,3 +53,28 @@ All four routes use the same storage keys in one browser origin. That lets a cus
 ## Production direction
 
 The production build aliases the mock service to `apiEntry.js`, defines public-preview features as disabled, excludes demo accounts/routes and scans the output for forbidden markers. Authentication must use secure server cookies, and the API—not a UI route—must enforce tenant isolation, permissions, transitions and audit creation.
+
+## Phase 21 operational domains
+
+The internal desktop preview now includes Laboratory and Quality Assurance workspaces without adding another application or persistence path.
+
+```text
+Planning routing decision
+       |
+       +-- certification --> certification domain --> Laboratory service/UI
+       |                                          |
+       |                              physical movement + certificate queue
+       |
+       +-- standard -------> Expediting --> QA domain/service/UI
+                                                |
+                                        pass or immutable rework cycle
+                                                |
+                                                v
+                                  separate Dispatch receipt
+```
+
+`src/domain/certification.js` owns per-unit calibration records, certificate requirements, Laboratory queue metrics and archive eligibility. `src/domain/qualityAssurance.js` owns inspections, failures, configurable return destinations, rework cycles and monthly process metrics. `src/domain/analytics.js` derives pricing-safe quantity and operational measures.
+
+The mock services persist those structures behind existing interfaces. The HTTP implementation exposes matching methods but production remains unconnected. Customer projections keep internal Lab/QA/Dispatch details out, and certificate file access is a separate permission from certificate status visibility.
+
+Customer/internal sign-in uses separate preview realms. Credential changes use the service layer and a simulated one-time code; production requires a verified-email delivery worker, hashed codes, rate limits and session invalidation.

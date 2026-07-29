@@ -16,14 +16,17 @@ export const representativesByBranch = {
     ['17', 'Arthur Daniels'],
     ['27', 'Ericu Vercuiel'],
   ].map(([code, name]) => makeRepresentative('cape-town', 'C', code, name)),
-  durban: [],
+  durban: [
+    ['31', 'Dawie'],
+    ['32', 'Nadia'],
+  ].map(([code, name]) => makeRepresentative('durban', 'D', code, name)),
   johannesburg: [
     ['21', 'Danny'],
     ['23', 'Siya'],
     ['25', 'Reneil'],
   ].map(([code, name]) => makeRepresentative('johannesburg', 'J', code, name)),
   'port-elizabeth': [
-    ['16', 'Carmen Bellew'],
+    ['16', 'Carmen'],
   ].map(([code, name]) => makeRepresentative('port-elizabeth', 'P', code, name)),
 };
 

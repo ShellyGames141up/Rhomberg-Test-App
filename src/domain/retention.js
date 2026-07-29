@@ -1,3 +1,5 @@
+import { allRequiredCertificatesPresent, orderRequiresLaboratory } from './certification.js';
+
 export const DEFAULT_RETENTION_POLICY = Object.freeze({
   id: 'demo-retention-v1',
   name: 'Demonstration retention policy',
@@ -102,6 +104,12 @@ export const filterArchiveRecords = (orders, {
 
 export const assertArchiveAllowed = order => {
   if (order?.retentionStatus !== 'archive_eligible') throw new Error('Only archive-eligible completed orders may be archived.');
+  if (order?.legalHold?.active || order?.investigationFlag === true) {
+    throw new Error('Archival is blocked while a legal hold or investigation flag is active.');
+  }
+  if (orderRequiresLaboratory(order) && !allRequiredCertificatesPresent(order)) {
+    throw new Error('Laboratory orders cannot be archived until every physical unit has its own certificate.');
+  }
 };
 
 export const assertDeletionCanProceed = (order, policy, { exportRecord, managerApproval, administratorApproval } = {}) => {

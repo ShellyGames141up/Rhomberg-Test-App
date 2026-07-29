@@ -43,7 +43,7 @@ assert.deepEqual(REQUIRED_EXPEDITOR_STEP_IDS, [
 ]);
 assert.deepEqual(
   EXPEDITOR_QUEUE_FILTERS.map(filter => filter.id),
-  ['all', 'newly_submitted', 'in_progress', 'on_hold', 'approaching_completion', 'awaiting_dispatch', 'priority'],
+  ['all', 'laboratory_receipt', 'newly_submitted', 'in_progress', 'qa_rework', 'on_hold', 'approaching_completion', 'at_qa', 'awaiting_dispatch', 'priority'],
 );
 
 const base = {
@@ -153,10 +153,13 @@ assert.equal(filterExpeditorOrders(orders, { search: 'PO-TEST-1000' }, now).leng
 const counts = expeditorQueueCounts(orders, now);
 assert.deepEqual(counts, {
   all: 4,
+  laboratoryReceipt: 0,
   newlySubmitted: 1,
   inProgress: 1,
+  qaRework: 0,
   onHold: 1,
   approachingCompletion: 1,
+  atQa: 0,
   awaitingDispatch: 1,
   priority: 2,
 });

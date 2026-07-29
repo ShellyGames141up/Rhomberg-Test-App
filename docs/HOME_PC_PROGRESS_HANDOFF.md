@@ -8,7 +8,7 @@ Use this form as the checkpoint for continuing the project on another computer.
 |---|---|
 | Repository | `ShellyGames141up/Rhomberg-Test-App` |
 | Branch | `main` |
-| App version | `4.8.0` |
+| App version | `5.0.0` |
 | Checkpoint date | 29 July 2026 |
 | Completed phase | Prompt 19: security and data-leak review, targeted hardening and adversarial tests |
 | Last stopping point | Security findings are documented, accidental customer-field leakage and restricted-manager archive/audit scope gaps are hardened, and the complete test suite passes. The GitHub Pages mock is explicitly not production-secure; no live backend is connected. |
@@ -160,7 +160,13 @@ Use this form as the checkpoint for continuing the project on another computer.
 
 | Check | Result |
 |---|---|
-| `npm test` | Passed for version 4.8: all existing suites plus the complete scenario, production-specification checks and adversarial security review |
+| `npm test` | Phase 21 suite added for Laboratory/QA routing, unit certificates, rework, Dispatch receipt, analytics, credentials, realms and representative assignments; full final verification is recorded in the Phase 21 commit |
+
+## Phase 21 checkpoint
+
+The active branch adds desktop Laboratory and QA workspaces, per-unit SANAS/Traceable tasks and certificates, physical release independent of certificate upload, QA failure/rework/reinspection history, mandatory Dispatch receipt, pricing-safe management/product analytics, verified credential changes, separate customer/internal realms and corrected branch/dedicated-representative behaviour.
+
+Continue with the production-infrastructure implementation only after the Phase 21 branch is reviewed and approved. The repository still uses browser-local fabricated data and no real identity, database, email, push or object-storage provider.
 | `npm run check` | Passed for 61 React/source modules and relative imports |
 | `npm run check:css` | Passed |
 | `npm run build:previews` | Passed; four standalone preview artifacts and the combined GitHub Pages artifact were generated |

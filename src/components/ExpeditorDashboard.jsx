@@ -13,6 +13,7 @@ import {
   isApproachingEstimatedCompletion,
   missingRequiredExpeditorSteps,
 } from '../domain/expediting.js';
+import { orderRequiresLaboratory } from '../domain/certification.js';
 import { statusById } from '../domain/tracking.js';
 import { OrderSummaryPanel } from './OrderSummaryPanel.jsx';
 import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
@@ -71,10 +72,13 @@ export function ExpeditorDashboard({ account, orders, onAction, serviceMode, exp
   );
   const filterCounts = {
     all: counts.all,
+    laboratory_receipt: counts.laboratoryReceipt,
     newly_submitted: counts.newlySubmitted,
     in_progress: counts.inProgress,
+    qa_rework: counts.qaRework,
     on_hold: counts.onHold,
     approaching_completion: counts.approachingCompletion,
+    at_qa: counts.atQa,
     awaiting_dispatch: counts.awaitingDispatch,
     priority: counts.priority,
   };
@@ -93,7 +97,7 @@ export function ExpeditorDashboard({ account, orders, onAction, serviceMode, exp
         <div className="expediting-hero-copy">
           <span className="eyebrow">{serviceMode === 'mock' ? 'Test · ' : ''}Expediting workspace</span>
           <h1 id="expediting-title">Good day, {account.contact.split(/\s+/)[0]}.<br /><em>Keep every order moving.</em></h1>
-          <p>Record clear progress, protect internal notes and hand completed work to Dispatch through the controlled order workflow.</p>
+          <p>Record clear progress, protect internal notes and route standard work through QA before the controlled Dispatch handover.</p>
         </div>
         <div className="expediting-kpi-grid" aria-label="Expediting queue summary">
           <button type="button" className={filter === 'all' ? 'is-active' : ''} onClick={() => setFilter('all')}><small>Active queue</small><strong>{counts.all}</strong><em>orders in scope</em></button>
@@ -161,10 +165,14 @@ function ExpeditingOrder({ order, expanded, onToggle, onAction, account, options
   const lineItems = (order.items || []).length;
   const unitQuantity = (order.items || []).reduce((sum, item) => sum + Number(item.quantity || 1), 0);
   const startAction = actionFor(order, 'start_expediting');
+  const laboratoryReceiptAction = actionFor(order, 'confirm_lab_receipt_expediting');
   const updateAction = actionFor(order, 'add_expediting_update');
   const holdAction = actionFor(order, 'place_on_hold');
   const resumeAction = actionFor(order, 'resume_order');
   const dispatchAction = actionFor(order, 'complete_expediting');
+  const startReworkAction = actionFor(order, 'start_qa_rework');
+  const resubmitAction = actionFor(order, 'resubmit_to_qa');
+  const laboratoryOrder = orderRequiresLaboratory(order);
   const approaching = isApproachingEstimatedCompletion(order, now, options.approachingCompletionDays);
   const customerPo = order.planning?.customerPoNumber || order.customerPoNumber || order.poNumber || '';
   const internalJob = order.planning?.internalJobNumber || order.internalJobNumber || '';
@@ -221,6 +229,15 @@ function ExpeditingOrder({ order, expanded, onToggle, onAction, account, options
           {startAction && (
             <WorkflowActionPanel record={order} actions={[startAction]} preferredAction="start_expediting" onAction={onAction} account={account} expeditingOptions={options} title="Start Expediting work" description="Accept the planned order and create its first customer-visible progress update" />
           )}
+          {laboratoryReceiptAction && (
+            <WorkflowActionPanel record={order} actions={[laboratoryReceiptAction]} preferredAction="confirm_lab_receipt_expediting" onAction={onAction} account={account} title="Confirm receipt from Laboratory" description="Record the controlled physical handover before Expediting work starts" />
+          )}
+          {startReworkAction && (
+            <WorkflowActionPanel record={order} actions={[startReworkAction]} preferredAction="start_qa_rework" onAction={onAction} account={account} title="Accept QA corrective work" description="Keep the failed inspection immutable while starting its controlled correction cycle" />
+          )}
+          {resubmitAction && (
+            <WorkflowActionPanel record={order} actions={[resubmitAction]} preferredAction="resubmit_to_qa" onAction={onAction} account={account} title="Resubmit corrected order to QA" description="Record the corrective action and place the order in the reinspection queue" />
+          )}
           {resumeAction && (
             <WorkflowActionPanel record={order} actions={[resumeAction]} preferredAction="resume_order" onAction={onAction} account={account} expeditingOptions={options} title="Resume this order" description="Return the order to its controlled Expediting stage and notify the customer and representative" />
           )}
@@ -232,8 +249,8 @@ function ExpeditingOrder({ order, expanded, onToggle, onAction, account, options
             <div className="expediting-secondary-actions">
               {dispatchAction && (
                 <details>
-                  <summary>Submit this order to Dispatch <span>→</span></summary>
-                  <WorkflowActionPanel record={order} actions={[dispatchAction]} preferredAction="complete_expediting" onAction={onAction} account={account} expeditingOptions={options} title="Dispatch hand-off" description="Validate required progress or record a controlled exception before hand-off" />
+                  <summary>{laboratoryOrder ? 'Submit this order to Dispatch' : 'Submit this order to Quality Assurance'} <span>→</span></summary>
+                  <WorkflowActionPanel record={order} actions={[dispatchAction]} preferredAction="complete_expediting" onAction={onAction} account={account} expeditingOptions={options} title={laboratoryOrder ? 'Dispatch hand-off' : 'Quality Assurance hand-off'} description="Validate required progress or record a controlled exception before hand-off" />
                 </details>
               )}
               {holdAction && (
@@ -245,8 +262,8 @@ function ExpeditingOrder({ order, expanded, onToggle, onAction, account, options
             </div>
           )}
 
-          {!startAction && !resumeAction && !updateAction && !dispatchAction && !holdAction && (
-            <p className="tracking-storage-note expeditor-readonly-note"><span>i</span><span><strong>{order.trackingStatus === 'awaiting_dispatch' ? 'Handed to Dispatch.' : 'No Expediting action is available.'}</strong> {order.trackingStatus === 'awaiting_dispatch' ? 'The order remains visible here for shared operational awareness while Dispatch completes the handover.' : 'Refresh the record or ask an authorised manager to review its workflow stage.'}</span></p>
+          {!startAction && !laboratoryReceiptAction && !startReworkAction && !resubmitAction && !resumeAction && !updateAction && !dispatchAction && !holdAction && (
+            <p className="tracking-storage-note expeditor-readonly-note"><span>i</span><span><strong>{order.trackingStatus === 'awaiting_qa' ? 'Handed to Quality Assurance.' : order.trackingStatus === 'awaiting_dispatch' ? 'Handed to Dispatch.' : 'No Expediting action is available.'}</strong> {['awaiting_qa', 'awaiting_dispatch'].includes(order.trackingStatus) ? 'The order remains visible for shared operational awareness while the next team completes its work.' : 'Refresh the record or ask an authorised manager to review its workflow stage.'}</span></p>
           )}
 
           <section className="expediting-update-history">

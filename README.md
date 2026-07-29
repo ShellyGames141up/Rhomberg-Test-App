@@ -43,8 +43,8 @@ All credentials above are fabricated and demonstration-only. GitHub Pages runs i
 ## Current development checkpoint
 
 - **Checkpoint date:** 29 July 2026
-- **Current version:** 4.8.0
-- **Last completed steps:** Prompt 19 - security and data-leak review, hardening and adversarial access-control tests.
+- **Current version:** 5.0.0
+- **Last completed step:** Phase 21 - desktop optimisation, unit-level Laboratory certificates, QA/rework control, Dispatch receipt, operational analytics and verified credential-change preview.
 
 This checkpoint adds a complete security/data-leak review, allow-listed customer record projections that exclude unknown fields by default, full authorised-company enforcement across archive/audit/company-directory operations, safer serverless error logging, stronger production-bundle scans and adversarial tests for company/representative access, forged statuses, PDFs, recipients, secrets, pricing, documents, audit and deletion boundaries.
 
@@ -54,7 +54,7 @@ No real database, identity provider, email provider, push provider, courier inte
 
 ## Latest development changes
 
-The current release includes the completed Prompt 11-19 work:
+The current release includes the completed Prompt 11-19 work plus Phase 21:
 
 - **Prompt 11:** Separate customer-visible order timelines and immutable internal audit history, with management viewing permissions and customer-data leakage tests.
 - **Prompt 12:** Customer-safe and internal operational order-summary PDFs, preview/download controls, simulated email sharing, recipient validation and audited document actions.
@@ -65,8 +65,30 @@ The current release includes the completed Prompt 11-19 work:
 - **Prompt 17:** Canonical PostgreSQL production model, role/company scoping, row-level-security approach, audit rules and reconciled OpenAPI contract with fabricated examples.
 - **Prompt 18:** Automated complete mock RFQ/order lifecycle, customer/representative notifications, Planning/Expediting/Dispatch hand-offs, internal/customer PDFs, archive eligibility and manual presenter checklist.
 - **Prompt 19:** Security/data-leak review, fail-closed customer projection, archive/audit/company scope hardening, safe logging, stronger production scans and adversarial access-control tests.
+- **Phase 21:** Proper Laboratory and QA desktop workspaces; SANAS/Traceable per-unit routing and certificates; physical movement independent of certificate upload; QA failure, rework and reinspection history; separate Dispatch receipt; pricing-safe management/product analytics; customer/internal sign-in realms; simulated verified credential changes; and dedicated branch-based representative assignment.
 
 The public GitHub Pages build remains a fabricated mock demonstration. Email and push delivery are simulated, browser code cannot permanently delete orders, and no production credentials or customer data were added.
+
+## Phase 21 desktop demonstration accounts
+
+| Role | Email | Password | Preview |
+| --- | --- | --- | --- |
+| Laboratory user | `laboratory.workflow@example.invalid` | `Lab12345!` | Operations desktop |
+| Laboratory manager | `laboratory.manager@example.invalid` | `LabManager123!` | Operations desktop |
+| Quality Assurance | `quality.workflow@example.invalid` | `Quality123!` | Operations desktop |
+| Quality manager | `quality.manager@example.invalid` | `QualityManager123!` | Operations desktop |
+| Sales manager | `sales.manager@example.invalid` | `SalesManager123!` | Operations mobile/desktop |
+| Company owner | `owner.workflow@example.invalid` | `Owner12345!` | Operations mobile/desktop |
+
+These are fabricated public-preview identities. Production builds exclude mock accounts and development verification codes.
+
+## Phase 21 documentation
+
+- [Order routing](docs/ORDER_WORKFLOW.md)
+- [Laboratory workflow](docs/LAB_WORKFLOW.md) and [certificate workflow](docs/CERTIFICATE_WORKFLOW.md)
+- [Quality Assurance](docs/QA_WORKFLOW.md) and [Dispatch receipt](docs/DISPATCH_WORKFLOW.md)
+- [Authentication](docs/AUTHENTICATION.md), [database proposal](docs/DATABASE_SCHEMA.md) and [API contract](docs/API_CONTRACT.md)
+- [Management analytics](docs/MANAGEMENT_ANALYTICS.md), [product analytics](docs/PRODUCT_ANALYTICS.md) and [desktop UI guidance](docs/DESKTOP_UI_GUIDELINES.md)
 
 ## Included in version 4.8
 

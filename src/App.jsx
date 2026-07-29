@@ -12,10 +12,12 @@ import { Home } from './components/Home.jsx';
 import { Intro } from './components/Intro.jsx';
 import { AppHeader, BottomNav, Toast } from './components/Layout.jsx';
 import { ManagementDashboard } from './components/ManagementDashboard.jsx';
+import { LaboratoryDashboard } from './components/LaboratoryDashboard.jsx';
 import { Notifications } from './components/Notifications.jsx';
 import { OperationalDashboard } from './components/OperationalDashboard.jsx';
 import { OrderTracking } from './components/OrderTracking.jsx';
 import { PlanningDashboard } from './components/PlanningDashboard.jsx';
+import { QualityDashboard } from './components/QualityDashboard.jsx';
 import { ProductDetail } from './components/ProductDetail.jsx';
 import { SalesRepresentativeDashboard } from './components/SalesRepresentativeDashboard.jsx';
 import { CustomerPersonalisation } from './apps/customer/CustomerPersonalisation.jsx';
@@ -43,7 +45,9 @@ import {
   services,
   usesDispatchWorkspace,
   usesExpeditorWorkspace,
+  usesLaboratoryWorkspace,
   usesPlanningWorkspace,
+  usesQualityWorkspace,
 } from './services/index.js';
 
 const EMPTY_CATALOGUE = { categories: [], products: [], recommendedCategories: {} };
@@ -51,6 +55,8 @@ const EMPTY_REGISTRATION = { areas: [], industries: [], branches: [], areaDirect
 const EMPTY_PLANNING_OPTIONS = { users: [], locations: [], priorities: [] };
 const EMPTY_EXPEDITING_OPTIONS = { progressSteps: [], requiredStepIds: [], documentTypes: [], approachingCompletionDays: 3 };
 const EMPTY_DISPATCH_OPTIONS = { methods: [], proofTypes: [], maxProofBytes: 4 * 1024 * 1024 };
+const EMPTY_LAB_OPTIONS = { certificationTypes: [], releaseDestinations: [], maxCertificateBytes: 12 * 1024 * 1024 };
+const EMPTY_QA_OPTIONS = { problemCategories: [], severities: [], reworkDestinations: [] };
 const PUBLIC_PREVIEW = __PUBLIC_PREVIEW__;
 const DOCUMENT_PREVIEW_ID = globalThis.document?.querySelector?.('meta[name="rhomberg-preview"]')?.content || '';
 const PREVIEW_CONTEXT = PUBLIC_PREVIEW
@@ -71,6 +77,8 @@ const canLoadDispatchOptions = signedInAccount => (
   || accountCan(signedInAccount, PERMISSIONS.CONFIRM_DELIVERY)
   || accountCan(signedInAccount, PERMISSIONS.CONFIRM_COLLECTION)
 );
+const canLoadLaboratoryOptions = signedInAccount => accountCan(signedInAccount, PERMISSIONS.VIEW_LAB_QUEUE);
+const canLoadQualityOptions = signedInAccount => accountCan(signedInAccount, PERMISSIONS.VIEW_QA_QUEUE);
 
 export default function App() {
   const [introComplete, setIntroComplete] = useState(false);
@@ -100,6 +108,8 @@ export default function App() {
   const [planningOptions, setPlanningOptions] = useState(EMPTY_PLANNING_OPTIONS);
   const [expeditingOptions, setExpeditingOptions] = useState(EMPTY_EXPEDITING_OPTIONS);
   const [dispatchOptions, setDispatchOptions] = useState(EMPTY_DISPATCH_OPTIONS);
+  const [laboratoryOptions, setLaboratoryOptions] = useState(EMPTY_LAB_OPTIONS);
+  const [qualityOptions, setQualityOptions] = useState(EMPTY_QA_OPTIONS);
   const [success, setSuccess] = useState(null);
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
@@ -137,9 +147,11 @@ export default function App() {
         let loadedPlanningOptions = EMPTY_PLANNING_OPTIONS;
         let loadedExpeditingOptions = EMPTY_EXPEDITING_OPTIONS;
         let loadedDispatchOptions = EMPTY_DISPATCH_OPTIONS;
+        let loadedLaboratoryOptions = EMPTY_LAB_OPTIONS;
+        let loadedQualityOptions = EMPTY_QA_OPTIONS;
         let loadedPersonalisation = createDefaultCustomerPersonalisation();
         if (session) {
-          [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedAuditEvents, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedPersonalisation] = await Promise.all([
+          [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedAuditEvents, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedLaboratoryOptions, loadedQualityOptions, loadedPersonalisation] = await Promise.all([
             accountCan(session, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
             listEnquiriesForAccount(session),
             services.orders.list(),
@@ -157,6 +169,12 @@ export default function App() {
             canLoadDispatchOptions(session)
               ? services.dispatch.getWorkspaceOptions()
               : Promise.resolve(EMPTY_DISPATCH_OPTIONS),
+            canLoadLaboratoryOptions(session)
+              ? services.laboratory.getWorkspaceOptions()
+              : Promise.resolve(EMPTY_LAB_OPTIONS),
+            canLoadQualityOptions(session)
+              ? services.qualityAssurance.getWorkspaceOptions()
+              : Promise.resolve(EMPTY_QA_OPTIONS),
             PREVIEW_CONTEXT.customer
               ? services.personalisation.get()
               : Promise.resolve(createDefaultCustomerPersonalisation()),
@@ -180,6 +198,8 @@ export default function App() {
         setPlanningOptions(loadedPlanningOptions);
         setExpeditingOptions(loadedExpeditingOptions);
         setDispatchOptions(loadedDispatchOptions);
+        setLaboratoryOptions(loadedLaboratoryOptions);
+        setQualityOptions(loadedQualityOptions);
         setView(session ? defaultViewForRole(session.role) : 'home');
         setAppStatus('ready');
       } catch (error) {
@@ -225,6 +245,8 @@ export default function App() {
   const isPlanningWorkspace = usesPlanningWorkspace(account);
   const isExpeditorWorkspace = usesExpeditorWorkspace(account);
   const isDispatchWorkspace = usesDispatchWorkspace(account);
+  const isLaboratoryWorkspace = usesLaboratoryWorkspace(account);
+  const isQualityWorkspace = usesQualityWorkspace(account);
   const isManagementWorkspace = accountCan(account, PERMISSIONS.VIEW_REPORTS);
   const canPerformWorkflow = accountCanPerformWorkflow(account);
   const personalisationStyle = useMemo(
@@ -246,7 +268,7 @@ export default function App() {
     if (!previewAllowsRole(PREVIEW_CONTEXT, signedInAccount.role)) {
       throw new Error(`This ${signedInAccount.role.replaceAll('_', ' ')} account is not supported in ${PREVIEW_CONTEXT.displayName}.`);
     }
-    const [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedAuditEvents, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedPersonalisation] = await Promise.all([
+    const [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedAuditEvents, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedLaboratoryOptions, loadedQualityOptions, loadedPersonalisation] = await Promise.all([
       accountCan(signedInAccount, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
       listEnquiriesForAccount(signedInAccount),
       services.orders.list(),
@@ -264,6 +286,12 @@ export default function App() {
       canLoadDispatchOptions(signedInAccount)
         ? services.dispatch.getWorkspaceOptions()
         : Promise.resolve(EMPTY_DISPATCH_OPTIONS),
+      canLoadLaboratoryOptions(signedInAccount)
+        ? services.laboratory.getWorkspaceOptions()
+        : Promise.resolve(EMPTY_LAB_OPTIONS),
+      canLoadQualityOptions(signedInAccount)
+        ? services.qualityAssurance.getWorkspaceOptions()
+        : Promise.resolve(EMPTY_QA_OPTIONS),
       PREVIEW_CONTEXT.customer
         ? services.personalisation.get()
         : Promise.resolve(createDefaultCustomerPersonalisation()),
@@ -278,6 +306,8 @@ export default function App() {
     setPlanningOptions(loadedPlanningOptions);
     setExpeditingOptions(loadedExpeditingOptions);
     setDispatchOptions(loadedDispatchOptions);
+    setLaboratoryOptions(loadedLaboratoryOptions);
+    setQualityOptions(loadedQualityOptions);
     setCustomerPersonalisation(normaliseCustomerPersonalisation(loadedPersonalisation));
     setPersonalisationDeferred(false);
     setView(defaultViewForRole(signedInAccount.role));
@@ -285,7 +315,11 @@ export default function App() {
 
   const login = async (email, password) => {
     try {
-      const signedInAccount = await services.auth.signIn({ email, password });
+      const signedInAccount = await services.auth.signIn({
+        email,
+        password,
+        realm: PREVIEW_CONTEXT.customer ? 'customer' : 'internal',
+      });
       if (!previewAllowsRole(PREVIEW_CONTEXT, signedInAccount.role)) {
         await services.auth.signOut();
         return {
@@ -488,6 +522,17 @@ export default function App() {
     setAuditEvents(loadedAuditEvents);
   };
 
+  const refreshOperationalRecords = async () => {
+    const [loadedOrders, loadedNotifications, loadedAuditEvents] = await Promise.all([
+      services.orders.list(),
+      services.notifications.list(),
+      accountCan(account, PERMISSIONS.READ_AUDIT_HISTORY) ? services.audit.list() : Promise.resolve([]),
+    ]);
+    setOrders(loadedOrders);
+    setNotifications(loadedNotifications);
+    setAuditEvents(loadedAuditEvents);
+  };
+
   const openNotificationRecord = notification => {
     setNotificationTarget({
       entityId: notification.entityId,
@@ -546,6 +591,8 @@ export default function App() {
       setPlanningOptions(EMPTY_PLANNING_OPTIONS);
       setExpeditingOptions(EMPTY_EXPEDITING_OPTIONS);
       setDispatchOptions(EMPTY_DISPATCH_OPTIONS);
+      setLaboratoryOptions(EMPTY_LAB_OPTIONS);
+      setQualityOptions(EMPTY_QA_OPTIONS);
       setCategoryId(null);
       setProductId(null);
       setView('home');
@@ -585,7 +632,7 @@ export default function App() {
       data-density={PREVIEW_CONTEXT.customer ? customerPersonalisation.density : undefined}
     >
       <span className="desktop-caption">{PREVIEW_CONTEXT.product.toUpperCase()} · {PREVIEW_CONTEXT.platform.toUpperCase()} · {__PUBLIC_PREVIEW__ ? 'DEMO PREVIEW' : 'PRIVATE CLOUD'}</span>
-      <div className={`app-shell ${isStaff ? 'expeditor-shell' : ''} ${isPlanningWorkspace ? 'planning-shell' : ''} ${isExpeditorWorkspace ? 'expediting-workspace-shell' : ''} ${isDispatchWorkspace ? 'dispatch-workspace-shell' : ''}`}>
+      <div className={`app-shell ${isStaff ? 'expeditor-shell' : ''} ${isPlanningWorkspace ? 'planning-shell' : ''} ${isExpeditorWorkspace ? 'expediting-workspace-shell' : ''} ${isLaboratoryWorkspace ? 'laboratory-workspace-shell' : ''} ${isQualityWorkspace ? 'quality-workspace-shell' : ''} ${isDispatchWorkspace ? 'dispatch-workspace-shell' : ''}`}>
         {__PUBLIC_PREVIEW__ && <div className="platform-preview-banner"><span><strong>{PREVIEW_CONTEXT.product}</strong> {PREVIEW_CONTEXT.platform}</span><a href="./">All previews</a></div>}
         <AppHeader account={account} onNavigate={navigate} onBack={detailView ? backFromDetail : null} backLabel={view === 'settings' ? 'Customer settings' : view === 'configurator' ? 'Product configuration' : selectedProduct?.code || 'Catalogue'} theme={theme} onToggleTheme={toggleTheme} serviceMode={services.mode} preview={PREVIEW_CONTEXT} showThemeToggle={!PREVIEW_CONTEXT.customer} personalisation={PREVIEW_CONTEXT.customer ? customerPersonalisation : null} />
         <main className="app-main">
@@ -598,6 +645,10 @@ export default function App() {
                   ? <PlanningDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} planningOptions={planningOptions} focusRecordId={notificationTarget?.entityId} documentActions={orderDocumentActions} />
                   : isExpeditorWorkspace
                     ? <ExpeditorDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} expeditingOptions={expeditingOptions} focusRecordId={notificationTarget?.entityId} documentActions={orderDocumentActions} />
+                    : isLaboratoryWorkspace
+                      ? <LaboratoryDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} laboratoryActions={services.laboratory} laboratoryOptions={laboratoryOptions} onRecordsChanged={refreshOperationalRecords} focusRecordId={notificationTarget?.entityId} />
+                      : isQualityWorkspace
+                        ? <QualityDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} options={qualityOptions} focusRecordId={notificationTarget?.entityId} />
                     : isDispatchWorkspace
                       ? <DispatchDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} documentActions={orderDocumentActions} />
                     : isManagementWorkspace
@@ -606,7 +657,7 @@ export default function App() {
               {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
               {view === 'archive' && <ArchivedOrders account={account} archiveActions={services.archive} serviceMode={services.mode} onRecordsChanged={refreshAfterRetentionAction} />}
               {view === 'audit' && <AuditTrail events={auditEvents} serviceMode={services.mode} />}
-              {view === 'account' && <Account account={account} enquiries={staffRecords} onSignOut={signOut} serviceMode={services.mode} />}
+              {view === 'account' && <Account account={account} enquiries={staffRecords} onSignOut={signOut} serviceMode={services.mode} credentialActions={services.credentials} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} />}
             </>
           ) : (
             <>
@@ -615,9 +666,9 @@ export default function App() {
               {view === 'product' && selectedProduct && <ProductDetail product={selectedProduct} category={selectedCategory} onConfigure={() => startConfigurator(null, 'product')} />}
               {view === 'configurator' && selectedProduct && <Configurator product={selectedProduct} existingLine={editingLine} onSave={saveConfiguredLine} onCancel={backFromDetail} />}
               {view === 'enquiry' && <Enquiry account={account} lines={draft} registrationOptions={registrationOptions} deliverySettings={services.preview} onAddProducts={() => navigate('catalogue')} onEdit={line => startConfigurator(line, 'enquiry')} onRemove={removeLine} onQuantity={updateQuantity} onSubmit={submitEnquiry} success={success} onCloseSuccess={() => { setSuccess(null); navigate('tracking'); }} />}
-              {view === 'tracking' && <OrderTracking account={account} enquiries={accountRecords} onStartEnquiry={() => navigate('enquiry')} onAction={performWorkflowAction} serviceMode={services.mode} focusRecordId={notificationTarget?.entityId} />}
+              {view === 'tracking' && <OrderTracking account={account} enquiries={accountRecords} onStartEnquiry={() => navigate('enquiry')} onAction={performWorkflowAction} serviceMode={services.mode} certificateActions={services.laboratory} focusRecordId={notificationTarget?.entityId} />}
               {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
-              {view === 'account' && <Account account={account} enquiries={accountRecords} onSignOut={signOut} serviceMode={services.mode} onOpenSettings={() => navigate('settings')} personalisation={customerPersonalisation} />}
+              {view === 'account' && <Account account={account} enquiries={accountRecords} onSignOut={signOut} serviceMode={services.mode} onOpenSettings={() => navigate('settings')} personalisation={customerPersonalisation} credentialActions={services.credentials} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} />}
               {view === 'settings' && <CustomerPersonalisation account={account} initialValue={customerPersonalisation} mode="settings" onSave={saveCustomerPersonalisation} onCancel={() => navigate('account')} onUploadImage={uploadCustomerImage} onRemoveImage={removeCustomerImage} />}
             </>
           )}

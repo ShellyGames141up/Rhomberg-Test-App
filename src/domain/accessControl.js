@@ -1,4 +1,5 @@
 import { accountCan, PERMISSIONS, roleCan, USER_ROLES } from '../services/contracts.js';
+import { orderRequiresLaboratory } from './certification.js';
 
 const navItem = (id, glyph, label) => Object.freeze({ id, glyph, label });
 
@@ -82,6 +83,54 @@ export const ROLE_PROFILES = Object.freeze({
       queue: 'Daily expediting queue',
     },
   }),
+  [USER_ROLES.LABORATORY_USER]: profile({
+    role: USER_ROLES.LABORATORY_USER,
+    label: 'Laboratory user',
+    workspaceLabel: 'Laboratory',
+    dashboard: {
+      eyebrow: 'Laboratory workspace',
+      headline: 'Calibration work, unit by unit.',
+      description: 'Receive SANAS and Traceable orders, maintain one controlled task per physical unit and prepare certificates for release.',
+      queue: 'Laboratory queue',
+    },
+  }),
+  [USER_ROLES.LABORATORY_MANAGER]: profile({
+    role: USER_ROLES.LABORATORY_MANAGER,
+    label: 'Laboratory manager',
+    workspaceLabel: 'Laboratory',
+    navigation: internalNavigation('Laboratory', true),
+    allowedViews: Object.freeze([...INTERNAL_VIEWS, 'audit']),
+    dashboard: {
+      eyebrow: 'Laboratory control',
+      headline: 'Calibration and certificates under control.',
+      description: 'Review unit results, verify certificate completeness and authorise controlled Laboratory release.',
+      queue: 'Laboratory release queue',
+    },
+  }),
+  [USER_ROLES.QUALITY_ASSURANCE]: profile({
+    role: USER_ROLES.QUALITY_ASSURANCE,
+    label: 'Quality assurance',
+    workspaceLabel: 'Quality',
+    dashboard: {
+      eyebrow: 'Quality Assurance workspace',
+      headline: 'Inspect, correct and release with confidence.',
+      description: 'Inspect non-Laboratory orders, record controlled findings and preserve every rework and reinspection cycle.',
+      queue: 'QA inspection queue',
+    },
+  }),
+  [USER_ROLES.QUALITY_MANAGER]: profile({
+    role: USER_ROLES.QUALITY_MANAGER,
+    label: 'Quality manager',
+    workspaceLabel: 'Quality',
+    navigation: internalNavigation('Quality', true),
+    allowedViews: Object.freeze([...INTERNAL_VIEWS, 'audit']),
+    dashboard: {
+      eyebrow: 'Quality management',
+      headline: 'Quality performance and exceptions.',
+      description: 'Manage inspection queues, failures, corrective work and controlled release to Dispatch.',
+      queue: 'QA oversight',
+    },
+  }),
   [USER_ROLES.DISPATCH]: profile({
     role: USER_ROLES.DISPATCH,
     label: 'Dispatch',
@@ -102,6 +151,32 @@ export const ROLE_PROFILES = Object.freeze({
       headline: 'Procurement workflow is prepared.',
       description: 'The Buyer role is available for secure sign-in, but its procurement queue and actions remain inactive until that workflow is approved.',
       queue: 'Buyer workflow inactive',
+    },
+  }),
+  [USER_ROLES.SALES_MANAGER]: profile({
+    role: USER_ROLES.SALES_MANAGER,
+    label: 'Sales manager',
+    workspaceLabel: 'Sales analytics',
+    navigation: internalNavigation('Sales', true),
+    allowedViews: Object.freeze([...INTERNAL_VIEWS, 'audit']),
+    dashboard: {
+      eyebrow: 'Sales management',
+      headline: 'Customer activity and unit demand.',
+      description: 'Review representative workload, RFQ movement and product quantities without exposing protected pricing.',
+      queue: 'Sales overview',
+    },
+  }),
+  [USER_ROLES.COMPANY_OWNER]: profile({
+    role: USER_ROLES.COMPANY_OWNER,
+    label: 'Company owner',
+    workspaceLabel: 'Executive',
+    navigation: internalNavigation('Executive', true, true),
+    allowedViews: OVERSIGHT_VIEWS,
+    dashboard: {
+      eyebrow: 'Executive overview',
+      headline: 'Operations, demand and service performance.',
+      description: 'Review company-wide workflow health, laboratory throughput, quality performance and unit-volume trends.',
+      queue: 'Executive dashboard',
     },
   }),
   [USER_ROLES.MANAGER]: profile({
@@ -168,11 +243,33 @@ export const usesDispatchWorkspace = account => (
   accountCan(account, PERMISSIONS.VIEW_DISPATCH_QUEUE)
   && !accountCan(account, PERMISSIONS.VIEW_ALL_ORDERS)
 );
+export const usesLaboratoryWorkspace = account => (
+  accountCan(account, PERMISSIONS.VIEW_LAB_QUEUE)
+  && !accountCan(account, PERMISSIONS.VIEW_ALL_ORDERS)
+);
+export const usesQualityWorkspace = account => (
+  accountCan(account, PERMISSIONS.VIEW_QA_QUEUE)
+  && !accountCan(account, PERMISSIONS.VIEW_ALL_ORDERS)
+);
 
 export const ORDER_QUEUE_SCOPES = Object.freeze({
   [PERMISSIONS.VIEW_PLANNING_QUEUE]: Object.freeze(['awaiting_planning', 'planning_in_progress', 'planned']),
-  [PERMISSIONS.VIEW_EXPEDITING_QUEUE]: Object.freeze(['submitted_to_expediting', 'expediting_in_progress', 'awaiting_dispatch']),
-  [PERMISSIONS.VIEW_DISPATCH_QUEUE]: Object.freeze(['awaiting_dispatch', 'ready_for_collection', 'out_for_delivery', 'delivered', 'collected']),
+  [PERMISSIONS.VIEW_EXPEDITING_QUEUE]: Object.freeze([
+    'awaiting_lab_receipt_expediting', 'submitted_to_expediting', 'expediting_in_progress',
+    'qa_failed', 'returned_to_expediting', 'awaiting_qa', 'awaiting_dispatch',
+  ]),
+  [PERMISSIONS.VIEW_LAB_QUEUE]: Object.freeze([
+    'awaiting_lab', 'lab_received', 'calibration_in_progress', 'calibration_on_hold',
+    'calibration_completed', 'awaiting_lab_release', 'released_from_lab',
+  ]),
+  [PERMISSIONS.VIEW_QA_QUEUE]: Object.freeze([
+    'awaiting_qa', 'qa_in_progress', 'qa_failed', 'returned_to_expediting',
+    'qa_reinspection_required', 'qa_passed',
+  ]),
+  [PERMISSIONS.VIEW_DISPATCH_QUEUE]: Object.freeze([
+    'awaiting_lab_receipt_dispatch', 'awaiting_dispatch', 'ready_for_collection',
+    'out_for_delivery', 'delivered', 'collected',
+  ]),
 });
 
 const representativeIdFor = record => record?.representativeId || record?.selectedRep?.id || '';
@@ -210,6 +307,12 @@ export const canAccessRecord = (account, record) => {
   if (!isOrder && roleCan(account.role, PERMISSIONS.VIEW_ASSIGNED_RFQS)) {
     return Boolean(account.representativeId) && representativeIdFor(record) === account.representativeId;
   }
+
+  if (
+    isOrder
+    && roleCan(account.role, PERMISSIONS.VIEW_LAB_QUEUE)
+    && orderRequiresLaboratory(record)
+  ) return true;
 
   if (isOrder) {
     return Object.keys(ORDER_QUEUE_SCOPES).some(permission => (

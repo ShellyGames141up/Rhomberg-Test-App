@@ -15,6 +15,10 @@ import {
   DISPATCH_METHODS,
   DISPATCH_PROOF_TYPES,
 } from './dispatch.js';
+import {
+  allLaboratoryUnitsCalibrated,
+  orderRequiresLaboratory,
+} from './certification.js';
 
 export const WORKFLOW_ENTITY_TYPES = Object.freeze({
   RFQ: 'rfq',
@@ -40,8 +44,23 @@ export const ORDER_STATUSES = Object.freeze([
   'awaiting_planning',
   'planning_in_progress',
   'planned',
+  'awaiting_lab',
+  'lab_received',
+  'calibration_in_progress',
+  'calibration_on_hold',
+  'calibration_completed',
+  'awaiting_lab_release',
+  'released_from_lab',
+  'awaiting_lab_receipt_expediting',
+  'awaiting_lab_receipt_dispatch',
   'submitted_to_expediting',
   'expediting_in_progress',
+  'awaiting_qa',
+  'qa_in_progress',
+  'qa_failed',
+  'returned_to_expediting',
+  'qa_reinspection_required',
+  'qa_passed',
   'awaiting_dispatch',
   'ready_for_collection',
   'out_for_delivery',
@@ -80,8 +99,23 @@ export const WORKFLOW_STATUS_DEFINITIONS = Object.freeze({
     awaiting_planning: status('awaiting_planning', 'order', 'Awaiting planning', 'Your order has been accepted and is waiting to be planned.', 'Accepted order is queued for Planning.', true, 8),
     planning_in_progress: status('planning_in_progress', 'order', 'Planning in progress', 'Your order is being prepared for production or fulfilment.', 'Planning is assigning the internal job and validating the customer PO.', true, 18),
     planned: status('planned', 'order', 'Planning completed', 'Planning for your order has been completed.', 'Internal job and customer PO references are complete.', false, 28),
+    awaiting_lab: status('awaiting_lab', 'order', 'Awaiting laboratory', 'Your instruments are queued for the required calibration work.', 'Planning routed a SANAS or Traceable order to the Laboratory.', true, 32),
+    lab_received: status('lab_received', 'order', 'Received by laboratory', 'The Laboratory has received your instruments.', 'Laboratory receipt was confirmed.', true, 36),
+    calibration_in_progress: status('calibration_in_progress', 'order', 'Calibration in progress', 'Required calibration work is in progress.', 'Laboratory owns the unit-level calibration tasks.', true, 44),
+    calibration_on_hold: status('calibration_on_hold', 'order', 'Calibration on hold', 'Calibration work is temporarily on hold.', 'Laboratory paused calibration with a controlled reason.', true, 44),
+    calibration_completed: status('calibration_completed', 'order', 'Calibration completed', 'Calibration work is complete and certificates are being checked.', 'All physical-unit tasks are complete.', true, 52),
+    awaiting_lab_release: status('awaiting_lab_release', 'order', 'Awaiting laboratory release', 'Your calibrated instruments are being prepared for release.', 'Physical calibration work is complete; certificates may remain pending after release.', true, 56),
+    released_from_lab: status('released_from_lab', 'order', 'Released from laboratory', 'The Laboratory has released your calibrated instruments.', 'Laboratory manager released the order.', true, 58),
+    awaiting_lab_receipt_expediting: status('awaiting_lab_receipt_expediting', 'order', 'Awaiting Expediting receipt', 'Your calibrated instruments are moving to the fulfilment team.', 'Expediting must confirm receipt from Laboratory.', true, 60),
+    awaiting_lab_receipt_dispatch: status('awaiting_lab_receipt_dispatch', 'order', 'Awaiting Dispatch receipt', 'Your calibrated instruments are moving to Dispatch.', 'Dispatch must confirm receipt from Laboratory.', true, 66),
     submitted_to_expediting: status('submitted_to_expediting', 'order', 'Submitted to expediting', 'Your order has entered the fulfilment queue.', 'Planning handed the order to Expediting.', true, 36),
     expediting_in_progress: status('expediting_in_progress', 'order', 'In progress', 'Your instruments are being manufactured or prepared.', 'Expeditor owns daily production and fulfilment updates.', true, 52),
+    awaiting_qa: status('awaiting_qa', 'order', 'Awaiting quality inspection', 'Your instruments are queued for final quality checks.', 'Non-Laboratory order was submitted to Quality Assurance.', true, 62),
+    qa_in_progress: status('qa_in_progress', 'order', 'Quality inspection in progress', 'Final quality checks are in progress.', 'Quality Assurance owns the current inspection attempt.', true, 65),
+    qa_failed: status('qa_failed', 'order', 'Quality correction required', 'A quality concern is being corrected before release.', 'Quality Assurance recorded a failure and selected a controlled rework destination.', true, 60),
+    returned_to_expediting: status('returned_to_expediting', 'order', 'Corrective work in progress', 'Corrective work is in progress before another quality inspection.', 'Expediting or Planning owns the recorded rework cycle.', true, 58),
+    qa_reinspection_required: status('qa_reinspection_required', 'order', 'Awaiting quality reinspection', 'Corrective work is complete and another quality inspection is queued.', 'Order was resubmitted to Quality Assurance.', true, 62),
+    qa_passed: status('qa_passed', 'order', 'Quality checks passed', 'Your instruments passed the final quality checks.', 'Quality Assurance passed the inspection; Dispatch handoff is pending.', true, 68),
     awaiting_dispatch: status('awaiting_dispatch', 'order', 'Awaiting dispatch', 'Your order has completed fulfilment and is being prepared for handover.', 'Expediting completed and Dispatch owns the next action.', true, 68),
     ready_for_collection: status('ready_for_collection', 'order', 'Ready for collection', 'Your order is ready for collection from the confirmed branch.', 'Dispatch has released a collection order.', true, 80),
     out_for_delivery: status('out_for_delivery', 'order', 'Out for delivery', 'Your order has left Rhomberg and is on its way.', 'Dispatch released the delivery order.', true, 82),
@@ -99,6 +133,10 @@ const INTERNAL_MANAGEMENT = Object.freeze([USER_ROLES.MANAGER, USER_ROLES.ADMINI
 const REP_ACTION_ROLES = Object.freeze([USER_ROLES.SALES_REPRESENTATIVE, ...INTERNAL_MANAGEMENT]);
 const PLANNING_ACTION_ROLES = Object.freeze([USER_ROLES.PLANNING, ...INTERNAL_MANAGEMENT]);
 const EXPEDITING_ACTION_ROLES = Object.freeze([USER_ROLES.EXPEDITOR, ...INTERNAL_MANAGEMENT]);
+const LAB_ACTION_ROLES = Object.freeze([USER_ROLES.LABORATORY_USER, USER_ROLES.LABORATORY_MANAGER, ...INTERNAL_MANAGEMENT]);
+const LAB_RELEASE_ROLES = Object.freeze([USER_ROLES.LABORATORY_MANAGER, ...INTERNAL_MANAGEMENT]);
+const QA_ACTION_ROLES = Object.freeze([USER_ROLES.QUALITY_ASSURANCE, USER_ROLES.QUALITY_MANAGER, ...INTERNAL_MANAGEMENT]);
+const QA_REWORK_ROLES = Object.freeze([USER_ROLES.EXPEDITOR, USER_ROLES.QUALITY_MANAGER, ...INTERNAL_MANAGEMENT]);
 const DISPATCH_ACTION_ROLES = Object.freeze([USER_ROLES.DISPATCH, ...INTERNAL_MANAGEMENT]);
 
 const transition = ({
@@ -289,25 +327,102 @@ const transitions = [
     persistInputFields: ['planning', 'internalJobNumber', 'customerPoNumber'],
   }),
   orderTransition({
-    action: 'submit_to_expediting', from: 'planned', to: 'submitted_to_expediting', roles: PLANNING_ACTION_ROLES, label: 'Submit to expediting',
+    action: 'submit_to_expediting', from: 'planned', to: '__planning_route__', roles: PLANNING_ACTION_ROLES, label: 'Submit planned order',
     requiredFields: [
       required('entity.planning.internalJobNumber', 'Internal job number'),
       required('entity.planning.assignedPlanningUserId', 'Assigned Planning user'),
       required('entity.planning.submissionDate', 'Planning submission date'),
       required('entity.selectedRep.id', 'Assigned representative'),
     ],
-    customerDescription: 'Your order entered the fulfilment queue.', internalDescription: 'Planning handed the completed order plan to Expediting.',
+    customerDescription: 'Your order entered the next controlled fulfilment stage.', internalDescription: 'Planning routed the completed order according to its calibration requirements.',
     guard: 'planning_handoff',
     generatesNotification: true,
     notificationRecipients: ['customer', 'assigned_representative', 'expeditor'],
     notificationMessages: {
       customer: 'Planning has processed your order and it has entered the fulfilment queue.',
-      assigned_representative: 'Planning has processed the order and submitted it to Expediting.',
-      expeditor: 'A planned order is ready in the Expediting queue.',
+      assigned_representative: 'Planning has processed and routed the order.',
+      expeditor: 'A planned standard order is ready in the Expediting queue.',
     },
-    timestampField: 'submittedToExpeditingAt',
+    timestampField: 'planningSubmittedAt',
     actorField: 'submittedToExpeditingBy',
     customerVisible: true,
+  }),
+  orderTransition({
+    action: 'receive_lab_order', from: 'awaiting_lab', to: 'lab_received', roles: LAB_ACTION_ROLES, label: 'Confirm laboratory receipt',
+    customerDescription: 'The Laboratory received your instruments.', internalDescription: 'Laboratory confirmed physical receipt of the planned order.',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative', 'expeditor', 'laboratory_manager'],
+    timestampField: 'labReceivedAt', actorField: 'labReceivedBy', customerVisible: true,
+  }),
+  orderTransition({
+    action: 'start_lab_calibration', from: 'lab_received', to: 'calibration_in_progress', roles: LAB_ACTION_ROLES, label: 'Start calibration',
+    customerDescription: 'Required calibration work has started.', internalDescription: 'Laboratory started unit-level calibration work.',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'],
+    timestampField: 'calibrationStartedAt', actorField: 'calibrationStartedBy', customerVisible: true,
+  }),
+  orderTransition({
+    action: 'hold_lab_calibration', from: 'calibration_in_progress', to: 'calibration_on_hold', roles: LAB_ACTION_ROLES, label: 'Place calibration on hold',
+    customerDescription: 'Calibration work is temporarily on hold.', internalDescription: 'Laboratory paused calibration work.',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'], requiresComment: true,
+    timestampField: 'calibrationHeldAt', actorField: 'calibrationHeldBy', customerVisible: true,
+  }),
+  orderTransition({
+    action: 'resume_lab_calibration', from: 'calibration_on_hold', to: 'calibration_in_progress', roles: LAB_ACTION_ROLES, label: 'Resume calibration',
+    customerDescription: 'Calibration work has resumed.', internalDescription: 'Laboratory resumed calibration work.',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative'], requiresComment: true,
+    timestampField: 'calibrationResumedAt', actorField: 'calibrationResumedBy', customerVisible: true,
+  }),
+  orderTransition({
+    action: 'complete_lab_calibration', from: 'calibration_in_progress', to: 'calibration_completed', roles: LAB_ACTION_ROLES, label: 'Complete calibration work',
+    customerDescription: 'Calibration work is complete.', internalDescription: 'All physical-unit calibration tasks were completed.',
+    guard: 'laboratory_units_complete',
+    generatesNotification: true, notificationRecipients: ['assigned_representative', 'laboratory_manager'],
+    timestampField: 'calibrationCompletedAt', actorField: 'calibrationCompletedBy', customerVisible: true,
+  }),
+  orderTransition({
+    action: 'mark_lab_ready_for_release', from: 'calibration_completed', to: 'awaiting_lab_release', roles: LAB_ACTION_ROLES, label: 'Submit for laboratory release',
+    customerDescription: 'Your calibrated instruments are being prepared for release.', internalDescription: 'Physical calibration work is complete; certificates may remain in the permanent pending queue.',
+    guard: 'laboratory_units_complete',
+    generatesNotification: true, notificationRecipients: ['laboratory_manager', 'assigned_representative'],
+    timestampField: 'labReleaseRequestedAt', actorField: 'labReleaseRequestedBy', customerVisible: true,
+  }),
+  orderTransition({
+    action: 'release_from_lab', from: 'awaiting_lab_release', to: '__lab_release__', roles: LAB_RELEASE_ROLES, label: 'Release from laboratory',
+    requiredFields: [required('input.labRelease.destination', 'Release destination')],
+    customerDescription: 'The Laboratory released your calibrated instruments.', internalDescription: 'Laboratory manager released the controlled order and certificates.',
+    guard: 'laboratory_release',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative', 'expeditor', 'dispatch'],
+    timestampField: 'labReleasedAt', actorField: 'labReleasedBy', customerVisible: true,
+  }),
+  orderTransition({
+    action: 'confirm_lab_receipt_expediting', from: 'awaiting_lab_receipt_expediting', to: 'submitted_to_expediting', roles: EXPEDITING_ACTION_ROLES, label: 'Confirm receipt from laboratory',
+    customerDescription: 'Your calibrated instruments entered the fulfilment queue.', internalDescription: 'Expediting confirmed receipt from Laboratory.',
+    generatesNotification: true, notificationRecipients: ['assigned_representative', 'laboratory_manager'],
+    timestampField: 'expeditingLabReceiptAt', actorField: 'expeditingLabReceiptBy', customerVisible: false,
+  }),
+  orderTransition({
+    action: 'confirm_lab_receipt_dispatch', from: 'awaiting_lab_receipt_dispatch', to: 'awaiting_dispatch', roles: DISPATCH_ACTION_ROLES, label: 'Confirm receipt from laboratory',
+    customerDescription: 'Your calibrated instruments are being prepared for handover.', internalDescription: 'Dispatch confirmed receipt from Laboratory.',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative', 'laboratory_manager'],
+    timestampField: 'dispatchLabReceiptAt', actorField: 'dispatchLabReceiptBy', customerVisible: true,
+  }),
+  orderTransition({
+    action: 'confirm_dispatch_receipt', from: 'awaiting_dispatch', to: '__same__', roles: DISPATCH_ACTION_ROLES, label: 'Confirm Received in Dispatch',
+    requiredFields: [
+      required('input.dispatchReceipt.sourceDepartment', 'Source department'),
+      required('input.dispatchReceipt.numberOfPackages', 'Number of packages'),
+      required('input.dispatchReceipt.customerMessage', 'Customer-facing receipt message'),
+    ],
+    customerDescription: 'Your order has been received by Dispatch and is being prepared for handover.',
+    internalDescription: 'Dispatch recorded a controlled receipt from the sending department.',
+    guard: 'dispatch_receipt',
+    generatesNotification: true,
+    notificationRecipients: ['customer', 'assigned_representative'],
+    timestampField: 'dispatchReceivedAt',
+    actorField: 'dispatchReceivedBy',
+    customerVisible: true,
+    customerNotePath: 'input.dispatchReceipt.customerMessage',
+    auditNotePath: 'input.dispatchReceipt.internalNote',
+    allowsSameStatus: true,
   }),
   orderTransition({
     action: 'start_expediting', from: 'submitted_to_expediting', to: 'expediting_in_progress', roles: EXPEDITING_ACTION_ROLES, label: 'Start expediting',
@@ -340,21 +455,65 @@ const transitions = [
     allowsSameStatus: true,
   }),
   orderTransition({
-    action: 'complete_expediting', from: 'expediting_in_progress', to: 'awaiting_dispatch', roles: EXPEDITING_ACTION_ROLES, label: 'Send to dispatch',
+    action: 'complete_expediting', from: 'expediting_in_progress', to: '__expediting_completion_route__', roles: EXPEDITING_ACTION_ROLES, label: 'Complete expediting',
     requiredFields: [
       required('input.completionCheckConfirmed', 'Completion check confirmation'),
       required('input.expeditingUpdate.progressStep', 'Dispatch-ready progress step'),
       required('input.expeditingUpdate.customerMessage', 'Customer-facing update'),
     ],
-    customerDescription: 'Your order is being prepared for handover.', internalDescription: 'Expeditor completed fulfilment and handed the order to Dispatch.',
+    customerDescription: 'Fulfilment is complete and your order entered its next controlled stage.', internalDescription: 'Expeditor completed fulfilment and routed the order to QA or directly to Dispatch for a Laboratory order.',
     guard: 'expediting_dispatch_handoff',
-    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative', 'dispatch'],
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative', 'quality_assurance', 'dispatch'],
     notificationMessages: {
       dispatch: 'An Expedited order is ready in the Dispatch queue.',
     },
     timestampField: 'submittedToDispatchAt', actorField: 'submittedToDispatchBy', customerVisible: true,
     customerNotePath: 'input.expeditingUpdate.customerMessage',
     auditNotePath: 'input.expeditingUpdate.internalNote',
+  }),
+  orderTransition({
+    action: 'start_qa', from: 'awaiting_qa', to: 'qa_in_progress', roles: QA_ACTION_ROLES, label: 'Start quality inspection',
+    customerDescription: 'Final quality inspection has started.', internalDescription: 'Quality Assurance started a controlled inspection attempt.',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative', 'expeditor'],
+    timestampField: 'qaStartedAt', actorField: 'qaStartedBy', customerVisible: true,
+  }),
+  orderTransition({
+    action: 'start_qa_reinspection', from: 'qa_reinspection_required', to: 'qa_in_progress', roles: QA_ACTION_ROLES, label: 'Start reinspection',
+    customerDescription: 'Quality reinspection has started.', internalDescription: 'Quality Assurance started the next inspection attempt.',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative', 'expeditor'],
+    timestampField: 'qaReinspectionStartedAt', actorField: 'qaReinspectionStartedBy', customerVisible: true,
+  }),
+  orderTransition({
+    action: 'pass_qa', from: 'qa_in_progress', to: 'qa_passed', roles: QA_ACTION_ROLES, label: 'Pass quality inspection',
+    customerDescription: 'Your instruments passed final quality checks.', internalDescription: 'Quality Assurance passed the active inspection attempt.',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative', 'expeditor', 'quality_manager', 'dispatch'],
+    timestampField: 'qaPassedAt', actorField: 'qaPassedBy', customerVisible: true,
+  }),
+  orderTransition({
+    action: 'release_qa_order', from: 'qa_passed', to: 'awaiting_dispatch', roles: QA_ACTION_ROLES, label: 'Send to Dispatch',
+    customerDescription: 'Your order is being prepared for handover.', internalDescription: 'Quality Assurance released the passed order to Dispatch.',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative', 'dispatch'],
+    timestampField: 'submittedToDispatchAt', actorField: 'submittedToDispatchBy', customerVisible: true,
+  }),
+  orderTransition({
+    action: 'fail_qa', from: 'qa_in_progress', to: 'qa_failed', roles: QA_ACTION_ROLES, label: 'Record quality problem',
+    requiredFields: [required('input.qaFailure.problemDescription', 'Problem description'), required('input.qaFailure.reworkDestination', 'Rework destination')],
+    customerDescription: 'A quality concern is being corrected before release.', internalDescription: 'Quality Assurance failed the active attempt and recorded the controlled rework destination.',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative', 'expeditor', 'quality_manager'],
+    timestampField: 'qaFailedAt', actorField: 'qaFailedBy', customerVisible: true,
+  }),
+  orderTransition({
+    action: 'start_qa_rework', from: 'qa_failed', to: 'returned_to_expediting', roles: QA_REWORK_ROLES, label: 'Start corrective work',
+    customerDescription: 'Corrective work has started.', internalDescription: 'The responsible team accepted the QA rework cycle.',
+    generatesNotification: true, notificationRecipients: ['assigned_representative', 'quality_assurance'],
+    timestampField: 'qaReworkStartedAt', actorField: 'qaReworkStartedBy', customerVisible: false,
+  }),
+  orderTransition({
+    action: 'resubmit_to_qa', from: 'returned_to_expediting', to: 'qa_reinspection_required', roles: QA_REWORK_ROLES, label: 'Resubmit to QA',
+    requiredFields: [required('input.qaRework.correctiveAction', 'Corrective action')],
+    customerDescription: 'Corrective work is complete and another quality inspection is queued.', internalDescription: 'Rework was documented and resubmitted to QA.',
+    generatesNotification: true, notificationRecipients: ['customer', 'assigned_representative', 'quality_assurance'],
+    timestampField: 'qaResubmittedAt', actorField: 'qaResubmittedBy', customerVisible: true,
   }),
   orderTransition({
     action: 'mark_ready_for_collection', from: 'awaiting_dispatch', to: 'ready_for_collection', roles: DISPATCH_ACTION_ROLES, label: 'Mark ready for collection',
@@ -771,6 +930,12 @@ const assertDispatchUpdate = (entity, input, action) => {
   const recipientName = String(details.recipientName || '').trim();
   const numberOfPackages = Number(details.numberOfPackages);
 
+  if (['mark_ready_for_collection', 'start_delivery'].includes(action) && !entity.dispatch?.receivedAt) {
+    throw new ServiceError('Confirm receipt in Dispatch before preparing the customer handover.', {
+      code: 'DISPATCH_RECEIPT_REQUIRED',
+      status: 409,
+    });
+  }
   if (!method) fieldErrors.dispatchMethod = 'Select a recognised Dispatch method.';
   if (entity.fulfilment === 'collect' && method?.fulfilment !== 'collect') {
     fieldErrors.dispatchMethod = 'This collection order must use the customer collection method.';
@@ -838,6 +1003,29 @@ const assertGuard = (entity, actor, transitionDefinition, input) => {
   if (transitionDefinition.guard === 'order_acceptance' && input !== undefined) assertOrderAcceptance(input);
   if (transitionDefinition.guard === 'planning_submission' && input !== undefined) assertPlanningDetails(input.planning);
   if (transitionDefinition.guard === 'planning_handoff') assertPlanningDetails(entity.planning);
+  if (transitionDefinition.guard === 'laboratory_units_complete') {
+    if (!allLaboratoryUnitsCalibrated(entity)) {
+      throw new ServiceError('Complete the calibration record for every physical unit first.', {
+        code: 'LAB_UNITS_INCOMPLETE',
+        status: 409,
+      });
+    }
+  }
+  if (transitionDefinition.guard === 'laboratory_release') {
+    if (!allLaboratoryUnitsCalibrated(entity)) {
+      throw new ServiceError('This order cannot leave the Laboratory until every physical unit has completed calibration.', {
+        code: 'LAB_UNITS_INCOMPLETE',
+        status: 409,
+      });
+    }
+    if (input !== undefined && !['expediting', 'dispatch'].includes(input?.labRelease?.destination)) {
+      throw new ServiceError('Select Expediting or Dispatch as the controlled release destination.', {
+        code: 'LAB_RELEASE_DESTINATION_INVALID',
+        status: 422,
+        fieldErrors: { labReleaseDestination: 'Select a release destination.' },
+      });
+    }
+  }
   if (transitionDefinition.guard === 'expediting_start' && input !== undefined) {
     assertExpeditingUpdate(input.expeditingUpdate, { expectedStep: 'planning_received' });
   }
@@ -847,7 +1035,39 @@ const assertGuard = (entity, actor, transitionDefinition, input) => {
   if (transitionDefinition.guard === 'expediting_dispatch_handoff' && input !== undefined) {
     assertExpeditingHandoff(entity, input);
   }
-  if (transitionDefinition.guard?.startsWith('dispatch_') && input !== undefined) {
+  if (transitionDefinition.guard === 'dispatch_receipt') {
+    if (entity.dispatch?.receivedAt) {
+      throw new ServiceError('Dispatch receipt has already been confirmed for this order.', {
+        code: 'DISPATCH_RECEIPT_ALREADY_CONFIRMED',
+        status: 409,
+      });
+    }
+    if (input !== undefined) {
+      const receipt = input.dispatchReceipt || {};
+      if (!['laboratory', 'quality_assurance', 'expediting', 'planning', 'authorised_exception'].includes(receipt.sourceDepartment)) {
+        throw new ServiceError('Select the department that handed this order to Dispatch.', {
+          code: 'DISPATCH_RECEIPT_INVALID',
+          status: 422,
+          fieldErrors: { dispatchReceiptSourceDepartment: 'Select a recognised source department.' },
+        });
+      }
+      const packages = Number(receipt.numberOfPackages);
+      if (!Number.isInteger(packages) || packages < 1 || packages > 999) {
+        throw new ServiceError('Enter the number of packages received by Dispatch.', {
+          code: 'DISPATCH_RECEIPT_INVALID',
+          status: 422,
+          fieldErrors: { dispatchReceiptNumberOfPackages: 'Enter a package quantity between 1 and 999.' },
+        });
+      }
+      if (receipt.sourceDepartment === 'authorised_exception' && String(receipt.exceptionReason || '').trim().length < 10) {
+        throw new ServiceError('Record the authorised exception reason.', {
+          code: 'DISPATCH_RECEIPT_INVALID',
+          status: 422,
+          fieldErrors: { dispatchReceiptExceptionReason: 'Explain the exception in at least 10 characters.' },
+        });
+      }
+    }
+  } else if (transitionDefinition.guard?.startsWith('dispatch_') && input !== undefined) {
     assertDispatchUpdate(entity, input, transitionDefinition.action);
   }
   if (transitionDefinition.guard === 'accepted_order' && !(entity.sourceRfqStatus === 'converted_to_order' && entity.acceptedAt)) {
@@ -901,6 +1121,11 @@ const resolveTargetStatus = (entity, transitionDefinition, input) => {
   if (transitionDefinition.to === '__resume__') return entity.workflowContext?.resumeStatus || '';
   if (transitionDefinition.to === '__input__') return String(input.targetStatus || '').trim();
   if (transitionDefinition.to === '__same__') return entity.trackingStatus || '';
+  if (transitionDefinition.to === '__planning_route__') return orderRequiresLaboratory(entity) ? 'awaiting_lab' : 'submitted_to_expediting';
+  if (transitionDefinition.to === '__expediting_completion_route__') return orderRequiresLaboratory(entity) ? 'awaiting_dispatch' : 'awaiting_qa';
+  if (transitionDefinition.to === '__lab_release__') {
+    return input?.labRelease?.destination === 'dispatch' ? 'awaiting_lab_receipt_dispatch' : 'awaiting_lab_receipt_expediting';
+  }
   return transitionDefinition.to;
 };
 
@@ -968,11 +1193,19 @@ export function performWorkflowTransition({ entity, action, actor, input = {}, e
   const context = { entity, input };
   const customerNote = input.dispatchUpdate?.customerMessage
     || input.expeditingUpdate?.customerMessage
+    || input.qaFailure?.customerMessage
+    || input.qaPass?.customerMessage
+    || input.qaRework?.customerMessage
+    || input.labUpdate?.customerMessage
     || (validated.transitionDefinition.customerNotePath
     ? getPath(context, validated.transitionDefinition.customerNotePath)
     : input.comment);
   const auditNote = input.dispatchUpdate?.internalNotes
     || input.expeditingUpdate?.internalNote
+    || input.qaFailure?.internalNote
+    || input.qaPass?.internalNote
+    || input.qaRework?.internalNote
+    || input.labUpdate?.internalNote
     || (validated.transitionDefinition.auditNotePath
     ? getPath(context, validated.transitionDefinition.auditNotePath)
     : input.comment);
@@ -1008,11 +1241,50 @@ export function performWorkflowTransition({ entity, action, actor, input = {}, e
       displayName: actor.displayName || actor.contact || actor.role,
     };
   }
-  if (action === 'complete_expediting') {
+  if (
+    (action === 'complete_expediting' && validated.targetStatus === 'awaiting_dispatch')
+    || action === 'release_qa_order'
+  ) {
+    updatedEntity.dispatch = {
+      ...(entity.dispatch || {}),
+      submittedAt: entity.dispatch?.submittedAt || occurredAt,
+      sourceDepartment: action === 'release_qa_order' ? 'quality_assurance' : 'expediting',
+      lastUpdatedAt: entity.dispatch?.lastUpdatedAt || occurredAt,
+    };
+  }
+  if (action === 'confirm_lab_receipt_dispatch') {
     updatedEntity.dispatch = {
       ...(entity.dispatch || {}),
       receivedAt: entity.dispatch?.receivedAt || occurredAt,
-      lastUpdatedAt: entity.dispatch?.lastUpdatedAt || occurredAt,
+      sourceDepartment: 'laboratory',
+      numberOfPackages: Number(entity.dispatch?.numberOfPackages || 1),
+      lastUpdatedAt: occurredAt,
+    };
+  }
+  if (input.dispatchReceipt) {
+    const previousDispatch = updatedEntity.dispatch || entity.dispatch || {};
+    const receipt = {
+      id: makeId('dispatch-receipt', idFactory),
+      sourceDepartment: String(input.dispatchReceipt.sourceDepartment || ''),
+      numberOfPackages: Number(input.dispatchReceipt.numberOfPackages || 0),
+      internalNote: String(input.dispatchReceipt.internalNote || '').trim(),
+      exceptionReason: String(input.dispatchReceipt.exceptionReason || '').trim(),
+      customerMessage: description,
+      receivedBy: {
+        id: actor.id,
+        role: actor.role,
+        displayName: actor.displayName || actor.contact || actor.role,
+      },
+      receivedAt: occurredAt,
+    };
+    updatedEntity.dispatch = {
+      ...previousDispatch,
+      receivedAt: occurredAt,
+      receivedBy: receipt.receivedBy,
+      sourceDepartment: receipt.sourceDepartment,
+      numberOfPackages: receipt.numberOfPackages,
+      receipts: [...(previousDispatch.receipts || []), receipt],
+      lastUpdatedAt: occurredAt,
     };
   }
   if (input.expeditingUpdate) {
@@ -1102,7 +1374,7 @@ export function performWorkflowTransition({ entity, action, actor, input = {}, e
       currentProblemReason: action === 'report_delivery_problem' ? update.problemReason : '',
       internalNotes: update.internalNotes || previousDispatch.internalNotes || '',
       customerMessage: update.customerMessage,
-      receivedAt: previousDispatch.receivedAt || entity.submittedToDispatchAt || occurredAt,
+      receivedAt: previousDispatch.receivedAt || '',
       updates: [...(previousDispatch.updates || []), update],
       lastUpdatedAt: occurredAt,
       lastUpdatedBy: updatedBy,
@@ -1126,6 +1398,7 @@ export function performWorkflowTransition({ entity, action, actor, input = {}, e
     actor: actor.displayName || actor.contact || actor.role,
     progressStep: input.expeditingUpdate?.progressStep || '',
     dispatchMethod: input.dispatchUpdate?.method || '',
+    dispatchSourceDepartment: input.dispatchReceipt?.sourceDepartment || '',
     isOverride,
     overrideReason: isOverride ? String(input.overrideReason || '').trim() : '',
     createdAt: occurredAt,
@@ -1142,6 +1415,7 @@ export function performWorkflowTransition({ entity, action, actor, input = {}, e
     ...(validated.transitionDefinition.persistInputFields || []),
     ...(input.expeditingUpdate ? ['expediting'] : []),
     ...(input.dispatchUpdate ? ['dispatch'] : []),
+    ...(input.dispatchReceipt ? ['dispatch'] : []),
     ...(isOverride ? ['workflowContext'] : []),
   ].filter(Boolean);
   const documentMetadata = [
@@ -1188,13 +1462,30 @@ export function performWorkflowTransition({ entity, action, actor, input = {}, e
     createdAt: occurredAt,
   };
 
+  let notificationRecipients = [...validated.transitionDefinition.notificationRecipients];
+  if (action === 'submit_to_expediting') {
+    notificationRecipients = validated.targetStatus === 'awaiting_lab'
+      ? ['customer', 'assigned_representative', 'laboratory']
+      : ['customer', 'assigned_representative', 'expeditor'];
+  }
+  if (action === 'complete_expediting') {
+    notificationRecipients = validated.targetStatus === 'awaiting_qa'
+      ? ['customer', 'assigned_representative', 'quality_assurance']
+      : ['customer', 'assigned_representative', 'dispatch'];
+  }
+  if (action === 'release_from_lab') {
+    notificationRecipients = validated.targetStatus === 'awaiting_lab_receipt_dispatch'
+      ? ['customer', 'assigned_representative', 'dispatch']
+      : ['customer', 'assigned_representative', 'expeditor'];
+  }
+
   return {
     entity: updatedEntity,
     workflowEvent,
     auditEvent,
     notification: validated.transitionDefinition.generatesNotification ? {
       required: true,
-      recipients: [...validated.transitionDefinition.notificationRecipients],
+      recipients: notificationRecipients,
       customerVisible: validated.transitionDefinition.customerVisible,
       status: validated.targetStatus,
       message: description,

@@ -37,10 +37,29 @@ const emailSender = async (enquiry, poFile) => {
 const services = createMockServices({ storage, emailSender, now: () => new Date('2026-07-22T12:00:00.000Z') });
 await services.initialize();
 
-assert.deepEqual(Object.values(USER_ROLES), ['customer', 'sales_representative', 'planning', 'expeditor', 'dispatch', 'buyer', 'manager', 'administrator']);
+assert.deepEqual(Object.values(USER_ROLES), [
+  'customer',
+  'sales_representative',
+  'planning',
+  'expeditor',
+  'laboratory_user',
+  'laboratory_manager',
+  'quality_assurance',
+  'quality_manager',
+  'dispatch',
+  'buyer',
+  'sales_manager',
+  'company_owner',
+  'manager',
+  'administrator',
+]);
 assert.deepEqual(
   new Set((await services.auth.getDemoLogins()).map(login => login.id)),
-  new Set(['customer', 'cape_customer', 'sales_representative', 'planning', 'expeditor', 'dispatch', 'buyer', 'manager', 'administrator']),
+  new Set([
+    'customer', 'cape_customer', 'sales_representative', 'planning', 'expeditor',
+    'laboratory_user', 'laboratory_manager', 'quality_assurance', 'quality_manager',
+    'dispatch', 'buyer', 'sales_manager', 'company_owner', 'manager', 'administrator',
+  ]),
   'mock mode must provide fabricated logins for every active role and the prepared Buyer role',
 );
 
@@ -65,15 +84,15 @@ assert.deepEqual(
   Object.fromEntries(Object.entries(representativesByBranch).map(([branch, reps]) => [branch, reps.map(rep => rep.name)])),
   {
     'cape-town': ['Alphonso Majiet', 'Andrew Japhtha', 'Quintin van Wyk', 'Arthur Daniels', 'Ericu Vercuiel'],
-    durban: [],
+    durban: ['Dawie', 'Nadia'],
     johannesburg: ['Danny', 'Siya', 'Reneil'],
-    'port-elizabeth': ['Carmen Bellew'],
+    'port-elizabeth': ['Carmen'],
   },
   'only the approved branch representatives should be available',
 );
 assert.ok(catalogue.products.every(product => product.configurations.every(field => !field.options?.includes('No logo'))), 'logo removal must not be offered');
 
-const customer = await services.auth.signIn({ email: 'customer.demo@example.invalid', password: 'Demo123!' });
+const customer = await services.auth.signIn({ email: 'cape.demo@client.test', password: 'Demo123!' });
 assert.equal(customer.role, 'customer');
 assert.equal('password' in customer, false, 'passwords must not enter React-facing account state');
 
@@ -86,7 +105,7 @@ assert.ok(customerOrders.length >= 1, 'the customer should receive its demo orde
 assert.ok(customerOrders.every(order => order.companyId === customer.companyId && order.workflowType === 'order'), 'customer orders must be isolated to the authorised company');
 
 await assert.rejects(
-  () => services.enquiries.getById('enquiry-demo-cape-001'),
+  () => services.enquiries.getById('enquiry-demo-jhb-001'),
   error => error instanceof ServiceError && error.status === 404,
   'a customer must not retrieve another company RFQ by ID',
 );
@@ -145,13 +164,15 @@ const submissionDetails = {
   poFile: testPoFile,
 };
 
-await assert.rejects(
-  () => reopenedServices.enquiries.submit({
-    ...submissionDetails,
-    selectedRep: { id: 'J-21', name: 'Representative outside the selected area' },
-  }, [draftLine]),
-  error => error instanceof ServiceError && error.code === 'VALIDATION_ERROR' && Boolean(error.fieldErrors.selectedRep),
-  'the service must reject a representative outside the approved directory for the selected area',
+const dedicatedRepresentativeSubmission = await reopenedServices.enquiries.submit({
+  ...submissionDetails,
+  submissionKey: submissionDetails.submissionKey,
+  selectedRep: { id: 'J-21', name: 'Representative outside the selected area' },
+}, [draftLine]);
+assert.equal(
+  dedicatedRepresentativeSubmission.enquiry.selectedRep.id,
+  'C-27',
+  'an existing company assignment must override a customer attempt to select another representative',
 );
 
 const submission = await reopenedServices.enquiries.submit(submissionDetails, [draftLine]);
@@ -549,9 +570,21 @@ assert.ok(expeditingOptions.progressSteps.some(step => step.id === 'ready_for_di
 assert.ok(expeditingOptions.requiredStepIds.includes('quality_check'), 'the service must expose controlled hand-off requirements');
 assert.ok(expeditingOptions.documentTypes.some(type => type.id === 'image'), 'document and image metadata types must be configurable');
 const operationalOrders = await reopenedServices.orders.list();
-assert.ok(operationalOrders.every(order => ['submitted_to_expediting', 'expediting_in_progress', 'awaiting_dispatch'].includes(order.trackingStatus)
-  || (order.trackingStatus === 'on_hold' && ['submitted_to_expediting', 'expediting_in_progress'].includes(order.workflowContext?.resumeStatus))),
-'Expediting must receive only orders handed over by Planning, including the awaiting-Dispatch awareness state');
+assert.ok(operationalOrders.every(order => [
+  'submitted_to_expediting',
+  'expediting_in_progress',
+  'awaiting_qa',
+  'qa_failed',
+  'returned_to_expediting',
+  'awaiting_dispatch',
+].includes(order.trackingStatus)
+  || (order.trackingStatus === 'on_hold' && [
+    'submitted_to_expediting',
+    'expediting_in_progress',
+    'qa_failed',
+    'returned_to_expediting',
+  ].includes(order.workflowContext?.resumeStatus))),
+'Expediting must receive Planning hand-offs, controlled QA rework, and downstream awareness states only');
 const migratedProductionOrder = operationalOrders.find(order => order.id === 'enquiry-demo-jhb-001');
 assert.equal(migratedProductionOrder.trackingStatus, 'expediting_in_progress', 'legacy combined records should migrate into the separate order collection');
 let expeditedOrder = operationalOrders.find(order => order.id === conversion.createdOrder.id);
@@ -648,16 +681,42 @@ expeditedOrder = await reopenedServices.workflow.performAction(expeditedOrder.id
   action: 'complete_expediting',
   comment: '',
   data: {
-    expeditingCustomerMessage: 'Your order has completed Expediting and is moving to Dispatch.',
+    expeditingCustomerMessage: 'Your order has completed Expediting and is moving to Quality Assurance.',
     expeditingInternalNote: 'All fabricated Expeditor hand-off checks complete.',
     expeditingEstimatedCompletionDate: '2026-08-01',
     expeditingCompletionCheckConfirmed: true,
   },
   expectedVersion: expeditedOrder.version,
 });
-assert.equal(expeditedOrder.trackingStatus, 'awaiting_dispatch');
+assert.equal(expeditedOrder.trackingStatus, 'awaiting_qa');
 assert.equal(expeditedOrder.expediting.currentStep, 'ready_for_dispatch');
 assert.ok(expeditedOrder.expediting.completedStepIds.includes('quality_check'));
+
+await reopenedServices.auth.signOut();
+await reopenedServices.auth.signIn({ email: 'quality.workflow@example.invalid', password: 'Quality123!' });
+let qualityOrder = (await reopenedServices.qualityAssurance.listOrders()).find(order => order.id === conversion.createdOrder.id);
+qualityOrder = await reopenedServices.workflow.performAction(qualityOrder.id, {
+  entityType: 'order',
+  action: 'start_qa',
+  comment: '',
+  data: { qaStart: { checklistReference: 'QA-CHECK-TEST-001', internalNote: 'Fabricated QA start note.' } },
+  expectedVersion: qualityOrder.version,
+});
+qualityOrder = await reopenedServices.workflow.performAction(qualityOrder.id, {
+  entityType: 'order',
+  action: 'pass_qa',
+  comment: '',
+  data: { qaPass: { customerMessage: 'Your instruments passed final quality inspection.', internalNote: 'Fabricated QA pass note.' } },
+  expectedVersion: qualityOrder.version,
+});
+qualityOrder = await reopenedServices.workflow.performAction(qualityOrder.id, {
+  entityType: 'order',
+  action: 'release_qa_order',
+  comment: '',
+  data: {},
+  expectedVersion: qualityOrder.version,
+});
+assert.equal(qualityOrder.trackingStatus, 'awaiting_dispatch');
 
 await reopenedServices.auth.signOut();
 await reopenedServices.auth.signIn({ email: 'cape.demo@client.test', password: 'Demo123!' });
@@ -685,14 +744,25 @@ assert.deepEqual(
 assert.ok(dispatchWorkspaceOptions.proofTypes.some(type => type.id === 'signed_delivery_note'));
 assert.equal(dispatchWorkspaceOptions.maxProofBytes, 4 * 1024 * 1024);
 const dispatchQueue = await reopenedServices.orders.list();
-assert.ok(dispatchQueue.every(order => ['awaiting_dispatch', 'ready_for_collection', 'out_for_delivery', 'delivered', 'collected'].includes(order.trackingStatus)
+assert.ok(dispatchQueue.every(order => ['awaiting_lab_receipt_dispatch', 'awaiting_dispatch', 'ready_for_collection', 'out_for_delivery', 'delivered', 'collected'].includes(order.trackingStatus)
   || (order.trackingStatus === 'on_hold' && ['awaiting_dispatch', 'ready_for_collection', 'out_for_delivery', 'delivered', 'collected'].includes(order.workflowContext?.resumeStatus))),
-'Dispatch must receive only orders handed over by Expediting');
+'Dispatch must receive only orders handed over by QA, Laboratory or the approved legacy route');
 const migratedDispatchDemo = dispatchQueue.find(order => order.id === 'enquiry-demo-kzn-001');
 assert.equal(migratedDispatchDemo.reference, 'OR-TEST-0003', 'legacy fabricated Dispatch records must expose a permanent order reference');
 assert.equal(migratedDispatchDemo.sourceRfqReference, 'RQ-TEST-0003', 'the source RFQ reference must remain separate from the order reference');
 assert.equal(migratedDispatchDemo.internalJobNumber, 'JOB-TEST-0003', 'legacy fabricated Dispatch records must retain their job number');
 let dispatchedOrder = dispatchQueue.find(order => order.id === conversion.createdOrder.id);
+dispatchedOrder = await reopenedServices.workflow.performAction(dispatchedOrder.id, {
+  entityType: 'order',
+  action: 'confirm_dispatch_receipt',
+  comment: '',
+  data: {
+    sourceDepartment: 'quality_assurance',
+    numberOfPackages: 2,
+    internalNote: 'Fabricated physical handover confirmation.',
+  },
+  expectedVersion: dispatchedOrder.version,
+});
 dispatchedOrder = await reopenedServices.workflow.performAction(dispatchedOrder.id, {
   entityType: 'order',
   action: 'mark_ready_for_collection',

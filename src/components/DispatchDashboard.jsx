@@ -45,7 +45,10 @@ const actionFor = (order, actionId) => (
 
 const primaryActionFor = order => {
   const actionByStatus = {
-    awaiting_dispatch: order.fulfilment === 'collect' ? 'mark_ready_for_collection' : 'start_delivery',
+    awaiting_lab_receipt_dispatch: 'confirm_lab_receipt_dispatch',
+    awaiting_dispatch: order.dispatch?.receivedAt
+      ? (order.fulfilment === 'collect' ? 'mark_ready_for_collection' : 'start_delivery')
+      : 'confirm_dispatch_receipt',
     ready_for_collection: 'confirm_collection',
     out_for_delivery: 'confirm_delivery',
     delivered: 'complete_delivery',
@@ -96,6 +99,7 @@ export function DispatchDashboard({
         <div className="dispatch-kpi-grid" aria-label="Dispatch queue summary">
           <span className="is-total"><small>Dispatch work</small><strong>{counts.all}</strong><em>open handovers</em></span>
           <span><small>Awaiting</small><strong>{counts.awaitingDispatch}</strong><em>needs release</em></span>
+          <span><small>From Lab</small><strong>{counts.laboratoryReceipt}</strong><em>confirm receipt</em></span>
           <span><small>Collection</small><strong>{counts.collection}</strong><em>customer pickup</em></span>
           <span><small>Delivery</small><strong>{counts.delivery}</strong><em>outbound supply</em></span>
           <span className={counts.emergency ? 'is-alert' : ''}><small>Emergency</small><strong>{counts.emergency}</strong><em>priority handover</em></span>
@@ -189,7 +193,7 @@ function DispatchOrder({ order, expanded, onToggle, onAction, account, dispatchO
         <span role="cell" data-label="Handover"><i className={`dispatch-method method-${dispatch.method || order.fulfilment}`}>{dispatch.method ? method.label : order.fulfilment === 'collect' ? 'Collection' : 'Delivery'}</i><small>{dispatch.trackingReference || customerPo || 'No tracking reference'}</small></span>
         <span role="cell" data-label="Packages"><strong>{dispatch.numberOfPackages || '—'}</strong><small>{dispatch.numberOfPackages ? `${dispatch.numberOfPackages} package${dispatch.numberOfPackages === 1 ? '' : 's'}` : 'Not packed'}</small></span>
         <span role="cell" data-label="Stage"><i className={`tracking-status status-${order.trackingStatus}`}>{stage.label}</i>{order.emergency === 'yes' && <small className="dispatch-emergency">Emergency</small>}</span>
-        <span role="cell" data-label="Received"><strong>{formatDateTime(dispatchReceivedAt(order))}</strong><small>Updated {formatDateTime(dispatchLastActivityAt(order))}</small></span>
+        <span role="cell" data-label="Received"><strong>{dispatch.receivedAt ? formatDateTime(dispatchReceivedAt(order)) : 'Awaiting confirmation'}</strong><small>Updated {formatDateTime(dispatchLastActivityAt(order))}</small></span>
         <span className="dispatch-open-cell" role="cell" data-label="Action"><button type="button" onClick={onToggle} aria-expanded={expanded}>{expanded ? 'Close' : 'Open order'} <b>{expanded ? '−' : '→'}</b></button></span>
       </div>
 

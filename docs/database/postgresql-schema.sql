@@ -12,8 +12,14 @@ CREATE SCHEMA IF NOT EXISTS app;
 CREATE TYPE app.user_role AS ENUM (
   'customer',
   'sales_representative',
+  'sales_manager',
+  'company_owner',
   'planning',
   'expeditor',
+  'laboratory_user',
+  'laboratory_manager',
+  'quality_assurance',
+  'quality_manager',
   'dispatch',
   'buyer',
   'manager',
@@ -22,7 +28,26 @@ CREATE TYPE app.user_role AS ENUM (
 
 CREATE TYPE app.record_status AS ENUM ('pending', 'active', 'suspended', 'archived');
 CREATE TYPE app.enquiry_status AS ENUM ('draft', 'submitted', 'assigned_to_rep', 'under_rep_review', 'quoted', 'awaiting_customer_acceptance', 'accepted', 'cancelled', 'expired', 'converted_to_order');
-CREATE TYPE app.order_status AS ENUM ('awaiting_planning', 'planning_in_progress', 'planned', 'submitted_to_expediting', 'expediting_in_progress', 'awaiting_dispatch', 'ready_for_collection', 'out_for_delivery', 'delivered', 'collected', 'completed', 'on_hold', 'cancelled', 'archived');
+CREATE TYPE app.order_status AS ENUM (
+  'awaiting_planning', 'planning_in_progress', 'planned',
+  'submitted_to_lab', 'lab_received', 'calibration_in_progress',
+  'calibration_on_hold', 'calibration_completed', 'awaiting_lab_release',
+  'released_from_lab', 'awaiting_lab_receipt_expediting',
+  'awaiting_lab_receipt_dispatch', 'certificate_pending',
+  'submitted_to_expediting', 'expediting_in_progress',
+  'awaiting_qa', 'qa_in_progress', 'qa_failed',
+  'returned_to_production', 'returned_to_expediting',
+  'qa_reinspection_required', 'qa_passed',
+  'awaiting_dispatch', 'ready_for_collection', 'out_for_delivery',
+  'delivered', 'collected', 'completed', 'on_hold', 'cancelled',
+  'archived'
+);
+CREATE TYPE app.certificate_type AS ENUM ('sanas', 'traceable');
+CREATE TYPE app.certificate_status AS ENUM ('required', 'pending', 'in_preparation', 'ready_for_upload', 'uploaded', 'correction_required', 'archived');
+CREATE TYPE app.lab_unit_status AS ENUM ('awaiting_receipt', 'lab_received', 'calibration_in_progress', 'calibration_on_hold', 'calibration_completed', 'awaiting_lab_release', 'released_from_lab', 'lab_archived');
+CREATE TYPE app.qa_task_status AS ENUM ('awaiting_qa', 'qa_in_progress', 'qa_failed', 'returned_to_production', 'returned_to_expediting', 'qa_reinspection_required', 'qa_passed', 'handed_to_dispatch');
+CREATE TYPE app.qa_result AS ENUM ('passed', 'failed');
+CREATE TYPE app.auth_realm AS ENUM ('customer', 'internal');
 CREATE TYPE app.fulfilment_method AS ENUM ('delivery', 'collect');
 CREATE TYPE app.dispatch_method AS ENUM ('collection', 'company_delivery', 'courier', 'third_party_delivery');
 CREATE TYPE app.dispatch_proof_type AS ENUM ('signed_delivery_note', 'collection_confirmation', 'courier_confirmation', 'photograph', 'other');
@@ -1730,5 +1755,395 @@ CREATE VIEW app.enquiries AS SELECT * FROM app.rfqs;
 CREATE VIEW app.enquiry_items AS SELECT * FROM app.rfq_items;
 CREATE VIEW app.order_dispatch_records AS SELECT * FROM app.dispatch_records;
 CREATE VIEW app.workflow_events AS SELECT * FROM app.tracking_events;
+
+-- Phase 21 Laboratory, certification, QA, department receipt, credential and
+-- operational-reporting model. This remains a design specification only.
+CREATE TABLE app.order_routing (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  order_id uuid NOT NULL UNIQUE REFERENCES app.orders(id),
+  requires_laboratory boolean NOT NULL DEFAULT false,
+  requires_quality_assurance boolean NOT NULL DEFAULT true,
+  certificate_types app.certificate_type[] NOT NULL DEFAULT '{}',
+  decided_by uuid REFERENCES app.users(id),
+  decision_reason text NOT NULL,
+  decided_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT order_routing_valid_path CHECK (
+    (requires_laboratory AND NOT requires_quality_assurance)
+    OR (NOT requires_laboratory AND requires_quality_assurance)
+  )
+);
+
+CREATE TABLE app.lab_tasks (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  order_id uuid NOT NULL UNIQUE REFERENCES app.orders(id),
+  status app.lab_unit_status NOT NULL DEFAULT 'awaiting_receipt',
+  assigned_lab_user_id uuid REFERENCES app.users(id),
+  received_by uuid REFERENCES app.users(id),
+  received_at timestamptz,
+  calibration_started_at timestamptz,
+  calibration_completed_at timestamptz,
+  physically_released_by uuid REFERENCES app.users(id),
+  physically_released_at timestamptz,
+  receiving_department text,
+  archived_by uuid REFERENCES app.users(id),
+  archived_at timestamptz,
+  archive_reason text,
+  legal_hold boolean NOT NULL DEFAULT false,
+  investigation_flag boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  deleted_at timestamptz
+);
+
+CREATE TABLE app.calibration_units (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  lab_task_id uuid NOT NULL REFERENCES app.lab_tasks(id),
+  order_id uuid NOT NULL REFERENCES app.orders(id),
+  order_item_id uuid NOT NULL REFERENCES app.order_items(id),
+  unit_sequence integer NOT NULL CHECK (unit_sequence > 0),
+  product_id uuid REFERENCES app.products(id),
+  product_model text NOT NULL,
+  product_description text NOT NULL,
+  serial_number text,
+  internal_job_number text,
+  calibration_type app.certificate_type NOT NULL,
+  urgent boolean NOT NULL DEFAULT false,
+  status app.lab_unit_status NOT NULL DEFAULT 'awaiting_receipt',
+  certificate_status app.certificate_status NOT NULL DEFAULT 'required',
+  received_at timestamptz,
+  completed_at timestamptz,
+  released_at timestamptz,
+  acting_lab_user_id uuid REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  archived_at timestamptz,
+  UNIQUE (order_item_id, unit_sequence)
+);
+
+CREATE TABLE app.certificate_requirements (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  calibration_unit_id uuid NOT NULL UNIQUE REFERENCES app.calibration_units(id),
+  order_id uuid NOT NULL REFERENCES app.orders(id),
+  order_item_id uuid NOT NULL REFERENCES app.order_items(id),
+  certificate_type app.certificate_type NOT NULL,
+  status app.certificate_status NOT NULL DEFAULT 'required',
+  required_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz,
+  archived_at timestamptz
+);
+
+CREATE TABLE app.certificates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  requirement_id uuid NOT NULL UNIQUE REFERENCES app.certificate_requirements(id),
+  calibration_unit_id uuid NOT NULL UNIQUE REFERENCES app.calibration_units(id),
+  order_id uuid NOT NULL REFERENCES app.orders(id),
+  order_item_id uuid NOT NULL REFERENCES app.order_items(id),
+  document_id uuid NOT NULL UNIQUE REFERENCES app.uploaded_documents(id),
+  certificate_number text NOT NULL UNIQUE,
+  certificate_type app.certificate_type NOT NULL,
+  certificate_date date NOT NULL,
+  expiry_date date,
+  result_summary text,
+  serial_number text,
+  internal_note text,
+  uploaded_by uuid NOT NULL REFERENCES app.users(id),
+  uploaded_at timestamptz NOT NULL DEFAULT now(),
+  verified_by uuid REFERENCES app.users(id),
+  verified_at timestamptz,
+  customer_notified_at timestamptz,
+  archived_at timestamptz,
+  deleted_at timestamptz
+);
+
+CREATE TABLE app.certificate_versions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  certificate_id uuid NOT NULL REFERENCES app.certificates(id),
+  version_number integer NOT NULL CHECK (version_number > 0),
+  document_id uuid NOT NULL REFERENCES app.uploaded_documents(id),
+  change_reason text NOT NULL,
+  created_by uuid NOT NULL REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (certificate_id, version_number)
+);
+
+CREATE TABLE app.lab_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  lab_task_id uuid NOT NULL REFERENCES app.lab_tasks(id),
+  calibration_unit_id uuid REFERENCES app.calibration_units(id),
+  event_type text NOT NULL,
+  customer_visible boolean NOT NULL DEFAULT false,
+  customer_message text,
+  internal_note text,
+  actor_user_id uuid NOT NULL REFERENCES app.users(id),
+  occurred_at timestamptz NOT NULL DEFAULT now(),
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE TABLE app.lab_monthly_metrics (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  period_start date NOT NULL,
+  metric_key text NOT NULL,
+  metric_value numeric(18,4) NOT NULL DEFAULT 0,
+  dimensions jsonb NOT NULL DEFAULT '{}'::jsonb,
+  calculated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (company_id, period_start, metric_key, dimensions)
+);
+
+CREATE TABLE app.qa_tasks (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  order_id uuid NOT NULL REFERENCES app.orders(id),
+  status app.qa_task_status NOT NULL DEFAULT 'awaiting_qa',
+  current_inspection_number integer NOT NULL DEFAULT 0,
+  assigned_qa_user_id uuid REFERENCES app.users(id),
+  received_at timestamptz NOT NULL DEFAULT now(),
+  started_at timestamptz,
+  completed_at timestamptz,
+  handed_to_dispatch_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  archived_at timestamptz
+);
+CREATE UNIQUE INDEX qa_tasks_one_active_order_idx
+  ON app.qa_tasks (order_id)
+  WHERE archived_at IS NULL;
+
+CREATE TABLE app.qa_inspections (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  qa_task_id uuid NOT NULL REFERENCES app.qa_tasks(id),
+  order_id uuid NOT NULL REFERENCES app.orders(id),
+  inspection_number integer NOT NULL CHECK (inspection_number > 0),
+  result app.qa_result,
+  inspector_user_id uuid NOT NULL REFERENCES app.users(id),
+  inspection_date date NOT NULL,
+  checklist_reference text,
+  checklist_confirmed boolean NOT NULL DEFAULT false,
+  meets_requirements boolean NOT NULL DEFAULT false,
+  internal_note text,
+  document_metadata jsonb NOT NULL DEFAULT '[]'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz,
+  UNIQUE (qa_task_id, inspection_number)
+);
+
+CREATE TABLE app.qa_failures (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  qa_inspection_id uuid NOT NULL UNIQUE REFERENCES app.qa_inspections(id),
+  order_item_id uuid NOT NULL REFERENCES app.order_items(id),
+  problem_category text NOT NULL,
+  problem_description text NOT NULL,
+  other_explanation text,
+  severity text NOT NULL CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+  found_at date NOT NULL,
+  found_by uuid NOT NULL REFERENCES app.users(id),
+  return_destination text NOT NULL,
+  customer_message text NOT NULL,
+  internal_note text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE app.qa_rework_cycles (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  qa_task_id uuid NOT NULL REFERENCES app.qa_tasks(id),
+  qa_failure_id uuid NOT NULL REFERENCES app.qa_failures(id),
+  cycle_number integer NOT NULL CHECK (cycle_number > 0),
+  responsible_department text NOT NULL,
+  current_correction_stage text,
+  estimated_correction_date date,
+  status text NOT NULL CHECK (status IN ('open', 'in_progress', 'completed', 'cancelled')),
+  opened_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz,
+  completed_by uuid REFERENCES app.users(id),
+  UNIQUE (qa_task_id, cycle_number)
+);
+
+CREATE TABLE app.qa_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  qa_task_id uuid NOT NULL REFERENCES app.qa_tasks(id),
+  qa_inspection_id uuid REFERENCES app.qa_inspections(id),
+  rework_cycle_id uuid REFERENCES app.qa_rework_cycles(id),
+  event_type text NOT NULL,
+  customer_visible boolean NOT NULL DEFAULT false,
+  customer_message text,
+  internal_note text,
+  actor_user_id uuid NOT NULL REFERENCES app.users(id),
+  occurred_at timestamptz NOT NULL DEFAULT now(),
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE TABLE app.qa_monthly_metrics (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  period_start date NOT NULL,
+  metric_key text NOT NULL,
+  metric_value numeric(18,4) NOT NULL DEFAULT 0,
+  dimensions jsonb NOT NULL DEFAULT '{}'::jsonb,
+  calculated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (company_id, period_start, metric_key, dimensions)
+);
+
+CREATE TABLE app.department_receipts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  order_id uuid NOT NULL REFERENCES app.orders(id),
+  receiving_department text NOT NULL,
+  source_department text NOT NULL,
+  number_of_packages integer CHECK (number_of_packages BETWEEN 1 AND 999),
+  exception_reason text,
+  internal_note text,
+  customer_message text,
+  received_by uuid NOT NULL REFERENCES app.users(id),
+  received_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (order_id, receiving_department, received_at)
+);
+
+CREATE TABLE app.verification_codes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES app.users(id),
+  realm app.auth_realm NOT NULL,
+  purpose text NOT NULL CHECK (purpose IN ('change_username', 'change_password', 'change_credentials')),
+  code_hash text NOT NULL,
+  expires_at timestamptz NOT NULL,
+  attempts_remaining integer NOT NULL CHECK (attempts_remaining BETWEEN 0 AND 10),
+  used_at timestamptz,
+  invalidated_at timestamptz,
+  requested_ip_hash text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE app.credential_change_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES app.users(id),
+  verification_code_id uuid NOT NULL REFERENCES app.verification_codes(id),
+  realm app.auth_realm NOT NULL,
+  requested_username citext,
+  requested_password_hash text,
+  status text NOT NULL CHECK (status IN ('pending_verification', 'verified', 'applied', 'expired', 'cancelled')),
+  requested_at timestamptz NOT NULL DEFAULT now(),
+  verified_at timestamptz,
+  applied_at timestamptz,
+  session_invalidated_at timestamptz
+);
+
+CREATE TABLE app.product_statistics (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  product_id uuid REFERENCES app.products(id),
+  period_start date NOT NULL,
+  period_granularity text NOT NULL CHECK (period_granularity IN ('month', 'year')),
+  units_ordered integer NOT NULL DEFAULT 0,
+  sanas_units integer NOT NULL DEFAULT 0,
+  traceable_units integer NOT NULL DEFAULT 0,
+  qa_failures integer NOT NULL DEFAULT 0,
+  average_turnaround_hours numeric(12,2),
+  calculated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (company_id, product_id, period_start, period_granularity)
+);
+
+CREATE TABLE app.representative_statistics (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  representative_id uuid NOT NULL REFERENCES app.representatives(id),
+  branch_id uuid REFERENCES app.branches(id),
+  period_start date NOT NULL,
+  rfq_count integer NOT NULL DEFAULT 0,
+  quotation_count integer NOT NULL DEFAULT 0,
+  order_count integer NOT NULL DEFAULT 0,
+  conversion_rate numeric(7,4),
+  average_quotation_hours numeric(12,2),
+  average_customer_response_hours numeric(12,2),
+  calculated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (representative_id, period_start)
+);
+
+CREATE TABLE app.operational_metrics (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid REFERENCES app.companies(id),
+  branch_id uuid REFERENCES app.branches(id),
+  period_start date NOT NULL,
+  period_granularity text NOT NULL CHECK (period_granularity IN ('day', 'month', 'year')),
+  metric_key text NOT NULL,
+  metric_value numeric(18,4) NOT NULL DEFAULT 0,
+  dimensions jsonb NOT NULL DEFAULT '{}'::jsonb,
+  calculated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE NULLS NOT DISTINCT (company_id, branch_id, period_start, period_granularity, metric_key, dimensions)
+);
+
+CREATE INDEX calibration_units_company_status_idx ON app.calibration_units (company_id, status, created_at);
+CREATE INDEX certificate_requirements_company_status_idx ON app.certificate_requirements (company_id, status, required_at);
+CREATE INDEX certificates_company_order_idx ON app.certificates (company_id, order_id, uploaded_at DESC);
+CREATE INDEX lab_events_task_time_idx ON app.lab_events (lab_task_id, occurred_at DESC);
+CREATE INDEX qa_tasks_company_status_idx ON app.qa_tasks (company_id, status, received_at);
+CREATE INDEX qa_failures_company_category_idx ON app.qa_failures (company_id, problem_category, created_at DESC);
+CREATE INDEX qa_events_task_time_idx ON app.qa_events (qa_task_id, occurred_at DESC);
+CREATE INDEX department_receipts_order_time_idx ON app.department_receipts (order_id, received_at DESC);
+CREATE INDEX verification_codes_user_expiry_idx ON app.verification_codes (user_id, expires_at DESC);
+CREATE INDEX product_statistics_period_idx ON app.product_statistics (period_start, product_id);
+CREATE INDEX representative_statistics_period_idx ON app.representative_statistics (period_start, representative_id);
+CREATE INDEX operational_metrics_period_key_idx ON app.operational_metrics (period_start, metric_key);
+
+ALTER TABLE app.order_routing ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.lab_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.calibration_units ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.certificate_requirements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.certificates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.certificate_versions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.lab_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.qa_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.qa_inspections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.qa_failures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.qa_rework_cycles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.qa_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.department_receipts ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY lab_tasks_company_scope ON app.lab_tasks
+  USING (app.can_access_company(company_id))
+  WITH CHECK (app.can_access_company(company_id));
+CREATE POLICY calibration_units_company_scope ON app.calibration_units
+  USING (app.can_access_company(company_id))
+  WITH CHECK (app.can_access_company(company_id));
+CREATE POLICY certificate_requirements_company_scope ON app.certificate_requirements
+  USING (app.can_access_company(company_id))
+  WITH CHECK (app.can_access_company(company_id));
+CREATE POLICY certificates_company_scope ON app.certificates
+  USING (app.can_access_company(company_id))
+  WITH CHECK (app.can_access_company(company_id));
+CREATE POLICY qa_tasks_company_scope ON app.qa_tasks
+  USING (app.can_access_company(company_id))
+  WITH CHECK (app.can_access_company(company_id));
+CREATE POLICY qa_inspections_company_scope ON app.qa_inspections
+  USING (app.can_access_company(company_id))
+  WITH CHECK (app.can_access_company(company_id));
+CREATE POLICY qa_failures_company_scope ON app.qa_failures
+  USING (app.can_access_company(company_id))
+  WITH CHECK (app.can_access_company(company_id));
+CREATE POLICY qa_rework_cycles_company_scope ON app.qa_rework_cycles
+  USING (app.can_access_company(company_id))
+  WITH CHECK (app.can_access_company(company_id));
+CREATE POLICY department_receipts_company_scope ON app.department_receipts
+  USING (app.can_access_company(company_id))
+  WITH CHECK (app.can_access_company(company_id));
+
+CREATE TRIGGER certificate_versions_immutable
+BEFORE UPDATE OR DELETE ON app.certificate_versions
+FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+CREATE TRIGGER lab_events_immutable
+BEFORE UPDATE OR DELETE ON app.lab_events
+FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+CREATE TRIGGER qa_events_immutable
+BEFORE UPDATE OR DELETE ON app.qa_events
+FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
 
 COMMIT;

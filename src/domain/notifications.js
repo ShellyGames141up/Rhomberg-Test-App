@@ -26,11 +26,20 @@ export const NOTIFICATION_EVENT_TYPES = Object.freeze({
   ORDER_CREATED: 'order_created',
   ORDER_SENT_TO_PLANNING: 'order_sent_to_planning',
   ORDER_SENT_TO_EXPEDITING: 'order_sent_to_expediting',
+  ORDER_SENT_TO_LABORATORY: 'order_sent_to_laboratory',
+  LABORATORY_PROGRESS: 'laboratory_progress',
+  LABORATORY_RELEASED: 'laboratory_released',
+  CERTIFICATE_UPLOADED: 'certificate_uploaded',
+  ORDER_SENT_TO_QA: 'order_sent_to_qa',
+  QA_FAILED: 'qa_failed',
+  QA_REWORK: 'qa_rework',
+  QA_PASSED: 'qa_passed',
   CUSTOMER_PROGRESS_UPDATE: 'customer_progress_update',
   ORDER_DELAYED: 'order_delayed',
   ORDER_ON_HOLD: 'order_on_hold',
   ORDER_RESUMED: 'order_resumed',
   ORDER_SENT_TO_DISPATCH: 'order_sent_to_dispatch',
+  DISPATCH_RECEIVED: 'dispatch_received',
   READY_FOR_COLLECTION: 'ready_for_collection',
   OUT_FOR_DELIVERY: 'out_for_delivery',
   DELIVERY_PROBLEM_REPORTED: 'delivery_problem_reported',
@@ -132,10 +141,12 @@ const eventDefinition = ({
 const referenceText = record => record?.reference || 'this record';
 const companyText = record => record?.company || 'the customer';
 const publicUpdateText = (record, fallback) => (
-  record?.trackingHistory?.at(-1)?.note
-  || record?.dispatch?.updates?.at(-1)?.customerMessage
+  record?.dispatch?.updates?.at(-1)?.customerMessage
   || record?.dispatch?.customerMessage
   || record?.expediting?.updates?.at(-1)?.customerMessage
+  || record?.laboratory?.updates?.at(-1)?.customerMessage
+  || record?.qualityAssurance?.customerMessage
+  || record?.trackingHistory?.at(-1)?.note
   || fallback
 );
 
@@ -249,6 +260,119 @@ export const NOTIFICATION_EVENT_CATALOG = Object.freeze({
       internal: record => `${referenceText(record)} entered Expediting.`,
     },
   }),
+  [NOTIFICATION_EVENT_TYPES.ORDER_SENT_TO_LABORATORY]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.ORDER_SENT_TO_LABORATORY,
+    title: 'Order sent to Laboratory',
+    category: 'orderProgress',
+    status: 'awaiting_lab',
+    recipients: ['customer', 'assigned_representative', 'laboratory_user', 'laboratory_manager'],
+    messages: {
+      customer: record => `${referenceText(record)} requires controlled calibration and is queued with the Laboratory.`,
+      assigned_representative: record => `${referenceText(record)} was routed to the Laboratory.`,
+      laboratory_user: record => `${referenceText(record)} is ready in the Laboratory receipt queue.`,
+      laboratory_manager: record => `${referenceText(record)} is ready in the Laboratory receipt queue.`,
+      internal: record => `${referenceText(record)} entered the Laboratory route.`,
+    },
+  }),
+  [NOTIFICATION_EVENT_TYPES.LABORATORY_PROGRESS]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.LABORATORY_PROGRESS,
+    title: 'Laboratory progress updated',
+    category: 'orderProgress',
+    status: 'calibration_in_progress',
+    recipients: ['customer', 'assigned_representative', 'expeditor'],
+    messages: {
+      customer: record => publicUpdateText(record, `Laboratory progress on ${referenceText(record)} was updated.`),
+      assigned_representative: record => `Laboratory progress on ${referenceText(record)} was updated.`,
+      expeditor: record => `${referenceText(record)} is currently controlled by the Calibration Laboratory.`,
+      internal: record => `Laboratory progress was updated for ${referenceText(record)}.`,
+    },
+  }),
+  [NOTIFICATION_EVENT_TYPES.LABORATORY_RELEASED]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.LABORATORY_RELEASED,
+    title: 'Laboratory order released',
+    category: 'orderProgress',
+    status: 'released_from_lab',
+    recipients: ['customer', 'assigned_representative', 'expeditor', 'dispatch'],
+    messages: {
+      customer: record => `${referenceText(record)} was released by the Laboratory. Any pending certificate remains tracked and will be shared when ready.`,
+      assigned_representative: record => `${referenceText(record)} was released by the Laboratory.`,
+      expeditor: record => `${referenceText(record)} is awaiting receipt from the Laboratory.`,
+      dispatch: record => `${referenceText(record)} may be awaiting Dispatch receipt from the Laboratory.`,
+      internal: record => `${referenceText(record)} was released from Laboratory control.`,
+    },
+  }),
+  [NOTIFICATION_EVENT_TYPES.CERTIFICATE_UPLOADED]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.CERTIFICATE_UPLOADED,
+    title: 'Calibration certificate ready',
+    category: 'orderProgress',
+    status: 'certificate_uploaded',
+    recipients: ['customer', 'assigned_representative', 'laboratory_user', 'laboratory_manager'],
+    messages: {
+      customer: record => publicUpdateText(record, `A calibration certificate for ${referenceText(record)} is ready in your order timeline.`),
+      assigned_representative: record => `A unit certificate for ${referenceText(record)} was uploaded and the customer was notified.`,
+      laboratory_user: record => `A unit certificate for ${referenceText(record)} was uploaded.`,
+      laboratory_manager: record => `A unit certificate for ${referenceText(record)} was uploaded.`,
+      internal: record => `A unit certificate was uploaded for ${referenceText(record)}.`,
+    },
+  }),
+  [NOTIFICATION_EVENT_TYPES.ORDER_SENT_TO_QA]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.ORDER_SENT_TO_QA,
+    title: 'Order sent to Quality Assurance',
+    category: 'orderProgress',
+    status: 'awaiting_qa',
+    recipients: ['customer', 'assigned_representative', 'expeditor', 'quality_assurance', 'quality_manager'],
+    messages: {
+      customer: record => `${referenceText(record)} is queued for final quality checks.`,
+      assigned_representative: record => `${referenceText(record)} entered Quality Assurance.`,
+      expeditor: record => `${referenceText(record)} entered Quality Assurance.`,
+      quality_assurance: record => `${referenceText(record)} is ready in the QA inspection queue.`,
+      quality_manager: record => `${referenceText(record)} is ready in the QA inspection queue.`,
+      internal: record => `${referenceText(record)} entered Quality Assurance.`,
+    },
+  }),
+  [NOTIFICATION_EVENT_TYPES.QA_FAILED]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.QA_FAILED,
+    title: 'Quality correction required',
+    category: 'delayNotifications',
+    status: 'qa_failed',
+    recipients: ['customer', 'assigned_representative', 'expeditor', 'quality_manager'],
+    priority: 'high',
+    messages: {
+      customer: record => publicUpdateText(record, `A quality concern on ${referenceText(record)} is being corrected before release.`),
+      assigned_representative: record => `${referenceText(record)} requires a controlled QA correction.`,
+      expeditor: record => `${referenceText(record)} requires corrective work after QA inspection.`,
+      quality_manager: record => `${referenceText(record)} has a failed QA inspection.`,
+      internal: record => `${referenceText(record)} failed QA inspection.`,
+    },
+  }),
+  [NOTIFICATION_EVENT_TYPES.QA_REWORK]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.QA_REWORK,
+    title: 'Quality corrective work updated',
+    category: 'orderProgress',
+    status: 'qa_reinspection_required',
+    recipients: ['customer', 'assigned_representative', 'quality_assurance'],
+    messages: {
+      customer: record => publicUpdateText(record, `Corrective work on ${referenceText(record)} is progressing.`),
+      assigned_representative: record => `QA corrective work on ${referenceText(record)} was updated.`,
+      quality_assurance: record => `${referenceText(record)} is ready for reinspection.`,
+      internal: record => `QA corrective work was updated for ${referenceText(record)}.`,
+    },
+  }),
+  [NOTIFICATION_EVENT_TYPES.QA_PASSED]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.QA_PASSED,
+    title: 'Quality checks passed',
+    category: 'orderProgress',
+    status: 'qa_passed',
+    recipients: ['customer', 'assigned_representative', 'expeditor', 'quality_manager', 'dispatch'],
+    messages: {
+      customer: record => `${referenceText(record)} passed final quality checks.`,
+      assigned_representative: record => `${referenceText(record)} passed QA.`,
+      expeditor: record => `${referenceText(record)} passed QA.`,
+      quality_manager: record => `${referenceText(record)} passed QA.`,
+      dispatch: record => `${referenceText(record)} passed QA and will be released to Dispatch.`,
+      internal: record => `${referenceText(record)} passed QA.`,
+    },
+  }),
   [NOTIFICATION_EVENT_TYPES.CUSTOMER_PROGRESS_UPDATE]: eventDefinition({
     type: NOTIFICATION_EVENT_TYPES.CUSTOMER_PROGRESS_UPDATE,
     title: 'Order progress updated',
@@ -310,6 +434,18 @@ export const NOTIFICATION_EVENT_CATALOG = Object.freeze({
       assigned_representative: record => `${referenceText(record)} was submitted to Dispatch.`,
       dispatch: record => `${referenceText(record)} is ready in the Dispatch queue.`,
       internal: record => `${referenceText(record)} entered Dispatch.`,
+    },
+  }),
+  [NOTIFICATION_EVENT_TYPES.DISPATCH_RECEIVED]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.DISPATCH_RECEIVED,
+    title: 'Received by Dispatch',
+    category: 'fulfilmentNotifications',
+    status: 'awaiting_dispatch',
+    recipients: ['customer', 'assigned_representative'],
+    messages: {
+      customer: record => publicUpdateText(record, `${referenceText(record)} has been received by Dispatch and is being prepared for handover.`),
+      assigned_representative: record => `Dispatch confirmed receipt of ${referenceText(record)}.`,
+      internal: record => `Dispatch receipt was confirmed for ${referenceText(record)}.`,
     },
   }),
   [NOTIFICATION_EVENT_TYPES.READY_FOR_COLLECTION]: eventDefinition({
@@ -449,10 +585,29 @@ const ACTION_EVENT_TYPES = Object.freeze({
     NOTIFICATION_EVENT_TYPES.ORDER_CREATED,
     NOTIFICATION_EVENT_TYPES.ORDER_SENT_TO_PLANNING,
   ]),
-  submit_to_expediting: freezeList([NOTIFICATION_EVENT_TYPES.ORDER_SENT_TO_EXPEDITING]),
+  submit_to_expediting: freezeList([]),
   start_expediting: freezeList([NOTIFICATION_EVENT_TYPES.CUSTOMER_PROGRESS_UPDATE]),
   add_expediting_update: freezeList([NOTIFICATION_EVENT_TYPES.CUSTOMER_PROGRESS_UPDATE]),
-  complete_expediting: freezeList([NOTIFICATION_EVENT_TYPES.ORDER_SENT_TO_DISPATCH]),
+  complete_expediting: freezeList([]),
+  receive_lab_order: freezeList([NOTIFICATION_EVENT_TYPES.LABORATORY_PROGRESS]),
+  start_lab_calibration: freezeList([NOTIFICATION_EVENT_TYPES.LABORATORY_PROGRESS]),
+  hold_lab_calibration: freezeList([NOTIFICATION_EVENT_TYPES.ORDER_ON_HOLD]),
+  resume_lab_calibration: freezeList([NOTIFICATION_EVENT_TYPES.ORDER_RESUMED]),
+  complete_lab_calibration: freezeList([NOTIFICATION_EVENT_TYPES.LABORATORY_PROGRESS]),
+  mark_lab_ready_for_release: freezeList([NOTIFICATION_EVENT_TYPES.LABORATORY_PROGRESS]),
+  release_from_lab: freezeList([NOTIFICATION_EVENT_TYPES.LABORATORY_RELEASED]),
+  confirm_lab_receipt_expediting: freezeList([NOTIFICATION_EVENT_TYPES.ORDER_SENT_TO_EXPEDITING]),
+  confirm_lab_receipt_dispatch: freezeList([NOTIFICATION_EVENT_TYPES.ORDER_SENT_TO_DISPATCH]),
+  confirm_dispatch_receipt: freezeList([NOTIFICATION_EVENT_TYPES.DISPATCH_RECEIVED]),
+  laboratory_progress_updated: freezeList([NOTIFICATION_EVENT_TYPES.LABORATORY_PROGRESS]),
+  certificate_uploaded: freezeList([NOTIFICATION_EVENT_TYPES.CERTIFICATE_UPLOADED]),
+  start_qa: freezeList([NOTIFICATION_EVENT_TYPES.ORDER_SENT_TO_QA]),
+  start_qa_reinspection: freezeList([NOTIFICATION_EVENT_TYPES.ORDER_SENT_TO_QA]),
+  fail_qa: freezeList([NOTIFICATION_EVENT_TYPES.QA_FAILED]),
+  start_qa_rework: freezeList([NOTIFICATION_EVENT_TYPES.QA_REWORK]),
+  resubmit_to_qa: freezeList([NOTIFICATION_EVENT_TYPES.QA_REWORK]),
+  pass_qa: freezeList([NOTIFICATION_EVENT_TYPES.QA_PASSED]),
+  release_qa_order: freezeList([NOTIFICATION_EVENT_TYPES.ORDER_SENT_TO_DISPATCH]),
   place_on_hold: freezeList([NOTIFICATION_EVENT_TYPES.ORDER_ON_HOLD]),
   resume_order: freezeList([NOTIFICATION_EVENT_TYPES.ORDER_RESUMED]),
   mark_ready_for_collection: freezeList([NOTIFICATION_EVENT_TYPES.READY_FOR_COLLECTION]),
@@ -481,6 +636,20 @@ export const notificationRequestsForWorkflowAction = ({
   input = {},
 }) => {
   const eventTypes = [...(ACTION_EVENT_TYPES[action] || [])];
+  if (action === 'submit_to_expediting') {
+    eventTypes.push(
+      record?.trackingStatus === 'awaiting_lab'
+        ? NOTIFICATION_EVENT_TYPES.ORDER_SENT_TO_LABORATORY
+        : NOTIFICATION_EVENT_TYPES.ORDER_SENT_TO_EXPEDITING,
+    );
+  }
+  if (action === 'complete_expediting') {
+    eventTypes.push(
+      record?.trackingStatus === 'awaiting_qa'
+        ? NOTIFICATION_EVENT_TYPES.ORDER_SENT_TO_QA
+        : NOTIFICATION_EVENT_TYPES.ORDER_SENT_TO_DISPATCH,
+    );
+  }
   if (['start_expediting', 'add_expediting_update'].includes(action) && delayReasonFor(record, input)) {
     eventTypes.push(NOTIFICATION_EVENT_TYPES.ORDER_DELAYED);
   }
