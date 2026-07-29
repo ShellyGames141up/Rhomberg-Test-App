@@ -190,6 +190,19 @@ const normaliseEnquiry = enquiry => {
 const isCustomerVisibleEvent = event => event.customerVisible !== false
   && workflowStatusById(event.toStatus || event.status, event.entityType)?.customerVisible !== false;
 
+const toCustomerVisibleDocument = document => {
+  if (!document || document.customerVisible === false) return undefined;
+  return {
+    id: document.id,
+    documentType: document.documentType,
+    fileName: document.fileName,
+    mimeType: document.mimeType,
+    sizeBytes: document.sizeBytes,
+    uploadedAt: document.uploadedAt,
+    storageStatus: document.storageStatus,
+  };
+};
+
 const toCustomerTimelineEvent = event => ({
   id: event.id,
   eventType: event.action || event.eventType || event.toStatus || event.status,
@@ -218,7 +231,7 @@ const toCustomerVisibleQuotation = quotation => {
     customerNote: quotation.customerNote,
     emailed: quotation.emailed,
     documentReference: documentIsVisible ? quotation.documentReference : '',
-    document: documentIsVisible && quotation.document ? { ...quotation.document } : undefined,
+    document: documentIsVisible ? toCustomerVisibleDocument(quotation.document) : undefined,
   };
 };
 
@@ -286,6 +299,52 @@ const toCustomerVisibleDispatch = dispatch => {
   };
 };
 
+const CUSTOMER_RESTRICTED_FIELD_TOKENS = new Set([
+  'audit',
+  'cost',
+  'credential',
+  'credentials',
+  'internal',
+  'margin',
+  'password',
+  'price',
+  'pricing',
+  'private',
+  'protected',
+  'raw',
+  'secret',
+  'supplier',
+  'token',
+]);
+const CUSTOMER_ALLOWED_CONFIGURATION_FIELDS = new Set(['internalContacts']);
+
+const customerFieldIsRestricted = (key, path = []) => {
+  if (
+    CUSTOMER_ALLOWED_CONFIGURATION_FIELDS.has(key)
+    && path.at(-1) === 'configuration'
+  ) return false;
+  const tokens = String(key || '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  return tokens.some(token => CUSTOMER_RESTRICTED_FIELD_TOKENS.has(token));
+};
+
+const sanitiseCustomerValue = (value, path = []) => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item, index) => sanitiseCustomerValue(item, [...path, String(index)]))
+      .filter(item => item !== undefined);
+  }
+  if (!value || typeof value !== 'object') return value;
+  if (value.customerVisible === false) return undefined;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => !customerFieldIsRestricted(key, path))
+    .map(([key, nested]) => [key, sanitiseCustomerValue(nested, [...path, key])])
+    .filter(([, nested]) => nested !== undefined));
+};
+
 const toCustomerVisibleRecord = enquiry => {
   const history = (enquiry.trackingHistory || [])
     .filter(isCustomerVisibleEvent)
@@ -293,8 +352,79 @@ const toCustomerVisibleRecord = enquiry => {
   const lastVisible = history.at(-1);
   const visibleStatus = lastVisible?.toStatus || lastVisible?.status || (workflowStatusById(enquiry.trackingStatus, enquiry.workflowType)?.customerVisible ? enquiry.trackingStatus : 'submitted');
   const definition = workflowStatusById(visibleStatus);
+  const customerSafeRecord = {
+    id: enquiry.id,
+    reference: enquiry.reference,
+    version: enquiry.version,
+    companyId: enquiry.companyId,
+    company: enquiry.company,
+    companySnapshot: enquiry.companySnapshot ? {
+      id: enquiry.companySnapshot.id,
+      name: enquiry.companySnapshot.name,
+      area: enquiry.companySnapshot.area,
+      industry: enquiry.companySnapshot.industry,
+    } : undefined,
+    contact: enquiry.contact,
+    email: enquiry.email,
+    phone: enquiry.phone,
+    submittingCustomerId: enquiry.submittingCustomerId,
+    submittingCustomer: enquiry.submittingCustomer ? {
+      id: enquiry.submittingCustomer.id,
+      name: enquiry.submittingCustomer.name,
+      email: enquiry.submittingCustomer.email,
+      phone: enquiry.submittingCustomer.phone,
+    } : undefined,
+    application: enquiry.application,
+    medium: enquiry.medium,
+    area: enquiry.area,
+    fulfilment: enquiry.fulfilment,
+    deliveryAddress: enquiry.deliveryAddress,
+    collectionBranch: enquiry.collectionBranch,
+    emergency: enquiry.emergency,
+    notes: enquiry.notes,
+    customerNotes: enquiry.customerNotes,
+    priority: enquiry.priority,
+    poMode: enquiry.poMode,
+    poNumber: enquiry.poNumber,
+    poFileName: enquiry.poFileName,
+    items: (enquiry.items || []).map(item => ({
+      lineId: item.lineId,
+      productId: item.productId,
+      code: item.code,
+      name: item.name,
+      image: item.image,
+      description: item.description,
+      quantity: item.quantity,
+      configuration: sanitiseCustomerValue(item.configuration || {}, ['configuration']),
+    })),
+    documents: (enquiry.documents || [])
+      .map(toCustomerVisibleDocument)
+      .filter(Boolean),
+    selectedRep: enquiry.selectedRep ? {
+      id: enquiry.selectedRep.id,
+      code: enquiry.selectedRep.code,
+      name: enquiry.selectedRep.name,
+      branchId: enquiry.selectedRep.branchId,
+      branchName: enquiry.selectedRep.branchName,
+    } : undefined,
+    workflowType: enquiry.workflowType,
+    sourceEnquiryId: enquiry.sourceEnquiryId,
+    sourceRfqReference: enquiry.sourceRfqReference,
+    sourceRfqStatus: enquiry.sourceRfqStatus,
+    assignedAt: enquiry.assignedAt,
+    submittedAt: enquiry.submittedAt,
+    quotedAt: enquiry.quotedAt,
+    quotationAcknowledgedAt: enquiry.quotationAcknowledgedAt,
+    acceptedAt: enquiry.acceptedAt,
+    readyForCollectionAt: enquiry.readyForCollectionAt,
+    outForDeliveryAt: enquiry.outForDeliveryAt,
+    completedAt: enquiry.completedAt,
+    createdAt: enquiry.createdAt,
+    updatedAt: enquiry.updatedAt,
+    isDemo: enquiry.isDemo,
+  };
   return {
-    ...enquiry,
+    ...customerSafeRecord,
     trackingStatus: visibleStatus,
     status: definition?.label || enquiry.status,
     trackingHistory: history,
@@ -912,6 +1042,11 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       if (roleCan(account.role, PERMISSIONS.VIEW_ALL_COMPANIES)) {
         return readAccounts()
           .filter(item => roleCan(item.role, PERMISSIONS.VIEW_OWN_COMPANY_ACCOUNT))
+          .filter(item => (
+            !Array.isArray(account.authorisedCompanyIds)
+            || !account.authorisedCompanyIds.length
+            || account.authorisedCompanyIds.includes(item.companyId)
+          ))
           .map(item => ({ id: item.companyId, name: item.company, area: item.area, industry: item.industry }));
       }
       if (roleCan(account.role, PERMISSIONS.VIEW_OWN_COMPANY_ACCOUNT)) {
@@ -1610,6 +1745,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const stateFilter = String(filters.state || 'all');
       const legalHoldFilter = String(filters.legalHold || 'all');
       const records = refreshRetentionStates()
+        .filter(order => canReadRecord(account, order))
         .filter(order => ['archive_eligible', 'archived'].includes(order.retentionStatus))
         .filter(order => stateFilter === 'all' || order.retentionStatus === stateFilter)
         .filter(order => legalHoldFilter === 'all' || Boolean(order.legalHold?.active) === (legalHoldFilter === 'held'))
@@ -1690,7 +1826,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const account = requireAccount();
       if (!accountCan(account, PERMISSIONS.ARCHIVE_ORDERS)) throw new ServiceError('Your role cannot archive orders.', { code: 'FORBIDDEN', status: 403 });
       const order = refreshRetentionStates().find(item => item.id === orderId);
-      if (!order) throw new ServiceError('The order was not found.', { code: 'ORDER_NOT_FOUND', status: 404 });
+      if (!order || !canReadRecord(account, order)) throw new ServiceError('The order was not found.', { code: 'ORDER_NOT_FOUND', status: 404 });
       try {
         assertArchiveAllowed(order);
       } catch (error) {
@@ -1737,7 +1873,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const account = requireAccount();
       if (!accountCan(account, PERMISSIONS.RESTORE_ARCHIVED_ORDERS)) throw new ServiceError('Your role cannot restore archived orders.', { code: 'FORBIDDEN', status: 403 });
       const order = refreshRetentionStates().find(item => item.id === orderId && item.retentionStatus === 'archived');
-      if (!order) throw new ServiceError('The archived order was not found.', { code: 'ARCHIVED_ORDER_NOT_FOUND', status: 404 });
+      if (!order || !canReadRecord(account, order)) throw new ServiceError('The archived order was not found.', { code: 'ARCHIVED_ORDER_NOT_FOUND', status: 404 });
       const restoredAt = now().toISOString();
       const updated = saveOrder({
         ...order,
@@ -1772,7 +1908,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const account = requireAccount();
       if (!accountCan(account, PERMISSIONS.MANAGE_LEGAL_HOLD)) throw new ServiceError('Your role cannot manage legal holds.', { code: 'FORBIDDEN', status: 403 });
       const order = refreshRetentionStates().find(item => item.id === orderId);
-      if (!order) throw new ServiceError('The order was not found.', { code: 'ORDER_NOT_FOUND', status: 404 });
+      if (!order || !canReadRecord(account, order)) throw new ServiceError('The order was not found.', { code: 'ORDER_NOT_FOUND', status: 404 });
       const holdReason = String(reason || '').trim();
       if (active === true && holdReason.length < 5) {
         throw new ServiceError('Enter a meaningful legal-hold or investigation reason.', { code: 'LEGAL_HOLD_REASON_REQUIRED', status: 422, fieldErrors: { reason: 'Enter at least 5 characters.' } });
@@ -1809,7 +1945,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const account = requireAccount();
       if (!accountCan(account, PERMISSIONS.EXPORT_ARCHIVED_ORDERS)) throw new ServiceError('Your role cannot export archived orders.', { code: 'FORBIDDEN', status: 403 });
       const order = refreshRetentionStates().find(item => item.id === orderId);
-      if (!order || !['archive_eligible', 'archived'].includes(order.retentionStatus)) {
+      if (!order || !canReadRecord(account, order) || !['archive_eligible', 'archived'].includes(order.retentionStatus)) {
         throw new ServiceError('The archive record was not found.', { code: 'ARCHIVED_ORDER_NOT_FOUND', status: 404 });
       }
       const generatedAt = now().toISOString();
@@ -2067,6 +2203,14 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const term = String(search || '').trim().toLowerCase();
       return clone(readAuditEvents()
         .map(presentAuditEvent)
+        .filter(event => {
+          const companyId = event.company?.id || event.companyId || '';
+          if (!companyId) return true;
+          return canReadRecord(account, {
+            workflowType: event.entityType === 'order' ? 'order' : 'rfq',
+            companyId,
+          });
+        })
         .filter(event => !entityId || event.entityId === entityId)
         .filter(event => !entityType || event.entityType === entityType)
         .filter(event => !outcome || event.outcome === outcome)

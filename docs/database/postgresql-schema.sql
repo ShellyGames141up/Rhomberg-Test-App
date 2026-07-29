@@ -1,5 +1,6 @@
 -- Rhomberg Instruments proposed PostgreSQL schema
--- Design draft only: review naming, retention, ERP integration and privileges with IT.
+-- Prompt 17 production specification. Design draft only: review naming,
+-- retention, ERP integration and privileges with IT before migration.
 -- No credentials or customer records belong in this file.
 
 BEGIN;
@@ -82,6 +83,7 @@ CREATE TABLE app.users (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   disabled_at timestamptz,
+  deleted_at timestamptz,
   CONSTRAINT users_password_or_external_identity CHECK (
     password_hash IS NOT NULL OR (identity_provider IS NOT NULL AND external_subject IS NOT NULL)
   )
@@ -121,10 +123,14 @@ CREATE TABLE app.user_permission_overrides (
 CREATE TABLE app.user_company_access (
   user_id uuid NOT NULL REFERENCES app.users(id) ON DELETE CASCADE,
   company_id uuid NOT NULL REFERENCES app.companies(id) ON DELETE CASCADE,
+  membership_role text NOT NULL DEFAULT 'member'
+    CHECK (membership_role IN ('member', 'company_administrator')),
   is_primary boolean NOT NULL DEFAULT false,
   granted_by uuid REFERENCES app.users(id),
   granted_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
   revoked_at timestamptz,
+  deleted_at timestamptz,
   PRIMARY KEY (user_id, company_id)
 );
 
@@ -139,6 +145,7 @@ CREATE TABLE app.representatives (
   is_active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
+  deleted_at timestamptz,
   UNIQUE (branch_id, code)
 );
 
@@ -183,7 +190,8 @@ CREATE TABLE app.products (
   is_active boolean NOT NULL DEFAULT true,
   row_version integer NOT NULL DEFAULT 1 CHECK (row_version > 0),
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  deleted_at timestamptz
 );
 
 -- Server-owned configurable Expediting catalogue. Production changes require
@@ -870,7 +878,8 @@ CREATE TABLE app.order_deletion_log (
 -- backend retention function must lock/re-read the order, verify policy age,
 -- legal hold, export and approvals, then write order_deletion_log atomically.
 
-CREATE INDEX user_company_access_company_idx ON app.user_company_access (company_id, user_id) WHERE revoked_at IS NULL;
+CREATE INDEX user_company_access_company_idx ON app.user_company_access (company_id, user_id)
+  WHERE revoked_at IS NULL AND deleted_at IS NULL;
 CREATE UNIQUE INDEX users_external_identity_unique ON app.users (identity_provider, external_subject) WHERE identity_provider IS NOT NULL AND external_subject IS NOT NULL;
 CREATE INDEX representative_assignment_company_idx ON app.representative_company_assignments (company_id, representative_id) WHERE ends_at IS NULL;
 CREATE INDEX products_category_active_idx ON app.products (category_id, is_active, code);
@@ -1023,6 +1032,7 @@ AS $$
       WHERE access.user_id = app.current_user_id()
         AND access.company_id = target_company_id
         AND access.revoked_at IS NULL
+        AND access.deleted_at IS NULL
     )
     WHEN app.current_user_has_permission('view_assigned_rfqs')
       OR app.current_user_has_permission('view_assigned_orders') THEN EXISTS (
@@ -1112,6 +1122,9 @@ AS $$
 $$;
 
 ALTER TABLE app.companies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.user_company_access ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.representatives ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.enquiries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.enquiry_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.quotations ENABLE ROW LEVEL SECURITY;
@@ -1133,6 +1146,37 @@ ALTER TABLE app.customer_identity_images ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY companies_authorised_scope ON app.companies
   USING (app.can_access_company(id));
+
+CREATE POLICY users_own_or_administrative_scope ON app.users
+  USING (
+    id = app.current_user_id()
+    OR app.current_user_has_permission('administer_users')
+  )
+  WITH CHECK (app.current_user_has_permission('administer_users'));
+
+CREATE POLICY company_users_authorised_scope ON app.user_company_access
+  USING (
+    deleted_at IS NULL
+    AND (
+      user_id = app.current_user_id()
+      OR (
+        app.can_access_company(company_id)
+        AND app.current_user_has_permission('administer_users')
+      )
+    )
+  )
+  WITH CHECK (
+    app.can_access_company(company_id)
+    AND app.current_user_has_permission('administer_users')
+  );
+
+CREATE POLICY representatives_authenticated_directory ON app.representatives
+  FOR SELECT
+  USING (
+    app.current_user_id() IS NOT NULL
+    AND is_active
+    AND deleted_at IS NULL
+  );
 
 CREATE POLICY enquiries_authorised_scope ON app.enquiries
   USING (app.can_access_enquiry(id))
@@ -1363,20 +1407,7 @@ CREATE TABLE IF NOT EXISTS app.operational_report_exports (
   sha256 text,
   generated_at timestamptz NOT NULL DEFAULT now(),
   expires_at timestamptz,
-  audit_event_id uuid REFERENCES app.audit_events(id)
-);
-
-CREATE TABLE IF NOT EXISTS app.idempotency_records (
-  actor_user_id uuid NOT NULL REFERENCES app.users(id),
-  route_key text NOT NULL,
-  idempotency_key text NOT NULL,
-  request_hash text NOT NULL,
-  response_status integer NOT NULL,
-  response_reference text,
-  response_body jsonb,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  expires_at timestamptz NOT NULL,
-  PRIMARY KEY (actor_user_id, route_key, idempotency_key)
+  audit_event_id bigint REFERENCES app.audit_events(id)
 );
 
 CREATE INDEX IF NOT EXISTS management_approvals_company_time_idx
@@ -1418,5 +1449,286 @@ CREATE POLICY operational_report_exports_own_scope ON app.operational_report_exp
 -- functions. The ordinary API role receives no direct SELECT of response bodies.
 -- Management aggregates must apply app.can_access_company before grouping, and
 -- the API projection must omit all protected pricing columns/JSON keys.
+
+-- ---------------------------------------------------------------------------
+-- Prompt 17 canonical production entities
+-- ---------------------------------------------------------------------------
+-- Earlier browser-preview phases used "enquiry" names in the API and proposal.
+-- The physical production tables below are canonical RFQ entities. Compatibility
+-- views preserve the current /enquiries API adapter while IT migrates clients.
+
+CREATE TABLE app.roles (
+  code app.user_role PRIMARY KEY,
+  name text NOT NULL UNIQUE CHECK (length(trim(name)) BETWEEN 2 AND 100),
+  description text NOT NULL,
+  is_internal boolean NOT NULL DEFAULT true,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO app.roles (code, name, description, is_internal) VALUES
+  ('customer', 'Customer', 'Authorised customer-company contact.', false),
+  ('sales_representative', 'Sales representative', 'Assigned commercial representative.', true),
+  ('planning', 'Planning', 'Production planning workspace user.', true),
+  ('expeditor', 'Expeditor', 'Production and fulfilment progress user.', true),
+  ('dispatch', 'Dispatch', 'Collection and delivery workspace user.', true),
+  ('buyer', 'Buyer', 'Prepared role; workflow remains inactive.', true),
+  ('manager', 'Manager', 'Operational oversight and controlled approvals.', true),
+  ('administrator', 'Administrator', 'User, policy and platform administration.', true);
+
+ALTER TABLE app.role_permissions
+  ADD CONSTRAINT role_permissions_role_fk
+  FOREIGN KEY (role) REFERENCES app.roles(code);
+
+CREATE TABLE app.user_roles (
+  user_id uuid NOT NULL REFERENCES app.users(id) ON DELETE CASCADE,
+  role_code app.user_role NOT NULL REFERENCES app.roles(code),
+  assigned_by_user_id uuid REFERENCES app.users(id),
+  assigned_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz,
+  revoked_at timestamptz,
+  PRIMARY KEY (user_id, role_code, assigned_at),
+  CHECK (expires_at IS NULL OR expires_at > assigned_at)
+);
+
+-- Backfill the earlier single-role proposal before removing its duplicated
+-- source of truth. Production authorisation reads app.user_roles only.
+INSERT INTO app.user_roles (user_id, role_code, assigned_at)
+SELECT id, role, created_at FROM app.users;
+ALTER TABLE app.users DROP COLUMN role;
+
+CREATE TABLE app.product_configurations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id uuid NOT NULL REFERENCES app.products(id) ON DELETE CASCADE,
+  schema_version integer NOT NULL CHECK (schema_version > 0),
+  configuration_schema jsonb NOT NULL,
+  business_rules jsonb NOT NULL DEFAULT '{}'::jsonb,
+  effective_from timestamptz NOT NULL DEFAULT now(),
+  effective_to timestamptz,
+  created_by_user_id uuid NOT NULL REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  deleted_at timestamptz,
+  UNIQUE (product_id, schema_version),
+  CHECK (jsonb_typeof(configuration_schema) = 'array'),
+  CHECK (jsonb_typeof(business_rules) = 'object'),
+  CHECK (effective_to IS NULL OR effective_to > effective_from)
+);
+
+-- Authoritative one-to-one Planning record. The queue columns currently present
+-- on app.orders are a denormalised read model and must be updated only in the
+-- same transaction as this record.
+CREATE TABLE app.planning_records (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL UNIQUE REFERENCES app.orders(id) ON DELETE CASCADE,
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  internal_job_number text NOT NULL UNIQUE,
+  customer_purchase_order_number text,
+  purchase_order_exception_authorised boolean NOT NULL DEFAULT false,
+  purchase_order_exception_reason text,
+  planning_notes text,
+  planned_start_date date,
+  estimated_completion_date date,
+  assigned_planning_user_id uuid NOT NULL REFERENCES app.users(id),
+  production_location_branch_id uuid REFERENCES app.branches(id),
+  priority text NOT NULL DEFAULT 'standard' CHECK (priority IN ('standard', 'high', 'urgent')),
+  document_references text[] NOT NULL DEFAULT '{}',
+  started_at timestamptz,
+  submitted_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  row_version integer NOT NULL DEFAULT 1 CHECK (row_version > 0),
+  CHECK (
+    customer_purchase_order_number IS NOT NULL
+    OR (
+      purchase_order_exception_authorised
+      AND purchase_order_exception_reason IS NOT NULL
+      AND length(trim(purchase_order_exception_reason)) >= 8
+    )
+  ),
+  CHECK (
+    planned_start_date IS NULL
+    OR estimated_completion_date IS NULL
+    OR estimated_completion_date >= planned_start_date
+  )
+);
+
+CREATE TYPE app.archive_action AS ENUM (
+  'eligible',
+  'archived',
+  'restored',
+  'legal_hold_applied',
+  'legal_hold_released',
+  'deletion_requested',
+  'deletion_cancelled'
+);
+
+CREATE TABLE app.archive_records (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL REFERENCES app.orders(id) ON DELETE RESTRICT,
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  retention_policy_id uuid NOT NULL REFERENCES app.retention_policies(id),
+  action app.archive_action NOT NULL,
+  reason text NOT NULL CHECK (length(trim(reason)) >= 5),
+  legal_hold_active boolean NOT NULL DEFAULT false,
+  performed_by_user_id uuid REFERENCES app.users(id),
+  eligible_at timestamptz,
+  archived_at timestamptz,
+  restored_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  request_id text NOT NULL,
+  correlation_id text NOT NULL,
+  UNIQUE (order_id, action, created_at)
+);
+
+CREATE TYPE app.workflow_override_status AS ENUM (
+  'requested',
+  'approved',
+  'rejected',
+  'executed',
+  'cancelled'
+);
+
+CREATE TABLE app.workflow_overrides (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  enquiry_id uuid REFERENCES app.enquiries(id) ON DELETE RESTRICT,
+  order_id uuid REFERENCES app.orders(id) ON DELETE RESTRICT,
+  requested_from_status text NOT NULL,
+  requested_to_status text NOT NULL,
+  expected_row_version integer NOT NULL CHECK (expected_row_version >= 0),
+  reason text NOT NULL CHECK (length(trim(reason)) >= 10),
+  status app.workflow_override_status NOT NULL DEFAULT 'requested',
+  requested_by_user_id uuid NOT NULL REFERENCES app.users(id),
+  requested_at timestamptz NOT NULL DEFAULT now(),
+  decided_by_user_id uuid REFERENCES app.users(id),
+  decided_at timestamptz,
+  decision_comment text,
+  executed_by_user_id uuid REFERENCES app.users(id),
+  executed_at timestamptz,
+  request_id text NOT NULL,
+  correlation_id text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (num_nonnulls(enquiry_id, order_id) = 1),
+  CHECK (
+    status = 'requested'
+    OR (
+      decided_by_user_id IS NOT NULL
+      AND decided_at IS NOT NULL
+      AND decision_comment IS NOT NULL
+      AND length(trim(decision_comment)) >= 10
+    )
+  ),
+  CHECK (
+    status <> 'executed'
+    OR (executed_by_user_id IS NOT NULL AND executed_at IS NOT NULL)
+  )
+);
+
+CREATE INDEX user_roles_active_idx
+  ON app.user_roles (user_id, role_code) WHERE revoked_at IS NULL;
+CREATE INDEX product_configurations_active_idx
+  ON app.product_configurations (product_id, effective_from DESC)
+  WHERE deleted_at IS NULL AND effective_to IS NULL;
+CREATE INDEX planning_records_queue_idx
+  ON app.planning_records (company_id, priority, submitted_at DESC);
+CREATE INDEX archive_records_order_time_idx
+  ON app.archive_records (order_id, created_at DESC);
+CREATE INDEX archive_records_company_time_idx
+  ON app.archive_records (company_id, created_at DESC);
+CREATE INDEX workflow_overrides_company_status_idx
+  ON app.workflow_overrides (company_id, status, requested_at DESC);
+
+ALTER TABLE app.user_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.product_configurations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.planning_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.archive_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.workflow_overrides ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY user_roles_authorised_scope ON app.user_roles
+  USING (
+    user_id = app.current_user_id()
+    OR app.current_user_has_permission('administer_users')
+  )
+  WITH CHECK (app.current_user_has_permission('administer_users'));
+
+CREATE POLICY product_configurations_catalogue_scope ON app.product_configurations
+  FOR SELECT
+  USING (
+    deleted_at IS NULL
+    AND (
+      app.current_user_has_permission('read_catalogue')
+      OR app.current_user_has_permission('manage_products')
+    )
+  );
+
+CREATE POLICY planning_records_internal_scope ON app.planning_records
+  USING (
+    app.can_access_company(company_id)
+    AND app.can_access_order(order_id)
+    AND app.current_user_role() <> 'customer'
+  )
+  WITH CHECK (
+    app.can_access_company(company_id)
+    AND app.current_user_has_permission('add_planning_information')
+  );
+
+CREATE POLICY archive_records_management_scope ON app.archive_records
+  USING (
+    app.can_access_company(company_id)
+    AND (
+      app.current_user_has_permission('archive_orders')
+      OR app.current_user_has_permission('restore_archived_orders')
+      OR app.current_user_has_permission('read_audit_history')
+    )
+  )
+  WITH CHECK (
+    app.can_access_company(company_id)
+    AND app.current_user_has_permission('archive_orders')
+  );
+
+CREATE POLICY workflow_overrides_management_scope ON app.workflow_overrides
+  USING (
+    app.can_access_company(company_id)
+    AND app.current_user_has_permission('read_audit_history')
+  )
+  WITH CHECK (
+    app.can_access_company(company_id)
+    AND app.current_user_has_permission('override_workflow')
+  );
+
+-- Append-only operational evidence. Corrections are additional audit/tracking
+-- events; production roles receive no UPDATE or DELETE grant on these tables.
+CREATE TRIGGER tracking_events_immutable
+BEFORE UPDATE OR DELETE ON app.workflow_events
+FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+
+CREATE TRIGGER expediting_updates_immutable
+BEFORE UPDATE OR DELETE ON app.expediting_updates
+FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+
+CREATE TRIGGER dispatch_updates_immutable
+BEFORE UPDATE OR DELETE ON app.order_dispatch_updates
+FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+
+CREATE TRIGGER archive_records_immutable
+BEFORE UPDATE OR DELETE ON app.archive_records
+FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+
+-- Canonical physical names required by the production model.
+ALTER TABLE app.user_company_access RENAME TO company_users;
+ALTER TABLE app.enquiries RENAME TO rfqs;
+ALTER TABLE app.enquiry_items RENAME TO rfq_items;
+ALTER TABLE app.order_dispatch_records RENAME TO dispatch_records;
+ALTER TABLE app.workflow_events RENAME TO tracking_events;
+
+-- Temporary read-only compatibility views for the existing API adapter. New
+-- backend code and migrations must use the canonical table names above.
+CREATE VIEW app.user_company_access AS SELECT * FROM app.company_users;
+CREATE VIEW app.enquiries AS SELECT * FROM app.rfqs;
+CREATE VIEW app.enquiry_items AS SELECT * FROM app.rfq_items;
+CREATE VIEW app.order_dispatch_records AS SELECT * FROM app.dispatch_records;
+CREATE VIEW app.workflow_events AS SELECT * FROM app.tracking_events;
 
 COMMIT;

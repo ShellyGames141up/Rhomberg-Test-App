@@ -64,6 +64,17 @@ const forbiddenMockMarkers = [
   'manager.workflow@example.invalid',
   'administrator.workflow@example.invalid',
   'preview-landing',
+  'createMockServices',
+  'DEMO_LOGINS',
+  'rhombergPreviewSeed',
+  'loadPrivatePriceBook',
+  'RHOMBERG_PRICEBOOK',
+  'KNOWN CATALOGUE SUBTOTAL',
+  'REP-ONLY PRICED RFQ',
+  'privatePrice',
+  'priceEngine',
+  'pricingResult',
+  'unitPrice',
 ];
 const leakedMarker = forbiddenMockMarkers.find(marker => apiBundle.toLowerCase().includes(marker.toLowerCase()));
 if (leakedMarker) throw new Error(`Production build contains mock-only marker: ${leakedMarker}`);

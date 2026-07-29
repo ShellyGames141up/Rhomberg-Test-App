@@ -4,6 +4,22 @@ Status: proposed contract for IT implementation. No live endpoint or database is
 
 Base path: `/api/v1`
 
+## Prompt 17 production reconciliation
+
+The canonical, machine-readable contract is `docs/api/openapi.yaml` at proposed version `0.6.0`. The companion entity, constraint, index, row-level-security and audit specification is `docs/PRODUCTION_API_DATABASE_SPECIFICATION.md`.
+
+The API deliberately keeps `/enquiries` as a compatibility resource name. The proposed PostgreSQL entity is `app.rfqs`; only the backend adapter maps between those names. The same compatibility mapping applies to RFQ items and the established `sourceEnquiryId` response field.
+
+Version 0.6 adds explicit contracts for:
+
+- roles, permissions, user-role assignments, users, and company memberships;
+- versioned product configurations;
+- RFQ items, quotation confirmation, acceptance evidence, and RFQ timelines;
+- one-to-one Planning and Dispatch records plus append-only Expediting updates;
+- archive history and independently reviewed workflow overrides.
+
+No endpoint permits a component or client to set an RFQ/order status directly. Workflow state changes still use the controlled workflow-action endpoint, expected row version, permission checks, and idempotency.
+
 ## Transport and authentication
 
 - HTTPS only; reject plaintext HTTP outside a local developer environment.
@@ -991,18 +1007,9 @@ Requires `export_operational_reports` and an idempotency key. Generates an inter
 
 The web HTTP client retries only safe `GET`/`HEAD` requests once after a transient network/502/503/504 failure. Mutation retry is a higher-level decision and requires an unchanged idempotency key. Public error envelopes never expose stack, database, provider or security-policy details.
 
-The administrator UI is a later phase, but the backend should reserve:
+The earlier placeholder `/admin/users` route list is obsolete and has been replaced by the explicit v0.6 contracts for `/users`, `/users/{userId}/roles`, `/companies/{companyId}/users`, `/roles`, `/permissions`, and `/audit-events`. This removes route ambiguity without activating an administrator UI or a live backend.
 
-- `GET/POST/PATCH /admin/users`
-- `GET/POST/PATCH /admin/companies`
-- `GET/POST/PATCH /admin/representatives`
-- `PUT /admin/representatives/{id}/company-assignments`
-- `GET/POST/PATCH /admin/products`
-- `GET /admin/audit-events`
-
-All administrative mutations require elevated role checks, MFA-backed staff sessions and audit records.
-
-Reserved permission codes include `administer_users`, `archive_orders` and `restore_archived_orders`. Defining the codes does not activate those interfaces; only approved Administrator endpoints may use them.
+All administrative mutations require elevated permission checks, MFA-backed staff sessions, company-scope validation, expected row versions where relevant, idempotency, and audit records. Defining `administer_users`, `archive_orders`, and `restore_archived_orders` does not grant them; effective authority is calculated server-side from active role assignments and approved overrides.
 
 ## Status codes
 

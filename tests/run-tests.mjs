@@ -11,4 +11,7 @@ await import('./retention.test.mjs');
 await import('./management.test.mjs');
 await import('./validation-errors.test.mjs');
 await import('./mock-services.test.mjs');
+await import('./end-to-end-demo.test.mjs');
+await import('./production-spec.test.mjs');
+await import('./security-review.test.mjs');
 await import('./platform-previews.test.mjs');

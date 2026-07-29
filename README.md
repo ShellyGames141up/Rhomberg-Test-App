@@ -42,19 +42,19 @@ All credentials above are fabricated and demonstration-only. GitHub Pages runs i
 
 ## Current development checkpoint
 
-- **Checkpoint date:** 28 July 2026
-- **Current version:** 4.6.0
-- **Last completed steps:** Prompt 15 - management oversight; Prompt 16 - strengthened validation and error handling.
+- **Checkpoint date:** 29 July 2026
+- **Current version:** 4.8.0
+- **Last completed steps:** Prompt 19 - security and data-leak review, hardening and adversarial access-control tests.
 
-This checkpoint adds a permission-controlled management dashboard, operational metrics and reports, controlled representative reassignment and approvals, stronger company isolation, idempotent RFQ submission, safe network retry and expanded validation/error coverage.
+This checkpoint adds a complete security/data-leak review, allow-listed customer record projections that exclude unknown fields by default, full authorised-company enforcement across archive/audit/company-directory operations, safer serverless error logging, stronger production-bundle scans and adversarial tests for company/representative access, forged statuses, PDFs, recipients, secrets, pricing, documents, audit and deletion boundaries.
 
-All automated tests, source checks, stylesheet checks, static preview builds and the API-only production-candidate safety build passed before this checkpoint was committed. The GitHub Pages preview remains browser-local and uses fabricated data only.
+All automated tests, source checks, stylesheet checks, the shared build, all four static preview builds, and the scanned API-only production-candidate build passed at this checkpoint. The GitHub Pages preview remains browser-local and uses fabricated data only.
 
-The separately attached quotation, PO, rejection and Document Centre prompt was reviewed and is not complete; see [the gap review](docs/QUOTATION_WORKFLOW_GAP_REVIEW.md). No real database, email provider, push provider, courier integration or document-storage service has been connected. Continue from [the progress handoff](docs/HOME_PC_PROGRESS_HANDOFF.md), [retention policy](docs/RETENTION_POLICY.md) and [delivery strategy](docs/DELIVERY_STRATEGY.md).
+No real database, identity provider, email provider, push provider, courier integration or document-storage service has been connected. The GitHub Pages mock is explicitly not production-secure. Continue from [the security review](docs/SECURITY_REVIEW.md), [progress handoff](docs/HOME_PC_PROGRESS_HANDOFF.md), [production API/database specification](docs/PRODUCTION_API_DATABASE_SPECIFICATION.md), [end-to-end demo script](docs/END_TO_END_DEMO_SCRIPT.md), [retention policy](docs/RETENTION_POLICY.md) and [delivery strategy](docs/DELIVERY_STRATEGY.md).
 
-## Latest changes committed to `main`
+## Latest development changes
 
-The latest release includes the completed Prompt 11-16 work:
+The current release includes the completed Prompt 11-19 work:
 
 - **Prompt 11:** Separate customer-visible order timelines and immutable internal audit history, with management viewing permissions and customer-data leakage tests.
 - **Prompt 12:** Customer-safe and internal operational order-summary PDFs, preview/download controls, simulated email sharing, recipient validation and audited document actions.
@@ -62,8 +62,38 @@ The latest release includes the completed Prompt 11-16 work:
 - **Prompt 14:** One responsive Progressive Web App codebase, role-specific mobile and desktop navigation, Capacitor preparation and documented Windows/mobile delivery requirements.
 - **Prompt 15:** Management oversight metrics, ageing, activity, authorised search, reassignments, override/archive approvals and operational CSV reporting.
 - **Prompt 16:** Stronger end-to-end validation, public-safe errors, idempotency, safe read retries and expanded failure/isolation tests.
+- **Prompt 17:** Canonical PostgreSQL production model, role/company scoping, row-level-security approach, audit rules and reconciled OpenAPI contract with fabricated examples.
+- **Prompt 18:** Automated complete mock RFQ/order lifecycle, customer/representative notifications, Planning/Expediting/Dispatch hand-offs, internal/customer PDFs, archive eligibility and manual presenter checklist.
+- **Prompt 19:** Security/data-leak review, fail-closed customer projection, archive/audit/company scope hardening, safe logging, stronger production scans and adversarial access-control tests.
 
 The public GitHub Pages build remains a fabricated mock demonstration. Email and push delivery are simulated, browser code cannot permanently delete orders, and no production credentials or customer data were added.
+
+## Included in version 4.8
+
+- Complete findings, evidence and unresolved production requirements in [Security and Data-Leak Review](docs/SECURITY_REVIEW.md)
+- Explicit warning that browser-local GitHub Pages authentication, isolation and audit history are not production security boundaries
+- Allow-listed customer record/document/representative/item projections plus recursive configuration redaction for internal/private/protected/audit/credential/token/pricing/cost/margin/supplier fields
+- Preservation of the legitimate customer-selected PBB `internalContacts` configuration
+- Authorised-company enforcement for company lists, archive lists/actions/exports/legal holds and direct audit reads
+- Generic serverless failure responses and correlation-only logging without raw exceptions or RFQ/customer payloads
+- Expanded API-only build rejection markers for mock services, demo data and private pricing code
+- Adversarial tests for customer/representative isolation, forged statuses, internal notes, protected documents, PDF content, email header injection, archive scope, secrets and pricing
+- Static verification of secure-cookie/CSRF contracts, document RLS, append-only audit and controlled permanent-deletion design
+
+## Included in version 4.7
+
+- Canonical proposed PostgreSQL entities for users, roles, permissions, memberships, catalogue configuration, RFQs, quotations, acceptance, orders, operational records, notification/audit evidence, archive history and workflow overrides
+- Primary/foreign keys, uniqueness, enums, timestamps, soft deletion/archive fields, targeted indexes and row-level-security policies
+- Append-only audit, tracking, Expediting, Dispatch-update and archive evidence
+- Explicit v0.6 OpenAPI endpoints for identity administration, memberships, product configurations, RFQ subresources, Planning, Expediting, Dispatch, archive history and controlled workflow overrides
+- Backward-compatible `/enquiries` API naming mapped to canonical `app.rfqs`
+- Fabricated requests/responses and safe error-envelope examples
+- Automated two-product end-to-end scenario covering RFQ submission through completed collection
+- Customer and assigned-representative notification and visibility assertions
+- Valid internal operational and customer-safe PDF generation assertions
+- Retention-clock test proving the completed order becomes archive eligible
+- Manual presenter checklist in [End-to-End Demonstration Script](docs/END_TO_END_DEMO_SCRIPT.md)
+- Static specification tests for canonical entities, endpoints, component references and required security markers
 
 ## Included in version 4.6
 

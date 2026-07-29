@@ -8,14 +8,33 @@ Use this form as the checkpoint for continuing the project on another computer.
 |---|---|
 | Repository | `ShellyGames141up/Rhomberg-Test-App` |
 | Branch | `main` |
-| App version | `4.6.0` |
-| Checkpoint date | 28 July 2026 |
-| Completed phase | Prompts 15 and 16: management oversight and workflow-wide validation/error strengthening |
-| Last stopping point | Management metrics/actions/reports, restricted-company oversight, RFQ idempotency, safe GET retry and strengthened validation are complete in mock mode. The attached quotation/PO/rejection workflow remains incomplete and is documented separately. |
+| App version | `4.8.0` |
+| Checkpoint date | 29 July 2026 |
+| Completed phase | Prompt 19: security and data-leak review, targeted hardening and adversarial tests |
+| Last stopping point | Security findings are documented, accidental customer-field leakage and restricted-manager archive/audit scope gaps are hardened, and the complete test suite passes. The GitHub Pages mock is explicitly not production-secure; no live backend is connected. |
 | Preview mode | GitHub Pages browser mock remains enabled |
 | Production connection | Not connected; API and PostgreSQL material remain proposed contracts only |
 
 ## What changed in this checkpoint
+
+- Added `SECURITY_REVIEW.md` with a requirement-by-requirement result, evidence, fixed findings, unresolved risks and production acceptance gates.
+- Added allow-listed customer record, document, representative and item projections, plus recursive configuration redaction for internal, private, protected, audit, credential, token, pricing, cost, margin and supplier fields.
+- Preserved the legitimate PBB `internalContacts` customer configuration while blocking similarly named internal company data.
+- Enforced `authorisedCompanyIds` across company-directory reads, archive lists, archive/restore/legal-hold/export actions and audit reads.
+- Replaced raw serverless exception logging/public error messages with a safe request reference, generic response and non-payload metadata.
+- Expanded the API-only production build scan for mock-service, demo-login and private-pricing markers.
+- Added `security-review.test.mjs` covering company/representative isolation, future-field leakage, protected documents, forged statuses, audit/archive scope, PDFs, email header injection, secret signatures, pricing and production security contracts.
+
+- Reconciled the proposed PostgreSQL schema around canonical production entities, including roles/user roles, company memberships, versioned product configuration, RFQs/items, Planning records, archive history and workflow overrides.
+- Added explicit keys, relationships, uniqueness, status enums, lifecycle timestamps, soft deletion/archive fields, operational indexes, row-level-security policies and append-only evidence triggers.
+- Preserved the established `/enquiries` service/API route while documenting its backend mapping to canonical `app.rfqs`.
+- Expanded the OpenAPI proposal to v0.6 with identity/membership, product-configuration, RFQ subresource, Planning, Expediting, Dispatch, archive-record and workflow-override endpoints.
+- Added fabricated OpenAPI request/response examples and corrected retired security-scheme references.
+- Added `PRODUCTION_API_DATABASE_SPECIFICATION.md` as the IT-facing design narrative.
+- Added a dedicated automated integration scenario using two configured products and every active department from RFQ submission through completed collection.
+- Proved customer/representative notifications, customer-safe projections, immutable audit coverage, valid internal/customer PDF byte streams and archive eligibility after the configured threshold.
+- Added `END_TO_END_DEMO_SCRIPT.md` with accounts, role switches, actions, expected statuses, notifications, audit events and customer visibility.
+- Added static specification checks for required entities, endpoints, references and security markers.
 
 - Added the Manager/Administrator oversight dashboard with all requested RFQ/order KPIs, stage averages, breakdowns, ageing and recent activity.
 - Added authorised search, timeline/audit review, representative reassignment, override approval, archival approval and operational CSV export.
@@ -130,27 +149,31 @@ Use this form as the checkpoint for continuing the project on another computer.
 | Expeditor workspace | `src/components/ExpeditorDashboard.jsx`, `src/components/ExpeditingFields.jsx`, `src/domain/expediting.js` |
 | Dispatch workspace | `src/components/DispatchDashboard.jsx`, `src/components/DispatchFields.jsx`, `src/domain/dispatch.js` |
 | Shared operational fallback | `src/components/OperationalDashboard.jsx` |
-| Automated tests | `tests/dispatch.test.mjs`, `tests/notifications.test.mjs` plus the existing catalogue, permissions, RFQ inbox, Planning, Expediting, workflow, mock service and preview suites |
+| Automated tests | `tests/security-review.test.mjs`, `tests/end-to-end-demo.test.mjs`, `tests/production-spec.test.mjs`, `tests/dispatch.test.mjs`, `tests/notifications.test.mjs` plus the existing catalogue, permissions, RFQ inbox, Planning, Expediting, workflow, mock service and preview suites |
 | Workflow documentation | `docs/WORKFLOW_STATE_MACHINE.md`, `docs/ORDER_WORKFLOW_IMPLEMENTATION_PLAN.md` |
 | Platform and deployment documentation | `docs/ARCHITECTURE.md`, `docs/PREVIEW_GUIDE.md`, `docs/PLATFORM_MATRIX.md`, `docs/ROLE_PERMISSION_MATRIX.md`, `docs/CUSTOMER_PERSONALISATION.md`, `docs/RESPONSIVE_TESTING.md`, `docs/BUILD_AND_DEPLOYMENT.md`, `docs/MOCK_MODE_LIMITATIONS.md` |
-| Production proposals | `docs/NOTIFICATION_SYSTEM.md`, `docs/API-CONTRACT.md`, `docs/api/openapi.yaml`, `docs/database/postgresql-schema.sql`, `docs/SECURITY-AND-ROLES.md`, `docs/PRODUCTION-DEPLOYMENT.md` |
+| Production proposals | `docs/PRODUCTION_API_DATABASE_SPECIFICATION.md`, `docs/API-CONTRACT.md`, `docs/api/openapi.yaml`, `docs/database/postgresql-schema.sql`, `docs/NOTIFICATION_SYSTEM.md`, `docs/SECURITY-AND-ROLES.md`, `docs/PRODUCTION-DEPLOYMENT.md` |
+| Demonstration guide | `docs/END_TO_END_DEMO_SCRIPT.md` |
+| Security review | `docs/SECURITY_REVIEW.md` |
 
 ## Validation completed at this checkpoint
 
 | Check | Result |
 |---|---|
-| `npm test` | Passed for version 4.4: PDF privacy/generation/sharing/audit plus Dispatch, customer timeline, notification and all existing suites |
-| In-app browser QA | Passed: manager audit navigation and event rendering, customer-only company records, sanitised customer timeline, and desktop preview watermark placement |
-| `npm run check` | Passed for 54 React/source modules and relative imports |
+| `npm test` | Passed for version 4.8: all existing suites plus the complete scenario, production-specification checks and adversarial security review |
+| `npm run check` | Passed for 61 React/source modules and relative imports |
 | `npm run check:css` | Passed |
 | `npm run build:previews` | Passed; four standalone preview artifacts and the combined GitHub Pages artifact were generated |
-| `npm run build:netlify` | Passed; the backward-compatible static preview was staged in `dist/` |
-| `npm run build:production` | Passed; the API-only candidate was built without source maps and scanned for forbidden demo accounts, passwords and preview-only markers |
-| Repository checks | `git diff --check` passed; React/App source contains no direct `localStorage` or `sessionStorage` calls |
-| Browser interaction QA | Passed the Dispatch queue/detail workflow at 1280 × 720 and its single-column responsive layout at 390 × 844; no console errors or horizontal document overflow were found |
+| `npm run build` | Passed; the shared GitHub Pages mock-preview bundle was regenerated |
+| `npm run build:production` | Passed; the API-only candidate was regenerated and scanned for forbidden demonstration data and public-preview markers |
+| OpenAPI/static contract checks | Passed component-reference, endpoint, canonical-entity, security-marker and fabricated-demo-document checks |
+| Runtime UI scope | No React component or visual styling changed in Prompt 19; service-layer projections and scope checks were hardened |
 
 ## Known limitations and risks
 
+- GitHub Pages authentication, company isolation and audit records remain browser-local demonstrations that can be altered through developer tools; they are not production security controls.
+- The legacy Netlify RFQ helper is test-only and must not replace the authenticated, company-scoped private API.
+- Real object storage, malware scanning, immutable audit retention, structured log redaction and approved deletion execution are not implemented.
 - Browser mock data belongs to one device/browser and is not production authentication, concurrency or durability.
 - The backend does not exist yet; the API, PostgreSQL, notification and audit structures are implementation proposals.
 - In-app delivery is functional only in this browser. Email and push statuses/retries are simulations until IT supplies the approved backend, worker and providers.
@@ -162,13 +185,13 @@ Use this form as the checkpoint for continuing the project on another computer.
 - Expediting document/image fields store metadata references only. Real uploads require private object storage, malware scanning and approved visibility/download rules.
 - Dispatch proof fields store safe metadata only in mock mode. No file bytes, courier integration, mapping, signature capture or legal proof-of-delivery process is connected.
 - The production owner must approve Dispatch methods, branch/address access, mandatory completion evidence and proof-retention periods.
-- Generated order-summary PDFs, delivery retries and retention/archive jobs are not implemented yet.
+- Order-summary PDFs, simulated delivery retries and retention eligibility work in mock mode; production still needs private document storage, delivery workers and a durable scheduled retention job.
 - PO-exception authority is modelled and audited, but the owner/IT must still define which staff permissions or approval records authorise that exception in production.
 - Planning reference options use fabricated mock accounts/branches; production must resolve active staff and location scope from authoritative directories.
 
 ## Recommended next phase
 
-Continue only with the next approved prompt. Do not connect Microsoft 365/SMTP, APNs/FCM or a production database without an approved IT phase. PDF generation, real delivery workers and retention remain later controlled work.
+Continue only with the next approved prompt. Do not connect Microsoft 365/SMTP, APNs/FCM, object storage or a production database without an approved IT phase. The proposed schema and API must first be reviewed by IT and the business owners listed in `docs/PRODUCTION_API_DATABASE_SPECIFICATION.md`.
 
 ## Continue on the home PC
 
@@ -176,10 +199,10 @@ After cloning the private repository or opening the existing clone:
 
 ```powershell
 git fetch origin
-git switch agent/improve-theme-readability-and-reps
+git switch main
 git pull --ff-only
 npm install
 npm test
 ```
 
-Then read this file, `docs/DISPATCH_WORKSPACE.md`, `docs/WORKFLOW_STATE_MACHINE.md` and the next-phase sections of `docs/ORDER_WORKFLOW_IMPLEMENTATION_PLAN.md`.
+Then read this file, `docs/PRODUCTION_API_DATABASE_SPECIFICATION.md`, `docs/END_TO_END_DEMO_SCRIPT.md`, `docs/WORKFLOW_STATE_MACHINE.md` and the next approved phase.

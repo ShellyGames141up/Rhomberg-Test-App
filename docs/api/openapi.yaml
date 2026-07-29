@@ -1,8 +1,12 @@
 openapi: 3.1.0
 info:
   title: Rhomberg Instruments Private-Cloud API
-  version: 0.5.0-proposed
-  description: Proposed contract only. No production service is connected.
+  version: 0.6.0-proposed
+  description: |
+    Proposed production contract for the completed RFQ-to-order workflow.
+    No production service or database is connected. All examples are fabricated.
+    The public API retains the established `/enquiries` resource name while the
+    canonical PostgreSQL entity is `app.rfqs`; the backend adapter owns that mapping.
 servers:
   - url: /api/v1
 security:
@@ -1066,7 +1070,7 @@ paths:
   /admin/retention-policy:
     get:
       summary: Read the approved retention-policy projection
-      security: [{ cookieSession: [] }]
+      security: [{ sessionCookie: [] }]
       responses:
         '200':
           description: Retention policy
@@ -1075,7 +1079,7 @@ paths:
               schema: { $ref: '#/components/schemas/RetentionPolicy' }
     put:
       summary: Update retention settings (Administrator only; always audited)
-      security: [{ cookieSession: [], csrfToken: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         required: true
         content:
@@ -1091,7 +1095,7 @@ paths:
   /archived-orders:
     get:
       summary: Search archive-eligible and archived orders
-      security: [{ cookieSession: [] }]
+      security: [{ sessionCookie: [] }]
       parameters:
         - { in: query, name: search, schema: { type: string } }
         - { in: query, name: state, schema: { type: string, enum: [all, archive_eligible, archived] } }
@@ -1107,7 +1111,7 @@ paths:
   /orders/{orderId}/archive:
     post:
       summary: Archive an eligible completed order
-      security: [{ cookieSession: [], csrfToken: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters:
         - { $ref: '#/components/parameters/OrderId' }
       requestBody:
@@ -1125,7 +1129,7 @@ paths:
   /orders/{orderId}/archive-approval:
     post:
       summary: Approve a later archival action
-      security: [{ cookieSession: [], csrfToken: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters:
         - { $ref: '#/components/parameters/OrderId' }
       requestBody:
@@ -1148,7 +1152,7 @@ paths:
   /orders/{orderId}/restore:
     post:
       summary: Restore an archived order to completed-order history
-      security: [{ cookieSession: [], csrfToken: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters:
         - { $ref: '#/components/parameters/OrderId' }
       requestBody:
@@ -1165,7 +1169,7 @@ paths:
   /orders/{orderId}/legal-hold:
     put:
       summary: Apply or release a legal/investigation hold
-      security: [{ cookieSession: [], csrfToken: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters:
         - { $ref: '#/components/parameters/OrderId' }
       requestBody:
@@ -1182,7 +1186,7 @@ paths:
   /orders/{orderId}/retention-exports:
     post:
       summary: Generate the protected export required before deletion
-      security: [{ cookieSession: [], csrfToken: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters:
         - { $ref: '#/components/parameters/OrderId' }
       responses:
@@ -1195,7 +1199,7 @@ paths:
     post:
       summary: Start the backend-only deletion approval workflow
       description: Never deletes inline. The backend re-checks policy, retention age, legal holds, export evidence and independent approvals.
-      security: [{ cookieSession: [], csrfToken: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters:
         - { $ref: '#/components/parameters/OrderId' }
       requestBody:
@@ -1214,7 +1218,7 @@ paths:
   /management/dashboard:
     get:
       summary: Read authorised management metrics, groups, ageing, activity and records
-      security: [{ cookieSession: [] }]
+      security: [{ sessionCookie: [] }]
       parameters:
         - { in: query, name: search, schema: { type: string } }
         - { in: query, name: status, schema: { type: string } }
@@ -1229,7 +1233,7 @@ paths:
   /management/representatives:
     get:
       summary: List representatives available for controlled reassignment
-      security: [{ cookieSession: [] }]
+      security: [{ sessionCookie: [] }]
       responses:
         '200':
           description: Authorised representative options
@@ -1248,7 +1252,7 @@ paths:
   /management/records/{recordId}/representative:
     post:
       summary: Reassign an authorised RFQ or order
-      security: [{ cookieSession: [], csrfToken: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters:
         - { in: path, name: recordId, required: true, schema: { type: string } }
       requestBody:
@@ -1269,7 +1273,7 @@ paths:
   /management/records/{recordId}/workflow-override-approval:
     post:
       summary: Approve and apply a controlled workflow override
-      security: [{ cookieSession: [], csrfToken: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       parameters:
         - { in: path, name: recordId, required: true, schema: { type: string } }
       requestBody:
@@ -1291,7 +1295,7 @@ paths:
   /management/reports:
     post:
       summary: Generate an authorised internal operational CSV
-      security: [{ cookieSession: [], csrfToken: [] }]
+      security: [{ sessionCookie: [], csrfHeader: [] }]
       requestBody:
         content:
           application/json:
@@ -1308,6 +1312,622 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ManagementReport' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /roles:
+    get:
+      operationId: listRoles
+      summary: List the server-owned role catalogue
+      description: Requires administer_users. Roles are definitions, not proof of an individual user's authority.
+      responses:
+        '200':
+          description: Role definitions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/RoleDefinition' }
+              example:
+                data:
+                  - code: planning
+                    name: Planning
+                    description: Plans accepted orders and submits them to Expediting.
+                    active: true
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /permissions:
+    get:
+      operationId: listPermissions
+      summary: List server-owned permission definitions
+      description: Requires administer_users.
+      responses:
+        '200':
+          description: Permission definitions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PermissionDefinition' }
+              example:
+                data:
+                  - code: submit_to_expediting
+                    description: Submit a validated planned order to Expediting.
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /users:
+    get:
+      operationId: listUsers
+      summary: List users within the caller's authorised administrative scope
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/CompanyIdQuery'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Authorised user summaries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/UserAdministrationRecord' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createUser
+      summary: Create an internal or invited user
+      description: Requires administer_users. Password delivery and identity verification are handled outside this request.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateUserRequest' }
+            example:
+              email: planner.demo@example.invalid
+              displayName: Fabricated Planning User
+              roleCodes: [planning]
+              companyIds: []
+      responses:
+        '201':
+          description: User created or invitation queued
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/UserAdministrationRecord' }
+              example:
+                data:
+                  id: 00000000-0000-4000-8000-000000000101
+                  email: planner.demo@example.invalid
+                  displayName: Fabricated Planning User
+                  status: pending
+                  roleCodes: [planning]
+                  companyIds: []
+                  createdAt: '2026-07-29T09:00:00Z'
+        '409': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /users/{userId}/roles:
+    get:
+      operationId: listUserRoles
+      summary: List a user's role assignments
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User role assignments
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/UserRoleAssignment' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ApiError' }
+    put:
+      operationId: replaceUserRoles
+      summary: Replace a user's controlled role assignments
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [roleCodes, reason]
+              properties:
+                roleCodes:
+                  type: array
+                  minItems: 1
+                  uniqueItems: true
+                  items: { $ref: '#/components/schemas/Role' }
+                reason: { type: string, minLength: 10, maxLength: 1000 }
+            example:
+              roleCodes: [expeditor]
+              reason: Fabricated reassignment approved for the demonstration environment.
+      responses:
+        '200':
+          description: Audited role assignments
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/UserRoleAssignment' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /companies/{companyId}/users:
+    get:
+      operationId: listCompanyUsers
+      summary: List authorised memberships for one company
+      parameters:
+        - $ref: '#/components/parameters/CompanyId'
+      responses:
+        '200':
+          description: Company memberships
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/CompanyUser' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: addCompanyUser
+      summary: Add an audited company membership
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CompanyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [userId, membershipRole]
+              properties:
+                userId: { type: string, format: uuid }
+                membershipRole: { type: string, enum: [member, company_administrator] }
+            example:
+              userId: 00000000-0000-4000-8000-000000000102
+              membershipRole: member
+      responses:
+        '201':
+          description: Company membership created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/CompanyUser' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/ApiError' }
+  /products/{productId}/configurations:
+    get:
+      security: []
+      operationId: listProductConfigurations
+      summary: List active configuration definitions for a product
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: Versioned configuration definitions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ProductConfiguration' }
+              example:
+                data:
+                  - id: 00000000-0000-4000-8000-000000000201
+                    productId: pbg
+                    version: 3
+                    definition:
+                      - key: dialSize
+                        label: Dial size
+                        required: true
+                        options: [63 mm, 100 mm]
+                    validationRules: {}
+                    effectiveFrom: '2026-07-01T00:00:00Z'
+                    active: true
+        '404': { $ref: '#/components/responses/ApiError' }
+    post:
+      operationId: createProductConfiguration
+      summary: Create a new immutable configuration version
+      description: Requires manage_products. Existing RFQ and order snapshots are never rewritten.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductConfigurationInput' }
+      responses:
+        '201':
+          description: Configuration version created and audited
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ProductConfiguration' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /enquiries/{enquiryId}/items:
+    get:
+      operationId: listRfqItems
+      summary: List immutable RFQ line-item snapshots
+      parameters:
+        - $ref: '#/components/parameters/EnquiryId'
+      responses:
+        '200':
+          description: Company-scoped RFQ items
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/RfqItem' }
+        '404': { $ref: '#/components/responses/ApiError' }
+  /enquiries/{enquiryId}/quotation:
+    get:
+      operationId: getRfqQuotation
+      summary: Get the caller-authorised quotation confirmation
+      description: Customer responses omit internal notes and unauthorised document metadata.
+      parameters:
+        - $ref: '#/components/parameters/EnquiryId'
+      responses:
+        '200':
+          description: Authorised quotation projection
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/QuotationConfirmation' }
+        '404': { $ref: '#/components/responses/ApiError' }
+  /enquiries/{enquiryId}/acceptance:
+    get:
+      operationId: getRfqAcceptance
+      summary: Get internal acceptance evidence
+      description: Requires accept_customer_order or wider management authority. Never returned to customer roles.
+      parameters:
+        - $ref: '#/components/parameters/EnquiryId'
+      responses:
+        '200':
+          description: Internal acceptance evidence
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/OrderAcceptance' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ApiError' }
+  /enquiries/{enquiryId}/tracking-events:
+    get:
+      operationId: listRfqTrackingEvents
+      summary: List an authorised RFQ timeline
+      parameters:
+        - $ref: '#/components/parameters/EnquiryId'
+      responses:
+        '200':
+          description: Customer-safe or internal timeline according to role
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/TrackingEvent' }
+        '404': { $ref: '#/components/responses/ApiError' }
+  /orders/{orderId}/planning-record:
+    get:
+      operationId: getPlanningRecord
+      summary: Get the internal Planning record
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Internal Planning record
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/PlanningRecord' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ApiError' }
+    put:
+      operationId: replacePlanningRecord
+      summary: Validate and save Planning information before workflow hand-off
+      description: Requires add_planning_information and a Planning-compatible order status.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlanningRecord' }
+            example:
+              internalJobNumber: JOB-DEMO-2401
+              customerPoNumber: PO-DEMO-8001
+              notes: Fabricated Planning note.
+              plannedStartDate: '2026-07-30'
+              estimatedCompletionDate: '2026-08-08'
+              assignedPlanningUserId: 00000000-0000-4000-8000-000000000103
+              productionLocationId: cape-town
+              priority: high
+              documentReferences: [PLAN-DEMO-01]
+              submissionDate: '2026-07-29'
+      responses:
+        '200':
+          description: Planning record saved and audited
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/PlanningRecord' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /orders/{orderId}/expediting-updates:
+    get:
+      operationId: listExpeditingUpdates
+      summary: List authorised Expediting updates
+      description: Customers and representatives receive customer-visible projections only.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Authorised progress updates
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ExpeditingUpdate' }
+        '404': { $ref: '#/components/responses/ApiError' }
+    post:
+      operationId: createExpeditingUpdate
+      summary: Add a controlled Expediting progress update
+      description: Requires update_order_progress. Status changes still use the workflow-actions endpoint.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExpeditingUpdate' }
+            example:
+              progressStep: quality_check
+              customerMessage: Your fabricated demonstration order is undergoing quality review.
+              internalNote: Fabricated internal quality note.
+              estimatedCompletionDate: '2026-08-08'
+              document: null
+              customerVisible: true
+      responses:
+        '201':
+          description: Progress update, timeline event and notifications created atomically
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ExpeditingUpdate' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /orders/{orderId}/dispatch-record:
+    get:
+      operationId: getDispatchRecord
+      summary: Get an authorised Dispatch record
+      description: Customer projections omit internal notes, problem reasons and internal actor identifiers.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Authorised Dispatch projection
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DispatchRecord' }
+        '404': { $ref: '#/components/responses/ApiError' }
+    patch:
+      operationId: updateDispatchRecord
+      summary: Save validated Dispatch metadata without bypassing the workflow state machine
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DispatchRecord' }
+      responses:
+        '200':
+          description: Dispatch metadata saved and audited
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DispatchRecord' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /orders/{orderId}/archive-records:
+    get:
+      operationId: listOrderArchiveRecords
+      summary: List immutable archive and restore history for an order
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Archive history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ArchiveRecord' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /workflow-overrides:
+    get:
+      operationId: listWorkflowOverrides
+      summary: List controlled override requests within management scope
+      parameters:
+        - $ref: '#/components/parameters/Status'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Workflow override requests
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/WorkflowOverride' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: requestWorkflowOverride
+      summary: Request a controlled exception without applying it inline
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkflowOverrideInput' }
+            example:
+              entityType: order
+              entityId: 00000000-0000-4000-8000-000000000301
+              requestedFromStatus: expediting_in_progress
+              requestedToStatus: awaiting_dispatch
+              reason: Fabricated quality exception approved for demonstration review.
+              expectedVersion: 8
+      responses:
+        '202':
+          description: Override request recorded for independent review
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/WorkflowOverride' }
+              example:
+                data:
+                  id: 00000000-0000-4000-8000-000000000302
+                  companyId: 00000000-0000-4000-8000-000000000001
+                  entityType: order
+                  entityId: 00000000-0000-4000-8000-000000000301
+                  requestedFromStatus: expediting_in_progress
+                  requestedToStatus: awaiting_dispatch
+                  reason: Fabricated quality exception approved for demonstration review.
+                  status: requested
+                  requestedBy: 00000000-0000-4000-8000-000000000104
+                  requestedAt: '2026-07-29T12:00:00Z'
+                  requestId: req-demo-override-001
+                  correlationId: corr-demo-override-001
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /workflow-overrides/{overrideId}:
+    patch:
+      operationId: decideWorkflowOverride
+      summary: Approve or reject a pending workflow override
+      description: Requires override_workflow. Approval and the resulting state transition are one audited transaction.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OverrideId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [decision, comment]
+              properties:
+                decision: { type: string, enum: [approved, rejected] }
+                comment: { type: string, minLength: 10, maxLength: 1000 }
+            example:
+              decision: approved
+              comment: Fabricated management approval after independent review.
+      responses:
+        '200':
+          description: Override decision recorded and, when approved, applied
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/WorkflowOverride' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/ApiError' }
 
 components:
   securitySchemes:
@@ -1325,6 +1945,26 @@ components:
       in: path
       required: true
       schema: { type: string }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CompanyId:
+      name: companyId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CompanyIdQuery:
+      name: companyId
+      in: query
+      description: Optional administrative filter; never expands the caller's authorised company scope.
+      schema: { type: string, format: uuid }
+    OverrideId:
+      name: overrideId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     EnquiryId:
       name: enquiryId
       in: path
@@ -1372,6 +2012,17 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
+    Forbidden:
+      description: The authenticated actor lacks permission or company scope
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: FORBIDDEN
+              message: You do not have access to this record.
+              correlationId: corr-demo-403
   schemas:
     Role:
       type: string
@@ -1419,6 +2070,194 @@ components:
         - read_audit_history
         - manage_products
         - view_reports
+    RoleDefinition:
+      type: object
+      additionalProperties: false
+      required: [code, name, description, active]
+      properties:
+        code: { $ref: '#/components/schemas/Role' }
+        name: { type: string, maxLength: 100 }
+        description: { type: string, maxLength: 500 }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+    PermissionDefinition:
+      type: object
+      additionalProperties: false
+      required: [code, description]
+      properties:
+        code: { $ref: '#/components/schemas/Permission' }
+        description: { type: string, maxLength: 500 }
+        createdAt: { type: string, format: date-time, readOnly: true }
+    UserAdministrationRecord:
+      type: object
+      additionalProperties: false
+      required: [id, email, displayName, status, roleCodes, companyIds, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        displayName: { type: string, maxLength: 160 }
+        phone: { type: string, maxLength: 80 }
+        status: { type: string, enum: [pending, active, suspended, archived] }
+        roleCodes:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Role' }
+        companyIds:
+          type: array
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        lastSignedInAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        deletedAt: { type: [string, 'null'], format: date-time }
+    CreateUserRequest:
+      type: object
+      additionalProperties: false
+      required: [email, displayName, roleCodes, companyIds]
+      properties:
+        email: { type: string, format: email }
+        displayName: { type: string, minLength: 2, maxLength: 160 }
+        phone: { type: string, maxLength: 80 }
+        roleCodes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Role' }
+        companyIds:
+          type: array
+          uniqueItems: true
+          items: { type: string, format: uuid }
+    UserRoleAssignment:
+      type: object
+      additionalProperties: false
+      required: [userId, roleCode, assignedBy, assignedAt]
+      properties:
+        userId: { type: string, format: uuid }
+        roleCode: { $ref: '#/components/schemas/Role' }
+        assignedBy: { type: string, format: uuid }
+        assignedAt: { type: string, format: date-time }
+        revokedAt: { type: [string, 'null'], format: date-time }
+    CompanyUser:
+      type: object
+      additionalProperties: false
+      required: [companyId, userId, membershipRole, active, createdAt]
+      properties:
+        companyId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        membershipRole: { type: string, enum: [member, company_administrator] }
+        active: { type: boolean }
+        authorisedBy: { type: [string, 'null'], format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        deletedAt: { type: [string, 'null'], format: date-time }
+    ProductConfigurationInput:
+      type: object
+      additionalProperties: false
+      required: [definition, effectiveFrom]
+      properties:
+        definition:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: Versioned field definitions, allowed options and conditional rules.
+        validationRules:
+          type: object
+          additionalProperties: true
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo: { type: [string, 'null'], format: date-time }
+    ProductConfiguration:
+      type: object
+      additionalProperties: false
+      required: [id, productId, version, definition, validationRules, effectiveFrom, active, createdBy, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        productId: { type: string }
+        version: { type: integer, minimum: 1 }
+        definition:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        validationRules:
+          type: object
+          additionalProperties: true
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo: { type: [string, 'null'], format: date-time }
+        active: { type: boolean }
+        createdBy: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        deletedAt: { type: [string, 'null'], format: date-time }
+    RfqItem:
+      type: object
+      additionalProperties: false
+      required: [id, rfqId, companyId, lineNumber, productId, productCodeSnapshot, productNameSnapshot, quantity, configurationSnapshot, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        rfqId: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        lineNumber: { type: integer, minimum: 1 }
+        productId: { type: string }
+        productConfigurationId: { type: [string, 'null'], format: uuid }
+        productCodeSnapshot: { type: string, maxLength: 80 }
+        productNameSnapshot: { type: string, maxLength: 240 }
+        quantity: { type: integer, minimum: 1, maximum: 9999 }
+        configurationSnapshot: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+    ArchiveRecord:
+      type: object
+      additionalProperties: false
+      required: [id, companyId, orderId, retentionPolicyId, action, reason, requestId, correlationId, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        orderId: { type: string, format: uuid }
+        action: { type: string, enum: [eligible, archived, restored, legal_hold_applied, legal_hold_released, deletion_requested, deletion_cancelled] }
+        reason: { type: string, maxLength: 2000 }
+        retentionPolicyId: { type: string, format: uuid }
+        legalHoldActive: { type: boolean }
+        performedBy: { type: [string, 'null'], format: uuid }
+        eligibleAt: { type: [string, 'null'], format: date-time }
+        archivedAt: { type: [string, 'null'], format: date-time }
+        restoredAt: { type: [string, 'null'], format: date-time }
+        requestId: { type: string, maxLength: 160 }
+        correlationId: { type: string, maxLength: 160 }
+        createdAt: { type: string, format: date-time }
+    WorkflowOverrideInput:
+      type: object
+      additionalProperties: false
+      required: [entityType, entityId, requestedFromStatus, requestedToStatus, reason, expectedVersion]
+      properties:
+        entityType: { type: string, enum: [rfq, order] }
+        entityId: { type: string, format: uuid }
+        requestedFromStatus: { type: string, maxLength: 80 }
+        requestedToStatus: { type: string, maxLength: 80 }
+        reason: { type: string, minLength: 10, maxLength: 2000 }
+        expectedVersion: { type: integer, minimum: 0 }
+    WorkflowOverride:
+      type: object
+      additionalProperties: false
+      required: [id, companyId, entityType, entityId, requestedFromStatus, requestedToStatus, reason, expectedVersion, status, requestedBy, requestedAt, requestId, correlationId]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        entityType: { type: string, enum: [rfq, order] }
+        entityId: { type: string, format: uuid }
+        requestedFromStatus: { type: string, maxLength: 80 }
+        requestedToStatus: { type: string, maxLength: 80 }
+        reason: { type: string, minLength: 10, maxLength: 2000 }
+        expectedVersion: { type: integer, minimum: 0 }
+        status: { type: string, enum: [requested, approved, rejected, executed, cancelled] }
+        requestedBy: { type: string, format: uuid }
+        requestedAt: { type: string, format: date-time }
+        decidedBy: { type: [string, 'null'], format: uuid }
+        decidedAt: { type: [string, 'null'], format: date-time }
+        decisionComment: { type: string, maxLength: 1000 }
+        executedBy: { type: [string, 'null'], format: uuid }
+        executedAt: { type: [string, 'null'], format: date-time }
+        requestId: { type: string, maxLength: 160 }
+        correlationId: { type: string, maxLength: 160 }
     WorkflowActorRole:
       type: string
       enum: [customer, sales_representative, planning, expeditor, dispatch, buyer, manager, administrator, system]

@@ -1,5 +1,7 @@
 # Production roles and access rules
 
+The completed application security/data-leak assessment, fixed findings and unresolved production gates are recorded in [SECURITY_REVIEW.md](SECURITY_REVIEW.md). The GitHub Pages mock remains a browser-local demonstration and is not a production security boundary.
+
 ## Role definitions
 
 | Role | Intended access |

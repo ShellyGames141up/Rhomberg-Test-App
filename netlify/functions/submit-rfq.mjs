@@ -141,6 +141,7 @@ async function sendEmail(enquiry, pricing, pdfBytes, poFile) {
 }
 
 export default async request => {
+  const requestId = globalThis.crypto?.randomUUID?.() || `rfq-${Date.now()}`;
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { allow: 'POST, OPTIONS' } });
   if (request.method !== 'POST') return json({ success: false, message: 'Method not allowed.' }, 405, { allow: 'POST, OPTIONS' });
   if (!validateOrigin(request)) return json({ success: false, message: 'This RFQ source is not allowed.' }, 403);
@@ -170,8 +171,16 @@ export default async request => {
       pricedPdfAttached: true,
     });
   } catch (error) {
-    console.error('RFQ submission failed', error);
-    return json({ success: false, message: error?.message || 'The RFQ could not be delivered.' }, 500);
+    console.error('RFQ submission failed', {
+      requestId,
+      errorType: safe(error?.name || 'Error', 80),
+      status: Number.isInteger(Number(error?.status)) ? Number(error.status) : 500,
+    });
+    return json({
+      success: false,
+      message: 'The RFQ could not be delivered. Please try again or quote the support reference.',
+      requestId,
+    }, 500);
   }
 };
 
