@@ -1,6 +1,6 @@
 # Order-summary PDF and email sharing
 
-Prompt 12 adds a controlled internal export surface to every operational order workspace.
+The PDF export phase adds a controlled internal export surface to every operational order workspace.
 
 ## Copy types
 

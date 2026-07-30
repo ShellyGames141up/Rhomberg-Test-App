@@ -37,27 +37,28 @@ class TestStorage {
   }
 }
 
-assert.equal(PREVIEW_DEFINITIONS.length, 4);
+assert.equal(PREVIEW_DEFINITIONS.length, 5);
 assert.deepEqual(PREVIEW_DEFINITIONS.map(item => item.displayName), [
   'Rhomberg Connect — Customer Desktop',
   'Rhomberg Connect — Customer Mobile',
   'Rhomberg Operations — Rep & Expeditor Mobile',
   'Rhomberg Operations — Internal Desktop',
+  'Rhomberg Platform — Executive Workflow Demo',
 ]);
 for (const definition of PREVIEW_DEFINITIONS) {
-  assert.equal(previewIdFromPath(`/Rhomberg-Test-App/preview/${definition.id}/`), definition.id);
-  assert.equal(previewIdFromPath(`/Rhomberg-Test-App/preview/${definition.id}/index.html`), definition.id);
-  assert.equal(previewContextForPath(`/preview/${definition.id}/`).displayName, definition.displayName);
-  const page = readFileSync(path.resolve('preview', definition.id, 'index.html'), 'utf8');
+  assert.equal(previewIdFromPath(`/Rhomberg-Test-App${definition.route}`), definition.id);
+  assert.equal(previewIdFromPath(`/Rhomberg-Test-App${definition.route}index.html`), definition.id);
+  assert.equal(previewContextForPath(definition.route).displayName, definition.displayName);
+  const page = readFileSync(path.resolve(definition.sourcePath, 'index.html'), 'utf8');
   assert.match(page, new RegExp(`<meta name="rhomberg-preview" content="${definition.id}">`));
   assert.ok(page.includes('<base href="../../">'), `${definition.id} must preserve the GitHub Pages base path`);
 }
 const readme = readFileSync(path.resolve('README.md'), 'utf8');
 for (const definition of PREVIEW_DEFINITIONS) {
-  assert.ok(readme.includes(`https://shellygames141up.github.io/Rhomberg-Test-App/preview/${definition.id}/`), `README must launch ${definition.id}`);
+  assert.ok(readme.includes(`https://shellygames141up.github.io/Rhomberg-Test-App${definition.route}`), `README must launch ${definition.id}`);
 }
 const packageScripts = JSON.parse(readFileSync(path.resolve('package.json'), 'utf8')).scripts;
-for (const previewId of ['customer-desktop', 'customer-mobile', 'internal-mobile', 'internal-desktop']) {
+for (const previewId of ['customer-desktop', 'customer-mobile', 'internal-mobile', 'internal-desktop', 'executive-demo']) {
   assert.ok(packageScripts[`dev:${previewId}`], `development command missing for ${previewId}`);
   assert.ok(packageScripts[`build:${previewId}`], `build command missing for ${previewId}`);
 }
@@ -83,6 +84,7 @@ const customerDesktop = PREVIEW_BY_ID[PREVIEW_IDS.CUSTOMER_DESKTOP];
 const customerMobile = PREVIEW_BY_ID[PREVIEW_IDS.CUSTOMER_MOBILE];
 const internalMobile = PREVIEW_BY_ID[PREVIEW_IDS.INTERNAL_MOBILE];
 const internalDesktop = PREVIEW_BY_ID[PREVIEW_IDS.INTERNAL_DESKTOP];
+const executiveDemo = PREVIEW_BY_ID[PREVIEW_IDS.EXECUTIVE_DEMO];
 assert.ok(previewAllowsRole(customerDesktop, USER_ROLES.CUSTOMER));
 assert.ok(previewAllowsRole(customerMobile, USER_ROLES.CUSTOMER));
 assert.equal(previewAllowsRole(customerMobile, USER_ROLES.SALES_REPRESENTATIVE), false);
@@ -96,6 +98,8 @@ for (const role of [USER_ROLES.SALES_REPRESENTATIVE, USER_ROLES.MANAGER, USER_RO
   assert.ok(previewAllowsRole(internalDesktop, role));
 }
 assert.equal(previewAllowsRole(internalDesktop, USER_ROLES.CUSTOMER), false);
+for (const role of Object.values(USER_ROLES)) assert.ok(previewAllowsRole(executiveDemo, role));
+assert.equal(previewIdFromPath('/Rhomberg-Test-App/demo/executive-workflow/'), PREVIEW_IDS.EXECUTIVE_DEMO);
 
 const storage = new TestStorage();
 const services = createMockServices({ storage, now: () => new Date('2026-07-27T09:00:00.000Z') });
@@ -219,6 +223,6 @@ for (const marker of ['Demo123', 'Sales123', 'Planning123', 'Dispatch123', 'Buye
   assert.ok(productionScript.includes(`'${marker}'`), `production safety scan must reject ${marker}`);
 }
 const buildToolsSource = readFileSync(path.resolve('scripts', 'build-tools.mjs'), 'utf8');
-assert.ok(buildToolsSource.includes(".replace(/^\\s*'\\.\\/preview\\/.*\\r?\\n/gm, '')"), 'standalone previews must remove unavailable multi-route entries from their service-worker cache list');
+assert.ok(buildToolsSource.includes(".replace(/^\\s*'\\.\\/(?:preview|demo)\\/.*\\r?\\n/gm, '')"), 'standalone previews must remove unavailable multi-route entries from their service-worker cache list');
 
 console.log('Preview routing, branding, role separation, personalisation persistence, validation and responsive guard tests passed.');

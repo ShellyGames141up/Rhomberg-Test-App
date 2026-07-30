@@ -1,6 +1,6 @@
 # Order Workflow Implementation Plan
 
-- Status: analysis plus mock workflow Phases 1-5 and Prompt 9 notification slice complete; centralized permissions, representative inbox, quotation, atomic order acceptance, Planning, Expediting and the central notification centre are implemented
+- Status: analysis plus the mock workflow and notification phases complete; centralized permissions, representative inbox, quotation, atomic order acceptance, Planning, Expediting and the central notification centre are implemented
 - Application version reviewed: 2.4.0; workflow implementation updated through 3.1.0
 - Reviewed branch: `agent/improve-theme-readability-and-reps`
 - Last pushed workflow commit before this phase: `d276488`
@@ -605,7 +605,7 @@ Exit gate: tests prove metadata/assignment/company rules, note and document proj
 - adapt the existing PDF styling to an approved unpriced order summary;
 - provide authorised internal download and email actions through services;
 - record PDF generation, download and email audit events;
-- completed in Prompt 9: central event catalogue, in-app inbox, mark-read/all, preferences, links, delivery statuses, simulated retry and audit;
+- completed in the notification phase: central event catalogue, in-app inbox, mark-read/all, preferences, links, delivery statuses, simulated retry and audit;
 - completed in contract: recipient-specific notification/delivery/preference PostgreSQL structures and outbox/retry endpoints;
 - still required for production: approved Microsoft 365/SMTP and mobile-push workers, vault configuration, dead-letter operations and monitoring;
 - implement configurable retention, archive jobs, legal hold and archived-record queries;

@@ -6,6 +6,7 @@ export const PREVIEW_IDS = Object.freeze({
   CUSTOMER_MOBILE: 'customer-mobile',
   INTERNAL_MOBILE: 'internal-mobile',
   INTERNAL_DESKTOP: 'internal-desktop',
+  EXECUTIVE_DEMO: 'executive-demo',
 });
 
 const preview = ({
@@ -20,6 +21,9 @@ const preview = ({
   allowedRoles,
   customer = false,
   mobile = false,
+  route,
+  sourcePath,
+  executiveDemo = false,
 }) => Object.freeze({
   id,
   product,
@@ -29,12 +33,14 @@ const preview = ({
   description,
   intendedUsers,
   device,
-  route: `/preview/${id}/`,
+  route: route || `/preview/${id}/`,
+  sourcePath: sourcePath || `preview/${id}`,
   allowedRoles: Object.freeze([...allowedRoles]),
   customer,
   internal: !customer,
   mobile,
   desktop: !mobile,
+  executiveDemo,
 });
 
 export const PREVIEW_DEFINITIONS = Object.freeze([
@@ -104,6 +110,20 @@ export const PREVIEW_DEFINITIONS = Object.freeze([
       USER_ROLES.ADMINISTRATOR,
     ],
   }),
+  preview({
+    id: PREVIEW_IDS.EXECUTIVE_DEMO,
+    product: 'Rhomberg Platform',
+    platform: 'Executive Workflow Demo',
+    displayName: 'Rhomberg Platform — Executive Workflow Demo',
+    shortName: 'Executive Demo',
+    description: 'A guided, fabricated-data presentation across the complete customer and internal workflow.',
+    intendedUsers: 'Company owner, management, IT and authorised demonstration presenters',
+    device: 'Desktop presentation',
+    route: '/demo/executive-workflow/',
+    sourcePath: 'demo/executive-workflow',
+    executiveDemo: true,
+    allowedRoles: Object.values(USER_ROLES),
+  }),
 ]);
 
 export const PREVIEW_BY_ID = Object.freeze(Object.fromEntries(PREVIEW_DEFINITIONS.map(item => [item.id, item])));
@@ -115,6 +135,7 @@ const normalisePath = pathname => {
 
 export const previewIdFromPath = pathname => {
   const path = normalisePath(pathname);
+  if (/\/demo\/executive-workflow(?:\/|\/index\.html)?$/i.test(path)) return PREVIEW_IDS.EXECUTIVE_DEMO;
   const match = path.match(/\/preview\/([^/]+)(?:\/|\/index\.html)?$/i);
   if (match) return PREVIEW_BY_ID[match[1]] ? match[1] : 'unsupported';
   if (/\/preview\/?$/i.test(path)) return PREVIEW_IDS.LANDING;
@@ -164,6 +185,9 @@ export const previewUrl = (previewId, { origin = '', repositoryBase = '' } = {})
 
 export const landingUrlFromPath = pathname => {
   const path = normalisePath(pathname);
+  const executiveMarker = '/demo/executive-workflow';
+  const executiveIndex = path.toLowerCase().indexOf(executiveMarker);
+  if (executiveIndex >= 0) return `${path.slice(0, executiveIndex)}/`;
   const marker = '/preview/';
   const index = path.toLowerCase().indexOf(marker);
   return index >= 0 ? `${path.slice(0, index)}/` : './';

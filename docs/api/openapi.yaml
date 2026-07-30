@@ -2258,6 +2258,69 @@ paths:
         '200': { description: Dedicated assignment saved and audited }
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ApiError' }
+  /administration/overview:
+    get:
+      operationId: getAdministrationOverview
+      summary: Return the permission-controlled Administration desktop overview
+      description: Requires administer_users. Passwords, hashes, tokens and secret configuration are never returned.
+      responses:
+        '200':
+          description: Authorised account, company, role, assignment and configuration summaries
+          content:
+            application/json:
+              example:
+                generatedAt: '2026-07-29T08:30:00Z'
+                summary:
+                  users: 18
+                  customerCompanies: 3
+                  internalAccounts: 15
+                  rfqs: 7
+                  orders: 12
+                integrationPlaceholders:
+                  - Private-cloud API and PostgreSQL
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /administration/users/{userId}/status:
+    put:
+      operationId: setAdministrationAccountStatus
+      summary: Activate or suspend an account
+      description: Requires administer_users, creates immutable audit evidence and prevents self-suspension of the active Administrator.
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [active, suspended] }
+            example: { status: suspended }
+      responses:
+        '200': { description: Sanitised account with updated status }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /administration/companies/{companyId}/representative:
+    put:
+      operationId: setAdministrationCompanyRepresentative
+      summary: Assign an approved representative to a customer company
+      description: Requires administer_users. Company and representative existence, branch policy and audit creation are server enforced.
+      parameters: [{ $ref: '#/components/parameters/CompanyId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [representativeId]
+              properties:
+                representativeId: { type: string }
+            example: { representativeId: C-27 }
+      responses:
+        '200': { description: Representative assignment saved and audited }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
 
 components:
   securitySchemes:

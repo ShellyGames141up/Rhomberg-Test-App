@@ -18,6 +18,10 @@ export function LaboratoryDashboard({
 }) {
   const [query, setQuery] = useState('');
   const [type, setType] = useState('all');
+  const [queueStatus, setQueueStatus] = useState('active');
+  const [urgentOnly, setUrgentOnly] = useState(false);
+  const [sortBy, setSortBy] = useState('oldest');
+  const [certificateView, setCertificateView] = useState('pending');
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [openId, setOpenId] = useState(focusRecordId || '');
   const [unitForms, setUnitForms] = useState({});
@@ -30,8 +34,18 @@ export function LaboratoryDashboard({
   const monthly = useMemo(() => laboratoryMonthlyTracker(orders, period), [orders, period]);
   const visibleOrders = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return orders.filter(order => (
+    return orders.filter(order => {
+      const units = order.laboratory?.units || [];
+      const certificatesComplete = units.length > 0 && units.every(unit => unit.certificateId);
+      const isReleased = Boolean(order.laboratory?.releasedAt);
+      const statusMatches = queueStatus === 'all'
+        || (queueStatus === 'active' && !isReleased)
+        || (queueStatus === 'certificate_pending' && isReleased && !certificatesComplete)
+        || (queueStatus === 'completed' && isReleased && certificatesComplete);
+      return (
       (type === 'all' || order.routing?.certificationTypes?.includes(type))
+      && statusMatches
+      && (!urgentOnly || order.emergency === 'yes' || order.priority === 'urgent')
       && (!term || [
         order.reference,
         order.sourceRfqReference,
@@ -42,8 +56,19 @@ export function LaboratoryDashboard({
         order.selectedRep?.name,
         ...(order.items || []).flatMap(item => [item.code, item.name]),
       ].some(value => String(value || '').toLowerCase().includes(term)))
-    ));
-  }, [orders, query, type]);
+      );
+    }).sort((left, right) => {
+      if (sortBy === 'newest') return new Date(right.updatedAt || right.createdAt) - new Date(left.updatedAt || left.createdAt);
+      if (sortBy === 'customer') return String(left.company || '').localeCompare(String(right.company || ''));
+      return new Date(left.updatedAt || left.createdAt) - new Date(right.updatedAt || right.createdAt);
+    });
+  }, [orders, query, queueStatus, sortBy, type, urgentOnly]);
+  const visibleCertificates = useMemo(() => certificateQueue.filter(unit => {
+    if (certificateView === 'all') return true;
+    if (certificateView === 'completed') return ['uploaded', 'verified'].includes(unit.certificateStatus);
+    if (certificateView === 'archived') return unit.certificateStatus === 'archived';
+    return !['uploaded', 'verified', 'archived'].includes(unit.certificateStatus);
+  }), [certificateQueue, certificateView]);
 
   const run = async (key, operation, success) => {
     setBusy(key);
@@ -129,7 +154,10 @@ export function LaboratoryDashboard({
       <div className="operations-toolbar">
         <label><span>Search Laboratory queue</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Order, RFQ, job, PO, customer, rep or unit…" /></label>
         <label><span>Certificate route</span><select value={type} onChange={event => setType(event.target.value)}><option value="all">SANAS and Traceable</option><option value="sanas">SANAS only</option><option value="traceable">Traceable only</option></select></label>
+        <label><span>Queue view</span><select value={queueStatus} onChange={event => setQueueStatus(event.target.value)}><option value="active">Active work</option><option value="certificate_pending">Certificates pending</option><option value="completed">Completed</option><option value="all">All Laboratory records</option></select></label>
+        <label><span>Sort orders</span><select value={sortBy} onChange={event => setSortBy(event.target.value)}><option value="oldest">Oldest update first</option><option value="newest">Newest update first</option><option value="customer">Customer A–Z</option></select></label>
         <label><span>Monthly tracker</span><input type="month" value={period} onChange={event => setPeriod(event.target.value)} /></label>
+        <label className="laboratory-urgent-filter"><input type="checkbox" checked={urgentOnly} onChange={event => setUrgentOnly(event.target.checked)} /><span>Urgent only</span></label>
         <div className="operations-toolbar-note"><strong>{visibleOrders.length}</strong><span>matching orders</span></div>
       </div>
 
@@ -192,13 +220,17 @@ export function LaboratoryDashboard({
           <span className="eyebrow">Permanent queue</span>
           <h2>Certificate register</h2>
           <p>{certificateQueue.length} physical-unit record{certificateQueue.length === 1 ? '' : 's'} remain available until controlled archival.</p>
+          <div className="certificate-view-tabs">
+            {['pending', 'completed', 'archived', 'all'].map(view => <button key={view} type="button" className={certificateView === view ? 'active' : ''} onClick={() => setCertificateView(view)}>{humanise(view)}</button>)}
+          </div>
           <div className="certificate-queue">
-            {certificateQueue.slice(0, 12).map(unit => (
+            {visibleCertificates.slice(0, 12).map(unit => (
               <button key={unit.id} type="button" onClick={() => setOpenId(unit.orderId)}>
                 <span><strong>{unit.productCode} · Unit {unit.unitNumber}</strong><small>{unit.orderReference} · {unit.company}</small></span>
                 <b className={`status-pill is-${unit.certificateStatus}`}>{humanise(unit.certificateStatus)}</b>
               </button>
             ))}
+            {!visibleCertificates.length && <p className="laboratory-register-empty">No certificate records in this view.</p>}
           </div>
           <section className="laboratory-monthly-tracker">
             <span className="eyebrow">Monthly unit tracker</span>

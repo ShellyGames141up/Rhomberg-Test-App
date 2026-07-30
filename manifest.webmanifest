@@ -1,7 +1,7 @@
 {
   "name": "Rhomberg Platform Preview Centre",
   "short_name": "Rhomberg Preview",
-  "description": "Four mock Rhomberg Connect and Rhomberg Operations interface previews.",
+  "description": "Five controlled mock Rhomberg Connect, Operations and executive demonstration experiences.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
@@ -39,6 +39,12 @@
       "name": "Internal desktop",
       "short_name": "Desktop",
       "url": "./preview/internal-desktop/",
+      "icons": [{ "src": "assets/images/rhomberg-gauge-mark.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Executive workflow demo",
+      "short_name": "Executive",
+      "url": "./demo/executive-workflow/",
       "icons": [{ "src": "assets/images/rhomberg-gauge-mark.svg", "sizes": "any", "type": "image/svg+xml" }]
     }
   ]

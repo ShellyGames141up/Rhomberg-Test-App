@@ -2,7 +2,7 @@
 
 ## One shared product
 
-Rhomberg Connect and Rhomberg Operations remain one React codebase with one domain model, workflow service, authentication boundary, notification service, API contract and design system. The four preview routes are delivery profiles, not unrelated applications.
+Rhomberg Connect and Rhomberg Operations remain one React codebase with one domain model, workflow service, authentication boundary, notification service, API contract and design system. The four product preview routes plus the Executive Workflow Demo are delivery profiles, not unrelated applications.
 
 Shared components include authentication, catalogue/configuration, RFQ/order records, workflow panels, notifications, audit models, order-summary PDFs, personalisation, archive/retention services, layouts and validation. Role profiles and permissions decide which navigation and workspace components are available.
 
@@ -12,9 +12,9 @@ Shared components include authentication, catalogue/configuration, RFQ/order rec
 | --- | --- |
 | Customer mobile/desktop | Catalogue, RFQ creation, customer-safe quotation/tracking, notifications, account/settings |
 | Operations mobile | Assigned representative RFQs, Expeditor queues/updates, Manager read/oversight where authorised |
-| Operations desktop | Representative, Expeditor, Planning, Dispatch, Manager, Administrator, Audit and Archive workspaces |
+| Operations desktop | Representative, Sales Manager, Company Owner, Planning, Laboratory, Expeditor, QA, Dispatch, Manager, Administrator, Audit and Archive workspaces |
 | Manager desktop | Cross-record oversight, audit, archive/restore/export and legal hold |
-| Administrator desktop | Manager capabilities plus retention-policy configuration and future user administration |
+| Administrator desktop | Permission-controlled account/company overview, representative assignments, roles, configuration, retention, management and audit access |
 
 Planning and Dispatch stay desktop-only until physical-device workflow testing and business approval show a supported mobile use case.
 

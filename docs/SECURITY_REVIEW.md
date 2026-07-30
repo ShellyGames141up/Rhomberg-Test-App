@@ -5,6 +5,18 @@ Review date: 29 July 2026
 Application checkpoint: 4.8.0
 Scope: GitHub Pages mock preview, shared React/domain code, mock and API service adapters, PDF generation, Netlify test helper, build scripts, OpenAPI proposal and PostgreSQL proposal
 
+## IT handover addendum
+
+The final IT-handover build adds a fifth, fabricated Executive Workflow Demo and an Administrator workspace without weakening the existing security boundary:
+
+- the Executive Demo state is accessed only through the interchangeable service layer;
+- every Executive Demo account and scenario marker is rejected by the production-bundle scanner;
+- the mock Administrator can inspect and reset fabricated preview data, while the production build replaces mock-only controls with an inert production module;
+- administrative actions remain permission-gated, service-mediated and audited;
+- the Executive Demo never represents browser storage, mock role switching or fabricated notifications as production security.
+
+The release remains a demonstrator. Production still requires private identity, API, database, object-storage, audit and deployment controls described below.
+
 ## Important security statement
 
 The GitHub Pages version is a fabricated product demonstration. It is **not production-secure**.
@@ -17,7 +29,7 @@ Production security depends on implementing and independently testing the propos
 
 The review found no committed production credential, API key, private key, database password or embedded price-book value. The visible passwords are intentionally fabricated preview credentials using reserved `.invalid` or `.test` email domains.
 
-The existing architecture already routes business actions through the service layer and central workflow validator. Prompt 19 added focused hardening and automated tests for the highest-risk boundaries:
+The existing architecture already routes business actions through the service layer and central workflow validator. The security-hardening phase added focused controls and automated tests for the highest-risk boundaries:
 
 - customer responses now remove newly introduced sensitive fields by default, in addition to the existing explicit Planning, Expediting, Dispatch, quotation and acceptance projections;
 - the legitimate PBB `internalContacts` customer selection remains visible;
@@ -51,7 +63,7 @@ No visual design, route or working demo workflow was removed.
 | Archived records remain protected | Strengthened and verified. | Archive lists and actions now reapply company scope. Customers cannot open the archive workspace. Proposed RLS, legal hold and retention rules remain required in production. |
 | Permanent deletion is controlled and auditable | Contract verified; worker open. | Browser deletion is disabled. The proposal requires policy enablement, protected export, manager/admin approvals, legal-hold check and an append-only deletion log executed by a dedicated backend service. |
 
-## Prompt 19 hardening changes
+## Security-hardening changes
 
 ### 1. Fail-closed customer projection
 
@@ -67,7 +79,7 @@ Production must implement equivalent allow-listed response DTOs on the server. T
 
 The existing record access helper correctly honoured `authorisedCompanyIds`, but some archive methods and direct audit/company lists did not consistently call it.
 
-Prompt 19 applies company scope to:
+The security-hardening phase applies company scope to:
 
 - company-directory results;
 - archive search/list;
@@ -249,6 +261,6 @@ Do not call the platform production-secure until all of the following are comple
 
 ## Review conclusion
 
-The current implementation is suitable for fabricated workflow demonstration and continued backend design. The Prompt 19 changes reduce accidental leakage inside mock-service projections and close restricted-management scope gaps.
+The current implementation is suitable for fabricated workflow demonstration and continued backend design. These changes reduce accidental leakage inside mock-service projections and close restricted-management scope gaps.
 
 They do not make GitHub Pages, browser storage, fabricated passwords or the Netlify test helper suitable for real customer orders, credentials, pricing, Purchase Orders or operational records.

@@ -2,11 +2,11 @@
 
 ## Decision
 
-Rhomberg Connect and Rhomberg Operations are separate interface experiences over one shared business layer. This phase does not create four copies of workflow or persistence code. Each preview selects branding, layout constraints and allowed roles; all records, permissions, transitions, validation, notifications and audits continue through shared modules and services.
+Rhomberg Connect and Rhomberg Operations are separate interface experiences over one shared business layer. The Executive Workflow Demo is a controlled presenter profile over the same public mock services. This architecture does not create copies of workflow or persistence code. Each preview selects branding, layout constraints and allowed roles; all records, permissions, transitions, validation, notifications and audits continue through shared modules and services.
 
-Prompt 9 adds `src/domain/notifications.js` as the central event/delivery model. Workflow services publish recipient-scoped events only after a successful controlled transition. React uses `services.notifications` for inbox reads, read state, preferences, deep links and authorised simulated retries; it never reads notification storage directly. Email and push remain mock statuses until the private-cloud API and worker are approved.
+The notification phase adds `src/domain/notifications.js` as the central event/delivery model. Workflow services publish recipient-scoped events only after a successful controlled transition. React uses `services.notifications` for inbox reads, read state, preferences, deep links and authorised simulated retries; it never reads notification storage directly. Email and push remain mock statuses until the private-cloud API and worker are approved.
 
-Prompt 10 adds a Dispatch domain/helper module, a desktop-first responsive dashboard and reusable structured action fields. The UI still receives only service-scoped orders and cannot change a status directly. Both mock and future API implementations expose the same Dispatch reference-data method and workflow action contract.
+The Dispatch phase adds a Dispatch domain/helper module, a desktop-first responsive dashboard and reusable structured action fields. The UI still receives only service-scoped orders and cannot change a status directly. Both mock and future API implementations expose the same Dispatch reference-data method and workflow action contract.
 
 ```text
 Rhomberg Connect Customer Desktop
@@ -16,6 +16,8 @@ Rhomberg Connect Customer Mobile
 Rhomberg Operations Internal Mobile
                  |
 Rhomberg Operations Internal Desktop
+                 |
+Executive Workflow Demo
                  |
                  v
         Shared Service Contracts
@@ -31,13 +33,13 @@ The API and PostgreSQL database in the lower two layers are future production co
 
 | Area | Responsibility |
 | --- | --- |
-| `src/apps/` | Preview landing and platform-specific customer setup/settings presentation |
+| `src/apps/` | Preview landing, Executive Demo and platform-specific customer setup/settings presentation |
 | `src/components/` | Existing reusable catalogue, RFQ, Planning, Expediting, Dispatch, workflow and account screens |
-| `src/shared/platform/` | Four preview definitions, route resolution and preview-role gates |
+| `src/shared/platform/` | Five preview definitions, route resolution and preview-role gates |
 | `src/shared/personalisation/` | Themes, scalable typography/density values, colour protection and image rules |
 | `src/domain/` | Central workflow, access policy, queue and configuration business rules |
 | `src/services/` | Shared contracts plus interchangeable mock and HTTP implementations |
-| `preview/` | Stable GitHub Pages entry documents; no duplicated application bundles |
+| `preview/` and `demo/` | Stable GitHub Pages entry documents; no duplicated application bundles |
 | `docs/` | Production and preview handover material |
 
 ## Runtime selection
@@ -48,11 +50,11 @@ Preview role gating is an additional presentation boundary, not a replacement fo
 
 ## Shared logical data
 
-All four routes use the same storage keys in one browser origin. That lets a customer RFQ appear in the representative preview and later Planning/Expediting views in the same browser profile. GitHub Pages cannot synchronise separate browsers or devices. The private-cloud API will become the shared source of truth in production.
+All five experiences use the same service boundary and storage keys in one browser origin. That lets a customer RFQ appear in the representative preview and later Planning/Expediting views in the same browser profile. Executive presenter progress uses its own mock-service record. GitHub Pages cannot synchronise separate browsers or devices. The private-cloud API will become the shared source of truth in production.
 
 ## Production direction
 
-The production build aliases the mock service to `apiEntry.js`, defines public-preview features as disabled, excludes demo accounts/routes and scans the output for forbidden markers. Authentication must use secure server cookies, and the API—not a UI route—must enforce tenant isolation, permissions, transitions and audit creation.
+The production build aliases the mock service to `apiEntry.js`, replaces the Preview Centre and Executive Demo modules, defines public-preview features as disabled, excludes demo accounts/routes and scans the output for forbidden markers. Authentication must use secure server cookies, and the API—not a UI route—must enforce tenant isolation, permissions, transitions and audit creation.
 
 ## Phase 21 operational domains
 

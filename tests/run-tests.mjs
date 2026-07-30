@@ -16,3 +16,4 @@ await import('./end-to-end-demo.test.mjs');
 await import('./production-spec.test.mjs');
 await import('./security-review.test.mjs');
 await import('./platform-previews.test.mjs');
+await import('./final-handover.test.mjs');

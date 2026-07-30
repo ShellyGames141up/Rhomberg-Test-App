@@ -14,7 +14,7 @@ export function PreviewLanding({ demoLogins = [], serviceMode = 'mock' }) {
           <span><strong>RHOMBERG</strong><small>PLATFORM PREVIEW CENTRE</small></span>
         </div>
         <span className="preview-landing-chip">Demo Preview · {serviceMode === 'mock' ? 'Mock data' : 'Private service'}</span>
-        <h1>Two products.<br /><em>Four focused experiences.</em></h1>
+        <h1>One shared platform.<br /><em>Five focused experiences.</em></h1>
         <p>Choose the customer or internal Rhomberg interface and the device format you want to review. Every preview uses the same shared workflow, permissions, services and fabricated test records.</p>
       </header>
 
@@ -22,7 +22,7 @@ export function PreviewLanding({ demoLogins = [], serviceMode = 'mock' }) {
         {PREVIEW_DEFINITIONS.map((definition, index) => {
           const demo = loginForPreview(demoLogins, definition);
           return (
-            <article className={`preview-launch-card ${definition.customer ? 'is-connect' : 'is-operations'}`} key={definition.id}>
+            <article className={`preview-launch-card ${definition.customer ? 'is-connect' : definition.executiveDemo ? 'is-executive' : 'is-operations'}`} key={definition.id}>
               <span className="preview-card-number">0{index + 1}</span>
               <span className="preview-device" aria-hidden="true">{definition.mobile ? 'MOBILE' : 'DESKTOP'}</span>
               <div>

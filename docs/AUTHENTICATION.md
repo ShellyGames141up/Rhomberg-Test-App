@@ -16,3 +16,7 @@ Customer and internal staff authentication are distinct realms with different lo
 6. A confirmation notification is queued without echoing the new credential.
 
 Mock mode simulates delivery and may show a clearly labelled development code. Production builds must exclude demo accounts and development codes. Passwords require an approved modern hash, strength controls, breach screening, reset safeguards, suspicious-activity monitoring and secure cookies. Logs must never contain credentials or verification codes.
+
+## Executive Demo role switching
+
+The `/demo/executive-workflow/` role switcher is deliberately restricted to the fabricated GitHub Pages demonstration. It changes only the mock service session so executives can inspect the same scenario from different authorised perspectives. It is not impersonation, delegated administration or a production authentication feature. The production build aliases this module to an inert implementation and scans the output to ensure demo accounts, passwords and scenario markers are absent.

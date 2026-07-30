@@ -22,6 +22,15 @@ const internalNavigation = (workspaceLabel, includeAudit = false, includeArchive
 const CUSTOMER_VIEWS = Object.freeze(['home', 'catalogue', 'product', 'configurator', 'enquiry', 'tracking', 'notifications', 'account', 'settings']);
 const INTERNAL_VIEWS = Object.freeze(['expeditor', 'notifications', 'account']);
 const OVERSIGHT_VIEWS = Object.freeze([...INTERNAL_VIEWS, 'archive', 'audit']);
+const ADMIN_VIEWS = Object.freeze(['administration', ...OVERSIGHT_VIEWS]);
+const ADMIN_NAVIGATION = Object.freeze([
+  navItem('administration', 'A', 'Admin'),
+  navItem('expeditor', '\u25C7', 'Overview'),
+  navItem('notifications', '!', 'Alerts'),
+  navItem('archive', '\u25A1', 'Archive'),
+  navItem('audit', '\u2261', 'Audit'),
+  navItem('account', '\u25CB', 'Account'),
+]);
 
 const profile = ({
   role,
@@ -196,8 +205,9 @@ export const ROLE_PROFILES = Object.freeze({
     role: USER_ROLES.ADMINISTRATOR,
     label: 'Administrator',
     workspaceLabel: 'Admin',
-    navigation: internalNavigation('Admin', true, true),
-    allowedViews: OVERSIGHT_VIEWS,
+    defaultView: 'administration',
+    navigation: ADMIN_NAVIGATION,
+    allowedViews: ADMIN_VIEWS,
     dashboard: {
       eyebrow: 'Administration workspace',
       headline: 'Controlled workflow oversight.',
@@ -231,6 +241,15 @@ export const normaliseViewForRole = (role, requestedView) => {
 };
 export const isInternalRole = role => roleCan(role, PERMISSIONS.ACCESS_INTERNAL_WORKSPACE);
 export const isInternalAccount = account => accountCan(account, PERMISSIONS.ACCESS_INTERNAL_WORKSPACE);
+export const isCustomerAccount = account => (
+  accountCan(account, PERMISSIONS.ACCESS_CUSTOMER_WORKSPACE)
+  && !accountCan(account, PERMISSIONS.ACCESS_INTERNAL_WORKSPACE)
+);
+export const usesRepresentativeInbox = account => (
+  accountCan(account, PERMISSIONS.VIEW_ASSIGNED_RFQS)
+  && !accountCan(account, PERMISSIONS.VIEW_ALL_RFQS)
+  && Boolean(account?.representativeId)
+);
 export const usesPlanningWorkspace = account => (
   accountCan(account, PERMISSIONS.VIEW_PLANNING_QUEUE)
   && !accountCan(account, PERMISSIONS.VIEW_ALL_ORDERS)

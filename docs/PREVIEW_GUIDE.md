@@ -1,36 +1,63 @@
-# Preview guide
+# Preview Guide
 
 Base URL: `https://shellygames141up.github.io/Rhomberg-Test-App/`
 
-| Preview | URL | Demonstration login | Intended exercise |
-| --- | --- | --- | --- |
-| Rhomberg Connect — Customer Desktop | `/preview/customer-desktop/` | `customer.demo@example.invalid` / `Demo123!` | Complete setup, browse/configure a product, submit an RFQ and review tracking |
-| Rhomberg Connect — Customer Mobile | `/preview/customer-mobile/` | `cape.demo@client.test` / `Demo123!` | Touch-first customer journey, notifications, profile and settings |
-| Rhomberg Operations — Rep & Expeditor Mobile | `/preview/internal-mobile/` | `sales.workflow@example.invalid` / `Sales123!`, `expeditor.workflow@example.invalid` / `Expedite123!`, or manager demo | Review assigned RFQs or update Expediting from a phone-sized layout |
-| Rhomberg Operations — Internal Desktop | `/preview/internal-desktop/` | Role-specific account shown below | Review Sales, Planning, Expediting, the structured Dispatch workspace or management queues |
+All records and credentials are fabricated. Do not upload real Purchase Orders, customer documents, credentials, pricing or confidential information.
 
-Additional desktop-only accounts:
+| Preview | Route | Roles |
+| --- | --- | --- |
+| Rhomberg Connect - Customer Desktop | `/preview/customer-desktop/` | Customer |
+| Rhomberg Connect - Customer Mobile | `/preview/customer-mobile/` | Customer |
+| Rhomberg Operations - Rep & Expeditor Mobile | `/preview/internal-mobile/` | Sales Representative, Manager, Expeditor |
+| Rhomberg Operations - Internal Desktop | `/preview/internal-desktop/` | Sales, Planning, Laboratory, Expediting, QA, Dispatch, management, Buyer, Administrator |
+| Executive Workflow Demo | `/demo/executive-workflow/` | Guided switching between supported fabricated Customer and internal roles |
 
-- Planning: `planning.workflow@example.invalid` / `Planning123!`
-- Dispatch: `dispatch.workflow@example.invalid` / `Dispatch123!`
-- Buyer, prepared but inactive: `buyer.workflow@example.invalid` / `Buyer123!`
-- Administrator: `administrator.workflow@example.invalid` / `Admin123!`
+## Primary Accounts
 
-All credentials and records are fabricated. Do not upload real Purchase Orders, customer documents or confidential content.
+| Role | Username | Password |
+| --- | --- | --- |
+| Customer | `customer.demo@example.invalid` | `Demo123!` |
+| Sales Representative | `sales.workflow@example.invalid` | `Sales123!` |
+| Planning | `planning.workflow@example.invalid` | `Planning123!` |
+| Expeditor | `expeditor.workflow@example.invalid` | `Expedite123!` |
+| Laboratory User | `laboratory.workflow@example.invalid` | `Lab12345!` |
+| Laboratory Manager | `laboratory.manager@example.invalid` | `LabManager123!` |
+| Quality Assurance | `quality.workflow@example.invalid` | `Quality123!` |
+| Dispatch | `dispatch.workflow@example.invalid` | `Dispatch123!` |
+| Sales Manager | `sales.manager@example.invalid` | `SalesManager123!` |
+| Company Owner | `owner.workflow@example.invalid` | `Owner12345!` |
+| Administrator | `administrator.workflow@example.invalid` | `Admin123!` |
 
-## Access behaviour
+Additional Quality Manager, Buyer and Manager logins are shown by the Internal Desktop login selector.
 
-- Connect rejects every internal role.
-- Operations Mobile accepts Sales Representative, Manager and Expeditor only.
-- Planning, Dispatch, Buyer and Administrator are desktop-only.
-- Operations Desktop rejects Customer.
-- Changing a URL never grants a permission; service and workflow checks remain authoritative.
-- A visible **Demo Preview** marker and link back to the Preview Centre remain available.
+## Access Behaviour
+
+- Connect rejects internal roles.
+- Operations Mobile accepts only its supported Sales, Manager and Expeditor roles.
+- Planning, Laboratory, QA, Dispatch, Buyer and Administration are desktop-only.
+- Operations Desktop rejects Customer sessions.
+- The Executive Demo uses a mock-service role switch and preserves normal permissions.
+- Changing a URL does not grant access; service and workflow checks remain authoritative.
+- Administrator actions require `administer_users`.
+- Customer records remain company-scoped.
+- Representative records remain assignment-scoped unless wider management permission exists.
+
+## Laboratory Demonstration
+
+Use the Laboratory User for unit work and the Laboratory Manager for controlled release. The queue provides SANAS/Traceable, urgent, active, certificate-pending and completed views; search, sort and monthly metrics; unit results; and one PDF certificate per physical unit.
+
+## Administrator Demonstration
+
+The Administrator opens the Administration workspace by default. Review user and customer-company accounts, representative assignment, central roles/permissions, Lab/QA/Dispatch configuration, integration placeholders, notifications, retention, management, audit and archive controls.
+
+## Executive Demonstration
+
+See [Executive Demo Guide](EXECUTIVE_DEMO_GUIDE.md). The route contains a permanent fabricated-data banner, scenario guidance, role switching, presenter progress, notification/document/audit shortcuts, reset and presentation mode.
 
 ## Persistence
 
-Closing and reopening the browser retains mock accounts, RFQs, orders and customer settings on that device. Different browsers, profiles, computers and phones do not synchronise. Clear site data only when deliberately resetting the demonstration.
+Same-browser changes survive refresh and browser restart. Unrelated browsers, profiles, computers and phones do not synchronise. The Executive Demo scenario also resumes in the same browser.
 
-## Known preview limitations
+## Limitations
 
-No real authentication, server database, SMTP, push service, malware scanning, shared object storage, cross-device updates or production audit retention is connected. See `MOCK_MODE_LIMITATIONS.md`.
+No production authentication, API, database, email, push, malware scanning, shared object storage, backups or permanent audit retention is connected. GitHub Pages is not private or production-secure.

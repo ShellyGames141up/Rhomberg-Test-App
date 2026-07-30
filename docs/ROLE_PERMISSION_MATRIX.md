@@ -62,3 +62,9 @@ All signed-in roles receive only the notification rows produced for their existi
 | Reassign dedicated representative | No | No | No | No | No | Authorised manager/admin |
 
 The table is explanatory. `src/services/contracts.js`, service scoping and workflow guards are canonical. A role never grants cross-company access by itself.
+
+## Administrator workspace and Executive Demo
+
+The Administrator desktop workspace is opened by the reusable `administration` navigation permission. It calls the administration service for account status, company assignment, configuration summaries and demo reset actions; components do not perform direct role-name checks or browser-storage writes.
+
+The Executive Workflow Demo is a mock-only presentation layer. Its eleven switchable role perspectives reuse the canonical permission catalogue and existing workspaces. Switching a demonstration role does not grant any new permission, and all fabricated role/scenario markers are excluded from production builds.

@@ -27,6 +27,12 @@ await build({
       buildContext.onResolve({ filter: /^\.\/apps\/PreviewLanding\.jsx$/ }, () => ({
         path: path.join(root, 'src/apps/ProductionPreviewLanding.jsx'),
       }));
+      buildContext.onResolve({ filter: /^\.\/apps\/ExecutiveWorkflowDemo\.jsx$/ }, () => ({
+        path: path.join(root, 'src/apps/ProductionExecutiveWorkflowDemo.jsx'),
+      }));
+      buildContext.onResolve({ filter: /^\.\/MockAdministrationControls\.jsx$/ }, () => ({
+        path: path.join(root, 'src/components/ProductionAdministrationControls.jsx'),
+      }));
       buildContext.onResolve({ filter: /^\.\/shared\/platform\/previewConfig\.js$/ }, () => ({
         path: path.join(root, 'src/shared/platform/productionPlatformConfig.js'),
       }));
@@ -45,6 +51,12 @@ const forbiddenMockMarkers = [
   'Buyer123',
   'Manager123',
   'Admin123',
+  'Lab12345',
+  'LabManager123',
+  'Quality123',
+  'QualityManager123',
+  'SalesManager123',
+  'Owner12345',
   'formsubmit.co',
   'RQ-TEST',
   'company-demo-mining',
@@ -63,7 +75,17 @@ const forbiddenMockMarkers = [
   'buyer.workflow@example.invalid',
   'manager.workflow@example.invalid',
   'administrator.workflow@example.invalid',
+  'laboratory.workflow@example.invalid',
+  'laboratory.manager@example.invalid',
+  'quality.workflow@example.invalid',
+  'quality.manager@example.invalid',
+  'sales.manager@example.invalid',
+  'owner.workflow@example.invalid',
   'preview-landing',
+  'Executive Demo Mode',
+  'sanas-calibration',
+  'department-tour',
+  'Reset fabricated data',
   'createMockServices',
   'DEMO_LOGINS',
   'rhombergPreviewSeed',
@@ -86,11 +108,11 @@ for (const file of ['styles.css', 'runtime-config.js']) {
 const productionServiceWorkerSource = await fs.readFile(path.join(root, 'sw.js'), 'utf8');
 const productionServiceWorker = productionServiceWorkerSource
   .replace(/rhomberg-app-preview-v(\d+)/, 'rhomberg-app-production-v$1')
-  .replace(/^\s*'\.\/preview\/.*\r?\n/gm, '');
+  .replace(/^\s*'\.\/(?:preview|demo)\/.*\r?\n/gm, '');
 if (productionServiceWorker === productionServiceWorkerSource) throw new Error('Production service-worker cache name was not isolated from the preview cache.');
 await fs.writeFile(path.join(output, 'sw.js'), productionServiceWorker, 'utf8');
 const productionIndex = (await fs.readFile(path.join(root, 'index.html'), 'utf8'))
-  .replace('Rhomberg Platform Preview Centre for four separate customer and internal demonstration interfaces.', 'Rhomberg Instruments private-cloud product catalogue, RFQ and order-tracking application.')
+  .replace('Rhomberg Platform Preview Centre for five controlled customer, internal and executive demonstration experiences.', 'Rhomberg Instruments private-cloud product catalogue, RFQ and order-tracking application.')
   .replace('Rhomberg Platform Preview Centre', 'Rhomberg Instruments Private Cloud App');
 await fs.writeFile(path.join(output, 'index.html'), productionIndex, 'utf8');
 

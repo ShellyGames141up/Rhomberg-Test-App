@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Account } from './components/Account.jsx';
+import { AdministratorDashboard } from './components/AdministratorDashboard.jsx';
 import { ArchivedOrders } from './components/ArchivedOrders.jsx';
 import { AuditTrail } from './components/AuditTrail.jsx';
 import { Auth } from './components/Auth.jsx';
@@ -22,6 +23,7 @@ import { ProductDetail } from './components/ProductDetail.jsx';
 import { SalesRepresentativeDashboard } from './components/SalesRepresentativeDashboard.jsx';
 import { CustomerPersonalisation } from './apps/customer/CustomerPersonalisation.jsx';
 import { PreviewLanding } from './apps/PreviewLanding.jsx';
+import { ExecutiveDemoControls, ExecutiveDemoLauncher } from './apps/ExecutiveWorkflowDemo.jsx';
 import { createDefaultNotificationPreferences } from './domain/notifications.js';
 import {
   createDefaultCustomerPersonalisation,
@@ -39,6 +41,7 @@ import {
   accountCanPerformWorkflow,
   defaultViewForRole,
   friendlyServiceError,
+  isCustomerAccount,
   isInternalAccount,
   normaliseViewForRole,
   PERMISSIONS,
@@ -48,6 +51,7 @@ import {
   usesLaboratoryWorkspace,
   usesPlanningWorkspace,
   usesQualityWorkspace,
+  usesRepresentativeInbox,
 } from './services/index.js';
 
 const EMPTY_CATALOGUE = { categories: [], products: [], recommendedCategories: {} };
@@ -57,13 +61,14 @@ const EMPTY_EXPEDITING_OPTIONS = { progressSteps: [], requiredStepIds: [], docum
 const EMPTY_DISPATCH_OPTIONS = { methods: [], proofTypes: [], maxProofBytes: 4 * 1024 * 1024 };
 const EMPTY_LAB_OPTIONS = { certificationTypes: [], releaseDestinations: [], maxCertificateBytes: 12 * 1024 * 1024 };
 const EMPTY_QA_OPTIONS = { problemCategories: [], severities: [], reworkDestinations: [] };
+const EMPTY_EXECUTIVE_DEMO = { scenarios: [], roles: [], current: null, currentScenario: null };
 const PUBLIC_PREVIEW = __PUBLIC_PREVIEW__;
 const DOCUMENT_PREVIEW_ID = globalThis.document?.querySelector?.('meta[name="rhomberg-preview"]')?.content || '';
 const PREVIEW_CONTEXT = PUBLIC_PREVIEW
   ? (PREVIEW_BY_ID[DOCUMENT_PREVIEW_ID] || previewContextForPath(globalThis.location?.pathname || '/'))
   : previewContextForPath('/preview/internal-desktop/');
 const listEnquiriesForAccount = signedInAccount => (
-  accountCan(signedInAccount, PERMISSIONS.VIEW_ASSIGNED_RFQS)
+  usesRepresentativeInbox(signedInAccount)
     ? services.enquiries.listRepresentativeInbox()
     : services.enquiries.list()
 );
@@ -79,7 +84,6 @@ const canLoadDispatchOptions = signedInAccount => (
 );
 const canLoadLaboratoryOptions = signedInAccount => accountCan(signedInAccount, PERMISSIONS.VIEW_LAB_QUEUE);
 const canLoadQualityOptions = signedInAccount => accountCan(signedInAccount, PERMISSIONS.VIEW_QA_QUEUE);
-
 export default function App() {
   const [introComplete, setIntroComplete] = useState(false);
   const [appStatus, setAppStatus] = useState('loading');
@@ -110,6 +114,10 @@ export default function App() {
   const [dispatchOptions, setDispatchOptions] = useState(EMPTY_DISPATCH_OPTIONS);
   const [laboratoryOptions, setLaboratoryOptions] = useState(EMPTY_LAB_OPTIONS);
   const [qualityOptions, setQualityOptions] = useState(EMPTY_QA_OPTIONS);
+  const [executiveDemoCatalogue, setExecutiveDemoCatalogue] = useState(EMPTY_EXECUTIVE_DEMO);
+  const [executiveDemoState, setExecutiveDemoState] = useState(null);
+  const [executiveDemoBusy, setExecutiveDemoBusy] = useState('');
+  const [executiveDemoError, setExecutiveDemoError] = useState('');
   const [success, setSuccess] = useState(null);
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
@@ -122,12 +130,15 @@ export default function App() {
     (async () => {
       try {
         await services.initialize();
-        const [savedTheme, loadedCatalogue, loadedRegistration, loadedDemoLogins, savedSession] = await Promise.all([
+        const [savedTheme, loadedCatalogue, loadedRegistration, loadedDemoLogins, savedSession, loadedExecutiveDemo] = await Promise.all([
           services.preferences.getTheme(),
           services.products.getCatalogue(),
           services.accounts.getRegistrationOptions(),
           services.auth.getDemoLogins(),
           services.auth.getSession(),
+          PREVIEW_CONTEXT.executiveDemo
+            ? services.executiveDemo.getCatalogue()
+            : Promise.resolve(EMPTY_EXECUTIVE_DEMO),
         ]);
         if (!active) return;
 
@@ -175,7 +186,7 @@ export default function App() {
             canLoadQualityOptions(session)
               ? services.qualityAssurance.getWorkspaceOptions()
               : Promise.resolve(EMPTY_QA_OPTIONS),
-            PREVIEW_CONTEXT.customer
+            isCustomerAccount(session)
               ? services.personalisation.get()
               : Promise.resolve(createDefaultCustomerPersonalisation()),
           ]);
@@ -200,6 +211,8 @@ export default function App() {
         setDispatchOptions(loadedDispatchOptions);
         setLaboratoryOptions(loadedLaboratoryOptions);
         setQualityOptions(loadedQualityOptions);
+        setExecutiveDemoCatalogue(loadedExecutiveDemo);
+        setExecutiveDemoState(loadedExecutiveDemo.current);
         setView(session ? defaultViewForRole(session.role) : 'home');
         setAppStatus('ready');
       } catch (error) {
@@ -215,7 +228,7 @@ export default function App() {
   useEffect(() => {
     const systemTheme = globalThis.matchMedia?.('(prefers-color-scheme: dark)');
     const applyTheme = () => {
-      const preference = account && PREVIEW_CONTEXT.customer
+      const preference = isCustomerAccount(account)
         ? customerPersonalisation.appearanceMode
         : theme;
       document.documentElement.dataset.theme = preference === 'system'
@@ -242,6 +255,7 @@ export default function App() {
   };
 
   const isStaff = isInternalAccount(account);
+  const isCustomerExperience = isCustomerAccount(account);
   const isPlanningWorkspace = usesPlanningWorkspace(account);
   const isExpeditorWorkspace = usesExpeditorWorkspace(account);
   const isDispatchWorkspace = usesDispatchWorkspace(account);
@@ -250,8 +264,8 @@ export default function App() {
   const isManagementWorkspace = accountCan(account, PERMISSIONS.VIEW_REPORTS);
   const canPerformWorkflow = accountCanPerformWorkflow(account);
   const personalisationStyle = useMemo(
-    () => PREVIEW_CONTEXT.customer ? customerPersonalisationCss(customerPersonalisation) : undefined,
-    [customerPersonalisation],
+    () => isCustomerExperience ? customerPersonalisationCss(customerPersonalisation) : undefined,
+    [customerPersonalisation, isCustomerExperience],
   );
   const selectedProduct = catalogue.products.find(product => product.id === productId) || null;
   const selectedCategory = selectedProduct ? catalogue.categories.find(category => category.id === selectedProduct.category) || null : null;
@@ -292,7 +306,7 @@ export default function App() {
       canLoadQualityOptions(signedInAccount)
         ? services.qualityAssurance.getWorkspaceOptions()
         : Promise.resolve(EMPTY_QA_OPTIONS),
-      PREVIEW_CONTEXT.customer
+      isCustomerAccount(signedInAccount)
         ? services.personalisation.get()
         : Promise.resolve(createDefaultCustomerPersonalisation()),
     ]);
@@ -318,7 +332,7 @@ export default function App() {
       const signedInAccount = await services.auth.signIn({
         email,
         password,
-        realm: PREVIEW_CONTEXT.customer ? 'customer' : 'internal',
+        realm: PREVIEW_CONTEXT.executiveDemo ? undefined : PREVIEW_CONTEXT.customer ? 'customer' : 'internal',
       });
       if (!previewAllowsRole(PREVIEW_CONTEXT, signedInAccount.role)) {
         await services.auth.signOut();
@@ -465,7 +479,7 @@ export default function App() {
     const saved = await services.notifications.savePreferences(candidate);
     setNotificationPreferences(saved);
     setNotifications(await services.notifications.list());
-    if (PREVIEW_CONTEXT.customer) {
+    if (isCustomerAccount(account)) {
       setCustomerPersonalisation(current => normaliseCustomerPersonalisation({
         ...current,
         notificationPreferences: saved.categories,
@@ -575,6 +589,51 @@ export default function App() {
     }
   };
 
+  const runExecutiveDemoAction = async (key, operation) => {
+    setExecutiveDemoBusy(key);
+    setExecutiveDemoError('');
+    try {
+      return await operation();
+    } catch (error) {
+      setExecutiveDemoError(friendlyServiceError(error, 'The executive demonstration control could not be updated.'));
+      return null;
+    } finally {
+      setExecutiveDemoBusy('');
+    }
+  };
+
+  const selectExecutiveScenario = scenarioId => runExecutiveDemoAction('scenario', async () => {
+    const updated = await services.executiveDemo.selectScenario(scenarioId);
+    setExecutiveDemoState(updated);
+    return updated;
+  });
+
+  const setExecutiveStep = stepIndex => runExecutiveDemoAction('step', async () => {
+    const updated = await services.executiveDemo.setStep(stepIndex);
+    setExecutiveDemoState(updated);
+    return updated;
+  });
+
+  const setExecutivePresentationMode = enabled => runExecutiveDemoAction('presentation', async () => {
+    const updated = await services.executiveDemo.setPresentationMode(enabled);
+    setExecutiveDemoState(updated);
+    return updated;
+  });
+
+  const resetExecutiveScenario = () => runExecutiveDemoAction('reset', async () => {
+    const updated = await services.executiveDemo.resetScenario();
+    setExecutiveDemoState(updated);
+    return updated;
+  });
+
+  const switchExecutiveRole = role => runExecutiveDemoAction(`role-${role}`, async () => {
+    const signedInAccount = await services.executiveDemo.switchRole(role);
+    await loadAccountWorkspace(signedInAccount);
+    setExecutiveDemoState(await services.executiveDemo.getState());
+    setAccessError('');
+    return signedInAccount;
+  });
+
   const signOut = async () => {
     try {
       await services.auth.signOut();
@@ -605,9 +664,21 @@ export default function App() {
   if (appStatus === 'error') return <AppLoadError message={appError} onRetry={() => setRetryToken(value => value + 1)} />;
   if (PREVIEW_CONTEXT.landing) return <PreviewLanding demoLogins={demoLogins} serviceMode={services.mode} />;
   if (PREVIEW_CONTEXT.unsupported) return <UnsupportedPreview />;
-  if (!introComplete) return <Intro onComplete={() => setIntroComplete(true)} />;
+  if (PREVIEW_CONTEXT.executiveDemo && !account) {
+    return (
+      <ExecutiveDemoLauncher
+        catalogue={executiveDemoCatalogue}
+        state={executiveDemoState}
+        busy={executiveDemoBusy}
+        error={executiveDemoError}
+        onScenario={selectExecutiveScenario}
+        onStart={switchExecutiveRole}
+      />
+    );
+  }
+  if (!PREVIEW_CONTEXT.executiveDemo && !introComplete) return <Intro onComplete={() => setIntroComplete(true)} />;
   if (!account) return <Auth onSignIn={login} onCreateAccount={register} theme={theme} onToggleTheme={toggleTheme} registrationOptions={registrationOptions} demoLogins={demoLogins} serviceMode={services.mode} preview={PREVIEW_CONTEXT} allowRegistration={Boolean(PREVIEW_CONTEXT.customer)} accessError={accessError} />;
-  if (PREVIEW_CONTEXT.customer && !customerPersonalisation.setupCompleted && !personalisationDeferred) {
+  if (isCustomerExperience && !PREVIEW_CONTEXT.executiveDemo && !customerPersonalisation.setupCompleted && !personalisationDeferred) {
     return <CustomerPersonalisation account={account} initialValue={customerPersonalisation} onSave={saveCustomerPersonalisation} onDefer={() => { setPersonalisationDeferred(true); notify('Setup saved for later'); }} onUploadImage={uploadCustomerImage} onRemoveImage={removeCustomerImage} />;
   }
 
@@ -626,18 +697,37 @@ export default function App() {
 
   return (
     <div
-      className={`app-canvas platform-preview preview-${PREVIEW_CONTEXT.id} ${PREVIEW_CONTEXT.customer ? 'preview-connect' : 'preview-operations'}`}
+      className={`app-canvas platform-preview preview-${PREVIEW_CONTEXT.id} ${isCustomerExperience ? 'preview-connect' : 'preview-operations'} ${executiveDemoState?.presentationMode ? 'executive-presentation-mode' : ''}`}
       style={personalisationStyle}
-      data-font-size={PREVIEW_CONTEXT.customer ? customerPersonalisation.fontSize : undefined}
-      data-density={PREVIEW_CONTEXT.customer ? customerPersonalisation.density : undefined}
+      data-font-size={isCustomerExperience ? customerPersonalisation.fontSize : undefined}
+      data-density={isCustomerExperience ? customerPersonalisation.density : undefined}
     >
+      {PREVIEW_CONTEXT.executiveDemo && (
+        <ExecutiveDemoControls
+          catalogue={executiveDemoCatalogue}
+          state={executiveDemoState}
+          account={account}
+          busy={executiveDemoBusy}
+          error={executiveDemoError}
+          onScenario={selectExecutiveScenario}
+          onStep={setExecutiveStep}
+          onRole={switchExecutiveRole}
+          onPresentationMode={setExecutivePresentationMode}
+          onReset={resetExecutiveScenario}
+          onOpenNotifications={() => navigate('notifications')}
+          onOpenRecords={() => navigate(isStaff ? 'expeditor' : 'tracking')}
+          onOpenAudit={() => navigate('audit')}
+          canOpenAudit={accountCan(account, PERMISSIONS.READ_AUDIT_HISTORY)}
+        />
+      )}
       <span className="desktop-caption">{PREVIEW_CONTEXT.product.toUpperCase()} · {PREVIEW_CONTEXT.platform.toUpperCase()} · {__PUBLIC_PREVIEW__ ? 'DEMO PREVIEW' : 'PRIVATE CLOUD'}</span>
       <div className={`app-shell ${isStaff ? 'expeditor-shell' : ''} ${isPlanningWorkspace ? 'planning-shell' : ''} ${isExpeditorWorkspace ? 'expediting-workspace-shell' : ''} ${isLaboratoryWorkspace ? 'laboratory-workspace-shell' : ''} ${isQualityWorkspace ? 'quality-workspace-shell' : ''} ${isDispatchWorkspace ? 'dispatch-workspace-shell' : ''}`}>
-        {__PUBLIC_PREVIEW__ && <div className="platform-preview-banner"><span><strong>{PREVIEW_CONTEXT.product}</strong> {PREVIEW_CONTEXT.platform}</span><a href="./">All previews</a></div>}
-        <AppHeader account={account} onNavigate={navigate} onBack={detailView ? backFromDetail : null} backLabel={view === 'settings' ? 'Customer settings' : view === 'configurator' ? 'Product configuration' : selectedProduct?.code || 'Catalogue'} theme={theme} onToggleTheme={toggleTheme} serviceMode={services.mode} preview={PREVIEW_CONTEXT} showThemeToggle={!PREVIEW_CONTEXT.customer} personalisation={PREVIEW_CONTEXT.customer ? customerPersonalisation : null} />
+        {__PUBLIC_PREVIEW__ && <div className="platform-preview-banner"><span><strong>{PREVIEW_CONTEXT.product}</strong> {PREVIEW_CONTEXT.platform}</span><a href={PREVIEW_CONTEXT.executiveDemo ? '../../' : './'}>All previews</a></div>}
+        <AppHeader account={account} onNavigate={navigate} onBack={detailView ? backFromDetail : null} backLabel={view === 'settings' ? 'Customer settings' : view === 'configurator' ? 'Product configuration' : selectedProduct?.code || 'Catalogue'} theme={theme} onToggleTheme={toggleTheme} serviceMode={services.mode} preview={PREVIEW_CONTEXT} showThemeToggle={!isCustomerExperience} personalisation={isCustomerExperience ? customerPersonalisation : null} />
         <main className="app-main">
           {isStaff ? (
             <>
+              {view === 'administration' && <AdministratorDashboard account={account} administrationActions={services.administration} serviceMode={services.mode} onOpenManagement={() => navigate('expeditor')} onOpenAudit={() => navigate('audit')} onOpenArchive={() => navigate('archive')} onRecordsChanged={refreshAfterManagementAction} />}
               {view === 'expeditor' && (accountCan(account, PERMISSIONS.VIEW_ASSIGNED_RFQS)
                 && notificationTarget?.entityType !== 'order'
                 ? <SalesRepresentativeDashboard account={account} rfqs={enquiries} onAction={performWorkflowAction} serviceMode={services.mode} focusRecordId={notificationTarget?.entityId} />
@@ -703,7 +793,7 @@ function UnsupportedPreview() {
       <section className="app-state-card is-error">
         <span className="state-error-mark">!</span>
         <h1>This preview route is not supported</h1>
-        <p>The requested interface is not one of the four controlled Rhomberg test previews.</p>
+        <p>The requested interface is not one of the five controlled Rhomberg test previews.</p>
         <a className="primary-button" href="./">Return to the preview centre <span>→</span></a>
       </section>
     </main>

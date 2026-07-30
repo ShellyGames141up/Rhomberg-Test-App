@@ -38,6 +38,13 @@ import {
 } from '../../domain/qualityAssurance.js';
 import { buildPhase21Analytics } from '../../domain/analytics.js';
 import {
+  DEFAULT_EXECUTIVE_DEMO_STATE,
+  EXECUTIVE_DEMO_ROLES,
+  EXECUTIVE_DEMO_SCENARIOS,
+  executiveScenarioById,
+  normaliseExecutiveDemoState,
+} from '../../domain/executiveDemo.js';
+import {
   createDefaultNotificationPreferences,
   createNotificationRecord,
   messageForNotificationRecipient,
@@ -81,7 +88,15 @@ import {
   createDefaultCustomerPersonalisation,
   normaliseCustomerPersonalisation,
 } from '../../shared/personalisation/personalisation.js';
-import { accountCan, PERMISSIONS, ServiceError, USER_ROLES, roleCan, toPublicAccount } from '../contracts.js';
+import {
+  accountCan,
+  PERMISSIONS,
+  permissionsForRole,
+  ServiceError,
+  USER_ROLES,
+  roleCan,
+  toPublicAccount,
+} from '../contracts.js';
 import {
   MAX_ACCEPTANCE_DOCUMENT_BYTES,
   MAX_DISPATCH_PROOF_BYTES,
@@ -158,6 +173,7 @@ const normaliseAccount = account => {
     ...account,
     role,
     authRealm: account.authRealm || (role === USER_ROLES.CUSTOMER ? 'customer' : 'internal'),
+    status: account.status || 'active',
     signInName: account.signInName || '',
     companyId: account.companyId || (roleCan(role, PERMISSIONS.ACCESS_CUSTOMER_WORKSPACE) ? account.id : 'company-rhomberg'),
   };
@@ -1316,6 +1332,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const matched = readAccounts().find(account => (
         (account.email.toLowerCase() === identifier || account.signInName?.toLowerCase() === identifier)
         && account.password === credentials.password
+        && account.status !== 'suspended'
         && (!credentials.realm || account.authRealm === credentials.realm)
       ));
       if (!matched) throw new ServiceError('The email address or password does not match a preview account.', { code: 'INVALID_CREDENTIALS', status: 401 });
@@ -3480,6 +3497,300 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     },
   };
 
+  const requireAdministrator = () => {
+    const account = requireAccount();
+    if (!accountCan(account, PERMISSIONS.ADMINISTER_USERS)) {
+      throw new ServiceError('Administrator access is required.', { code: 'FORBIDDEN', status: 403 });
+    }
+    return account;
+  };
+
+  const buildAdministrationOverview = () => {
+    const accountRecords = readAccounts();
+    const workflowRecords = readWorkflowState();
+    const notificationRecords = readNotifications();
+    const documentRecords = readOrderDocuments();
+    const assignments = readCustomerRepresentativeAssignments();
+    const companyMap = new Map();
+    for (const account of accountRecords.filter(item => item.role === USER_ROLES.CUSTOMER)) {
+      if (!companyMap.has(account.companyId)) {
+        companyMap.set(account.companyId, {
+          id: account.companyId,
+          name: account.company,
+          area: account.area,
+          industry: account.industry,
+          contacts: 0,
+          representativeId: assignments[account.companyId]?.representativeId || '',
+        });
+      }
+      companyMap.get(account.companyId).contacts += 1;
+    }
+    const notificationDeliveryStatus = notificationRecords.reduce((counts, notification) => {
+      for (const delivery of notification.deliveries || []) {
+        counts[delivery.status] = (counts[delivery.status] || 0) + 1;
+      }
+      return counts;
+    }, {});
+    return {
+      generatedAt: now().toISOString(),
+      summary: {
+        users: accountRecords.length,
+        customerCompanies: companyMap.size,
+        internalAccounts: accountRecords.filter(item => item.role !== USER_ROLES.CUSTOMER).length,
+        rfqs: workflowRecords.enquiries.length,
+        orders: workflowRecords.orders.length,
+        auditEvents: readAuditEvents().length,
+        notifications: notificationRecords.length,
+        documents: documentRecords.length,
+      },
+      users: accountRecords.map(item => ({
+        ...toPublicAccount(item),
+        category: item.role === USER_ROLES.CUSTOMER ? 'customer' : 'internal',
+      })),
+      companies: [...companyMap.values()],
+      representatives: representatives.map(item => ({
+        id: item.id,
+        name: item.name,
+        branch: branches.find(branch => branch.id === item.branchId)?.name || item.branchCode,
+        areas: item.areas || [],
+      })),
+      branches: branches.map(item => ({ id: item.id, name: item.name, role: item.role })),
+      roles: Object.values(USER_ROLES).map(role => ({
+        id: role,
+        label: role.replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase()),
+        permissions: permissionsForRole(role),
+      })),
+      representativeAssignments: Object.values(assignments),
+      notificationDeliveryStatus,
+      retentionPolicy: readRetentionPolicy(),
+      configurations: {
+        laboratory: {
+          certificationTypes: ['sanas', 'traceable'],
+          certificateMimeTypes: ['application/pdf'],
+          releaseDestinations: ['expediting', 'dispatch'],
+        },
+        qualityAssurance: {
+          problemCategories: QA_PROBLEM_CATEGORIES,
+          severities: QA_SEVERITIES,
+          reworkDestinations: QA_REWORK_DESTINATIONS,
+        },
+        dispatch: {
+          methods: DISPATCH_METHODS,
+          proofTypes: DISPATCH_PROOF_TYPES,
+        },
+      },
+      integrationPlaceholders: [
+        'Private-cloud API and PostgreSQL',
+        'Microsoft 365 or approved SMTP email delivery',
+        'Object storage with malware scanning',
+        'Mobile push through APNs and FCM',
+        'Central monitoring, backups and disaster recovery',
+      ],
+    };
+  };
+
+  const administration = {
+    async getOverview() {
+      requireAdministrator();
+      return clone(buildAdministrationOverview());
+    },
+
+    async setAccountStatus(accountId, status) {
+      const actor = requireAdministrator();
+      if (!['active', 'suspended'].includes(status)) {
+        throw new ServiceError('Choose active or suspended.', {
+          code: 'ACCOUNT_STATUS_INVALID',
+          status: 422,
+          fieldErrors: { status: 'Choose active or suspended.' },
+        });
+      }
+      if (accountId === actor.id && status === 'suspended') {
+        throw new ServiceError('You cannot suspend the administrator account currently in use.', {
+          code: 'ACTIVE_ADMIN_SUSPENSION_BLOCKED',
+          status: 409,
+        });
+      }
+      const accountRecords = readAccounts();
+      const index = accountRecords.findIndex(item => item.id === accountId);
+      if (index < 0) throw new ServiceError('The account was not found.', { code: 'ACCOUNT_NOT_FOUND', status: 404 });
+      const occurredAt = now().toISOString();
+      accountRecords[index] = { ...accountRecords[index], status, updatedAt: occurredAt };
+      writeAccounts(accountRecords);
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'administration.account_status_changed',
+        outcome: 'success',
+        entityType: 'user',
+        entityId: accountId,
+        companyId: accountRecords[index].companyId,
+        actorId: actor.id,
+        actorRole: actor.role,
+        details: { status },
+        immutable: true,
+        createdAt: occurredAt,
+      });
+      return toPublicAccount(accountRecords[index]);
+    },
+
+    async assignRepresentative(companyId, representativeId) {
+      const actor = requireAdministrator();
+      const company = buildAdministrationOverview().companies.find(item => item.id === companyId);
+      const representative = representativeById(representativeId);
+      if (!company) throw new ServiceError('The customer company was not found.', { code: 'COMPANY_NOT_FOUND', status: 404 });
+      if (!representative) throw new ServiceError('Choose a valid representative.', {
+        code: 'REPRESENTATIVE_NOT_FOUND',
+        status: 422,
+        fieldErrors: { representativeId: 'Choose a valid representative.' },
+      });
+      const occurredAt = now().toISOString();
+      const assignments = readCustomerRepresentativeAssignments();
+      assignments[companyId] = {
+        companyId,
+        representativeId,
+        assignedAt: occurredAt,
+        assignedBy: actor.id,
+        source: 'administrator',
+      };
+      writeCustomerRepresentativeAssignments(assignments);
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'administration.company_representative_assigned',
+        outcome: 'success',
+        entityType: 'company',
+        entityId: companyId,
+        companyId,
+        actorId: actor.id,
+        actorRole: actor.role,
+        details: { representativeId },
+        immutable: true,
+        createdAt: occurredAt,
+      });
+      return clone(assignments[companyId]);
+    },
+
+    async resetDemoData() {
+      const actor = requireAdministrator();
+      for (const key of [
+        STORE_KEYS.workflowState,
+        STORE_KEYS.audit,
+        STORE_KEYS.orderDocuments,
+        STORE_KEYS.retentionExports,
+        STORE_KEYS.deletionLog,
+        STORE_KEYS.idempotency,
+        STORE_KEYS.managementExports,
+        STORE_KEYS.notifications,
+        STORE_KEYS.notificationPreferences,
+        STORE_KEYS.certificateFiles,
+        STORE_KEYS.customerRepresentativeAssignments,
+        STORE_KEYS.rfqSequence,
+        STORE_KEYS.seedVersion,
+      ]) store.remove(key);
+      await initialize();
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'administration.demo_data_reset',
+        outcome: 'success',
+        entityType: 'system',
+        entityId: 'mock-preview',
+        companyId: actor.companyId,
+        actorId: actor.id,
+        actorRole: actor.role,
+        details: { fabricatedDataOnly: true },
+        immutable: true,
+        createdAt: now().toISOString(),
+      });
+      return clone(buildAdministrationOverview());
+    },
+  };
+
+  const readExecutiveDemoState = () => normaliseExecutiveDemoState(
+    store.get(STORE_KEYS.executiveDemo, DEFAULT_EXECUTIVE_DEMO_STATE),
+  );
+  const saveExecutiveDemoState = patch => {
+    const current = readExecutiveDemoState();
+    const timestamp = now().toISOString();
+    const next = normaliseExecutiveDemoState({
+      ...current,
+      ...patch,
+      startedAt: current.startedAt || timestamp,
+      updatedAt: timestamp,
+    });
+    store.set(STORE_KEYS.executiveDemo, next);
+    return next;
+  };
+
+  const executiveDemo = {
+    async getState() {
+      return clone(readExecutiveDemoState());
+    },
+
+    async selectScenario(scenarioId) {
+      if (!EXECUTIVE_DEMO_SCENARIOS.some(item => item.id === scenarioId)) {
+        throw new ServiceError('Choose a valid executive demonstration scenario.', {
+          code: 'DEMO_SCENARIO_INVALID',
+          status: 422,
+        });
+      }
+      return clone(saveExecutiveDemoState({ scenarioId, stepIndex: 0 }));
+    },
+
+    async setStep(stepIndex) {
+      return clone(saveExecutiveDemoState({ stepIndex }));
+    },
+
+    async setPresentationMode(presentationMode) {
+      return clone(saveExecutiveDemoState({ presentationMode: Boolean(presentationMode) }));
+    },
+
+    async resetScenario() {
+      const current = readExecutiveDemoState();
+      return clone(saveExecutiveDemoState({ scenarioId: current.scenarioId, stepIndex: 0 }));
+    },
+
+    async switchRole(role) {
+      if (!EXECUTIVE_DEMO_ROLES.some(item => item.role === role)) {
+        throw new ServiceError('That role is not part of the executive demonstration.', {
+          code: 'DEMO_ROLE_INVALID',
+          status: 422,
+        });
+      }
+      const accountRecords = readAccounts();
+      const selected = role === USER_ROLES.CUSTOMER
+        ? accountRecords.find(item => item.id === DEMO_ACCOUNT.id)
+        : accountRecords.find(item => item.role === role);
+      if (!selected) throw new ServiceError('The fabricated role account is unavailable.', {
+        code: 'DEMO_ACCOUNT_NOT_FOUND',
+        status: 404,
+      });
+      const occurredAt = now().toISOString();
+      store.set(STORE_KEYS.session, { accountId: selected.id, signedInAt: occurredAt, executiveDemo: true });
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'executive_demo.role_switched',
+        outcome: 'success',
+        entityType: 'demo_session',
+        entityId: selected.id,
+        companyId: selected.companyId,
+        actorId: selected.id,
+        actorRole: selected.role,
+        details: { fabricatedDataOnly: true },
+        immutable: true,
+        createdAt: occurredAt,
+      });
+      return toPublicAccount(selected);
+    },
+
+    async getCatalogue() {
+      const current = readExecutiveDemoState();
+      return clone({
+        scenarios: EXECUTIVE_DEMO_SCENARIOS,
+        roles: EXECUTIVE_DEMO_ROLES,
+        current,
+        currentScenario: executiveScenarioById(current.scenarioId),
+      });
+    },
+  };
+
   const preferences = {
     async getTheme() {
       return store.get(STORE_KEYS.theme, null) || (globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -3512,6 +3823,8 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     laboratory,
     qualityAssurance,
     dispatch,
+    administration,
+    executiveDemo,
     personalisation,
     products: productService,
     preferences,

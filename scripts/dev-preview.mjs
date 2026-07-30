@@ -3,9 +3,11 @@ import http from 'node:http';
 import path from 'node:path';
 import { context } from 'esbuild';
 import { previewIds, root } from './build-tools.mjs';
+import { PREVIEW_BY_ID } from '../src/shared/platform/previewConfig.js';
 
 const previewId = process.argv[2];
 if (!previewIds.includes(previewId)) throw new Error(`Choose one preview: ${previewIds.join(', ')}`);
+const previewDefinition = PREVIEW_BY_ID[previewId];
 const port = Math.max(1024, Number(process.env.RHOMBERG_PREVIEW_PORT) || 4173);
 const buildContext = await context({
   absWorkingDir: root,
@@ -36,7 +38,7 @@ const server = http.createServer(async (request, response) => {
     const requestPath = decodeURIComponent(new URL(request.url, `http://127.0.0.1:${port}`).pathname);
     let relative = requestPath.replace(/^\/+/, '');
     if (!relative || relative.endsWith('/')) relative += 'index.html';
-    const permitted = allowedRootFiles.has(relative) || relative.startsWith('assets/') || relative.startsWith('preview/');
+    const permitted = allowedRootFiles.has(relative) || relative.startsWith('assets/') || relative.startsWith('preview/') || relative.startsWith('demo/');
     if (!permitted) {
       response.writeHead(404).end('Not found');
       return;
@@ -55,7 +57,7 @@ const server = http.createServer(async (request, response) => {
 });
 
 server.listen(port, '127.0.0.1', () => {
-  console.log(`Rhomberg preview server: http://127.0.0.1:${port}/preview/${previewId}/`);
+  console.log(`Rhomberg preview server: http://127.0.0.1:${port}${previewDefinition.route}`);
 });
 
 const close = async () => {

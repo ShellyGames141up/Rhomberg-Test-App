@@ -299,6 +299,39 @@ export function createApiServices(config = {}) {
     ),
   };
 
+  const administration = {
+    getOverview: () => client.get('/administration/overview'),
+    setAccountStatus: (accountId, status) => client.put(
+      `/administration/users/${encodeURIComponent(accountId)}/status`,
+      { status },
+    ),
+    assignRepresentative: (companyId, representativeId) => client.put(
+      `/administration/companies/${encodeURIComponent(companyId)}/representative`,
+      { representativeId },
+    ),
+    resetDemoData: () => {
+      throw new ServiceError('Fabricated-data reset controls are not available in the private-cloud application.', {
+        code: 'PREVIEW_ONLY_OPERATION',
+        status: 404,
+      });
+    },
+  };
+
+  const executiveDemo = Object.freeze({
+    getState: async () => null,
+    getCatalogue: async () => ({ scenarios: [], roles: [], current: null }),
+    selectScenario: async () => null,
+    setStep: async () => null,
+    setPresentationMode: async () => null,
+    resetScenario: async () => null,
+    switchRole: async () => {
+      throw new ServiceError('Guided role switching is not available in the private-cloud application.', {
+        code: 'PREVIEW_ONLY_OPERATION',
+        status: 404,
+      });
+    },
+  });
+
   const notifications = {
     list: filters => client.get('/notifications', { query: filters }),
     markRead: notificationId => client.post(`/notifications/${encodeURIComponent(notificationId)}/read`, {}),
@@ -409,6 +442,8 @@ export function createApiServices(config = {}) {
     orderDocuments,
     archive,
     management,
+    administration,
+    executiveDemo,
     notifications,
     planning,
     expediting,

@@ -17,6 +17,7 @@ export {
 } from './contracts.js';
 export {
   defaultViewForRole,
+  isCustomerAccount,
   isInternalAccount,
   navigationItemsForRole,
   normaliseViewForRole,
@@ -26,5 +27,6 @@ export {
   usesLaboratoryWorkspace,
   usesPlanningWorkspace,
   usesQualityWorkspace,
+  usesRepresentativeInbox,
 } from '../domain/accessControl.js';
 export { MAX_PO_FILE_BYTES } from './validation.js';

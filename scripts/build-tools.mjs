@@ -30,18 +30,19 @@ export async function buildPublicBundle({ sourcemap = true } = {}) {
 
 export async function stagePreviewVariant(previewId) {
   if (!previewIds.includes(previewId)) throw new Error(`Unknown preview: ${previewId}`);
+  const definition = PREVIEW_DEFINITIONS.find(item => item.id === previewId);
   const parent = path.join(root, 'dist-previews');
   const output = assertChildPath(path.join(parent, previewId), parent, previewId);
   await fs.rm(output, { recursive: true, force: true });
   await fs.mkdir(output, { recursive: true });
 
-  const routeIndex = await fs.readFile(path.join(root, 'preview', previewId, 'index.html'), 'utf8');
+  const routeIndex = await fs.readFile(path.join(root, definition.sourcePath, 'index.html'), 'utf8');
   await fs.writeFile(path.join(output, 'index.html'), routeIndex.replace('<base href="../../">', '<base href="./">'), 'utf8');
   for (const file of ['app.js', 'app.js.map', 'styles.css', 'runtime-config.js', 'manifest.webmanifest']) {
     await fs.copyFile(path.join(root, file), path.join(output, file));
   }
   const standaloneServiceWorker = (await fs.readFile(path.join(root, 'sw.js'), 'utf8'))
-    .replace(/^\s*'\.\/preview\/.*\r?\n/gm, '');
+    .replace(/^\s*'\.\/(?:preview|demo)\/.*\r?\n/gm, '');
   await fs.writeFile(path.join(output, 'sw.js'), standaloneServiceWorker, 'utf8');
   await fs.cp(path.join(root, 'assets'), path.join(output, 'assets'), { recursive: true });
   return output;
@@ -56,5 +57,6 @@ export async function stageGitHubPagesPreview() {
   }
   await fs.cp(path.join(root, 'assets'), path.join(output, 'assets'), { recursive: true });
   await fs.cp(path.join(root, 'preview'), path.join(output, 'preview'), { recursive: true });
+  await fs.cp(path.join(root, 'demo'), path.join(output, 'demo'), { recursive: true });
   return output;
 }

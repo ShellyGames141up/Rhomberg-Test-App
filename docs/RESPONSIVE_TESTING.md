@@ -56,7 +56,7 @@ The review also confirmed:
 
 Automated checks and this Chromium review do not replace testing on physical iOS/Android devices, browser zoom, screen readers, Windows high-contrast mode or all 2560 × 1440 combinations.
 
-Prompt 10 added a focused Dispatch review on 27 July 2026:
+The Dispatch phase added a focused review on 27 July 2026:
 
 | Preview | Viewport reviewed | Result |
 | --- | --- | --- |

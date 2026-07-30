@@ -5,11 +5,13 @@ import {
   canAccessNotification,
   canAccessRecord,
   defaultViewForRole,
+  isCustomerAccount,
   navigationItemsForRole,
   normaliseViewForRole,
   ORDER_QUEUE_SCOPES,
   roleProfileFor,
   usesDispatchWorkspace,
+  usesRepresentativeInbox,
 } from '../src/domain/accessControl.js';
 import { SYSTEM_ACTOR_ROLE, WORKFLOW_TRANSITIONS } from '../src/domain/workflow.js';
 import {
@@ -110,6 +112,8 @@ for (const role of allRoles) {
 }
 assert.equal(defaultViewForRole(USER_ROLES.CUSTOMER), 'home');
 assert.equal(defaultViewForRole(USER_ROLES.PLANNING), 'expeditor');
+assert.equal(defaultViewForRole(USER_ROLES.ADMINISTRATOR), 'administration');
+assert.ok(navigationItemsForRole(USER_ROLES.ADMINISTRATOR).some(item => item.id === 'administration'));
 assert.ok(navigationItemsForRole(USER_ROLES.MANAGER).some(item => item.id === 'audit'));
 assert.ok(navigationItemsForRole(USER_ROLES.ADMINISTRATOR).some(item => item.id === 'audit'));
 assert.equal(navigationItemsForRole(USER_ROLES.CUSTOMER).some(item => item.id === 'audit'), false);
@@ -127,6 +131,13 @@ const expeditor = { id: 'expeditor', role: USER_ROLES.EXPEDITOR, companyId: 'com
 const dispatch = { id: 'dispatch', role: USER_ROLES.DISPATCH, companyId: 'company-rhomberg' };
 const buyer = { id: 'buyer', role: USER_ROLES.BUYER, companyId: 'company-rhomberg' };
 const manager = { id: 'manager', role: USER_ROLES.MANAGER, companyId: 'company-rhomberg' };
+const administrator = { id: 'administrator', role: USER_ROLES.ADMINISTRATOR, companyId: 'company-rhomberg' };
+
+assert.equal(isCustomerAccount(customerA), true);
+assert.equal(isCustomerAccount(administrator), false, 'an Administrator with the complete permission catalogue must stay in the internal realm');
+assert.equal(usesRepresentativeInbox(salesA), true);
+assert.equal(usesRepresentativeInbox(manager), false);
+assert.equal(usesRepresentativeInbox(administrator), false, 'wider RFQ access must not be reduced to a representative inbox');
 
 const rfqA = { id: 'rfq-a', workflowType: 'rfq', companyId: 'company-a', trackingStatus: 'under_rep_review', selectedRep: { id: 'REP-A' } };
 const rfqB = { ...rfqA, id: 'rfq-b', companyId: 'company-b', selectedRep: { id: 'REP-B' } };

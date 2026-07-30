@@ -1,5 +1,5 @@
 -- Rhomberg Instruments proposed PostgreSQL schema
--- Prompt 17 production specification. Design draft only: review naming,
+-- Production specification. Design draft only: review naming,
 -- retention, ERP integration and privileges with IT before migration.
 -- No credentials or customer records belong in this file.
 
@@ -1404,7 +1404,7 @@ CREATE POLICY customer_identity_images_own_scope ON app.customer_identity_images
 -- parent order/company checks pass. Row-level security does not provide
 -- column-level redaction.
 
--- Prompt 15/16 management, approval and idempotency proposal.
+-- Management, approval and idempotency proposal.
 CREATE TABLE IF NOT EXISTS app.management_approvals (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id uuid NOT NULL REFERENCES app.companies(id),
@@ -1476,7 +1476,7 @@ CREATE POLICY operational_report_exports_own_scope ON app.operational_report_exp
 -- the API projection must omit all protected pricing columns/JSON keys.
 
 -- ---------------------------------------------------------------------------
--- Prompt 17 canonical production entities
+-- Canonical production entities
 -- ---------------------------------------------------------------------------
 -- Earlier browser-preview phases used "enquiry" names in the API and proposal.
 -- The physical production tables below are canonical RFQ entities. Compatibility

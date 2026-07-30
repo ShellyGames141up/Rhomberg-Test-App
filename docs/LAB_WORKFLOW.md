@@ -2,6 +2,8 @@
 
 The Laboratory workspace is desktop-only and available to `laboratory_user` and `laboratory_manager`. Its queue contains only orders routed by Planning because at least one physical unit requires SANAS calibration or a Traceable certificate.
 
+The final desktop handover adds queue tabs, SANAS/Traceable filtering, urgent-only filtering, oldest/newest/customer sorting and certificate-register views for pending, completed, archived and all records. These are presentation and queue-query controls only; unit actions still pass through the same permission-scoped Laboratory service.
+
 ## Unit-level model
 
 For a line quantity of five, the service creates five calibration units and five certificate requirements. Each unit retains its order, line item, model, description, configuration, job number, calibration type, urgent flag, status, optional serial number, acting Laboratory user and timestamps.

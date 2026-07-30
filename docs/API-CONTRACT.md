@@ -4,7 +4,7 @@ Status: proposed contract for IT implementation. No live endpoint or database is
 
 Base path: `/api/v1`
 
-## Prompt 17 production reconciliation
+## Production reconciliation
 
 The canonical, machine-readable contract is `docs/api/openapi.yaml` at proposed version `0.6.0`. The companion entity, constraint, index, row-level-security and audit specification is `docs/PRODUCTION_API_DATABASE_SPECIFICATION.md`.
 

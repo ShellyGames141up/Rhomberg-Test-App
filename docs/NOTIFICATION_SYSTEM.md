@@ -2,7 +2,7 @@
 
 ## Scope
 
-Prompt 9 introduces one central notification domain and service for Rhomberg Connect and Rhomberg Operations. The GitHub Pages preview fully supports in-app notifications and deliberately simulates email and mobile push. It does not contact an email server, Microsoft 365, Firebase, Apple or any other provider.
+The notification phase introduces one central notification domain and service for Rhomberg Connect and Rhomberg Operations. The GitHub Pages preview fully supports in-app notifications and deliberately simulates email and mobile push. It does not contact an email server, Microsoft 365, Firebase, Apple or any other provider.
 
 The source of truth is:
 
