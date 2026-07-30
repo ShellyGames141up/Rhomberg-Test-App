@@ -323,6 +323,8 @@ export function createApiServices(config = {}) {
     selectScenario: async () => null,
     setStep: async () => null,
     setPresentationMode: async () => null,
+    setLayoutMode: async () => null,
+    setDevicePreview: async () => null,
     resetScenario: async () => null,
     switchRole: async () => {
       throw new ServiceError('Guided role switching is not available in the private-cloud application.', {

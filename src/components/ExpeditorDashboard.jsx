@@ -16,6 +16,7 @@ import {
 import { orderRequiresLaboratory } from '../domain/certification.js';
 import { statusById } from '../domain/tracking.js';
 import { OrderSummaryPanel } from './OrderSummaryPanel.jsx';
+import { StatusBadge } from './StatusBadge.jsx';
 import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
 
 const formatDateTime = value => {
@@ -184,7 +185,7 @@ function ExpeditingOrder({ order, expanded, onToggle, onAction, account, options
         <span className="expediting-order-reference"><small>Order / RFQ</small><strong>{order.reference}</strong><em>{order.sourceRfqReference || 'No linked RFQ'} · {ageLabel(order)}</em></span>
         <span><small>Customer</small><strong>{order.company}</strong><em>{order.contact}</em></span>
         <span><small>Representative</small><strong>{order.selectedRep?.name || 'Unassigned'}</strong><em>{order.selectedRep?.branchName || order.area}</em></span>
-        <span><small>Current progress</small><strong>{currentStep.label}</strong><em className={`tracking-status status-${order.trackingStatus}`}>{stage.label}</em></span>
+        <span><small>Current progress</small><strong>{currentStep.label}</strong><StatusBadge as="em" status={order.trackingStatus} label={stage.label} className="tracking-status" /></span>
         <span><small>Estimate</small><strong>{formatDate(estimate)}</strong><em>{approaching ? 'Due soon or overdue' : 'Current completion estimate'}</em></span>
         <span><small>Priority</small><strong className={`expediting-priority priority-${priority}`}>{titleCase(priority)}</strong><em>{order.emergency === 'yes' ? 'Emergency fees apply' : `${lineItems} line item${lineItems === 1 ? '' : 's'}`}</em></span>
         <span><small>Last update</small><strong>{formatDateTime(expeditorOrderLastActivityAt(order))}</strong><em>Oldest updates are prioritised</em></span>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { friendlyServiceError } from '../services/contracts.js';
 import { MockAdministrationControls } from './MockAdministrationControls.jsx';
+import { StatusBadge } from './StatusBadge.jsx';
 
 const humanise = value => String(value || '').replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 
@@ -149,7 +150,7 @@ export function AdministratorDashboard({
                     <td>{user.company}</td>
                     <td>{humanise(user.role)}</td>
                     <td>{user.category}</td>
-                    <td><span className={`status-pill is-${user.status}`}>{humanise(user.status)}</span></td>
+                    <td><StatusBadge status={user.status} label={humanise(user.status)} className="status-pill" /></td>
                     <td><button className="text-button" type="button" disabled={Boolean(busy) || user.id === account.id} onClick={() => setAccountStatus(user)}>{user.status === 'suspended' ? 'Activate' : 'Suspend'}</button></td>
                   </tr>
                 ))}

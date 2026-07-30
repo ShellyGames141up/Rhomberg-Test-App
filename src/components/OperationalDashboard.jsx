@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { roleProfileFor } from '../domain/accessControl.js';
 import { statusById, trackingStatuses } from '../domain/tracking.js';
 import { OrderSummaryPanel } from './OrderSummaryPanel.jsx';
+import { StatusBadge } from './StatusBadge.jsx';
 import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
 
 const TERMINAL_STATUSES = new Set(['completed', 'cancelled', 'expired', 'converted_to_order', 'archived']);
@@ -83,7 +84,7 @@ function ExpeditorOrderCard({ enquiry, expanded, onToggle, onAction, canUpdate, 
     <article className={`expeditor-order-card ${enquiry.emergency === 'yes' ? 'is-emergency' : ''}`} id={`operational-record-${enquiry.id}`}>
       <button type="button" className="expeditor-order-summary" onClick={onToggle} aria-expanded={expanded}>
         <span className="expeditor-order-id"><small>{enquiry.workflowType === 'order' ? 'ORDER' : 'RFQ'} · {enquiry.reference}{enquiry.isDemo ? ' · DEMO' : ''}</small><strong>{enquiry.company}</strong><em>{enquiry.contact}</em></span>
-        <span className={`tracking-status status-${enquiry.trackingStatus}`}>{status.label}</span>
+        <StatusBadge status={enquiry.trackingStatus} label={status.label} className="tracking-status" />
         <span className="expeditor-order-meta"><b>{enquiry.selectedRep?.name || 'Unassigned rep'}</b><small>{enquiry.selectedRep?.branchName || enquiry.area} · {quantity} unit{quantity === 1 ? '' : 's'}</small></span>
         <span className="expeditor-updated">Last update {formatDate(enquiry.updatedAt || enquiry.createdAt)} <b>{expanded ? '−' : '+'}</b></span>
       </button>

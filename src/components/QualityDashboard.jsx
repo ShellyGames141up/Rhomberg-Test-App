@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { qaSearchText, qualityMetrics, qualityMonthlyMetrics } from '../domain/qualityAssurance.js';
 import { friendlyServiceError } from '../services/contracts.js';
+import { StatusBadge } from './StatusBadge.jsx';
 
 const humanise = value => String(value || '').replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 const formatDate = value => value ? new Date(value).toLocaleString('en-ZA', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Not recorded';
@@ -161,7 +162,7 @@ function QualityOrder({ order, expanded, values, options, onToggle, onValue, onA
             {actions.has('resubmit_to_qa') && <button className="primary-button" disabled={Boolean(busy)} type="button" onClick={() => onAction('resubmit_to_qa')}>Resubmit to QA</button>}
             {actions.has('release_qa_order') && <button className="primary-button" disabled={Boolean(busy)} type="button" onClick={() => onAction('release_qa_order')}>Send to Dispatch</button>}
           </div>
-          <section className="quality-history"><h3>Inspection history</h3>{history.map(inspection => <article key={inspection.id}><b className={`status-pill is-${inspection.result}`}>{humanise(inspection.result)}</b><span><strong>Attempt {inspection.attempt}</strong><small>{inspection.customerMessage || 'Internal inspection record'} · {formatDate(inspection.createdAt)}</small></span></article>)}{!history.length && <p>No completed inspection attempt is recorded yet.</p>}</section>
+          <section className="quality-history"><h3>Inspection history</h3>{history.map(inspection => <article key={inspection.id}><StatusBadge as="b" status={inspection.result} label={humanise(inspection.result)} className="status-pill" /><span><strong>Attempt {inspection.attempt}</strong><small>{inspection.customerMessage || 'Internal inspection record'} · {formatDate(inspection.createdAt)}</small></span></article>)}{!history.length && <p>No completed inspection attempt is recorded yet.</p>}</section>
         </div>
       )}
     </article>

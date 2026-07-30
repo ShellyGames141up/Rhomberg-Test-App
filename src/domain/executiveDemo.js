@@ -1,5 +1,8 @@
 import { USER_ROLES } from '../services/contracts.js';
 
+export const EXECUTIVE_LAYOUT_MODES = Object.freeze(['full', 'device']);
+export const EXECUTIVE_DEVICE_PREVIEWS = Object.freeze(['phone', 'tablet', 'desktop']);
+
 export const EXECUTIVE_DEMO_SCENARIOS = Object.freeze([
   Object.freeze({
     id: 'standard-order',
@@ -120,6 +123,8 @@ export const DEFAULT_EXECUTIVE_DEMO_STATE = Object.freeze({
   scenarioId: EXECUTIVE_DEMO_SCENARIOS[0].id,
   stepIndex: 0,
   presentationMode: false,
+  layoutMode: 'full',
+  devicePreview: 'desktop',
   startedAt: '',
   updatedAt: '',
 });
@@ -138,6 +143,8 @@ export const normaliseExecutiveDemoState = candidate => {
     scenarioId: scenario.id,
     stepIndex: Math.min(maximum, Math.max(0, Math.trunc(Number(candidate?.stepIndex) || 0))),
     presentationMode: candidate?.presentationMode === true,
+    layoutMode: EXECUTIVE_LAYOUT_MODES.includes(candidate?.layoutMode) ? candidate.layoutMode : DEFAULT_EXECUTIVE_DEMO_STATE.layoutMode,
+    devicePreview: EXECUTIVE_DEVICE_PREVIEWS.includes(candidate?.devicePreview) ? candidate.devicePreview : DEFAULT_EXECUTIVE_DEMO_STATE.devicePreview,
   };
 };
 

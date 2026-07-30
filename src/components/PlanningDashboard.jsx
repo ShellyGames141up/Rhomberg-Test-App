@@ -12,6 +12,7 @@ import {
 import { statusById } from '../domain/tracking.js';
 import { orderRequiresLaboratory } from '../domain/certification.js';
 import { OrderSummaryPanel } from './OrderSummaryPanel.jsx';
+import { StatusBadge } from './StatusBadge.jsx';
 import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
 
 const formatDateTime = value => {
@@ -160,7 +161,7 @@ function PlanningOrder({ order, expanded, onToggle, onAction, account, planningO
         <span className="planning-order-reference" role="cell" data-label="Order / RFQ"><strong>{order.reference}</strong><small>{order.sourceRfqReference || 'No linked RFQ'} · {planningOrderAgeLabel(order)}</small></span>
         <span role="cell" data-label="Customer"><strong>{order.company}</strong><small>{order.contact}</small></span>
         <span role="cell" data-label="Representative"><strong>{order.selectedRep?.name || 'Unassigned'}</strong><small>{order.selectedRep?.branchName || order.area || 'No branch'}</small></span>
-        <span role="cell" data-label="Stage"><i className={`tracking-status status-${order.trackingStatus}`}>{stage.label}</i></span>
+        <span role="cell" data-label="Stage"><StatusBadge as="i" status={order.trackingStatus} label={stage.label} className="tracking-status" /></span>
         <span role="cell" data-label="Priority"><i className={`planning-priority priority-${priority}`}>{titleCase(priority)}</i>{order.emergency === 'yes' && <small className="planning-emergency">Emergency</small>}</span>
         <span role="cell" data-label="PO / items"><strong>{customerPo || (planning.customerPoException?.authorised ? 'PO exception' : 'PO pending')}</strong><small>{lineItems} line item{lineItems === 1 ? '' : 's'}</small></span>
         <span role="cell" data-label="Last update"><strong>{formatDateTime(planningOrderLastActivityAt(order))}</strong><small>{order.updatedAt !== order.createdAt ? 'Workflow activity' : 'Order received'}</small></span>

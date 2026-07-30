@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { isInternalAccount, roleProfileFor } from '../domain/accessControl.js';
 import { friendlyServiceError } from '../services/contracts.js';
+import { StatusBadge } from './StatusBadge.jsx';
 
 export function Account({
   account,
@@ -170,7 +171,7 @@ function HistoryRow({ enquiry, showCompany }) {
           ? `${enquiry.reference} · ${enquiry.selectedRep?.name || 'Unassigned rep'}`
           : `${quantity ? `${quantity} unit${quantity === 1 ? '' : 's'}` : 'General enquiry'} · ${date}`}</small>
       </div>
-      <span>{enquiry.status || 'Preview saved'}</span>
+      <StatusBadge status={enquiry.trackingStatus} label={enquiry.status || 'Preview saved'} />
     </article>
   );
 }

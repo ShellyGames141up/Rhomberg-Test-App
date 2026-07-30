@@ -145,10 +145,10 @@ assert.equal((await reopened.personalisation.get()).appearanceMode, 'dark', 'app
 assert.equal((await reopened.personalisation.get()).notificationPreferences.companyAnnouncements, false, 'notification preferences must persist');
 
 const css = customerPersonalisationCss(saved);
-assert.equal(css['--customer-font-scale'], '1.24');
+assert.equal(css['--customer-font-scale'], '1.25');
 assert.equal(css['--customer-density-scale'], '1.14');
 assert.match(css['--customer-primary'], /^#[0-9a-f]{6}$/i);
-assert.ok(['#ffffff', '#102f3d'].includes(foregroundForColour('#777777')));
+assert.ok(['#ffffff', '#10252f'].includes(foregroundForColour('#777777')));
 
 const invalidContrast = normaliseCustomerPersonalisation({
   ...completeSettings,

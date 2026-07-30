@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { executiveDemoProgress } from '../domain/executiveDemo.js';
 
 export function ExecutiveDemoLauncher({ catalogue, state, onScenario, onStart, busy, error }) {
@@ -47,6 +48,8 @@ export function ExecutiveDemoControls({
   onStep,
   onRole,
   onPresentationMode,
+  onLayoutMode,
+  onDevicePreview,
   onReset,
   onOpenNotifications,
   onOpenRecords,
@@ -55,9 +58,21 @@ export function ExecutiveDemoControls({
 }) {
   const progress = executiveDemoProgress(state);
   const role = catalogue.roles.find(item => item.role === account?.role);
+  const [controlsExpanded, setControlsExpanded] = useState(true);
   return (
-    <aside className={`executive-demo-controls ${state.presentationMode ? 'is-presenting' : ''}`} aria-label="Executive demonstration controls">
+    <aside className={`executive-demo-controls ${state.presentationMode ? 'is-presenting' : ''} ${controlsExpanded ? 'is-expanded' : 'is-collapsed'}`} aria-label="Executive demonstration controls">
       <div className="executive-demo-fabricated-banner">Executive Demo Mode - Fabricated Data Only</div>
+      <button
+        type="button"
+        className="executive-control-toggle"
+        aria-expanded={controlsExpanded}
+        aria-controls="executive-control-panel"
+        onClick={() => setControlsExpanded(value => !value)}
+      >
+        <span><strong>Executive demo controls</strong><small>{role?.label || account?.role} · {progress.scenario.label}</small></span>
+        <b aria-hidden="true">{controlsExpanded ? '−' : '+'}</b>
+      </button>
+      <div className="executive-control-panel" id="executive-control-panel" hidden={!controlsExpanded}>
       <div className="executive-control-main">
         <div className="executive-control-identity">
           <span className="eyebrow">{role?.device || 'Rhomberg Platform'}</span>
@@ -66,6 +81,8 @@ export function ExecutiveDemoControls({
         </div>
         <label><span>Scenario</span><select value={progress.scenario.id} disabled={Boolean(busy)} onChange={event => onScenario(event.target.value)}>{catalogue.scenarios.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
         <label><span>Active role</span><select value={account?.role || ''} disabled={Boolean(busy)} onChange={event => onRole(event.target.value)}>{catalogue.roles.map(item => <option key={item.role} value={item.role}>{item.label}</option>)}</select></label>
+        <label><span>View</span><select value={state.layoutMode || 'full'} disabled={Boolean(busy)} onChange={event => onLayoutMode(event.target.value)}><option value="full">Full application</option><option value="device">Device preview</option></select></label>
+        <label><span>Device</span><select value={state.devicePreview || 'desktop'} disabled={Boolean(busy) || state.layoutMode !== 'device'} onChange={event => onDevicePreview(event.target.value)}><option value="phone">Phone</option><option value="tablet">Tablet</option><option value="desktop">Desktop</option></select></label>
         <div className="executive-progress-copy"><span>Step {state.stepIndex + 1} of {progress.scenario.steps.length}</span><strong>{progress.currentStep}</strong><small>Next: {progress.nextStep}</small></div>
         <div className="executive-progress-bar" aria-label={`${progress.progressPercent}% complete`}><i style={{ width: `${progress.progressPercent}%` }} /></div>
         <div className="executive-step-buttons">
@@ -81,6 +98,7 @@ export function ExecutiveDemoControls({
         <button type="button" onClick={() => onPresentationMode(!state.presentationMode)}>{state.presentationMode ? 'Exit presentation' : 'Presentation mode'}</button>
         <button type="button" onClick={onReset}>Restart scenario</button>
         <a href="../../">All previews</a>
+      </div>
       </div>
     </aside>
   );

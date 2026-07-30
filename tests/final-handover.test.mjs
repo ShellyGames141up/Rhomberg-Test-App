@@ -44,11 +44,15 @@ for (const role of [
 const selectedScenario = await services.executiveDemo.selectScenario('sanas-calibration');
 assert.equal(selectedScenario.scenarioId, 'sanas-calibration');
 assert.equal((await services.executiveDemo.setStep(3)).stepIndex, 3);
+assert.equal((await services.executiveDemo.setLayoutMode('device')).layoutMode, 'device');
+assert.equal((await services.executiveDemo.setDevicePreview('tablet')).devicePreview, 'tablet');
 assert.equal(executiveDemoProgress(await services.executiveDemo.getState()).currentStep, EXECUTIVE_DEMO_SCENARIOS[1].steps[3]);
 
 const reopened = createMockServices({ storage, now: () => new Date('2026-07-29T09:05:00.000Z') });
 await reopened.initialize();
 assert.equal((await reopened.executiveDemo.getState()).stepIndex, 3, 'presenter progress must survive refresh/reinitialisation');
+assert.equal((await reopened.executiveDemo.getState()).layoutMode, 'device', 'presenter layout must survive refresh/reinitialisation');
+assert.equal((await reopened.executiveDemo.getState()).devicePreview, 'tablet', 'presenter device frame must survive refresh/reinitialisation');
 
 const switchedCustomer = await reopened.executiveDemo.switchRole(USER_ROLES.CUSTOMER);
 assert.equal(switchedCustomer.id, DEMO_ACCOUNT.id);

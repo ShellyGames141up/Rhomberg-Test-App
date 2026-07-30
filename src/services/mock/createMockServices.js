@@ -3742,6 +3742,14 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       return clone(saveExecutiveDemoState({ presentationMode: Boolean(presentationMode) }));
     },
 
+    async setLayoutMode(layoutMode) {
+      return clone(saveExecutiveDemoState({ layoutMode }));
+    },
+
+    async setDevicePreview(devicePreview) {
+      return clone(saveExecutiveDemoState({ devicePreview }));
+    },
+
     async resetScenario() {
       const current = readExecutiveDemoState();
       return clone(saveExecutiveDemoState({ scenarioId: current.scenarioId, stepIndex: 0 }));

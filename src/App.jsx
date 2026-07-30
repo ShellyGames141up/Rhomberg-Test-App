@@ -620,6 +620,18 @@ export default function App() {
     return updated;
   });
 
+  const setExecutiveLayoutMode = layoutMode => runExecutiveDemoAction('layout', async () => {
+    const updated = await services.executiveDemo.setLayoutMode(layoutMode);
+    setExecutiveDemoState(updated);
+    return updated;
+  });
+
+  const setExecutiveDevicePreview = devicePreview => runExecutiveDemoAction('device', async () => {
+    const updated = await services.executiveDemo.setDevicePreview(devicePreview);
+    setExecutiveDemoState(updated);
+    return updated;
+  });
+
   const resetExecutiveScenario = () => runExecutiveDemoAction('reset', async () => {
     const updated = await services.executiveDemo.resetScenario();
     setExecutiveDemoState(updated);
@@ -697,10 +709,13 @@ export default function App() {
 
   return (
     <div
-      className={`app-canvas platform-preview preview-${PREVIEW_CONTEXT.id} ${isCustomerExperience ? 'preview-connect' : 'preview-operations'} ${executiveDemoState?.presentationMode ? 'executive-presentation-mode' : ''}`}
+      className={`app-canvas platform-preview preview-${PREVIEW_CONTEXT.id} ${isCustomerExperience ? 'preview-connect' : 'preview-operations'} ${executiveDemoState?.presentationMode ? 'executive-presentation-mode' : ''} ${PREVIEW_CONTEXT.executiveDemo ? `executive-layout-${executiveDemoState?.layoutMode || 'full'} executive-device-${executiveDemoState?.devicePreview || 'desktop'}` : ''}`}
       style={personalisationStyle}
       data-font-size={isCustomerExperience ? customerPersonalisation.fontSize : undefined}
       data-density={isCustomerExperience ? customerPersonalisation.density : undefined}
+      data-theme-preset={isCustomerExperience ? customerPersonalisation.themePreset : undefined}
+      data-executive-layout={PREVIEW_CONTEXT.executiveDemo ? executiveDemoState?.layoutMode || 'full' : undefined}
+      data-executive-device={PREVIEW_CONTEXT.executiveDemo ? executiveDemoState?.devicePreview || 'desktop' : undefined}
     >
       {PREVIEW_CONTEXT.executiveDemo && (
         <ExecutiveDemoControls
@@ -713,6 +728,8 @@ export default function App() {
           onStep={setExecutiveStep}
           onRole={switchExecutiveRole}
           onPresentationMode={setExecutivePresentationMode}
+          onLayoutMode={setExecutiveLayoutMode}
+          onDevicePreview={setExecutiveDevicePreview}
           onReset={resetExecutiveScenario}
           onOpenNotifications={() => navigate('notifications')}
           onOpenRecords={() => navigate(isStaff ? 'expeditor' : 'tracking')}

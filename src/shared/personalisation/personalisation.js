@@ -2,22 +2,30 @@ import {
   DEFAULT_NOTIFICATION_CATEGORY_PREFERENCES,
   NOTIFICATION_PREFERENCE_CATEGORIES,
 } from '../../domain/notifications.js';
+import {
+  contrastRatio,
+  foregroundForColour,
+  isValidHexColour,
+  validateThemeColour,
+} from '../design/contrast.js';
+
+export { contrastRatio, foregroundForColour, isValidHexColour };
 
 export const CUSTOMER_THEME_PRESETS = Object.freeze([
-  { id: 'rhomberg-default', label: 'Rhomberg Default', description: 'Trusted Rhomberg navy and cyan.', colours: { primary: '#073b53', secondary: '#075e7b', accent: '#08788d', success: '#217a55', warning: '#b77812' } },
-  { id: 'industrial-professional', label: 'Industrial Professional', description: 'Steel, graphite and safety blue.', colours: { primary: '#263943', secondary: '#3c5966', accent: '#147896', success: '#28775a', warning: '#a96d13' } },
-  { id: 'modern', label: 'Modern', description: 'Clean indigo with a bright teal accent.', colours: { primary: '#28355f', secondary: '#43558f', accent: '#008b8f', success: '#25785a', warning: '#ad7314' } },
+  { id: 'rhomberg-default', label: 'Rhomberg Default', description: 'Trusted Rhomberg navy and cyan.', colours: { primary: '#073b53', secondary: '#075e7b', accent: '#08788d', success: '#217a55', warning: '#98630f' } },
+  { id: 'industrial-professional', label: 'Industrial Professional', description: 'Steel, graphite and safety blue.', colours: { primary: '#263943', secondary: '#3c5966', accent: '#147896', success: '#28775a', warning: '#945e0f' } },
+  { id: 'modern', label: 'Modern', description: 'Clean indigo with a bright teal accent.', colours: { primary: '#28355f', secondary: '#43558f', accent: '#00767b', success: '#25785a', warning: '#8e590d' } },
   { id: 'funky', label: 'Funky', description: 'Energetic purple and turquoise with safe contrast.', colours: { primary: '#51306f', secondary: '#77479a', accent: '#007f86', success: '#287653', warning: '#a8680f' } },
-  { id: 'dark', label: 'Dark', description: 'Deep technical surfaces and cool cyan.', colours: { primary: '#102d3a', secondary: '#164c5d', accent: '#0b8494', success: '#2c805e', warning: '#b67b20' } },
+  { id: 'dark', label: 'Dark', description: 'Deep technical surfaces and cool cyan.', colours: { primary: '#102d3a', secondary: '#164c5d', accent: '#087587', success: '#2c805e', warning: '#946014' } },
   { id: 'high-contrast', label: 'High Contrast', description: 'Strong navy, white and accessible yellow.', colours: { primary: '#001f2d', secondary: '#004a66', accent: '#006d7f', success: '#176b45', warning: '#9b6100' } },
   { id: 'custom', label: 'Custom', description: 'Choose up to five protected brand colours.', colours: null },
 ]);
 
 export const CUSTOMER_FONT_SIZES = Object.freeze([
-  { id: 'small', label: 'Small', scale: 0.92 },
+  { id: 'small', label: 'Small', scale: 0.95 },
   { id: 'medium', label: 'Medium', scale: 1 },
   { id: 'large', label: 'Large', scale: 1.12 },
-  { id: 'extra-large', label: 'Extra Large', scale: 1.24 },
+  { id: 'extra-large', label: 'Extra Large', scale: 1.25 },
 ]);
 
 export const CUSTOMER_DENSITIES = Object.freeze([
@@ -39,7 +47,7 @@ export const DEFAULT_CUSTOM_COLOURS = Object.freeze({
   secondary: '#075e7b',
   accent: '#08788d',
   success: '#217a55',
-  warning: '#b77812',
+  warning: '#98630f',
 });
 
 export const DEFAULT_NOTIFICATION_PREFERENCES = DEFAULT_NOTIFICATION_CATEGORY_PREFERENCES;
@@ -63,46 +71,16 @@ const themeIds = validIds(CUSTOMER_THEME_PRESETS);
 const fontSizeIds = validIds(CUSTOMER_FONT_SIZES);
 const densityIds = validIds(CUSTOMER_DENSITIES);
 const appearanceIds = validIds(APPEARANCE_MODES);
-const HEX_PATTERN = /^#[0-9a-f]{6}$/i;
-
-export const isValidHexColour = value => HEX_PATTERN.test(String(value || '').trim());
-
-const rgb = colour => {
-  if (!isValidHexColour(colour)) return null;
-  const value = colour.slice(1);
-  return [
-    Number.parseInt(value.slice(0, 2), 16),
-    Number.parseInt(value.slice(2, 4), 16),
-    Number.parseInt(value.slice(4, 6), 16),
-  ];
-};
-
-const luminance = colour => {
-  const values = rgb(colour);
-  if (!values) return 0;
-  const linear = values.map(channel => {
-    const normalised = channel / 255;
-    return normalised <= 0.03928 ? normalised / 12.92 : ((normalised + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
-};
-
-export const contrastRatio = (first, second) => {
-  const firstLum = luminance(first);
-  const secondLum = luminance(second);
-  return (Math.max(firstLum, secondLum) + 0.05) / (Math.min(firstLum, secondLum) + 0.05);
-};
-
-export const foregroundForColour = colour => (
-  contrastRatio(colour, '#ffffff') >= contrastRatio(colour, '#102f3d') ? '#ffffff' : '#102f3d'
-);
 
 export const themeColoursFor = personalisation => {
   const current = personalisation || createDefaultCustomerPersonalisation();
   const preset = CUSTOMER_THEME_PRESETS.find(item => item.id === current.themePreset) || CUSTOMER_THEME_PRESETS[0];
-  return preset.id === 'custom'
-    ? { ...DEFAULT_CUSTOM_COLOURS, ...(current.customColours || {}) }
-    : { ...preset.colours };
+  if (preset.id !== 'custom') return { ...preset.colours };
+  const customColours = { ...DEFAULT_CUSTOM_COLOURS, ...(current.customColours || {}) };
+  return Object.fromEntries(Object.entries(customColours).map(([name, colour]) => [
+    name,
+    validateThemeColour(name, colour) ? DEFAULT_CUSTOM_COLOURS[name] : colour,
+  ]));
 };
 
 export const validateCustomerPersonalisation = candidate => {
@@ -115,12 +93,8 @@ export const validateCustomerPersonalisation = candidate => {
 
   if (value.themePreset === 'custom') {
     for (const [name, colour] of Object.entries({ ...DEFAULT_CUSTOM_COLOURS, ...(value.customColours || {}) })) {
-      if (!isValidHexColour(colour)) {
-        errors[`customColours.${name}`] = `Choose a valid six-digit ${name} colour.`;
-        continue;
-      }
-      const bestContrast = Math.max(contrastRatio(colour, '#ffffff'), contrastRatio(colour, '#102f3d'));
-      if (bestContrast < 4.5) errors[`customColours.${name}`] = `${name} needs stronger contrast for readable text.`;
+      const contrastError = validateThemeColour(name, colour);
+      if (contrastError) errors[`customColours.${name}`] = contrastError;
     }
   }
 
@@ -166,7 +140,9 @@ export const customerPersonalisationCss = personalisation => {
     '--customer-accent': colours.accent,
     '--customer-accent-text': foregroundForColour(colours.accent),
     '--customer-success': colours.success,
+    '--customer-success-text': foregroundForColour(colours.success),
     '--customer-warning': colours.warning,
+    '--customer-warning-text': foregroundForColour(colours.warning),
     '--customer-font-scale': String(fontScale),
     '--customer-density-scale': String(densityScale),
   };

@@ -83,6 +83,7 @@ The Laboratory scenarios include fabricated SANAS and Traceable records. The Adm
 | `src/services/mock/` | Fabricated browser-local service implementation |
 | `src/services/api/` | Future private-cloud HTTP service implementation |
 | `src/shared/` | Platform routing and customer personalisation |
+| `src/shared/design/` | Semantic colour, contrast, typography, breakpoint and status contracts |
 | `tests/` | Automated unit, integration, isolation and production-exclusion checks |
 | `docs/` | IT architecture, API, database, security, workflow and deployment handover |
 | `preview/` | Four product preview route entry points |
@@ -122,6 +123,14 @@ npm run dev:executive-demo
 ```
 
 `build` prepares the GitHub Pages mock. `build:production` prepares and scans an API-only candidate in `dist-production/`. The production candidate excludes mock accounts, public-preview controls, executive role switching, browser-local workflow storage and source maps.
+
+## Accessibility and responsive UI
+
+The shared UI now uses protected light/dark foreground tokens, contrast-checked status pairs, a central rem-based typography scale and shared breakpoint definitions. Customer theme colours are validated and unsafe persisted custom colours fall back to protected defaults. Customer Desktop, Internal Desktop and Executive Full Application mode use real wide workspaces with a navigation rail from 1024 px; mobile and tablet views reflow controls and reserve space for bottom navigation.
+
+Run `npm test` for automated contrast/theme/status/responsive contracts and follow [the visual test checklist](docs/VISUAL_TEST_CHECKLIST.md) for rendered viewport, theme, text-size and zoom checks.
+
+The completed repair scope, rendered matrix, command results and remaining human-review items are recorded in [the accessibility and responsive completion report](docs/ACCESSIBILITY_RESPONSIVE_COMPLETION_REPORT.md).
 
 ## Mock Mode
 
@@ -219,6 +228,12 @@ No infrastructure values, credentials or private endpoints belong in this reposi
 - [Deployment handover](docs/DEPLOYMENT_HANDOVER.md)
 - [End-to-end demo script](docs/END_TO_END_DEMO_SCRIPT.md)
 - [Executive demo guide](docs/EXECUTIVE_DEMO_GUIDE.md)
+- [Design system](docs/DESIGN_SYSTEM.md)
+- [Accessibility](docs/ACCESSIBILITY.md)
+- [Responsive layout](docs/RESPONSIVE_LAYOUT.md)
+- [Desktop UI guidelines](docs/DESKTOP_UI_GUIDELINES.md)
+- [Visual test checklist](docs/VISUAL_TEST_CHECKLIST.md)
+- [Accessibility and responsive completion report](docs/ACCESSIBILITY_RESPONSIVE_COMPLETION_REPORT.md)
 - [Preview guide](docs/PREVIEW_GUIDE.md)
 - [Build and deployment](docs/BUILD_AND_DEPLOYMENT.md)
 - [Mock-mode limitations](docs/MOCK_MODE_LIMITATIONS.md)

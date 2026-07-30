@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { certificateQueueForOrders, laboratoryMetrics, laboratoryMonthlyTracker } from '../domain/certification.js';
 import { friendlyServiceError } from '../services/contracts.js';
+import { StatusBadge } from './StatusBadge.jsx';
 
 const humanise = value => String(value || '').replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 const dateTime = value => value
@@ -227,7 +228,7 @@ export function LaboratoryDashboard({
             {visibleCertificates.slice(0, 12).map(unit => (
               <button key={unit.id} type="button" onClick={() => setOpenId(unit.orderId)}>
                 <span><strong>{unit.productCode} · Unit {unit.unitNumber}</strong><small>{unit.orderReference} · {unit.company}</small></span>
-                <b className={`status-pill is-${unit.certificateStatus}`}>{humanise(unit.certificateStatus)}</b>
+                <StatusBadge as="b" status={unit.certificateStatus} label={humanise(unit.certificateStatus)} className="status-pill" />
               </button>
             ))}
             {!visibleCertificates.length && <p className="laboratory-register-empty">No certificate records in this view.</p>}
@@ -278,7 +279,7 @@ function LaboratoryUnit({ unit, item, order, values, onValue, onAction, onUpload
   const configuration = Object.entries(item?.configuration || {}).filter(([, value]) => String(value || '').trim());
   return (
     <article className="laboratory-unit">
-      <header><span><strong>{unit.productCode} · Unit {unit.unitNumber} of {unit.quantityInLine}</strong><small>{humanise(unit.certificationType)} · {humanise(unit.status)}</small></span><b className={`status-pill is-${unit.certificateStatus}`}>{humanise(unit.certificateStatus)}</b></header>
+      <header><span><strong>{unit.productCode} · Unit {unit.unitNumber} of {unit.quantityInLine}</strong><small>{humanise(unit.certificationType)} · {humanise(unit.status)}</small></span><StatusBadge as="b" status={unit.certificateStatus} label={humanise(unit.certificateStatus)} className="status-pill" /></header>
       <dl className="laboratory-unit-overview">
         <div><dt>Product</dt><dd>{unit.productName || item?.name || unit.productCode}</dd></div>
         <div><dt>Job / PO</dt><dd>{order.planning?.internalJobNumber || order.internalJobNumber || 'Pending'} · {order.planning?.customerPoNumber || order.customerPoNumber || 'PO pending'}</dd></div>

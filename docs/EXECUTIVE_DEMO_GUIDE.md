@@ -38,13 +38,33 @@ The active role, Customer/Internal product, workflow stage, current step and rec
 
 1. Select a scenario.
 2. Select the first role.
-3. Use **Next step** while completing the action in the normal workspace.
-4. Switch roles at a workflow handover.
-5. Open Records/Documents, Notifications or Audit History when available.
-6. Use Presentation Mode to reduce preview chrome.
-7. Use Restart Scenario to return to the first guidance step.
+3. Choose **Full application** or **Device preview**.
+4. In Device preview, choose Phone, Tablet or Desktop.
+5. Use **Next step** while completing the action in the normal workspace.
+6. Switch roles at a workflow handover.
+7. Open Records/Documents, Notifications or Audit History when available.
+8. Use Presentation Mode to reduce preview chrome.
+9. Use Restart Scenario to return to the first guidance step.
 
 The control progress is a presenter guide. It does not bypass the workflow state machine or complete business actions automatically.
+
+The top control bar can be collapsed so the application receives the usable viewport. Its expanded state is presentational only. The selected scenario, step, layout mode and device frame are persisted through the mock service.
+
+## Layout Modes
+
+### Full Application
+
+This is the default on tablet and desktop. The current role uses the available width. At desktop sizes Customer and Operations workspaces use a persistent left navigation rail, wide content column, horizontal filters and role-appropriate tables/queues.
+
+### Device Preview
+
+This intentionally centres a constrained frame:
+
+- Phone: 390 px
+- Tablet: 768 px
+- Desktop: up to 1440 px
+
+The frame contracts if the presenter viewport is smaller. Phone and tablet selections activate matching internal reflow rules rather than merely squeezing desktop content into a narrow container.
 
 ## Fabricated Accounts
 
@@ -69,6 +89,7 @@ The role switcher does not display passwords because it selects only pre-seeded 
 - **Restart Scenario** resets presenter progress only.
 - The Administrator **Reset fabricated data** control restores seeded workflows, notifications, document registrations and audit records in the current browser.
 - Refresh preserves the current scenario and signed-in fabricated role.
+- Refresh preserves Full Application/Device Preview and the selected device frame.
 - Clearing browser site data removes all browser-local changes.
 
 ## Mock Limitations

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { progressForStatus, statusById } from '../domain/tracking.js';
+import { StatusBadge } from './StatusBadge.jsx';
 
 const TERMINAL_STATUSES = new Set(['completed', 'cancelled', 'expired', 'converted_to_order', 'archived']);
 
@@ -70,7 +71,7 @@ function TrackingCard({ enquiry, expanded, onToggle, onAction, serviceMode, cert
     <article className={`tracking-card ${expanded ? 'expanded' : ''}`} id={`tracking-${enquiry.id}`}>
       <button className="tracking-card-summary" type="button" onClick={onToggle} aria-expanded={expanded}>
         <span className="tracking-reference"><small>{isOrder ? 'Order progress' : 'Request for quotation'}</small><strong>{enquiry.reference}</strong></span>
-        <span className={`tracking-status status-${enquiry.trackingStatus}`}>{status.label}</span>
+        <StatusBadge status={enquiry.trackingStatus} label={status.label} className="tracking-status" />
         <span className="tracking-client-line">{totalQuantity} unit{totalQuantity === 1 ? '' : 's'} · Updated {formatDate(enquiry.updatedAt || enquiry.createdAt)}</span>
         <span className="tracking-progress"><i style={{ width: `${progress}%` }} /></span>
         <span className="tracking-expand">{expanded ? 'Hide details' : 'View details'} <b>{expanded ? '−' : '+'}</b></span>

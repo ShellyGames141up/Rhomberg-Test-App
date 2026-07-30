@@ -9,6 +9,7 @@ import {
   rfqAgeLabel,
 } from '../domain/rfqInbox.js';
 import { statusById } from '../domain/tracking.js';
+import { StatusBadge } from './StatusBadge.jsx';
 import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
 
 const formatDate = value => value ? new Date(value).toLocaleString('en-ZA', {
@@ -98,7 +99,7 @@ function SalesRfqCard({ rfq, expanded, onToggle, onAction }) {
     <article className={`sales-rfq-card ${priority === 'urgent' ? 'is-emergency' : ''}`} id={`sales-rfq-${rfq.id}`}>
       <div className="sales-rfq-summary">
         <div className="sales-rfq-reference"><small>{rfq.reference}{rfq.isDemo ? ' · DEMO' : ''}</small><strong>{rfq.company}</strong><span>{rfq.contact}</span></div>
-        <span className={`tracking-status status-${rfq.trackingStatus}`}>{status.label}</span>
+        <StatusBadge status={rfq.trackingStatus} label={status.label} className="tracking-status" />
         <div className="sales-rfq-flags">
           <span className={`sales-priority priority-${priority}`}>{priority === 'urgent' ? 'Emergency' : 'Standard'}</span>
           <span>{rfqAgeLabel(rfq)}</span>

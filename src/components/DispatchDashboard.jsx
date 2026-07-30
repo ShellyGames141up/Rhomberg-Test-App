@@ -13,6 +13,7 @@ import {
 } from '../domain/dispatch.js';
 import { statusById } from '../domain/tracking.js';
 import { OrderSummaryPanel } from './OrderSummaryPanel.jsx';
+import { StatusBadge } from './StatusBadge.jsx';
 import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
 
 const formatDateTime = value => {
@@ -192,7 +193,7 @@ function DispatchOrder({ order, expanded, onToggle, onAction, account, dispatchO
         <span role="cell" data-label="Representative"><strong>{order.selectedRep?.name || 'Unassigned'}</strong><small>{order.selectedRep?.branchName || order.area || 'No branch'}</small></span>
         <span role="cell" data-label="Handover"><i className={`dispatch-method method-${dispatch.method || order.fulfilment}`}>{dispatch.method ? method.label : order.fulfilment === 'collect' ? 'Collection' : 'Delivery'}</i><small>{dispatch.trackingReference || customerPo || 'No tracking reference'}</small></span>
         <span role="cell" data-label="Packages"><strong>{dispatch.numberOfPackages || '—'}</strong><small>{dispatch.numberOfPackages ? `${dispatch.numberOfPackages} package${dispatch.numberOfPackages === 1 ? '' : 's'}` : 'Not packed'}</small></span>
-        <span role="cell" data-label="Stage"><i className={`tracking-status status-${order.trackingStatus}`}>{stage.label}</i>{order.emergency === 'yes' && <small className="dispatch-emergency">Emergency</small>}</span>
+        <span role="cell" data-label="Stage"><StatusBadge as="i" status={order.trackingStatus} label={stage.label} className="tracking-status" />{order.emergency === 'yes' && <small className="dispatch-emergency">Emergency</small>}</span>
         <span role="cell" data-label="Received"><strong>{dispatch.receivedAt ? formatDateTime(dispatchReceivedAt(order)) : 'Awaiting confirmation'}</strong><small>Updated {formatDateTime(dispatchLastActivityAt(order))}</small></span>
         <span className="dispatch-open-cell" role="cell" data-label="Action"><button type="button" onClick={onToggle} aria-expanded={expanded}>{expanded ? 'Close' : 'Open order'} <b>{expanded ? '−' : '→'}</b></button></span>
       </div>
