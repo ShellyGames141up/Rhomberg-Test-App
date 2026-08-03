@@ -2262,7 +2262,7 @@ paths:
     get:
       operationId: getAdministrationOverview
       summary: Return the permission-controlled Administration desktop overview
-      description: Requires administer_users. Passwords, hashes, tokens and secret configuration are never returned.
+      description: Requires administer_users. Results are limited by administrator capability and authorised-company scope. Customer and internal identity realms are returned separately. Passwords, hashes, tokens and secret configuration are never returned.
       responses:
         '200':
           description: Authorised account, company, role, assignment and configuration summaries
@@ -2283,7 +2283,7 @@ paths:
     put:
       operationId: setAdministrationAccountStatus
       summary: Activate or suspend an account
-      description: Requires administer_users, creates immutable audit evidence and prevents self-suspension of the active Administrator.
+      description: Requires administer_users plus the matching customer-contact or internal-account capability, creates immutable before/after audit evidence and prevents self-suspension of the active Administrator. Suspension requires recent step-up verification.
       parameters: [{ $ref: '#/components/parameters/UserId' }]
       requestBody:
         required: true
@@ -2291,10 +2291,12 @@ paths:
           application/json:
             schema:
               type: object
-              required: [status]
+              required: [status, reason]
               properties:
                 status: { type: string, enum: [active, suspended] }
-            example: { status: suspended }
+                reason: { type: string, minLength: 8, maxLength: 1000 }
+                verificationToken: { type: string, description: Short-lived server-issued step-up verification token; never a password. }
+            example: { status: suspended, reason: Approved security suspension, verificationToken: stepup_redacted }
       responses:
         '200': { description: Sanitised account with updated status }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -2304,7 +2306,7 @@ paths:
     put:
       operationId: setAdministrationCompanyRepresentative
       summary: Assign an approved representative to a customer company
-      description: Requires administer_users. Company and representative existence, branch policy and audit creation are server enforced.
+      description: Requires manage_customer_companies. Company scope, representative existence, branch policy, reason and immutable audit creation are server enforced.
       parameters: [{ $ref: '#/components/parameters/CompanyId' }]
       requestBody:
         required: true
@@ -2312,14 +2314,155 @@ paths:
           application/json:
             schema:
               type: object
-              required: [representativeId]
+              required: [representativeId, reason]
               properties:
                 representativeId: { type: string }
-            example: { representativeId: C-27 }
+                reason: { type: string, minLength: 8, maxLength: 1000 }
+            example: { representativeId: C-27, reason: Approved dedicated sales assignment }
       responses:
         '200': { description: Representative assignment saved and audited }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /administration/users/{userId}:
+    patch:
+      operationId: updateAdministrationUser
+      summary: Update approved customer-contact or internal-staff identity fields
+      description: Requires realm-specific capability. Role changes additionally require manage_roles_permissions and a recent step-up verification token. Realm and company membership cannot be changed through this operation.
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [values, reason]
+              properties:
+                values:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    displayName: { type: string, minLength: 2 }
+                    username: { type: string }
+                    email: { type: string, format: email }
+                    phone: { type: string }
+                    area: { type: string }
+                    branchId: { type: string, format: uuid }
+                    role: { $ref: '#/components/schemas/Role' }
+                reason: { type: string, minLength: 8, maxLength: 1000 }
+                verificationToken: { type: string }
+      responses:
+        '200': { description: Sanitised account and immutable audit reference }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /administration/users/{userId}/permissions:
+    put:
+      operationId: setAdministrationUserPermissions
+      summary: Set explicit permissions for an internal administrator or staff account
+      description: Requires manage_roles_permissions, separation-of-duties checks, a reason and recent step-up verification. Self-removal of administrative protection is blocked.
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permissions, reason, verificationToken]
+              properties:
+                permissions: { type: array, uniqueItems: true, items: { type: string } }
+                reason: { type: string, minLength: 8, maxLength: 1000 }
+                verificationToken: { type: string }
+      responses:
+        '200': { description: Effective permissions and immutable audit reference }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /administration/users/{userId}/notification-preferences:
+    put:
+      operationId: setAdministrationNotificationPreferences
+      summary: Update notification preferences for an authorised account
+      description: Requires manage_notification_preferences. Mandatory in-app security notifications remain enabled.
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [preferences, reason]
+              properties:
+                preferences: { type: object }
+                reason: { type: string, minLength: 8, maxLength: 1000 }
+      responses:
+        '200': { description: Updated preferences and immutable audit reference }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /administration/companies/{companyId}:
+    patch:
+      operationId: updateAdministrationCompany
+      summary: Update approved customer-company master data and branch assignment
+      description: Requires manage_customer_companies and authorised-company scope. Legal identifiers require a separately approved production workflow.
+      parameters: [{ $ref: '#/components/parameters/CompanyId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [values, reason]
+              properties:
+                values: { type: object }
+                reason: { type: string, minLength: 8, maxLength: 1000 }
+      responses:
+        '200': { description: Updated company and immutable audit reference }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /administration/catalogue/{catalogueKind}/{itemId}:
+    patch:
+      operationId: updateAdministrationCatalogueItem
+      summary: Update approved product or category information
+      description: Requires manage_products. Historical RFQ/order snapshots are not rewritten.
+      parameters:
+        - { name: catalogueKind, in: path, required: true, schema: { type: string, enum: [categories, products] } }
+        - { name: itemId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [values, reason]
+              properties:
+                values: { type: object }
+                reason: { type: string, minLength: 8, maxLength: 1000 }
+      responses:
+        '200': { description: Updated catalogue item and immutable audit reference }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /administration/workflow-records/{recordId}/corrections:
+    post:
+      operationId: createApprovedWorkflowRecordCorrection
+      summary: Append an approved RFQ or order reference-data correction
+      description: Requires correct_approved_records, expectedVersion, reason and recent step-up verification. Status, audit history, signed certificates, quotation versions and internal historical evidence are immutable.
+      parameters:
+        - { name: recordId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [values, expectedVersion, reason, verificationToken]
+              properties:
+                values: { type: object }
+                expectedVersion: { type: integer, minimum: 1 }
+                reason: { type: string, minLength: 8, maxLength: 1000 }
+                verificationToken: { type: string }
+      responses:
+        '200': { description: Corrected projection plus immutable correction/audit references }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/ApiError' }
         '422': { $ref: '#/components/responses/ApiError' }
 
 components:

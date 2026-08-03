@@ -688,6 +688,16 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   const writeCredentialChallenges = records => store.set(STORE_KEYS.credentialChallenges, records);
   const readCustomerRepresentativeAssignments = () => store.get(STORE_KEYS.customerRepresentativeAssignments, {});
   const writeCustomerRepresentativeAssignments = records => store.set(STORE_KEYS.customerRepresentativeAssignments, records);
+  const readAdministrationCatalogueOverrides = () => store.get(STORE_KEYS.administrationCatalogueOverrides, { categories: {}, products: {} });
+  const writeAdministrationCatalogueOverrides = records => store.set(STORE_KEYS.administrationCatalogueOverrides, records);
+  const effectiveCategories = () => {
+    const overrides = readAdministrationCatalogueOverrides().categories || {};
+    return categories.map(category => ({ ...category, ...(overrides[category.id] || {}) }));
+  };
+  const effectiveProducts = () => {
+    const overrides = readAdministrationCatalogueOverrides().products || {};
+    return products.map(product => ({ ...product, ...(overrides[product.id] || {}) }));
+  };
   const presentPersonalisation = record => {
     const images = readMockImages();
     const hydrate = image => image ? { ...image, previewUrl: images[image.id]?.dataUrl || '' } : null;
@@ -1316,6 +1326,9 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       }
       writeCustomerRepresentativeAssignments(assignments);
     }
+    if (!store.has(STORE_KEYS.administrationCatalogueOverrides)) {
+      writeAdministrationCatalogueOverrides({ categories: {}, products: {} });
+    }
 
     if (!store.has(STORE_KEYS.session)) {
       const legacySession = store.get(LEGACY_STORE_KEYS.session, null);
@@ -1575,16 +1588,16 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
 
   const productService = {
     async getCatalogue() {
-      return { categories: clone(categories), products: clone(products), recommendedCategories: clone(recommendedCategories) };
+      return { categories: clone(effectiveCategories()), products: clone(effectiveProducts()), recommendedCategories: clone(recommendedCategories) };
     },
 
     async list({ categoryId, query } = {}) {
       const term = String(query || '').trim().toLowerCase();
-      return clone(products.filter(product => (!categoryId || product.category === categoryId) && (!term || `${product.code} ${product.name} ${product.description} ${product.measuringRange}`.toLowerCase().includes(term))));
+      return clone(effectiveProducts().filter(product => product.status !== 'inactive' && (!categoryId || product.category === categoryId) && (!term || `${product.code} ${product.name} ${product.description} ${product.measuringRange}`.toLowerCase().includes(term))));
     },
 
     async getById(productId) {
-      const product = products.find(item => item.id === productId);
+      const product = effectiveProducts().find(item => item.id === productId && item.status !== 'inactive');
       if (!product) throw new ServiceError('That product could not be found.', { code: 'PRODUCT_NOT_FOUND', status: 404 });
       return clone(product);
     },
@@ -3632,16 +3645,67 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     },
   };
 
-  const requireAdministrator = () => {
+  const requireAdministrator = permission => {
     const account = requireAccount();
     if (!accountCan(account, PERMISSIONS.ADMINISTER_USERS)) {
       throw new ServiceError('Administrator access is required.', { code: 'FORBIDDEN', status: 403 });
     }
+    if (permission && !accountCan(account, permission)) {
+      throw new ServiceError('Your administrator account does not have this capability.', { code: 'FORBIDDEN', status: 403 });
+    }
     return account;
   };
 
-  const buildAdministrationOverview = () => {
-    const accountRecords = readAccounts();
+  const administrativeReason = value => {
+    const reason = String(value || '').trim();
+    if (reason.length < 8) throw new ServiceError('Enter a clear reason of at least 8 characters.', {
+      code: 'ADMIN_REASON_REQUIRED', status: 422, fieldErrors: { reason: 'Enter at least 8 characters.' },
+    });
+    return reason;
+  };
+
+  const verifyHighRiskAdministration = (actor, verification) => {
+    if (!verification || String(verification) !== String(actor.password || '')) {
+      throw new ServiceError('Administrator verification failed. Enter the current mock administrator password.', {
+        code: 'ADMIN_VERIFICATION_FAILED', status: 403, fieldErrors: { verification: 'Password confirmation is required.' },
+      });
+    }
+  };
+
+  const canAdministerCompany = (actor, companyId) => (
+    companyId === 'company-rhomberg'
+    || !Array.isArray(actor.authorisedCompanyIds)
+    || !actor.authorisedCompanyIds.length
+    || actor.authorisedCompanyIds.includes(companyId)
+  );
+
+  const administrationAudit = ({ actor, action, entityType, entityId, companyId = '', previousValue, newValue, reason, fieldsChanged }) => {
+    const occurredAt = now().toISOString();
+    appendAuditEvent({
+      id: makeId('audit'),
+      eventType: action.replace(/^administration\./, ''),
+      action,
+      outcome: 'success',
+      entityType,
+      entityId,
+      companyId,
+      actorId: actor.id,
+      actorDisplayName: actor.contact,
+      actorRole: actor.role,
+      fieldsChanged,
+      reason,
+      previousValue: clone(previousValue),
+      newValue: clone(newValue),
+      details: { previousValue: clone(previousValue), newValue: clone(newValue) },
+      immutable: true,
+      createdAt: occurredAt,
+    });
+    return occurredAt;
+  };
+
+  const buildAdministrationOverview = actor => {
+    const allAccountRecords = readAccounts();
+    const accountRecords = allAccountRecords.filter(item => canAdministerCompany(actor, item.companyId));
     const workflowRecords = readWorkflowState();
     const notificationRecords = readNotifications();
     const documentRecords = readOrderDocuments();
@@ -3654,6 +3718,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
           name: account.company,
           area: account.area,
           industry: account.industry,
+          branchId: account.branchId || '',
           contacts: 0,
           representativeId: assignments[account.companyId]?.representativeId || '',
         });
@@ -3681,6 +3746,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       users: accountRecords.map(item => ({
         ...toPublicAccount(item),
         category: item.role === USER_ROLES.CUSTOMER ? 'customer' : 'internal',
+        notificationPreferences: notificationPreferencesForAccount(item),
       })),
       companies: [...companyMap.values()],
       representatives: representatives.map(item => ({
@@ -3690,12 +3756,28 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         areas: item.areas || [],
       })),
       branches: branches.map(item => ({ id: item.id, name: item.name, role: item.role })),
+      areas: [...areas],
       roles: Object.values(USER_ROLES).map(role => ({
         id: role,
         label: role.replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase()),
         permissions: permissionsForRole(role),
       })),
       representativeAssignments: Object.values(assignments),
+      catalogue: {
+        categories: effectiveCategories().map(item => ({ id: item.id, number: item.number, name: item.name, short: item.short, description: item.description, status: item.status || 'active' })),
+        products: effectiveProducts().map(item => ({ id: item.id, code: item.code, name: item.name, category: item.category, description: item.description, status: item.status || 'active' })),
+      },
+      archivedRecords: workflowRecords.orders
+        .filter(item => item.retentionStatus === 'archived' && canAdministerCompany(actor, item.companyId))
+        .map(item => ({ id: item.id, reference: item.reference, company: item.company, archivedAt: item.archivedAt, legalHold: Boolean(item.legalHold?.active) })),
+      correctionRecords: [...workflowRecords.enquiries, ...workflowRecords.orders]
+        .filter(item => canAdministerCompany(actor, item.companyId))
+        .map(item => ({
+          id: item.id, workflowType: item.workflowType, reference: item.reference, companyId: item.companyId, company: item.company,
+          contact: item.contact, internalJobNumber: item.internalJobNumber || item.planning?.internalJobNumber || '',
+          customerPoNumber: item.customerPoNumber || item.poNumber || item.planning?.customerPoNumber || '',
+          trackingStatus: item.trackingStatus, version: item.version,
+        })),
       notificationDeliveryStatus,
       retentionPolicy: readRetentionPolicy(),
       configurations: {
@@ -3726,12 +3808,14 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
 
   const administration = {
     async getOverview() {
-      requireAdministrator();
-      return clone(buildAdministrationOverview());
+      const actor = requireAdministrator();
+      return clone(buildAdministrationOverview(actor));
     },
 
-    async setAccountStatus(accountId, status) {
-      const actor = requireAdministrator();
+    async setAccountStatus(accountId, input = {}) {
+      const actor = requireAdministrator(PERMISSIONS.ADMINISTER_USERS);
+      const status = String(input.status || '');
+      const reason = administrativeReason(input.reason);
       if (!['active', 'suspended'].includes(status)) {
         throw new ServiceError('Choose active or suspended.', {
           code: 'ACCOUNT_STATUS_INVALID',
@@ -3748,28 +3832,33 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const accountRecords = readAccounts();
       const index = accountRecords.findIndex(item => item.id === accountId);
       if (index < 0) throw new ServiceError('The account was not found.', { code: 'ACCOUNT_NOT_FOUND', status: 404 });
+      if (!canAdministerCompany(actor, accountRecords[index].companyId)) throw new ServiceError('The account is outside your authorised company scope.', { code: 'FORBIDDEN', status: 403 });
+      const permission = accountRecords[index].role === USER_ROLES.CUSTOMER ? PERMISSIONS.MANAGE_CUSTOMER_CONTACTS : PERMISSIONS.MANAGE_INTERNAL_ACCOUNTS;
+      if (!accountCan(actor, permission)) throw new ServiceError('Your administrator account cannot change this account realm.', { code: 'FORBIDDEN', status: 403 });
+      if (status === 'suspended') verifyHighRiskAdministration(actor, input.verification);
+      const previousValue = { status: accountRecords[index].status };
       const occurredAt = now().toISOString();
       accountRecords[index] = { ...accountRecords[index], status, updatedAt: occurredAt };
       writeAccounts(accountRecords);
-      appendAuditEvent({
-        id: makeId('audit'),
+      administrationAudit({
+        actor,
         action: 'administration.account_status_changed',
-        outcome: 'success',
         entityType: 'user',
         entityId: accountId,
         companyId: accountRecords[index].companyId,
-        actorId: actor.id,
-        actorRole: actor.role,
-        details: { status },
-        immutable: true,
-        createdAt: occurredAt,
+        previousValue,
+        newValue: { status },
+        fieldsChanged: ['status'],
+        reason,
       });
       return toPublicAccount(accountRecords[index]);
     },
 
-    async assignRepresentative(companyId, representativeId) {
-      const actor = requireAdministrator();
-      const company = buildAdministrationOverview().companies.find(item => item.id === companyId);
+    async assignRepresentative(companyId, input = {}) {
+      const actor = requireAdministrator(PERMISSIONS.MANAGE_CUSTOMER_COMPANIES);
+      const representativeId = String(input.representativeId || '');
+      const reason = administrativeReason(input.reason);
+      const company = buildAdministrationOverview(actor).companies.find(item => item.id === companyId);
       const representative = representativeById(representativeId);
       if (!company) throw new ServiceError('The customer company was not found.', { code: 'COMPANY_NOT_FOUND', status: 404 });
       if (!representative) throw new ServiceError('Choose a valid representative.', {
@@ -3779,6 +3868,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       });
       const occurredAt = now().toISOString();
       const assignments = readCustomerRepresentativeAssignments();
+      const previousValue = clone(assignments[companyId] || { representativeId: company.representativeId || '' });
       assignments[companyId] = {
         companyId,
         representativeId,
@@ -3787,20 +3877,163 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         source: 'administrator',
       };
       writeCustomerRepresentativeAssignments(assignments);
-      appendAuditEvent({
-        id: makeId('audit'),
+      administrationAudit({
+        actor,
         action: 'administration.company_representative_assigned',
-        outcome: 'success',
         entityType: 'company',
         entityId: companyId,
         companyId,
-        actorId: actor.id,
-        actorRole: actor.role,
-        details: { representativeId },
-        immutable: true,
-        createdAt: occurredAt,
+        previousValue,
+        newValue: clone(assignments[companyId]),
+        fieldsChanged: ['representativeId'],
+        reason,
       });
       return clone(assignments[companyId]);
+    },
+
+    async updateCompany(companyId, input = {}) {
+      const actor = requireAdministrator(PERMISSIONS.MANAGE_CUSTOMER_COMPANIES);
+      if (!canAdministerCompany(actor, companyId)) throw new ServiceError('The company is outside your authorised scope.', { code: 'FORBIDDEN', status: 403 });
+      const reason = administrativeReason(input.reason);
+      const accountRecords = readAccounts();
+      const indexes = accountRecords.map((item, index) => ({ item, index })).filter(entry => entry.item.companyId === companyId && entry.item.role === USER_ROLES.CUSTOMER);
+      if (!indexes.length) throw new ServiceError('The customer company was not found.', { code: 'COMPANY_NOT_FOUND', status: 404 });
+      const values = input.values || {};
+      const name = String(values.name || '').trim();
+      const area = String(values.area || '').trim();
+      const industry = String(values.industry || '').trim();
+      const branchId = String(values.branchId || '').trim();
+      if (name.length < 2 || !areas.includes(area) || !branches.some(branch => branch.id === branchId)) {
+        throw new ServiceError('Check the company name, area and branch.', { code: 'COMPANY_UPDATE_INVALID', status: 422 });
+      }
+      const previousValue = { name: indexes[0].item.company, area: indexes[0].item.area, industry: indexes[0].item.industry, branchId: indexes[0].item.branchId || '' };
+      const occurredAt = now().toISOString();
+      for (const entry of indexes) accountRecords[entry.index] = { ...entry.item, company: name, area, industry, branchId, updatedAt: occurredAt };
+      writeAccounts(accountRecords);
+      const newValue = { name, area, industry, branchId };
+      administrationAudit({ actor, action: 'administration.company_updated', entityType: 'company', entityId: companyId, companyId, previousValue, newValue, fieldsChanged: Object.keys(newValue).filter(key => newValue[key] !== previousValue[key]), reason });
+      return clone(newValue);
+    },
+
+    async updateAccount(accountId, input = {}) {
+      const actor = requireAdministrator(PERMISSIONS.ADMINISTER_USERS);
+      const reason = administrativeReason(input.reason);
+      const accountRecords = readAccounts();
+      const index = accountRecords.findIndex(item => item.id === accountId);
+      if (index < 0) throw new ServiceError('The account was not found.', { code: 'ACCOUNT_NOT_FOUND', status: 404 });
+      const current = accountRecords[index];
+      if (!canAdministerCompany(actor, current.companyId)) throw new ServiceError('The account is outside your authorised company scope.', { code: 'FORBIDDEN', status: 403 });
+      const customerRealm = current.role === USER_ROLES.CUSTOMER;
+      const requiredPermission = customerRealm ? PERMISSIONS.MANAGE_CUSTOMER_CONTACTS : PERMISSIONS.MANAGE_INTERNAL_ACCOUNTS;
+      if (!accountCan(actor, requiredPermission)) throw new ServiceError('Your administrator account cannot edit this account realm.', { code: 'FORBIDDEN', status: 403 });
+      const values = input.values || {};
+      const next = {
+        ...current,
+        contact: String(values.contact ?? current.contact).trim(),
+        email: String(values.email ?? current.email).trim().toLowerCase(),
+        signInName: String(values.signInName ?? current.signInName ?? '').trim(),
+        phone: String(values.phone ?? current.phone ?? '').trim(),
+        area: String(values.area ?? current.area ?? '').trim(),
+        branchId: String(values.branchId ?? current.branchId ?? '').trim(),
+      };
+      if (next.contact.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next.email)) throw new ServiceError('Enter a valid name and email address.', { code: 'ACCOUNT_UPDATE_INVALID', status: 422 });
+      if (next.branchId && !branches.some(branch => branch.id === next.branchId)) throw new ServiceError('Choose a valid branch.', { code: 'ACCOUNT_BRANCH_INVALID', status: 422 });
+      if (accountRecords.some(item => item.id !== accountId && (item.email.toLowerCase() === next.email || next.signInName && item.signInName?.toLowerCase() === next.signInName.toLowerCase()))) {
+        throw new ServiceError('That email address or username is already in use.', { code: 'ACCOUNT_IDENTITY_CONFLICT', status: 409 });
+      }
+      if (!customerRealm && values.role && values.role !== current.role) {
+        requireAdministrator(PERMISSIONS.MANAGE_ROLES_PERMISSIONS);
+        verifyHighRiskAdministration(actor, input.verification);
+        if (!Object.values(USER_ROLES).includes(values.role) || values.role === USER_ROLES.CUSTOMER) throw new ServiceError('Choose a valid internal role.', { code: 'ACCOUNT_ROLE_INVALID', status: 422 });
+        next.role = values.role;
+        delete next.permissions;
+      }
+      const editableFields = ['contact', 'email', 'signInName', 'phone', 'area', 'branchId', 'role'];
+      const previousValue = Object.fromEntries(editableFields.map(key => [key, current[key] || '']));
+      const newValue = Object.fromEntries(editableFields.map(key => [key, next[key] || '']));
+      const fieldsChanged = editableFields.filter(key => previousValue[key] !== newValue[key]);
+      if (!fieldsChanged.length) throw new ServiceError('No account changes were supplied.', { code: 'NO_CHANGES', status: 422 });
+      next.updatedAt = now().toISOString();
+      accountRecords[index] = next;
+      writeAccounts(accountRecords);
+      administrationAudit({ actor, action: 'administration.account_updated', entityType: 'user', entityId: accountId, companyId: next.companyId, previousValue, newValue, fieldsChanged, reason });
+      return toPublicAccount(next);
+    },
+
+    async setAccountPermissions(accountId, input = {}) {
+      const actor = requireAdministrator(PERMISSIONS.MANAGE_ROLES_PERMISSIONS);
+      const reason = administrativeReason(input.reason);
+      verifyHighRiskAdministration(actor, input.verification);
+      if (accountId === actor.id) throw new ServiceError('Use a second authorised administrator to change your own permissions.', { code: 'SELF_PERMISSION_CHANGE_BLOCKED', status: 409 });
+      const accountRecords = readAccounts();
+      const index = accountRecords.findIndex(item => item.id === accountId && item.role !== USER_ROLES.CUSTOMER);
+      if (index < 0) throw new ServiceError('The internal account was not found.', { code: 'ACCOUNT_NOT_FOUND', status: 404 });
+      const requested = [...new Set(Array.isArray(input.permissions) ? input.permissions : [])];
+      if (requested.some(permission => !Object.values(PERMISSIONS).includes(permission))) throw new ServiceError('One or more permissions are invalid.', { code: 'PERMISSION_INVALID', status: 422 });
+      const required = [PERMISSIONS.ACCESS_INTERNAL_WORKSPACE];
+      const nextPermissions = [...new Set([...required, ...requested])];
+      const previousValue = { permissions: toPublicAccount(accountRecords[index]).permissions };
+      accountRecords[index] = { ...accountRecords[index], permissions: nextPermissions, updatedAt: now().toISOString() };
+      writeAccounts(accountRecords);
+      administrationAudit({ actor, action: 'administration.account_permissions_changed', entityType: 'user', entityId: accountId, companyId: accountRecords[index].companyId, previousValue, newValue: { permissions: nextPermissions }, fieldsChanged: ['permissions'], reason });
+      return toPublicAccount(accountRecords[index]);
+    },
+
+    async updateNotificationPreferences(accountId, input = {}) {
+      const actor = requireAdministrator(PERMISSIONS.MANAGE_NOTIFICATION_PREFERENCES);
+      const reason = administrativeReason(input.reason);
+      const target = readAccounts().find(item => item.id === accountId && canAdministerCompany(actor, item.companyId));
+      if (!target) throw new ServiceError('The account was not found.', { code: 'ACCOUNT_NOT_FOUND', status: 404 });
+      const records = readNotificationPreferenceRecords();
+      const previousValue = notificationPreferencesForAccount(target);
+      const next = normaliseNotificationPreferences({ ...input.preferences, updatedAt: now().toISOString() });
+      records[accountId] = next;
+      writeNotificationPreferenceRecords(records);
+      administrationAudit({ actor, action: 'administration.notification_preferences_changed', entityType: 'user_preference', entityId: accountId, companyId: target.companyId, previousValue, newValue: next, fieldsChanged: ['channels', 'categories'], reason });
+      return clone(next);
+    },
+
+    async saveCatalogueItem(kind, itemId, input = {}) {
+      const actor = requireAdministrator(PERMISSIONS.MANAGE_PRODUCTS);
+      const reason = administrativeReason(input.reason);
+      if (!['category', 'product'].includes(kind)) throw new ServiceError('Choose a catalogue category or product.', { code: 'CATALOGUE_KIND_INVALID', status: 422 });
+      const collection = kind === 'category' ? effectiveCategories() : effectiveProducts();
+      const current = collection.find(item => item.id === itemId);
+      if (!current) throw new ServiceError('The catalogue item was not found.', { code: 'CATALOGUE_ITEM_NOT_FOUND', status: 404 });
+      const allowedFields = kind === 'category' ? ['name', 'short', 'description', 'status'] : ['code', 'name', 'category', 'description', 'status'];
+      const values = Object.fromEntries(allowedFields.map(key => [key, String(input.values?.[key] ?? current[key] ?? '').trim()]));
+      if (values.name.length < 2 || values.description.length < 5 || !['active', 'inactive'].includes(values.status)) throw new ServiceError('Check the catalogue name, description and status.', { code: 'CATALOGUE_ITEM_INVALID', status: 422 });
+      if (kind === 'product' && !effectiveCategories().some(category => category.id === values.category)) throw new ServiceError('Choose a valid product category.', { code: 'PRODUCT_CATEGORY_INVALID', status: 422 });
+      const overrides = readAdministrationCatalogueOverrides();
+      const bucket = kind === 'category' ? 'categories' : 'products';
+      overrides[bucket] = { ...(overrides[bucket] || {}), [itemId]: values };
+      writeAdministrationCatalogueOverrides(overrides);
+      const previousValue = Object.fromEntries(allowedFields.map(key => [key, current[key] || '']));
+      administrationAudit({ actor, action: `administration.catalogue_${kind}_updated`, entityType: `catalogue_${kind}`, entityId: itemId, companyId: actor.companyId, previousValue, newValue: values, fieldsChanged: allowedFields.filter(key => previousValue[key] !== values[key]), reason });
+      return clone({ ...current, ...values });
+    },
+
+    async correctRecord(recordId, input = {}) {
+      const actor = requireAdministrator(PERMISSIONS.CORRECT_APPROVED_RECORDS);
+      const reason = administrativeReason(input.reason);
+      verifyHighRiskAdministration(actor, input.verification);
+      const state = readWorkflowState();
+      const located = locateWorkflowRecord(state, recordId);
+      if (!located || !canAdministerCompany(actor, located.record.companyId)) throw new ServiceError('The RFQ or order was not found in your authorised scope.', { code: 'WORKFLOW_RECORD_NOT_FOUND', status: 404 });
+      if (Number(input.expectedVersion) !== Number(located.record.version)) throw new ServiceError('This record changed. Refresh before applying the correction.', { code: 'VERSION_CONFLICT', status: 409 });
+      const forbidden = ['trackingStatus', 'trackingHistory', 'quotation', 'quotationHistory', 'certificates', 'laboratory', 'audit', 'internalNotes'];
+      if (forbidden.some(key => Object.hasOwn(input.values || {}, key))) throw new ServiceError('Signed certificates, workflow state, quotation history and audit data cannot be corrected here.', { code: 'IMMUTABLE_FIELD', status: 409 });
+      const allowed = located.entityType === 'order' ? ['contact', 'internalJobNumber', 'customerPoNumber'] : ['contact'];
+      const supplied = Object.keys(input.values || {});
+      if (!supplied.length || supplied.some(key => !allowed.includes(key))) throw new ServiceError('Only approved reference and contact fields may be corrected.', { code: 'CORRECTION_FIELD_INVALID', status: 422 });
+      const previousValue = Object.fromEntries(supplied.map(key => [key, located.record[key] || '']));
+      const newValue = Object.fromEntries(supplied.map(key => [key, String(input.values[key] || '').trim()]));
+      if (Object.values(newValue).some(value => value.length < 2)) throw new ServiceError('Corrected values must be meaningful.', { code: 'CORRECTION_VALUE_INVALID', status: 422 });
+      const updated = { ...located.record, ...newValue, version: Number(located.record.version) + 1, updatedAt: now().toISOString() };
+      located.collection[located.index] = updated;
+      writeWorkflowState(state);
+      administrationAudit({ actor, action: 'administration.approved_record_corrected', entityType: located.entityType, entityId: updated.id, companyId: updated.companyId, previousValue, newValue, fieldsChanged: supplied, reason });
+      return clone(presentRecord(actor, updated));
     },
 
     async resetDemoData() {
@@ -3817,6 +4050,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         STORE_KEYS.notificationPreferences,
         STORE_KEYS.certificateFiles,
         STORE_KEYS.customerRepresentativeAssignments,
+        STORE_KEYS.administrationCatalogueOverrides,
         STORE_KEYS.rfqSequence,
         STORE_KEYS.seedVersion,
       ]) store.remove(key);
@@ -3834,7 +4068,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         immutable: true,
         createdAt: now().toISOString(),
       });
-      return clone(buildAdministrationOverview());
+      return clone(buildAdministrationOverview(actor));
     },
   };
 

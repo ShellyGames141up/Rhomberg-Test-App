@@ -10,6 +10,8 @@ The IT handover adds Administrator contracts for a sanitised system overview, au
 - `PUT /administration/users/{userId}/status`
 - `PUT /administration/companies/{companyId}/representative`
 
+The secure Administrator extension additionally defines realm-scoped user/company updates, explicit internal permission assignments, notification-preference administration, catalogue/category updates and append-only RFQ/order corrections. High-risk production requests use a short-lived step-up verification token rather than submitting a password as business data. Canonical definitions are in `docs/api/openapi.yaml`; audit evidence records previous and new values.
+
 Executive Demo role switching and fabricated-data reset are intentionally not production API operations.
 
 Restricted commercial reporting adds these future contracts:

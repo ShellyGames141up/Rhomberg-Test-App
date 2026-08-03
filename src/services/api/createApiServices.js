@@ -308,14 +308,22 @@ export function createApiServices(config = {}) {
 
   const administration = {
     getOverview: () => client.get('/administration/overview'),
-    setAccountStatus: (accountId, status) => client.put(
+    setAccountStatus: (accountId, input) => client.put(
       `/administration/users/${encodeURIComponent(accountId)}/status`,
-      { status },
+      input,
     ),
-    assignRepresentative: (companyId, representativeId) => client.put(
+    assignRepresentative: (companyId, input) => client.put(
       `/administration/companies/${encodeURIComponent(companyId)}/representative`,
-      { representativeId },
+      input,
     ),
+    updateCompany: (companyId, input) => client.patch(`/administration/companies/${encodeURIComponent(companyId)}`, input),
+    updateAccount: (accountId, input) => client.patch(`/administration/users/${encodeURIComponent(accountId)}`, input),
+    setAccountPermissions: (accountId, input) => client.put(`/administration/users/${encodeURIComponent(accountId)}/permissions`, input),
+    updateNotificationPreferences: (accountId, input) => client.put(`/administration/users/${encodeURIComponent(accountId)}/notification-preferences`, input),
+    saveCatalogueItem: (kind, itemId, input) => client.patch(`/administration/catalogue/${encodeURIComponent(kind)}s/${encodeURIComponent(itemId)}`, input),
+    correctRecord: (recordId, input) => client.post(`/administration/workflow-records/${encodeURIComponent(recordId)}/corrections`, input, {
+      headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `administration-correction-${Date.now()}` },
+    }),
     resetDemoData: () => {
       throw new ServiceError('Fabricated-data reset controls are not available in the private-cloud application.', {
         code: 'PREVIEW_ONLY_OPERATION',

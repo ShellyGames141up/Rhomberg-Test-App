@@ -1,5 +1,7 @@
 # Phase 21 database schema guide
 
+The secure Administrator extension adds usernames and branch assignments to identities, customer-company branch assignment, short-lived step-up verification sessions, generic administrative change evidence, explicit previous/new audit values and append-only approved RFQ/order correction rows. See [ADMINISTRATOR_MANAGEMENT.md](ADMINISTRATOR_MANAGEMENT.md).
+
 The executable design proposal is [database/postgresql-schema.sql](database/postgresql-schema.sql). It is not connected to the preview and must be reviewed/migrated by IT.
 
 Phase 21 adds `order_routing`, `lab_tasks`, `calibration_units`, `certificate_requirements`, `certificates`, `certificate_versions`, `lab_events`, `lab_monthly_metrics`, `qa_tasks`, `qa_inspections`, `qa_failures`, `qa_rework_cycles`, `qa_events`, `qa_monthly_metrics`, `department_receipts`, `verification_codes`, `credential_change_requests`, `product_statistics`, `representative_statistics` and `operational_metrics`.

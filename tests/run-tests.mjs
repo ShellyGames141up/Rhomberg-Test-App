@@ -11,6 +11,7 @@ await import('./order-documents.test.mjs');
 await import('./retention.test.mjs');
 await import('./management.test.mjs');
 await import('./management-commercial.test.mjs');
+await import('./administration-management.test.mjs');
 await import('./validation-errors.test.mjs');
 await import('./mock-services.test.mjs');
 await import('./end-to-end-demo.test.mjs');

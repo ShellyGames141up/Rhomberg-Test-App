@@ -93,11 +93,16 @@ CREATE TABLE app.branches (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE app.companies
+  ADD COLUMN branch_id uuid REFERENCES app.branches(id);
+
 CREATE TABLE app.users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  username citext UNIQUE,
   email citext NOT NULL UNIQUE,
   display_name text NOT NULL,
   phone text,
+  branch_id uuid REFERENCES app.branches(id),
   role app.user_role NOT NULL,
   status app.record_status NOT NULL DEFAULT 'pending',
   password_hash text,
@@ -112,6 +117,18 @@ CREATE TABLE app.users (
   CONSTRAINT users_password_or_external_identity CHECK (
     password_hash IS NOT NULL OR (identity_provider IS NOT NULL AND external_subject IS NOT NULL)
   )
+);
+
+CREATE TABLE app.administration_step_up_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES app.users(id) ON DELETE CASCADE,
+  method text NOT NULL CHECK (method IN ('password', 'totp', 'webauthn', 'identity_provider_mfa')),
+  purpose text NOT NULL,
+  verified_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL,
+  consumed_at timestamptz,
+  request_id text NOT NULL,
+  CHECK (expires_at > verified_at)
 );
 
 CREATE TABLE app.permissions (
@@ -510,6 +527,8 @@ CREATE TABLE app.workflow_events (
   actor_user_id uuid REFERENCES app.users(id),
   actor_role text NOT NULL CHECK (actor_role IN ('customer', 'sales_representative', 'planning', 'expeditor', 'dispatch', 'buyer', 'manager', 'administrator', 'system')),
   comment text,
+  previous_value jsonb NOT NULL DEFAULT '{}'::jsonb,
+  new_value jsonb NOT NULL DEFAULT '{}'::jsonb,
   customer_description text NOT NULL,
   internal_description text NOT NULL,
   customer_visible boolean NOT NULL DEFAULT false,
@@ -849,6 +868,52 @@ $$;
 CREATE TRIGGER audit_events_immutable
 BEFORE UPDATE OR DELETE ON app.audit_events
 FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+
+CREATE TABLE app.administration_change_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  change_type text NOT NULL,
+  target_entity_type text NOT NULL,
+  target_entity_id text NOT NULL,
+  company_id uuid REFERENCES app.companies(id),
+  requested_by_user_id uuid NOT NULL REFERENCES app.users(id),
+  requested_by_role app.user_role NOT NULL,
+  reason text NOT NULL CHECK (length(trim(reason)) >= 8),
+  previous_value jsonb NOT NULL DEFAULT '{}'::jsonb,
+  requested_value jsonb NOT NULL DEFAULT '{}'::jsonb,
+  required_permission text NOT NULL REFERENCES app.permissions(code),
+  step_up_session_id uuid REFERENCES app.administration_step_up_sessions(id),
+  status text NOT NULL DEFAULT 'applied' CHECK (status IN ('pending_approval', 'approved', 'rejected', 'applied', 'failed')),
+  audit_event_id bigint NOT NULL REFERENCES app.audit_events(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  decided_at timestamptz
+);
+
+CREATE TABLE app.approved_record_corrections (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  enquiry_id uuid REFERENCES app.enquiries(id),
+  order_id uuid REFERENCES app.orders(id),
+  expected_row_version integer NOT NULL CHECK (expected_row_version > 0),
+  fields_changed jsonb NOT NULL CHECK (jsonb_typeof(fields_changed) = 'array'),
+  previous_value jsonb NOT NULL,
+  corrected_value jsonb NOT NULL,
+  reason text NOT NULL CHECK (length(trim(reason)) >= 8),
+  corrected_by_user_id uuid NOT NULL REFERENCES app.users(id),
+  step_up_session_id uuid NOT NULL REFERENCES app.administration_step_up_sessions(id),
+  audit_event_id bigint NOT NULL REFERENCES app.audit_events(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT approved_record_correction_parent CHECK (num_nonnulls(enquiry_id, order_id) = 1)
+);
+
+CREATE OR REPLACE FUNCTION app.reject_approved_correction_mutation()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'approved_record_corrections are append-only';
+END;
+$$;
+
+CREATE TRIGGER approved_record_corrections_immutable
+BEFORE UPDATE OR DELETE ON app.approved_record_corrections
+FOR EACH ROW EXECUTE FUNCTION app.reject_approved_correction_mutation();
 
 CREATE TABLE app.order_retention_exports (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -65,6 +65,6 @@ The table is explanatory. `src/services/contracts.js`, service scoping and workf
 
 ## Administrator workspace and Executive Demo
 
-The Administrator desktop workspace is opened by the reusable `administration` navigation permission. It calls the administration service for account status, company assignment, configuration summaries and demo reset actions; components do not perform direct role-name checks or browser-storage writes.
+The Administrator desktop workspace is opened by `administer_users`. Mutations then require separate capabilities for customer companies, customer contacts, internal staff, roles/permissions, notification preferences, catalogue data and approved record corrections. An Administrator account may carry only a subset; the role name alone does not grant a mutation. Components never perform browser-storage writes. See [ADMINISTRATOR_MANAGEMENT.md](ADMINISTRATOR_MANAGEMENT.md).
 
 The Executive Workflow Demo is a mock-only presentation layer. Its eleven switchable role perspectives reuse the canonical permission catalogue and existing workspaces. Switching a demonstration role does not grant any new permission, and all fabricated role/scenario markers are excluded from production builds.

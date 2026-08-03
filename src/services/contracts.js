@@ -81,6 +81,12 @@ export const PERMISSIONS = Object.freeze({
   MANAGE_LEGAL_HOLD: 'manage_legal_hold',
   MANAGE_RETENTION_POLICY: 'manage_retention_policy',
   ADMINISTER_USERS: 'administer_users',
+  MANAGE_CUSTOMER_COMPANIES: 'manage_customer_companies',
+  MANAGE_CUSTOMER_CONTACTS: 'manage_customer_contacts',
+  MANAGE_INTERNAL_ACCOUNTS: 'manage_internal_accounts',
+  MANAGE_ROLES_PERMISSIONS: 'manage_roles_permissions',
+  MANAGE_NOTIFICATION_PREFERENCES: 'manage_notification_preferences',
+  CORRECT_APPROVED_RECORDS: 'correct_approved_records',
   OVERRIDE_WORKFLOW: 'override_workflow',
   APPROVE_WORKFLOW_OVERRIDE: 'approve_workflow_override',
   APPROVE_ARCHIVAL: 'approve_archival',
@@ -390,7 +396,12 @@ export const toPublicAccount = account => {
     verificationCode: _verificationCode,
     ...safeAccount
   } = account;
-  return { ...safeAccount, permissions: permissionsForRole(safeAccount.role) };
+  return {
+    ...safeAccount,
+    permissions: Array.isArray(safeAccount.permissions)
+      ? [...safeAccount.permissions]
+      : permissionsForRole(safeAccount.role),
+  };
 };
 
 export const friendlyServiceError = (error, fallback = 'Something went wrong. Please try again.') => {

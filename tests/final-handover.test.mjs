@@ -84,7 +84,7 @@ await assert.rejects(
 await reopened.auth.signOut();
 await reopened.auth.signIn({ email: ADMINISTRATOR_ACCOUNT.email, password: ADMINISTRATOR_ACCOUNT.password });
 const target = overview.users.find(user => user.role === USER_ROLES.LABORATORY_USER);
-await reopened.administration.setAccountStatus(target.id, 'suspended');
+await reopened.administration.setAccountStatus(target.id, { status: 'suspended', reason: 'Approved fabricated suspension test.', verification: ADMINISTRATOR_ACCOUNT.password });
 await reopened.auth.signOut();
 await assert.rejects(
   () => reopened.auth.signIn({ email: LAB_ACCOUNT.email, password: LAB_ACCOUNT.password }),
@@ -92,7 +92,7 @@ await assert.rejects(
   'a suspended fabricated account must not sign in',
 );
 await reopened.executiveDemo.switchRole(USER_ROLES.ADMINISTRATOR);
-await reopened.administration.setAccountStatus(target.id, 'active');
+await reopened.administration.setAccountStatus(target.id, { status: 'active', reason: 'Restore the fabricated account after the test.' });
 await reopened.administration.resetDemoData();
 const resetAudit = JSON.parse(storage.getItem(STORE_KEYS.audit));
 assert.ok(resetAudit.some(event => event.action === 'administration.demo_data_reset'));
