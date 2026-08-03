@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { statusById } from '../domain/tracking.js';
+import { readRhombergQuotationPdf } from '../domain/quotationPdf.js';
 import {
   DISPATCH_ACTIONS,
   DispatchFields,
@@ -141,6 +142,40 @@ export function WorkflowActionPanel({
 function WorkflowActionFields({ action, data, onChange, errors = {}, record, account, planningOptions, expeditingOptions, dispatchOptions }) {
   if (!action) return null;
   const set = (key, value) => onChange(current => ({ ...current, [key]: value }));
+  const readQuotationFile = async event => {
+    const file = event.target.files?.[0] || null;
+    onChange(current => ({
+      ...current,
+      quotationDocumentFile: file,
+      quotationPdfReadStatus: file?.type === 'application/pdf' || /\.pdf$/i.test(file?.name || '') ? 'reading' : '',
+      quotationPdfReadMessage: '',
+    }));
+    if (!file || !(file.type === 'application/pdf' || /\.pdf$/i.test(file.name || ''))) return;
+    try {
+      const details = await readRhombergQuotationPdf(file);
+      onChange(current => ({
+        ...current,
+        quotationNumber: details.quoteNumber || current.quotationNumber || '',
+        quotationDate: details.quotationDate || current.quotationDate || '',
+        quotationExpiryMode: details.expiryDate ? 'dated' : current.quotationExpiryMode || 'not_applicable',
+        quotationExpiryDate: details.expiryDate || current.quotationExpiryDate || '',
+        quotationCommercialTotal: details.commercialTotal,
+        quotationCurrency: details.currency,
+        quotationSubtotal: details.subtotal,
+        quotationVatTotal: details.vatTotal,
+        quotationExtractionStatus: details.extractionStatus,
+        quotationExtractionConfidence: details.extractionConfidence,
+        quotationPdfReadStatus: 'ready',
+        quotationPdfReadMessage: `Read ${details.quoteNumber || 'quotation'} - total ZAR ${details.commercialTotal.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}. Please verify before saving.`,
+      }));
+    } catch (readError) {
+      onChange(current => ({
+        ...current,
+        quotationPdfReadStatus: 'review_required',
+        quotationPdfReadMessage: readError?.message || 'The quotation PDF could not be read. Enter and verify the total manually.',
+      }));
+    }
+  };
   if (usesExpeditingFields(record, action.action)) {
     return <ExpeditingFields action={action.action} record={record} options={expeditingOptions} data={data} onChange={onChange} errors={errors} />;
   }
@@ -189,7 +224,7 @@ function WorkflowActionFields({ action, data, onChange, errors = {}, record, acc
     const hasDocumentEvidence = Boolean(data.quotationDocumentFile || String(data.quotationDocumentReference || '').trim());
     return (
       <div className="quotation-confirmation-fields">
-        <p className="workflow-helper quote-workflow-helper"><strong>Outlook remains the delivery channel.</strong> Record only the quotation confirmation here. Pricing is intentionally excluded from the app.</p>
+        <p className="workflow-helper quote-workflow-helper"><strong>Outlook remains the delivery channel.</strong> Upload the sent Rhomberg quotation PDF so the quote number, dates and TOTAL ZAR can be read for restricted Owner and Sales Manager analytics. Customers and ordinary operational roles never receive this commercial value.</p>
         <div className="form-grid">
           <label className="form-field"><span>Quotation number</span><input value={data.quotationNumber || ''} onChange={event => set('quotationNumber', event.target.value)} placeholder="Example: Q-TEST-1001" />{errors.quotationNumber && <small className="field-error">{errors.quotationNumber}</small>}</label>
           <label className="form-field"><span>Quotation date</span><input type="date" value={data.quotationDate || ''} onInput={event => set('quotationDate', event.target.value)} onChange={event => set('quotationDate', event.target.value)} />{errors.quotationDate && <small className="field-error">{errors.quotationDate}</small>}</label>
@@ -203,7 +238,11 @@ function WorkflowActionFields({ action, data, onChange, errors = {}, record, acc
         </div>
         <div className="quotation-document-fields">
           <label className="form-field"><span>Quotation document reference <i>Optional</i></span><input value={data.quotationDocumentReference || ''} onChange={event => set('quotationDocumentReference', event.target.value)} placeholder="Outlook message ID, SharePoint reference or file reference" />{errors.quotationDocumentReference && <small className="field-error">{errors.quotationDocumentReference}</small>}</label>
-          <label className="form-field quote-file-field"><span>Quotation copy <i>Optional</i></span><input type="file" accept=".pdf,.doc,.docx,image/*" onChange={event => set('quotationDocumentFile', event.target.files?.[0] || null)} />{data.quotationDocumentFile && <small>{data.quotationDocumentFile.name} · {Math.ceil(Number(data.quotationDocumentFile.size || 0) / 1024)} KB</small>}{errors.quotationDocumentFile && <small className="field-error">{errors.quotationDocumentFile}</small>}</label>
+          <label className="form-field quote-file-field"><span>Sent quotation PDF <b>Recommended</b></span><input type="file" accept=".pdf,application/pdf" onChange={readQuotationFile} />{data.quotationDocumentFile && <small>{data.quotationDocumentFile.name} · {Math.ceil(Number(data.quotationDocumentFile.size || 0) / 1024)} KB</small>}{errors.quotationDocumentFile && <small className="field-error">{errors.quotationDocumentFile}</small>}</label>
+        </div>
+        <div className={`quotation-value-review is-${data.quotationPdfReadStatus || 'manual'}`} role="status">
+          <label className="form-field"><span>Total quotation value (ZAR, including VAT) <b>Verify</b></span><input type="number" min="0.01" max="999999999.99" step="0.01" value={data.quotationCommercialTotal || ''} onChange={event => set('quotationCommercialTotal', event.target.value)} placeholder="Example: 37087.50" />{errors.quotationCommercialTotal && <small className="field-error">{errors.quotationCommercialTotal}</small>}</label>
+          <p><strong>{data.quotationPdfReadStatus === 'reading' ? 'Reading quotation PDF…' : data.quotationPdfReadStatus === 'ready' ? 'PDF fields found' : data.quotationPdfReadStatus === 'review_required' ? 'Manual review required' : 'Awaiting quotation PDF'}</strong><small>{data.quotationPdfReadMessage || 'The stored total is restricted to authorised commercial analytics and audited PDF reporting.'}</small></p>
         </div>
         <label className={`choice-row quote-customer-document ${!hasDocumentEvidence ? 'is-disabled' : ''}`}><input type="checkbox" disabled={!hasDocumentEvidence} checked={Boolean(data.quotationDocumentCustomerVisible && hasDocumentEvidence)} onChange={event => set('quotationDocumentCustomerVisible', event.target.checked)} /><span><strong>Authorise this document/reference for the customer</strong><small>Without this explicit approval, no quotation document or reference is shown in the customer app.</small></span></label>
       </div>

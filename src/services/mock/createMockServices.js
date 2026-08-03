@@ -70,6 +70,11 @@ import {
   buildManagementDashboard,
   createOperationalReportCsv,
 } from '../../domain/management.js';
+import {
+  generateManagementPdfReport,
+  validateManagementReportOptions,
+} from '../../domain/managementReports.js';
+import { resolveManagementPeriod } from '../../domain/salesAnalytics.js';
 import { PLANNING_PRIORITIES } from '../../domain/planningQueue.js';
 import {
   createDeniedWorkflowAudit,
@@ -2538,6 +2543,19 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     },
   };
 
+  const commercialReportingRoles = new Set([USER_ROLES.COMPANY_OWNER, USER_ROLES.SALES_MANAGER]);
+  const canUseCommercialReporting = account => (
+    commercialReportingRoles.has(account?.role)
+    && accountCan(account, PERMISSIONS.VIEW_COMMERCIAL_ANALYTICS)
+  );
+  const reportRecordDate = record => String(
+    record.quotation?.date
+    || record.quotedAt
+    || record.acceptedAt
+    || record.createdAt
+    || '',
+  ).slice(0, 10);
+
   const management = {
     async getDashboard(filters = {}) {
       const account = requireAccount();
@@ -2561,7 +2579,33 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         status: filters.status,
         branch: filters.branch,
         now: now(),
+        includeSalesPerformance: canUseCommercialReporting(account),
+        salesOptions: {
+          periodMode: filters.periodMode || 'rolling_months',
+          rollingMonths: filters.rollingMonths || 12,
+          startDate: filters.startDate,
+          endDate: filters.endDate,
+          representativeId: filters.representativeId || 'all',
+          branchId: filters.branch || 'all',
+        },
       }));
+    },
+
+    async getPerformanceReportOptions() {
+      const account = requireAccount();
+      if (!canUseCommercialReporting(account)) {
+        throw new ServiceError('Only the Company Owner and Sales Manager can configure commercial performance reports.', { code: 'FORBIDDEN', status: 403 });
+      }
+      return clone({
+        representatives: representatives.map(representative => ({
+          id: representative.id,
+          name: representative.name,
+          branchId: representative.branchId,
+          branchName: branches.find(branch => branch.id === representative.branchId)?.name || representative.branchId,
+        })),
+        branches: branches.map(branch => ({ id: branch.id, name: branch.name })),
+        rollingMonthOptions: [1, 3, 6, 12, 24, 36],
+      });
     },
 
     async getRepresentativeOptions() {
@@ -2740,6 +2784,97 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
           mimeType: report.mimeType,
           classification: report.classification,
         }],
+        createdAt: generatedAt,
+      });
+      return clone(report);
+    },
+
+    async exportPerformancePdf(input = {}) {
+      const account = requireAccount();
+      if (!canUseCommercialReporting(account) || !accountCan(account, PERMISSIONS.EXPORT_MANAGEMENT_PDF)) {
+        throw new ServiceError('Only the Company Owner and Sales Manager can export this commercial performance PDF.', { code: 'FORBIDDEN', status: 403 });
+      }
+      let options;
+      let period;
+      try {
+        options = validateManagementReportOptions(input);
+        period = resolveManagementPeriod(options, now());
+      } catch (validationError) {
+        throw new ServiceError(validationError.message, { code: 'MANAGEMENT_REPORT_INVALID', status: 422 });
+      }
+      const authorisedRecords = readAllRecords().filter(record => canReadRecord(account, record));
+      const scopedRecords = authorisedRecords
+        .filter(record => options.representativeId === 'all' || record.selectedRep?.id === options.representativeId)
+        .filter(record => options.branchId === 'all' || record.selectedRep?.branchId === options.branchId)
+        .filter(record => {
+          const key = reportRecordDate(record);
+          return key && key >= period.startDate && key <= period.endDate;
+        });
+      const auditEvents = readAuditEvents().map(presentAuditEvent).filter(event => {
+        if (!event.company?.id) return true;
+        return canReadRecord(account, {
+          workflowType: event.entityType === 'order' ? 'order' : 'rfq',
+          companyId: event.company.id,
+        });
+      });
+      const dashboard = buildManagementDashboard({
+        records: scopedRecords,
+        salesRecords: authorisedRecords,
+        auditEvents,
+        now: now(),
+        includeSalesPerformance: true,
+        salesOptions: options,
+      });
+      const generatedAt = now().toISOString();
+      const bytesBase64 = await generateManagementPdfReport({
+        dashboard,
+        options,
+        generatedAt,
+        generatedBy: account.contact,
+        roleLabel: account.role === USER_ROLES.COMPANY_OWNER ? 'Company Owner' : 'Sales Manager',
+      });
+      const report = {
+        id: makeId('management-performance-report'),
+        fileName: `rhomberg-management-performance-${period.startDate}-to-${period.endDate}.pdf`,
+        mimeType: 'application/pdf',
+        classification: 'RESTRICTED MANAGEMENT REPORT',
+        generatedAt,
+        generatedBy: { id: account.id, displayName: account.contact, role: account.role },
+        period,
+        sections: options.sections,
+        representativeId: options.representativeId,
+        branchId: options.branchId,
+        rowCount: dashboard.records.length,
+        sizeBytes: Math.ceil(bytesBase64.length * 0.75),
+        bytesBase64,
+      };
+      writeManagementExports([...readManagementExports(), { ...report, bytesBase64: undefined }]);
+      appendAuditEvent({
+        id: makeId('audit'),
+        eventType: 'management_performance_pdf_exported',
+        action: 'management.performance_pdf_exported',
+        outcome: 'success',
+        entityType: 'management_report',
+        entityId: report.id,
+        actorId: account.id,
+        actorDisplayName: account.contact,
+        actorRole: account.role,
+        fieldsChanged: [],
+        reason: `Exported ${report.sections.length} authorised management sections for ${period.label}.`,
+        documentMetadata: [{
+          id: report.id,
+          fileName: report.fileName,
+          mimeType: report.mimeType,
+          classification: report.classification,
+          sizeBytes: report.sizeBytes,
+        }],
+        details: {
+          period,
+          sections: report.sections,
+          representativeId: report.representativeId,
+          branchId: report.branchId,
+          rowCount: report.rowCount,
+        },
         createdAt: generatedAt,
       });
       return clone(report);

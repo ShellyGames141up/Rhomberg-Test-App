@@ -176,6 +176,7 @@ export function validateQuotationConfirmation(data = {}) {
   const customerNote = present(data.quotationCustomerNote);
   const documentReference = present(data.quotationDocumentReference);
   const documentFile = data.quotationDocumentFile || null;
+  const commercialTotal = Number(data.quotationCommercialTotal || 0);
 
   if (!number) errors.quotationNumber = 'Enter the quotation number.';
   else if (!referencePattern.test(number)) errors.quotationNumber = 'Use letters, numbers and normal reference punctuation only.';
@@ -190,6 +191,9 @@ export function validateQuotationConfirmation(data = {}) {
   if (internalNote.length > 2000) errors.quotationInternalNote = 'Keep the internal note below 2,000 characters.';
   if (customerNote.length > 1000) errors.quotationCustomerNote = 'Keep the customer-facing note below 1,000 characters.';
   if (documentReference.length > 240) errors.quotationDocumentReference = 'Keep the document reference below 240 characters.';
+  if (data.quotationCommercialTotal !== undefined && (!Number.isFinite(commercialTotal) || commercialTotal <= 0 || commercialTotal > 999_999_999.99)) {
+    errors.quotationCommercialTotal = 'Enter a valid positive quotation total below ZAR 1 billion.';
+  }
   if (Object.keys(errors).length) throwValidation(errors, 'Check the quotation confirmation.');
   validateQuotationDocument(documentFile);
 
@@ -205,6 +209,12 @@ export function validateQuotationConfirmation(data = {}) {
       emailed: Boolean(data.quotationEmailed),
       documentReference,
       documentCustomerVisible,
+      commercialTotal: commercialTotal > 0 ? Math.round(commercialTotal * 100) / 100 : null,
+      currency: commercialTotal > 0 ? 'ZAR' : '',
+      subtotal: Number.isFinite(Number(data.quotationSubtotal)) ? Number(data.quotationSubtotal) : null,
+      vatTotal: Number.isFinite(Number(data.quotationVatTotal)) ? Number(data.quotationVatTotal) : null,
+      extractionStatus: present(data.quotationExtractionStatus) || (commercialTotal > 0 ? 'manually_verified' : 'not_recorded'),
+      extractionConfidence: present(data.quotationExtractionConfidence) || (commercialTotal > 0 ? 'manual' : 'none'),
     },
     quotationDocumentFile: documentFile,
   };

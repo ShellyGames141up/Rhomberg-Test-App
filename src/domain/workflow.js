@@ -720,6 +720,7 @@ const assertQuotationConfirmation = input => {
   const internalNote = String(quotation.internalNote || '');
   const customerNote = String(quotation.customerNote || '');
   const documentReference = String(quotation.documentReference || '');
+  const commercialTotal = Number(quotation.commercialTotal || 0);
 
   if (quotationNumber.length > 80) fieldErrors.quotationNumber = 'Keep the quotation number below 80 characters.';
   if (quotation.date && !validDateOnly(quotation.date)) fieldErrors.quotationDate = 'Enter a valid quotation date.';
@@ -731,6 +732,9 @@ const assertQuotationConfirmation = input => {
   if (internalNote.length > 2000) fieldErrors.quotationInternalNote = 'Keep the internal note below 2,000 characters.';
   if (customerNote.length > 1000) fieldErrors.quotationCustomerNote = 'Keep the customer-facing note below 1,000 characters.';
   if (documentReference.length > 240) fieldErrors.quotationDocumentReference = 'Keep the document reference below 240 characters.';
+  if (quotation.commercialTotal !== null && quotation.commercialTotal !== undefined && (!Number.isFinite(commercialTotal) || commercialTotal <= 0 || commercialTotal > 999_999_999.99)) {
+    fieldErrors.quotationCommercialTotal = 'Enter a valid positive quotation total below ZAR 1 billion.';
+  }
   if (['price', 'pricing', 'total', 'linePrices'].some(field => quotation[field] !== undefined)) {
     throw new ServiceError('Pricing data is not permitted in this quotation-confirmation phase.', {
       code: 'QUOTATION_PRICING_NOT_ALLOWED',

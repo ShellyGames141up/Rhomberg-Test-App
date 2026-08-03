@@ -1,4 +1,5 @@
 import { buildPhase21Analytics } from './analytics.js';
+import { buildSalesPerformanceAnalytics, formatDurationDaysHours } from './salesAnalytics.js';
 
 const RFQ_TERMINAL = new Set(['cancelled', 'expired', 'converted_to_order']);
 const ORDER_TERMINAL = new Set(['completed', 'cancelled', 'archived']);
@@ -23,6 +24,11 @@ const INTERNAL_ONLY_FIELDS = new Set([
   'privatePrice',
   'costPrice',
   'margin',
+  'commercialTotal',
+  'subtotal',
+  'vatTotal',
+  'extractionStatus',
+  'extractionConfidence',
 ]);
 
 const validDate = value => {
@@ -94,6 +100,9 @@ export const buildManagementDashboard = ({
   status = 'all',
   branch = 'all',
   now = new Date(),
+  includeSalesPerformance = false,
+  salesOptions = {},
+  salesRecords = records,
 } = {}) => {
   const term = String(search || '').trim().toLowerCase();
   const authorised = records.map(sanitiseManagementRecord);
@@ -134,6 +143,10 @@ export const buildManagementDashboard = ({
       timestamp: event.timestamp || event.createdAt,
     }));
   const phase21 = buildPhase21Analytics(authorised);
+  const averageHours = averageStageHours([...rfqs, ...orders]);
+  const salesPerformance = includeSalesPerformance
+    ? buildSalesPerformanceAnalytics(salesRecords, { ...salesOptions, now })
+    : { authorised: false };
 
   return {
     generatedAt: now.toISOString(),
@@ -151,7 +164,8 @@ export const buildManagementDashboard = ({
       completed: orders.filter(order => order.trackingStatus === 'completed').length,
       archived: orders.filter(order => order.trackingStatus === 'archived' || order.retentionStatus === 'archived').length,
       emergency: activeOrders.filter(order => order.emergency === 'yes' || order.priority === 'urgent').length,
-      averageStageHours: averageStageHours([...rfqs, ...orders]),
+      averageStageHours: averageHours,
+      averageStageDuration: formatDurationDaysHours(averageHours),
     },
     records: filteredRecords,
     ageing,
@@ -160,6 +174,7 @@ export const buildManagementDashboard = ({
     ordersByBranch: groupCounts(orders, order => order.selectedRep?.branchName),
     ordersByStatus: groupCounts(orders, order => order.trackingStatus),
     phase21,
+    salesPerformance,
     filters: {
       statuses: [...new Set(authorised.map(record => record.trackingStatus).filter(Boolean))].sort(),
       branches: [...new Map(authorised

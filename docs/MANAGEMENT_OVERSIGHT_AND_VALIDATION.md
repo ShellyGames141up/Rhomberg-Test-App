@@ -42,3 +42,9 @@ Production should store idempotency records with actor, route, canonical request
 - Enforce optimistic concurrency and append-only approval/audit records.
 - Add central structured logging with correlation IDs while keeping logs out of public responses.
 - Monitor validation, conflict, retry and idempotent-replay rates without logging sensitive payloads.
+
+## Owner and Sales Manager reporting extension
+
+The restricted dashboard now adds quotation totals, converted-order values, conversion/loss ratios, new-client growth and overdue delay-promise tracking. It also produces selectable, date-scoped management PDFs. These functions require the dedicated `view_commercial_analytics` and `export_management_pdf` permissions plus the Company Owner or Sales Manager role; having broad administrative permissions alone does not grant commercial-report access.
+
+Quotation totals are read from the Rhomberg quotation PDF and explicitly verified by the representative. Normal management projections continue to remove commercial fields. Report generation is audited, company-scoped and excludes internal security detail.

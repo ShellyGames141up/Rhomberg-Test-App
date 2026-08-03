@@ -964,7 +964,7 @@ const apiFetch = async (url, options) => {
   return jsonResponse([]);
 };
 
-const apiServices = createApiServices({ apiBaseUrl: '/api/v1', requestTimeoutMs: 1000, fetchImplementation: apiFetch, storage: new TestStorage() });
+const apiServices = createApiServices({ apiBaseUrl: '/api/v1', requestTimeoutMs: 1000, fetchImplementation: apiFetch, storage: new TestStorage(), now: () => new Date('2026-07-22T10:00:00.000Z') });
 await apiServices.initialize();
 assert.equal((await apiServices.auth.getSession()).companyId, apiUser.companyId);
 await apiServices.auth.signIn({ email: 'api@example.invalid', password: 'Example123!' });

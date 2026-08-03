@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ORDER_STATUSES, RFQ_STATUSES, workflowStatusById } from '../domain/workflow.js';
+import { MANAGEMENT_REPORT_SECTIONS } from '../domain/managementReports.js';
+import { formatDurationDaysHours } from '../domain/salesAnalytics.js';
 import { roleProfileFor } from '../domain/accessControl.js';
 import { accountCan, friendlyServiceError, PERMISSIONS } from '../services/contracts.js';
 
@@ -18,8 +20,19 @@ const EMPTY_DASHBOARD = {
     routing: {},
     operations: {},
   },
+  salesPerformance: { authorised: false },
   filters: { statuses: [], branches: [] },
 };
+
+const DEFAULT_REPORT_CONFIG = Object.freeze({
+  periodMode: 'rolling_months',
+  rollingMonths: 12,
+  startDate: '',
+  endDate: new Date().toISOString().slice(0, 10),
+  representativeId: 'all',
+  branchId: 'all',
+  sections: MANAGEMENT_REPORT_SECTIONS.map(section => section.id),
+});
 
 const formatDate = value => value
   ? new Date(value).toLocaleString('en-ZA', {
@@ -37,6 +50,22 @@ const downloadReport = report => {
   anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
+
+const downloadPdfReport = report => {
+  const binary = globalThis.atob(report.bytesBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  const url = URL.createObjectURL(new Blob([bytes], { type: report.mimeType || 'application/pdf' }));
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = report.fileName;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+const formatMoney = value => `ZAR ${Number(value || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const formatPercent = value => `${Number(value || 0).toLocaleString('en-ZA', { maximumFractionDigits: 1 })}%`;
+const formatStageTime = value => formatDurationDaysHours(value || 0);
 
 function Metric({ label, value, detail = '' }) {
   return <article className="management-metric"><strong>{value ?? 0}</strong><span>{label}</span>{detail && <small>{detail}</small>}</article>;
@@ -76,6 +105,104 @@ function QuantityBreakdown({ title, items, empty = 'No unit-volume data is avail
   );
 }
 
+function PerformanceTable({ title, columns, rows, empty = 'No data is available for this period.' }) {
+  return (
+    <section className="management-performance-table">
+      <h3>{title}</h3>
+      {rows.length ? <div className="management-table-scroll"><table><thead><tr>{columns.map(column => <th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={row.id || row.label || index}>{columns.map(column => <td key={column.key}>{column.render ? column.render(row[column.key], row) : row[column.key]}</td>)}</tr>)}</tbody></table></div> : <p>{empty}</p>}
+    </section>
+  );
+}
+
+function CommercialPerformance({ performance }) {
+  const overall = performance.overall || {};
+  return (
+    <section className="management-commercial-block" aria-labelledby="commercial-performance-title">
+      <div className="management-section-heading">
+        <div><span className="eyebrow">Restricted commercial performance</span><h2 id="commercial-performance-title">Quotation conversion and order value</h2></div>
+        <small>{performance.period?.label} · TOTAL ZAR from verified quotation metadata</small>
+      </div>
+      <div className="management-metrics compact" aria-label="Commercial performance totals">
+        <Metric label="Total quotations" value={overall.quotations || 0} />
+        <Metric label="Converted order value" value={formatMoney(overall.totalOrderValue)} detail={`${formatPercent(overall.valueCoverage)} value coverage`} />
+        <Metric label="Quote-to-order ratio" value={formatPercent(overall.quoteToOrderRatio)} detail={`${overall.convertedOrders || 0} converted orders`} />
+        <Metric label="Quote-loss ratio" value={formatPercent(overall.quoteLossRatio)} detail={`${overall.lostQuotes || 0} recorded losses`} />
+        <Metric label="New clients" value={performance.newClients?.total || 0} detail="First recorded activity in period" />
+        <Metric label="Promise dates exceeded" value={performance.overduePromises?.length || 0} detail="Delayed or held orders only" />
+      </div>
+      <div className="management-performance-grid">
+        <PerformanceTable
+          title="Performance by representative"
+          rows={performance.byRepresentative || []}
+          columns={[
+            { key: 'label', label: 'Representative' },
+            { key: 'quotations', label: 'Quotes' },
+            { key: 'convertedOrders', label: 'Orders' },
+            { key: 'totalOrderValue', label: 'Order value', render: formatMoney },
+            { key: 'quoteToOrderRatio', label: 'Order ratio', render: formatPercent },
+            { key: 'quoteLossRatio', label: 'Loss ratio', render: formatPercent },
+            { key: 'newClients', label: 'New clients' },
+          ]}
+        />
+        <PerformanceTable
+          title="Monthly financial tracking"
+          rows={performance.monthly || []}
+          columns={[
+            { key: 'label', label: 'Month' },
+            { key: 'quotations', label: 'Quotes' },
+            { key: 'convertedOrders', label: 'Orders' },
+            { key: 'totalOrderValue', label: 'Order value', render: formatMoney },
+            { key: 'quoteToOrderRatio', label: 'Order ratio', render: formatPercent },
+          ]}
+        />
+      </div>
+      <PerformanceTable
+        title="Orders beyond a recorded delay promise date"
+        rows={performance.overduePromises || []}
+        columns={[
+          { key: 'reference', label: 'Order' },
+          { key: 'company', label: 'Customer' },
+          { key: 'representative', label: 'Representative' },
+          { key: 'promiseDate', label: 'Promise date' },
+          { key: 'daysOverdue', label: 'Overdue', render: value => `${value}d` },
+          { key: 'reason', label: 'Delay reason' },
+        ]}
+        empty="No delayed orders are beyond their recorded promise date."
+      />
+      <p className="commercial-data-note"><strong>Coverage note:</strong> Converted-order value includes only quotations with a verified TOTAL ZAR. Missing quotation PDFs reduce value coverage rather than being estimated.</p>
+    </section>
+  );
+}
+
+function PerformanceReportBuilder({ config, onConfig, options, reportingProfile, busy, onExport }) {
+  const set = (key, value) => onConfig(current => ({ ...current, [key]: value }));
+  const toggleSection = sectionId => onConfig(current => ({
+    ...current,
+    sections: current.sections.includes(sectionId)
+      ? current.sections.filter(item => item !== sectionId)
+      : [...current.sections, sectionId],
+  }));
+  return (
+    <section className="management-report-builder" aria-labelledby="management-report-title">
+      <div className="management-section-heading">
+        <div><span className="eyebrow">Owner and Sales Manager only</span><h2 id="management-report-title">Downloadable management PDF</h2></div>
+        <small>Every generation is added to the immutable audit history</small>
+      </div>
+      <div className="management-report-scope">
+        <label><span>Period selection</span><select value={config.periodMode} onChange={event => set('periodMode', event.target.value)}><option value="rolling_months">Set number of months</option><option value="date_range">Date to date</option></select></label>
+        {config.periodMode === 'rolling_months' ? <label><span>Months</span><select value={config.rollingMonths} onChange={event => set('rollingMonths', Number(event.target.value))}>{options.rollingMonthOptions.map(months => <option key={months} value={months}>{months} month{months === 1 ? '' : 's'}</option>)}</select></label> : <>
+          <label><span>Start date</span><input type="date" value={config.startDate} onChange={event => set('startDate', event.target.value)} /></label>
+          <label><span>End date</span><input type="date" value={config.endDate} onChange={event => set('endDate', event.target.value)} /></label>
+        </>}
+        <label><span>{reportingProfile.representativeFilterLabel}</span><select value={config.representativeId} onChange={event => set('representativeId', event.target.value)}><option value="all">All authorised representatives</option>{options.representatives.map(rep => <option key={rep.id} value={rep.id}>{rep.name} · {rep.branchName}</option>)}</select></label>
+        <label><span>Branch scope</span><select value={config.branchId} onChange={event => set('branchId', event.target.value)}><option value="all">All authorised branches</option>{options.branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
+      </div>
+      <fieldset className="management-report-sections"><legend>Choose PDF sections</legend>{MANAGEMENT_REPORT_SECTIONS.map(section => <label key={section.id}><input type="checkbox" checked={config.sections.includes(section.id)} onChange={() => toggleSection(section.id)} /><span>{section.label}</span></label>)}</fieldset>
+      <div className="management-report-actions"><p>{config.sections.length} of {MANAGEMENT_REPORT_SECTIONS.length} sections selected</p><button className="primary-button" type="button" disabled={busy || !config.sections.length || (config.periodMode === 'date_range' && (!config.startDate || !config.endDate))} onClick={onExport}>{busy ? 'Generating PDF…' : 'Download selected PDF report'}</button></div>
+    </section>
+  );
+}
+
 export function ManagementDashboard({
   account,
   managementActions,
@@ -94,21 +221,30 @@ export function ManagementDashboard({
   const [openId, setOpenId] = useState('');
   const [actionState, setActionState] = useState({});
   const [busy, setBusy] = useState('');
+  const [showReportBuilder, setShowReportBuilder] = useState(false);
+  const [performanceReportOptions, setPerformanceReportOptions] = useState({ representatives: [], branches: [], rollingMonthOptions: [1, 3, 6, 12, 24, 36] });
+  const [reportConfig, setReportConfig] = useState(DEFAULT_REPORT_CONFIG);
   const canReassign = accountCan(account, PERMISSIONS.REASSIGN_REPRESENTATIVE);
   const canOverride = accountCan(account, PERMISSIONS.OVERRIDE_WORKFLOW);
   const canManageRecords = canReassign || canOverride;
+  const reportingProfile = roleProfileFor(account.role).commercialReporting;
+  const canUsePerformanceReports = Boolean(reportingProfile)
+    && accountCan(account, PERMISSIONS.VIEW_COMMERCIAL_ANALYTICS)
+    && accountCan(account, PERMISSIONS.EXPORT_MANAGEMENT_PDF);
 
   const filters = useMemo(() => ({ search, status, branch }), [branch, search, status]);
   const load = async currentFilters => {
     setState('loading');
     setError('');
     try {
-      const [nextDashboard, nextRepresentatives] = await Promise.all([
+      const [nextDashboard, nextRepresentatives, nextPerformanceOptions] = await Promise.all([
         managementActions.getDashboard(currentFilters),
         canManageRecords ? managementActions.getRepresentativeOptions() : Promise.resolve([]),
+        canUsePerformanceReports ? managementActions.getPerformanceReportOptions() : Promise.resolve(performanceReportOptions),
       ]);
       setDashboard(nextDashboard);
       setRepresentatives(nextRepresentatives);
+      setPerformanceReportOptions(nextPerformanceOptions);
       setState('ready');
     } catch (loadError) {
       setError(friendlyServiceError(loadError, 'Management oversight could not be loaded. Please try again.'));
@@ -119,7 +255,7 @@ export function ManagementDashboard({
   useEffect(() => {
     const timer = window.setTimeout(() => load(filters), search ? 200 : 0);
     return () => window.clearTimeout(timer);
-  }, [branch, search, status]);
+  }, [account.id, account.role, branch, search, status]);
 
   const run = async (key, operation, successMessage) => {
     setBusy(key);
@@ -143,6 +279,12 @@ export function ManagementDashboard({
     'The authorised operational report was generated and audited.',
   );
 
+  const exportPerformanceReport = () => run(
+    'performance-export',
+    async () => downloadPdfReport(await managementActions.exportPerformancePdf(reportConfig)),
+    'The restricted management PDF was generated, downloaded and audited.',
+  );
+
   if (state === 'loading' && !dashboard.generatedAt) {
     return <section className="app-screen management-state" aria-busy="true"><span className="state-spinner" /><h1>Preparing management oversight</h1><p>Calculating authorised workflow totals and recent activity…</p></section>;
   }
@@ -161,8 +303,13 @@ export function ManagementDashboard({
           <h1 id="management-title">Workflow health.<br /><em>Decisions with evidence.</em></h1>
           <p>Operational totals use only records authorised for {account.contact}. Protected price-engine values are excluded from this workspace and its exports.</p>
         </div>
-        <button className="secondary-button" type="button" disabled={busy === 'export'} onClick={exportReport}>{busy === 'export' ? 'Generating…' : 'Export operational report'}</button>
+        <div className="management-hero-actions">
+          {canUsePerformanceReports && <button className="primary-button" type="button" aria-expanded={showReportBuilder} onClick={() => setShowReportBuilder(value => !value)}>{showReportBuilder ? 'Close PDF report builder' : 'Build management PDF'}</button>}
+          {accountCan(account, PERMISSIONS.EXPORT_OPERATIONAL_REPORTS) && <button className="secondary-button" type="button" disabled={busy === 'export'} onClick={exportReport}>{busy === 'export' ? 'Generating…' : 'Export operational CSV'}</button>}
+        </div>
       </header>
+
+      {canUsePerformanceReports && showReportBuilder && <PerformanceReportBuilder config={reportConfig} onConfig={setReportConfig} options={performanceReportOptions} reportingProfile={reportingProfile} busy={busy === 'performance-export'} onExport={exportPerformanceReport} />}
 
       <div className="management-metrics" aria-label="Workflow totals">
         <Metric label="Open RFQs" value={metrics.openRfqs} />
@@ -178,8 +325,10 @@ export function ManagementDashboard({
         <Metric label="Completed" value={metrics.completed} />
         <Metric label="Emergency" value={metrics.emergency} />
         <Metric label="Archived" value={metrics.archived} />
-        <Metric label="Average stage time" value={`${metrics.averageStageHours || 0}h`} detail="Across recorded transitions" />
+        <Metric label="Average stage time" value={metrics.averageStageDuration || '0 hours'} detail={`${metrics.averageStageHours || 0} total hours across recorded transitions`} />
       </div>
+
+      {dashboard.salesPerformance?.authorised && <CommercialPerformance performance={dashboard.salesPerformance} />}
 
       <div className="management-breakdowns">
         <Breakdown title="Orders by representative" items={dashboard.ordersByRepresentative || []} />
@@ -209,10 +358,9 @@ export function ManagementDashboard({
           <Metric label="SANAS certificates" value={phase21.operations.sanasCertificates} />
           <Metric label="Traceable certificates" value={phase21.operations.traceableCertificates} />
           <Metric label="Dispatch completion" value={`${phase21.operations.dispatchCompletionRate || 0}%`} />
-          <Metric label="Average Lab time" value={`${phase21.operations.averageLaboratoryHours || 0}h`} />
-          <Metric label="Average QA time" value={`${phase21.operations.averageQaHours || 0}h`} />
-          <Metric label="Average Dispatch time" value={`${phase21.operations.averageDispatchHours || 0}h`} />
-          <Metric label="Revenue" value="Not enabled" detail="Protected future placeholder" />
+          <Metric label="Average Lab time" value={formatStageTime(phase21.operations.averageLaboratoryHours)} />
+          <Metric label="Average QA time" value={formatStageTime(phase21.operations.averageQaHours)} />
+          <Metric label="Average Dispatch time" value={formatStageTime(phase21.operations.averageDispatchHours)} />
         </div>
       </section>
 

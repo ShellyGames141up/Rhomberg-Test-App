@@ -35,6 +35,7 @@ export function createApiServices(config = {}) {
   let draftSaveQueue = Promise.resolve();
   let expeditingWorkspaceOptions = null;
   let dispatchWorkspaceOptions = null;
+  const today = () => (typeof config.now === 'function' ? config.now() : new Date()).toISOString().slice(0, 10);
 
   const refreshCsrfToken = async () => {
     const result = await client.get('/auth/csrf-token');
@@ -200,7 +201,7 @@ export function createApiServices(config = {}) {
       ) {
         request = {
           ...request,
-          data: validateExpeditingAction(request.action, request.data, expeditingWorkspaceOptions || {}),
+          data: validateExpeditingAction(request.action, request.data, { ...(expeditingWorkspaceOptions || {}), today: today() }),
         };
       }
       if ([
@@ -282,6 +283,7 @@ export function createApiServices(config = {}) {
   const management = {
     getDashboard: filters => client.get('/management/dashboard', { query: filters }),
     getRepresentativeOptions: () => client.get('/management/representatives'),
+    getPerformanceReportOptions: () => client.get('/management/performance-report-options'),
     reassignRepresentative: (recordId, input) => client.post(
       `/management/records/${encodeURIComponent(recordId)}/representative`,
       input,
@@ -296,6 +298,11 @@ export function createApiServices(config = {}) {
       '/management/reports',
       filters || {},
       { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `management-report-${Date.now()}` } },
+    ),
+    exportPerformancePdf: input => client.post(
+      '/management/performance-reports',
+      input || {},
+      { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `management-performance-report-${Date.now()}` } },
     ),
   };
 

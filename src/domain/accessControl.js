@@ -40,6 +40,7 @@ const profile = ({
   navigation = internalNavigation(workspaceLabel),
   allowedViews = INTERNAL_VIEWS,
   dashboard,
+  commercialReporting = null,
 }) => Object.freeze({
   role,
   label,
@@ -48,6 +49,7 @@ const profile = ({
   navigation,
   allowedViews,
   dashboard: dashboard ? Object.freeze(dashboard) : null,
+  commercialReporting: commercialReporting ? Object.freeze(commercialReporting) : null,
 });
 
 export const ROLE_PROFILES = Object.freeze({
@@ -168,6 +170,7 @@ export const ROLE_PROFILES = Object.freeze({
     workspaceLabel: 'Sales analytics',
     navigation: internalNavigation('Sales', true),
     allowedViews: Object.freeze([...INTERNAL_VIEWS, 'audit']),
+    commercialReporting: { representativeFilterLabel: 'Representative' },
     dashboard: {
       eyebrow: 'Sales management',
       headline: 'Customer activity and unit demand.',
@@ -181,6 +184,7 @@ export const ROLE_PROFILES = Object.freeze({
     workspaceLabel: 'Executive',
     navigation: internalNavigation('Executive', true, true),
     allowedViews: OVERSIGHT_VIEWS,
+    commercialReporting: { representativeFilterLabel: 'Representative scope' },
     dashboard: {
       eyebrow: 'Executive overview',
       headline: 'Operations, demand and service performance.',
