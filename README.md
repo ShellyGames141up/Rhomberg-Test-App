@@ -50,6 +50,12 @@ Role-aware internal interfaces for Sales, Planning, Laboratory, Expediting, Qual
 
 Both products use the same domain rules, validation, notifications, audit model, product data and replaceable service contracts.
 
+### Controlled Laboratory calibration workspace (local development)
+
+The current local branch adds the complete unit-level Laboratory journey for Cape Town and Johannesburg: receipt, stabilisation, inspection, booking, branch/technician assignment, separate Pressure and Temperature methods, structured readings, uncertainty calculation, management review, labelling, Dispatch transfer, internal review PDFs, draft/final certificate versions, external-signature re-upload, explicit certificate release, audit history and notifications. Reference registers and test records are fabricated. Supplied customer workbooks and certificates are excluded from the repository.
+
+This feature is an implementation for review, not a metrology or accreditation approval. Legacy external workbook links and a Temperature repeatability-count discrepancy require formal resolution before production.
+
 ## Fabricated Demo Accounts
 
 These accounts exist only in public mock builds. They use reserved `.invalid` or `.test` domains and are excluded from the production candidate.
@@ -237,7 +243,7 @@ No infrastructure values, credentials or private endpoints belong in this reposi
 - [Preview guide](docs/PREVIEW_GUIDE.md)
 - [Build and deployment](docs/BUILD_AND_DEPLOYMENT.md)
 - [Mock-mode limitations](docs/MOCK_MODE_LIMITATIONS.md)
-- [Laboratory workflow](docs/LAB_WORKFLOW.md) and [certificate workflow](docs/CERTIFICATE_WORKFLOW.md)
+- [Laboratory workflow](docs/LAB_WORKFLOW.md), [template analysis](docs/LAB_TEMPLATE_ANALYSIS.md), [calculation specification](docs/LAB_CALCULATION_SPECIFICATION.md), [validation report](docs/LAB_CALCULATION_VALIDATION_REPORT.md), [role matrix](docs/LAB_ROLE_PERMISSION_MATRIX.md), [certificate workflow](docs/LAB_CERTIFICATE_WORKFLOW.md) and [test plan](docs/LAB_TEST_PLAN.md)
 - [QA workflow](docs/QA_WORKFLOW.md)
 - [Authentication](docs/AUTHENTICATION.md)
 - [Management analytics](docs/MANAGEMENT_ANALYTICS.md)

@@ -25,7 +25,7 @@ export const STORE_KEYS = Object.freeze({
   executiveDemo: 'rhombergPreviewExecutiveDemoV1',
   rfqSequence: 'rhombergPreviewRfqSequenceV1',
   theme: THEME_PREFERENCE_KEY,
-  seedVersion: 'rhombergPreviewSeedV16',
+  seedVersion: 'rhombergPreviewSeedV17',
 });
 
 export const LEGACY_STORE_KEYS = Object.freeze({
@@ -109,12 +109,15 @@ export const LAB_ACCOUNT = Object.freeze({
   id: 'staff-laboratory-preview',
   companyId: 'company-rhomberg',
   company: 'Rhomberg Instruments',
-  contact: 'Laboratory Test',
+  contact: 'Bonga',
   email: 'laboratory.workflow@example.invalid',
   phone: 'Internal test account',
   area: 'Cape Town',
   industry: 'Internal laboratory',
   role: 'laboratory_user',
+  labBranchId: 'cape_town',
+  authorisedLabBranchIds: ['cape_town'],
+  labRoles: ['laboratory_technician'],
   password: 'Lab12345!',
   createdAt: '2026-07-28T07:00:00.000Z',
 });
@@ -123,12 +126,15 @@ export const LAB_MANAGER_ACCOUNT = Object.freeze({
   id: 'staff-laboratory-manager-preview',
   companyId: 'company-rhomberg',
   company: 'Rhomberg Instruments',
-  contact: 'Laboratory Manager Test',
+  contact: 'Brinley',
   email: 'laboratory.manager@example.invalid',
   phone: 'Internal test account',
   area: 'Cape Town',
   industry: 'Internal laboratory',
   role: 'laboratory_manager',
+  labBranchId: 'cape_town',
+  authorisedLabBranchIds: ['cape_town'],
+  labRoles: ['laboratory_manager', 'laboratory_temperature_technician', 'technical_signatory'],
   password: 'LabManager123!',
   createdAt: '2026-07-28T07:05:00.000Z',
 });
@@ -239,6 +245,30 @@ export const EXTRA_DEMO_ACCOUNTS = Object.freeze([
   {
     id: 'company-demo-kzn', companyId: 'company-demo-kzn', company: 'KZN Water Demo', contact: 'Ayesha Test', email: 'kzn.demo@client.test',
     phone: '+27 31 000 0202', area: 'KwaZulu-Natal', industry: 'Water & Wastewater', role: 'customer', password: 'Demo123!', createdAt: '2026-07-18T09:30:00.000Z',
+  },
+  {
+    id: 'staff-lab-saeed-demo', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Saeed', email: 'saeed.laboratory@example.invalid',
+    phone: 'Fabricated internal account', area: 'Cape Town', industry: 'Internal laboratory', role: 'laboratory_technician', labBranchId: 'cape_town', authorisedLabBranchIds: ['cape_town'], labRoles: ['laboratory_technician'], password: 'LabDemo123!', createdAt: '2026-08-03T08:00:00.000Z',
+  },
+  {
+    id: 'staff-lab-mandisi-demo', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Mandisi', email: 'mandisi.laboratory@example.invalid',
+    phone: 'Fabricated internal account', area: 'Cape Town', industry: 'Internal laboratory', role: 'laboratory_manager', labBranchId: 'cape_town', authorisedLabBranchIds: ['cape_town'], labRoles: ['laboratory_manager', 'technical_signatory'], password: 'LabManagerDemo123!', createdAt: '2026-08-03T08:05:00.000Z',
+  },
+  {
+    id: 'staff-lab-leah-demo', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Leah', email: 'leah.laboratory@example.invalid',
+    phone: 'Fabricated internal account', area: 'Johannesburg', industry: 'Internal laboratory', role: 'laboratory_technician', labBranchId: 'johannesburg', authorisedLabBranchIds: ['johannesburg'], labRoles: ['laboratory_technician'], password: 'LabDemo123!', createdAt: '2026-08-03T08:10:00.000Z',
+  },
+  {
+    id: 'staff-lab-thabiso-demo', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Thabiso', email: 'thabiso.laboratory@example.invalid',
+    phone: 'Fabricated internal account', area: 'Johannesburg', industry: 'Internal laboratory', role: 'laboratory_technician', labBranchId: 'johannesburg', authorisedLabBranchIds: ['johannesburg'], labRoles: ['laboratory_technician'], password: 'LabDemo123!', createdAt: '2026-08-03T08:15:00.000Z',
+  },
+  {
+    id: 'staff-lab-signatory-demo', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Technical Signatory Demo', email: 'signatory.laboratory@example.invalid',
+    phone: 'Fabricated internal account', area: 'Cape Town', industry: 'Internal laboratory', role: 'technical_signatory', labBranchId: 'cape_town', authorisedLabBranchIds: ['cape_town'], labRoles: ['technical_signatory'], password: 'SignatoryDemo123!', createdAt: '2026-08-03T08:20:00.000Z',
+  },
+  {
+    id: 'staff-lab-administrator-demo', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Laboratory Administrator Demo', email: 'lab.admin@example.invalid',
+    phone: 'Fabricated internal account', area: 'National', industry: 'Internal laboratory', role: 'laboratory_administrator', labBranchId: 'cape_town', authorisedLabBranchIds: ['cape_town', 'johannesburg'], labRoles: ['laboratory_administrator'], password: 'LabAdminDemo123!', createdAt: '2026-08-03T08:25:00.000Z',
   },
 ]);
 

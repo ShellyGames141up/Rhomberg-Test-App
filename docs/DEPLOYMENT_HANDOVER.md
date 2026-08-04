@@ -150,3 +150,6 @@ Do not approve production until:
 - monitoring and incident processes are active;
 - UAT is signed;
 - a rollback plan is approved.
+# Laboratory production gates
+
+The Laboratory workspace remains mock-only until Rhomberg and IT approve method/formula validation, golden datasets, controlled certificate templates, accreditation wording, reference-standard migration, branch/staff scope, external signing verification, protected object storage, malware scanning, sequential-number allocation, backup/restore, retention, monitoring and incident procedures. No supplied customer workbook or certificate may be copied into public fixtures or GitHub history.

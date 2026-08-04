@@ -1,28 +1,26 @@
-# Laboratory workflow
+# Laboratory calibration workflow
 
-The Laboratory workspace is desktop-only and available to `laboratory_user` and `laboratory_manager`. Its queue contains only orders routed by Planning because at least one physical unit requires SANAS calibration or a Traceable certificate.
+This local mock implements one controlled, unit-level workflow for the Cape Town and Johannesburg laboratories. It supports Pressure and Temperature work without merging their methods, templates or uncertainty models. Every customer line quantity becomes that number of physical calibration units; each unit receives its own job number, immutable worksheet revisions, certificate number and certificate versions.
 
-The final desktop handover adds queue tabs, SANAS/Traceable filtering, urgent-only filtering, oldest/newest/customer sorting and certificate-register views for pending, completed, archived and all records. These are presentation and queue-query controls only; unit actions still pass through the same permission-scoped Laboratory service.
+## Controlled journey
 
-## Unit-level model
+1. Planning routes a qualifying unit to its authorised laboratory branch.
+2. Laboratory receipt records condition, packaging, customer documents, actor and time.
+3. Thermal stabilisation records its start, ambient temperature and confirmed equilibrium.
+4. Inspection records the controlled outcome and routes rejected or quote-required units safely.
+5. Booking captures instrument identity, range, resolution, method, certification type and urgency; the service allocates branch-aware job and certificate references.
+6. A permitted technician selects a valid, in-calibration reference standard and records structured raw readings.
+7. Named calculation functions create rounded derived values and a versioned uncertainty budget. Raw inputs lock after calculation; corrections create a new revision.
+8. Laboratory Management records a review of unresolved formula/template warnings. The mock acknowledgement is not technical approval.
+9. The technician completes calibration, labels the instrument and signs off physical transfer to Dispatch or Expediting.
+10. Management generates an internal review PDF, draft certificate and final unsigned certificate, then uses the approved external signing process.
+11. A permitted manager uploads the signed PDF. The service validates PDF metadata, hashes it, preserves superseded versions, and requires an explicit recipient rule before release.
+12. Authorised recipients receive scoped notifications. Downloads and releases create immutable audit events.
 
-For a line quantity of five, the service creates five calibration units and five certificate requirements. Each unit retains its order, line item, model, description, configuration, job number, calibration type, urgent flag, status, optional serial number, acting Laboratory user and timestamps.
+## Separation and access
 
-One certificate can satisfy only one unit. The mock service and proposed database both reject a second certificate for the same unit.
+Technicians can enter raw data only for their assigned/authorised branch. Managers review but do not overwrite raw readings. Technical signatories approve certificate progression. Administrators may maintain approved configuration but cannot alter audit history or signed files. Customers see only safe progress and explicitly released certificates belonging to their own company; raw readings, internal notes, calculations, management comments and audit metadata are never included in customer projections.
 
-## Actions
+The browser stores fabricated mock data only. Production requires backend transactions, row-level company and branch scope, protected object storage, malware scanning, immutable event storage, server-side reference allocation and approved identity controls.
 
-1. `Confirm Received in Lab` records the actor/time, moves all routed units to `lab_received`, creates timelines, audit history and scoped notifications.
-2. Unit updates record calibration start, progress, hold, completion and serial metadata.
-3. `Ready to leave Lab` is allowed only after the physical calibration work is complete.
-4. Physical release selects Expediting or Dispatch. The receiving department must confirm receipt separately.
-5. Certificate work remains in the permanent certificate queue even after physical release.
-6. `Archive Lab task` requires physical release, every required unit certificate, no correction requirement, no active work, and no legal-hold or investigation flag.
-
-## Visibility
-
-Customers receive concise progress wording and only their own company records. Representatives see status/number/upload date but do not receive permanent certificate-file access. Planning, Expediting, QA and Dispatch see status only. Laboratory, Manager, Administrator and the authorised customer may create an audited download.
-
-## Monthly tracker
-
-Month filtering reports SANAS/Traceable orders and units, certificate counts per unit, pending certificates, average Laboratory turnaround, average certificate-upload delay, urgent completions and outstanding work. These browser-calculated metrics are fabricated preview data; production should calculate from immutable events or approved materialised aggregates.
+> Software implementation completed against supplied reference templates; technical validation and formal approval remain required from authorised Rhomberg Laboratory Management and Technical Signatories.

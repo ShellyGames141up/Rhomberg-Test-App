@@ -26,6 +26,26 @@ import {
   validateLaboratoryUnitUpdate,
 } from '../../domain/certification.js';
 import {
+  assertLabTransition,
+  calculateLaboratoryWorksheet,
+  FABRICATED_REFERENCE_STANDARDS,
+  LAB_METHODS,
+  LABORATORY_BRANCHES,
+  LABORATORY_ROLES,
+  LABORATORY_STAFF,
+  LAB_WORKFLOW_STATUSES,
+  methodById,
+  validStandardsForWorksheet,
+  validateBooking,
+  validateInspection,
+  validateReceipt,
+  validateStabilisation,
+} from '../../domain/laboratoryCalibration.js';
+import {
+  generateLaboratoryPdf,
+  LAB_DOCUMENT_KINDS,
+} from '../../domain/laboratoryDocuments.js';
+import {
   QA_PROBLEM_CATEGORIES,
   QA_REWORK_DESTINATIONS,
   QA_SEVERITIES,
@@ -171,6 +191,17 @@ const fileToDataUrl = file => new Promise((resolve, reject) => {
     })
     .catch(() => reject(new ServiceError('The image could not be read. Please choose it again.', { code: 'IMAGE_READ_FAILED', status: 422 })));
 });
+
+const hashFileSha256 = async file => {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (globalThis.crypto?.subtle) {
+    const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes));
+    return [...digest].map(value => value.toString(16).padStart(2, '0')).join('');
+  }
+  let fallback = 2166136261;
+  bytes.forEach(value => { fallback = Math.imul(fallback ^ value, 16777619); });
+  return `mock-fnv-${(fallback >>> 0).toString(16).padStart(8, '0')}`;
+};
 
 const normaliseAccount = account => {
   const role = account.role || USER_ROLES.CUSTOMER;
@@ -3133,6 +3164,90 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     },
   };
 
+  const legacyUnitStatus = workflowStatus => {
+    if (workflowStatus === 'received_in_lab' || workflowStatus === 'thermal_stabilisation' || workflowStatus === 'inspection_pending' || workflowStatus === 'inspection_failed' || workflowStatus === 'booked_in' || workflowStatus === 'worksheet_ready') return 'received';
+    if (workflowStatus === 'calibration_in_progress' || workflowStatus === 'calculation_review_required') return 'calibration_in_progress';
+    if (workflowStatus === 'calibration_on_hold' || workflowStatus === 'management_changes_required') return 'calibration_on_hold';
+    if (['calibration_completed', 'labelling_pending', 'labelling_completed', 'bom_signoff_pending', 'ready_for_dispatch', 'certificate_data_pending', 'draft_certificate_ready', 'management_review', 'approved_for_signature', 'awaiting_signed_certificate', 'signed_certificate_uploaded', 'certificate_released'].includes(workflowStatus)) return 'calibration_completed';
+    if (workflowStatus === 'released_to_dispatch' || workflowStatus === 'completed' || workflowStatus === 'archived') return 'released';
+    return 'awaiting_lab';
+  };
+
+  const laboratoryContext = (account, orderId, unitId, permission) => {
+    if (!accountCan(account, permission)) throw new ServiceError('Your account cannot perform that Laboratory action.', { code: 'FORBIDDEN', status: 403 });
+    const source = readAllOrders().find(item => item.id === orderId);
+    if (!source || !canReadRecord(account, source) || !orderRequiresLaboratory(source)) throw new ServiceError('The Laboratory order was not found.', { code: 'LAB_ORDER_NOT_FOUND', status: 404 });
+    const order = ensureLaboratoryRecord(source);
+    const index = order.laboratory.units.findIndex(unit => unit.id === unitId);
+    if (index < 0) throw new ServiceError('The physical calibration unit was not found.', { code: 'LAB_UNIT_NOT_FOUND', status: 404 });
+    const unit = order.laboratory.units[index];
+    const allowedBranches = account.authorisedLabBranchIds || (account.labBranchId ? [account.labBranchId] : []);
+    if (allowedBranches.length && unit.labWork?.branchId && !allowedBranches.includes(unit.labWork.branchId)) throw new ServiceError('That calibration unit belongs to another Laboratory branch.', { code: 'LAB_BRANCH_FORBIDDEN', status: 403 });
+    return { order, unit, index };
+  };
+
+  const persistLaboratoryUnit = ({ account, order, index, nextUnit, action, reason = '', customerMessage = '' }) => {
+    const occurredAt = now().toISOString();
+    const previousUnit = order.laboratory.units[index];
+    const event = {
+      id: makeId('lab-event'),
+      eventType: action,
+      previousStatus: previousUnit.labWork?.status || 'awaiting_lab_receipt',
+      newStatus: nextUnit.labWork?.status || previousUnit.labWork?.status || 'awaiting_lab_receipt',
+      actorId: account.id,
+      actorRole: account.role,
+      actorName: account.contact,
+      reason: String(reason || '').trim(),
+      createdAt: occurredAt,
+      immutable: true,
+    };
+    const completedUnit = {
+      ...nextUnit,
+      status: legacyUnitStatus(nextUnit.labWork?.status),
+      updatedAt: occurredAt,
+      updatedBy: actorSnapshot(account),
+      labWork: {
+        ...nextUnit.labWork,
+        events: [...(nextUnit.labWork?.events || []), event],
+      },
+    };
+    const units = [...order.laboratory.units];
+    units[index] = completedUnit;
+    const updated = saveOrder({
+      ...order,
+      version: Number(order.version || 0) + 1,
+      updatedAt: occurredAt,
+      laboratory: { ...order.laboratory, branchId: completedUnit.labWork?.branchId || order.laboratory.branchId, units, lastUpdatedAt: occurredAt },
+    });
+    appendAuditEvent({
+      id: makeId('audit'),
+      action: `laboratory.${action}`,
+      outcome: 'success',
+      entityType: 'laboratory_unit',
+      entityId: completedUnit.id,
+      companyId: updated.companyId,
+      reference: updated.reference,
+      actorId: account.id,
+      actorRole: account.role,
+      previousStatus: event.previousStatus,
+      newStatus: event.newStatus,
+      reason: event.reason,
+      fieldsChanged: ['laboratory.units.labWork'],
+      previousValue: previousUnit.labWork,
+      newValue: completedUnit.labWork,
+      details: { orderId: order.id, unitNumber: completedUnit.unitNumber, previousValue: previousUnit.labWork, newValue: completedUnit.labWork, reason: event.reason },
+      immutable: true,
+      createdAt: occurredAt,
+    });
+    if (customerMessage) publishWorkflowNotifications({
+      action: 'laboratory_progress_updated',
+      record: updated,
+      actor: createWorkflowActor(account),
+      input: { customerMessage },
+    });
+    return clone(completedUnit);
+  };
+
   const laboratory = {
     async getWorkspaceOptions() {
       const account = requireAccount();
@@ -3150,6 +3265,21 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
           { id: 'expediting', label: 'Expediting' },
           { id: 'dispatch', label: 'Dispatch' },
         ],
+        branches: LABORATORY_BRANCHES,
+        staff: LABORATORY_STAFF,
+        laboratoryRoles: LABORATORY_ROLES,
+        methods: LAB_METHODS,
+        referenceStandards: FABRICATED_REFERENCE_STANDARDS,
+        workflowStatuses: LAB_WORKFLOW_STATUSES,
+        inspectionOutcomes: [
+          'no_visible_defect', 'calibration_may_continue', 'calibration_may_continue_with_limitation',
+          'customer_or_representative_approval_required', 'repair_required', 'calibration_cannot_proceed',
+        ],
+        documentTypes: [
+          'booking_in_form', 'customer_supporting_document', 'raw_data_worksheet', 'calculation_review',
+          'uncertainty_budget', 'draft_certificate', 'unsigned_final_certificate', 'signed_final_certificate',
+          'reference_standard_certificate', 'inspection_image', 'bom_signoff_document', 'labelling_evidence', 'other_internal_document',
+        ],
       });
     },
 
@@ -3158,8 +3288,10 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       if (!accountCan(account, PERMISSIONS.VIEW_LAB_QUEUE)) {
         throw new ServiceError('Your account cannot access the Laboratory queue.', { code: 'FORBIDDEN', status: 403 });
       }
+      const allowedBranches = account.authorisedLabBranchIds || (account.labBranchId ? [account.labBranchId] : []);
       return clone(readAllOrders()
         .filter(order => orderRequiresLaboratory(order) && canReadRecord(account, order))
+        .filter(order => !allowedBranches.length || !order.laboratory?.branchId || allowedBranches.includes(order.laboratory.branchId))
         .map(order => ({ ...order, allowedWorkflowActions: getAllowedWorkflowActions(order, createWorkflowActor(account)) })));
     },
 
@@ -3170,6 +3302,307 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         orders,
         certificateQueue: certificateQueueForOrders(orders),
       });
+    },
+
+    async receive(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.RECEIVE_LAB_ORDER);
+      const receipt = validateReceipt(input);
+      const status = assertLabTransition(unit.labWork.status, 'receive');
+      const occurredAt = now().toISOString();
+      return persistLaboratoryUnit({
+        account, order, index, action: 'unit_received',
+        nextUnit: { ...unit, receivedAt: occurredAt, labWork: { ...unit.labWork, status, branchId: receipt.branchId, receipt: { ...receipt, receivedAt: occurredAt, receivedBy: actorSnapshot(account) } } },
+        customerMessage: 'Your instrument has been received by the Rhomberg Calibration Laboratory.',
+      });
+    },
+
+    async startStabilisation(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.UPDATE_LAB_WORK);
+      const details = validateStabilisation(input);
+      const status = assertLabTransition(unit.labWork.status, 'start_stabilisation');
+      return persistLaboratoryUnit({ account, order, index, action: 'stabilisation_started', nextUnit: { ...unit, labWork: { ...unit.labWork, status, stabilisation: { ...details, startedAt: now().toISOString(), startedBy: actorSnapshot(account), completedAt: '' } } } });
+    },
+
+    async completeStabilisation(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.UPDATE_LAB_WORK);
+      const details = validateStabilisation(input, { completing: true });
+      const status = assertLabTransition(unit.labWork.status, 'complete_stabilisation');
+      return persistLaboratoryUnit({ account, order, index, action: 'stabilisation_completed', nextUnit: { ...unit, labWork: { ...unit.labWork, status, stabilisation: { ...(unit.labWork.stabilisation || {}), ...details, completedAt: now().toISOString(), completedBy: actorSnapshot(account) } } } });
+    },
+
+    async inspect(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.INSPECT_LAB_UNIT);
+      const inspection = validateInspection(input);
+      const cannotContinue = ['customer_or_representative_approval_required', 'repair_required', 'calibration_cannot_proceed'].includes(inspection.outcome);
+      const transition = cannotContinue ? 'fail_inspection' : 'record_inspection';
+      const status = assertLabTransition(unit.labWork.status, transition);
+      return persistLaboratoryUnit({
+        account, order, index, action: cannotContinue ? 'inspection_failed' : 'inspection_completed', reason: inspection.reason,
+        nextUnit: { ...unit, labWork: { ...unit.labWork, status, inspection: { ...inspection, inspectedAt: now().toISOString(), inspectedBy: actorSnapshot(account) } } },
+        customerMessage: cannotContinue ? 'Our Laboratory identified an issue requiring review before calibration can continue.' : '',
+      });
+    },
+
+    async bookIn(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.BOOK_IN_LAB_UNIT);
+      const booking = validateBooking(input);
+      const status = assertLabTransition(unit.labWork.status, 'book_in');
+      const branchCode = unit.labWork.branchId === 'johannesburg' ? 'JHB' : 'CT';
+      const referenceToken = String(order.reference || order.id).replace(/[^A-Za-z0-9]/g, '').slice(-10).toUpperCase();
+      const jobNumber = String(input.jobNumber || `LAB-${branchCode}-${referenceToken}-${unit.unitNumber}`).trim();
+      const certificateNumber = String(input.certificateNumber || `CAL-${branchCode}-${referenceToken}-${unit.unitNumber}`).trim();
+      const allUnits = certificateQueueForOrders(readAllOrders());
+      if (allUnits.some(item => item.id !== unit.id && item.jobNumber?.toLowerCase() === jobNumber.toLowerCase())) throw new ServiceError('That Laboratory job number is already in use.', { code: 'DUPLICATE_LAB_JOB_NUMBER', status: 409, fieldErrors: { jobNumber: 'Use a unique Laboratory job number.' } });
+      if (allUnits.some(item => item.id !== unit.id && item.certificateNumber?.toLowerCase() === certificateNumber.toLowerCase())) throw new ServiceError('That certificate number is already in use.', { code: 'DUPLICATE_CERTIFICATE_NUMBER', status: 409, fieldErrors: { certificateNumber: 'Use a unique certificate number.' } });
+      return persistLaboratoryUnit({
+        account, order, index, action: 'unit_booked_in',
+        nextUnit: { ...unit, jobNumber, certificateNumber, serialNumber: booking.serialNumber, labWork: { ...unit.labWork, status, booking: { ...booking, jobNumber, certificateNumber, bookedAt: now().toISOString(), bookedBy: actorSnapshot(account) } } },
+      });
+    },
+
+    async assignTechnician(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.EDIT_LAB_MANAGEMENT_FIELDS);
+      const reason = String(input.reason || '').trim();
+      if (reason.length < 8) throw new ServiceError('Provide a reason for the technician assignment.', { code: 'LAB_ASSIGNMENT_REASON_REQUIRED', status: 422, fieldErrors: { reason: 'Provide a clear assignment reason.' } });
+      const staff = LABORATORY_STAFF.find(item => item.id === input.technicianId && item.roles.some(role => [LABORATORY_ROLES.TECHNICIAN, LABORATORY_ROLES.TEMPERATURE_TECHNICIAN].includes(role)));
+      if (!staff || staff.branchId !== unit.labWork.branchId) throw new ServiceError('Select a technician authorised for this Laboratory branch.', { code: 'LAB_TECHNICIAN_INVALID', status: 422, fieldErrors: { technicianId: 'Select an authorised branch technician.' } });
+      return persistLaboratoryUnit({ account, order, index, action: 'technician_assigned', reason, nextUnit: { ...unit, assignedTechnicianId: staff.id, labWork: { ...unit.labWork, assignedTechnicianId: staff.id } } });
+    },
+
+    async saveWorksheet(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const technicianRoles = [USER_ROLES.LABORATORY_USER, USER_ROLES.LABORATORY_TECHNICIAN, USER_ROLES.LABORATORY_TEMPERATURE_TECHNICIAN];
+      if (!technicianRoles.includes(account.role) && !(account.labRoles || []).some(role => [LABORATORY_ROLES.TECHNICIAN, LABORATORY_ROLES.TEMPERATURE_TECHNICIAN].includes(role))) throw new ServiceError('Management cannot overwrite technician raw readings. Return the worksheet to an authorised technician.', { code: 'LAB_RAW_DATA_ROLE_FORBIDDEN', status: 403 });
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.ENTER_RAW_CALIBRATION_DATA);
+      if (!['worksheet_ready', 'calibration_in_progress', 'calibration_on_hold', 'management_changes_required'].includes(unit.labWork.status)) throw new ServiceError('Complete booking-in before entering worksheet data.', { code: 'LAB_WORKSHEET_STAGE_INVALID', status: 409 });
+      const method = methodById(input.methodId || unit.labWork.booking?.methodId);
+      if (!method) throw new ServiceError('Select the calibration method.', { code: 'LAB_METHOD_REQUIRED', status: 422, fieldErrors: { methodId: 'Select a method.' } });
+      const testPoints = (input.testPoints || []).map((point, pointIndex) => ({
+        id: point.id || `point-${pointIndex + 1}`,
+        direction: method.discipline === 'pressure' ? (point.direction === 'decreasing' ? 'decreasing' : 'increasing') : 'temperature',
+        applied: Number(point.applied),
+        standardCorrection: Number(point.standardCorrection || 0),
+        readings: (point.readings || []).filter(value => value !== '').map(Number),
+        notes: String(point.notes || '').trim().slice(0, 500),
+      }));
+      if (!testPoints.length || testPoints.some(point => !Number.isFinite(point.applied) || !point.readings.length || point.readings.some(value => !Number.isFinite(value)))) throw new ServiceError('Enter valid calibration points and numeric readings.', { code: 'LAB_WORKSHEET_READINGS_INVALID', status: 422 });
+      const validStandards = validStandardsForWorksheet({ branchId: unit.labWork.branchId, methodId: method.id, minimum: unit.labWork.booking?.rangeMinimum, maximum: unit.labWork.booking?.rangeMaximum, asOf: now().toISOString().slice(0, 10) });
+      const standardIds = [...new Set(input.standardIds || [])];
+      if (!standardIds.length || standardIds.some(id => !validStandards.some(standard => standard.id === id))) throw new ServiceError('Select an active, in-range reference standard approved for this method.', { code: 'LAB_REFERENCE_STANDARD_INVALID', status: 422, fieldErrors: { standardIds: 'Select a valid reference standard.' } });
+      const uncertaintyContributions = (input.uncertaintyContributions || []).map(item => ({ ...item, source: String(item.source || '').trim().slice(0, 160), uncertainty: Number(item.uncertainty), divisor: item.divisor === '' ? undefined : Number(item.divisor), sensitivity: item.sensitivity === '' ? 1 : Number(item.sensitivity), degreesOfFreedom: item.degreesOfFreedom === '' ? null : Number(item.degreesOfFreedom) }));
+      if (!uncertaintyContributions.length) throw new ServiceError('Add the approved uncertainty-budget contributions.', { code: 'LAB_UNCERTAINTY_REQUIRED', status: 422 });
+      const previousWorksheet = unit.labWork.worksheet;
+      const worksheet = {
+        id: previousWorksheet?.id || makeId('lab-worksheet'), methodId: method.id, methodVersion: method.version,
+        sourceTemplate: method.sourceTemplate, procedureNumber: method.procedureNumber, standardIds, testPoints,
+        uncertaintyContributions, coverageFactor: Number(input.coverageFactor || 2), decimals: Number(input.decimals ?? 6),
+        environmental: { temperature: input.environmental?.temperature === '' ? null : Number(input.environmental?.temperature), humidity: input.environmental?.humidity === '' ? null : Number(input.environmental?.humidity) },
+        notes: String(input.notes || '').trim().slice(0, 2000), revision: Number(previousWorksheet?.revision || 0) + 1,
+        previousVersions: previousWorksheet ? [...(previousWorksheet.previousVersions || []), { ...previousWorksheet, previousVersions: undefined }] : [],
+        savedAt: now().toISOString(), savedBy: actorSnapshot(account), locked: false,
+      };
+      const nextStatus = unit.labWork.status === 'management_changes_required' ? 'calibration_in_progress' : unit.labWork.status;
+      return persistLaboratoryUnit({ account, order, index, action: 'worksheet_saved', nextUnit: { ...unit, labWork: { ...unit.labWork, status: nextStatus, worksheet, calculation: null } } });
+    },
+
+    async startCalibration(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.START_LAB_CALIBRATION);
+      if (!unit.labWork.worksheet) throw new ServiceError('Save the structured worksheet before calibration starts.', { code: 'LAB_WORKSHEET_REQUIRED', status: 409 });
+      const status = assertLabTransition(unit.labWork.status, 'start_calibration');
+      return persistLaboratoryUnit({ account, order, index, action: 'calibration_started', nextUnit: { ...unit, startedAt: unit.startedAt || now().toISOString(), labWork: { ...unit.labWork, status, calibrationStartedAt: unit.labWork.calibrationStartedAt || now().toISOString(), startNote: String(input.note || '').trim().slice(0, 1000) } }, customerMessage: 'Calibration of your instrument has started.' });
+    },
+
+    async holdCalibration(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.START_LAB_CALIBRATION);
+      const reason = String(input.reason || '').trim();
+      if (reason.length < 8) throw new ServiceError('Record why calibration is being put on hold.', { code: 'LAB_HOLD_REASON_REQUIRED', status: 422, fieldErrors: { reason: 'Provide a clear hold reason.' } });
+      const status = assertLabTransition(unit.labWork.status, 'hold_calibration');
+      return persistLaboratoryUnit({ account, order, index, action: 'calibration_put_on_hold', reason, nextUnit: { ...unit, labWork: { ...unit.labWork, status, hold: { reason, heldAt: now().toISOString(), heldBy: actorSnapshot(account) } } }, customerMessage: 'Calibration is temporarily on hold while our Laboratory completes a review.' });
+    },
+
+    async calculate(orderId, unitId) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.ENTER_RAW_CALIBRATION_DATA);
+      if (unit.labWork.status !== 'calibration_in_progress') throw new ServiceError('Start calibration before calculating the worksheet.', { code: 'LAB_CALCULATION_STAGE_INVALID', status: 409 });
+      const calculation = calculateLaboratoryWorksheet(unit.labWork.worksheet);
+      const status = assertLabTransition(unit.labWork.status, 'submit_raw_data');
+      return persistLaboratoryUnit({ account, order, index, action: 'calculation_completed', nextUnit: { ...unit, labWork: { ...unit.labWork, status, worksheet: { ...unit.labWork.worksheet, locked: true }, calculation: { ...calculation, calculatedBy: actorSnapshot(account) } } } });
+    },
+
+    async approveFormulaValidation(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.APPROVE_CALCULATION_REVIEW);
+      const reason = String(input.reason || '').trim();
+      if (input.confirmed !== true || reason.length < 12) throw new ServiceError('Confirm the mock technical review and record a detailed reason.', { code: 'LAB_FORMULA_REVIEW_CONFIRMATION_REQUIRED', status: 422, fieldErrors: { reason: 'Provide at least 12 characters.' } });
+      if (!unit.labWork.calculation) throw new ServiceError('Calculate the worksheet before review.', { code: 'LAB_CALCULATION_REQUIRED', status: 409 });
+      return persistLaboratoryUnit({ account, order, index, action: 'formula_validation_reviewed', reason, nextUnit: { ...unit, labWork: { ...unit.labWork, formulaValidationReview: { status: 'accepted_for_mock_demo', reason, reviewedAt: now().toISOString(), reviewedBy: actorSnapshot(account), formalProductionApprovalRequired: true } } } });
+    },
+
+    async completeCalibration(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.COMPLETE_LAB_CALIBRATION);
+      if (!unit.labWork.calculation) throw new ServiceError('Run and review the calculation before completing calibration.', { code: 'LAB_CALCULATION_REQUIRED', status: 409 });
+      if (unit.labWork.formulaValidationReview?.status !== 'accepted_for_mock_demo') throw new ServiceError('Laboratory Management must review the unresolved reference-template warnings before this mock workflow can continue.', { code: 'LAB_FORMULA_VALIDATION_REQUIRED', status: 409 });
+      if (input.technicianConfirmed !== true) throw new ServiceError('Confirm that the raw readings and required repeatability readings are complete.', { code: 'LAB_TECHNICIAN_CONFIRMATION_REQUIRED', status: 422 });
+      const status = assertLabTransition(unit.labWork.status, 'complete_calibration');
+      return persistLaboratoryUnit({ account, order, index, action: 'calibration_completed', nextUnit: { ...unit, completedAt: now().toISOString(), calibrationResult: String(input.resultSummary || 'Structured worksheet completed').slice(0, 1000), labWork: { ...unit.labWork, status, calibrationCompletedAt: now().toISOString(), technicianConfirmation: actorSnapshot(account) } }, customerMessage: 'Calibration of your instrument has been completed. The certificate is being finalised.' });
+    },
+
+    async completeLabelling(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.RECORD_LABELLING);
+      if (input.calibrationLabelApplied !== true || input.identificationChecked !== true) throw new ServiceError('Confirm the calibration label and instrument identification.', { code: 'LAB_LABELLING_INCOMPLETE', status: 422 });
+      const status = assertLabTransition(unit.labWork.status, 'complete_labelling');
+      const labelling = { calibrationLabelApplied: true, certificateNumber: unit.certificateNumber, calibrationDate: String(input.calibrationDate || '').trim(), recalibrationDate: String(input.recalibrationDate || '').trim(), identificationChecked: true, sealApplied: input.sealApplied === true, labelledAt: now().toISOString(), labelledBy: actorSnapshot(account), checkedBy: String(input.checkedBy || '').trim() };
+      return persistLaboratoryUnit({ account, order, index, action: 'labelling_completed', nextUnit: { ...unit, labWork: { ...unit.labWork, status, labelling } } });
+    },
+
+    async releaseUnitToDispatch(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.RELEASE_UNIT_TO_DISPATCH);
+      if (input.bomSignedOff !== true) throw new ServiceError('Complete the BOM or applicable production sign-off.', { code: 'LAB_BOM_SIGNOFF_REQUIRED', status: 422 });
+      const packages = Math.max(1, Math.trunc(Number(input.numberOfPackages) || 0));
+      const status = assertLabTransition(unit.labWork.status, 'release_to_dispatch');
+      const releasedAt = now().toISOString();
+      const completedUnit = persistLaboratoryUnit({ account, order, index, action: 'unit_released_to_dispatch', nextUnit: { ...unit, releasedAt, movementStatus: 'released', labWork: { ...unit.labWork, status, release: { bomSignedOff: true, numberOfPackages: packages, destination: input.destination === 'expediting' ? 'expediting' : 'dispatch', internalNote: String(input.internalNote || '').trim().slice(0, 2000), releasedAt, releasedBy: actorSnapshot(account) } } }, customerMessage: 'Calibration of your instrument has been completed and the unit is moving to Dispatch. The calibration certificate is being finalised.' });
+      const refreshed = ensureLaboratoryRecord(readAllOrders().find(item => item.id === orderId));
+      const allReleased = refreshed.laboratory.units.every(item => ['released_to_dispatch', 'certificate_released', 'completed', 'archived'].includes(item.labWork?.status));
+      if (allReleased && input.destination !== 'expediting' && refreshed.trackingStatus !== 'awaiting_lab_receipt_dispatch') {
+        saveOrder({
+          ...refreshed,
+          trackingStatus: 'awaiting_lab_receipt_dispatch',
+          status: 'Awaiting Dispatch receipt from Laboratory',
+          laboratory: { ...refreshed.laboratory, status: 'released', releasedAt, releasedBy: actorSnapshot(account), releaseNote: 'All physical calibration units transferred to Dispatch.' },
+          trackingHistory: [...(refreshed.trackingHistory || []), normaliseHistoryEvent({ id: makeId('event'), status: 'awaiting_lab_receipt_dispatch', note: 'All calibrated physical units were transferred to Dispatch. Certificate preparation may continue separately.', actor: account.contact, actorRole: account.role, customerVisible: true, createdAt: releasedAt }, releasedAt)],
+        });
+      }
+      return completedUnit;
+    },
+
+    async generateReviewPdf(orderId, unitId) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.REVIEW_RAW_LAB_DATA);
+      if (!unit.labWork.calculation) throw new ServiceError('Calculate the worksheet before generating the review package.', { code: 'LAB_CALCULATION_REQUIRED', status: 409 });
+      const generatedAt = now().toISOString();
+      const documentId = makeId('lab-document');
+      const base64 = await generateLaboratoryPdf({ kind: LAB_DOCUMENT_KINDS.REVIEW, order, unit, generatedAt, generatedBy: account.contact });
+      const files = readCertificateFiles();
+      files[documentId] = { id: documentId, orderId, unitId, companyId: order.companyId, dataUrl: `data:application/pdf;base64,${base64}`, immutable: true, createdAt: generatedAt };
+      writeCertificateFiles(files);
+      const document = { id: documentId, type: 'calculation_review', fileName: `${unit.jobNumber || unit.id}-calculation-review.pdf`, version: (unit.labWork.documents.filter(item => item.type === 'calculation_review').length + 1), status: 'generated', visibility: 'internal', generatedAt, generatedBy: actorSnapshot(account), relatedUnitId: unit.id, immutable: true };
+      persistLaboratoryUnit({ account, order, index, action: 'review_pdf_generated', nextUnit: { ...unit, labWork: { ...unit.labWork, documents: [...unit.labWork.documents, document] } } });
+      return clone({ ...document, dataUrl: files[documentId].dataUrl });
+    },
+
+    async generateDraftCertificate(orderId, unitId) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.GENERATE_DRAFT_CERTIFICATE);
+      const status = assertLabTransition(unit.labWork.status, 'generate_draft');
+      const generatedAt = now().toISOString();
+      const documentId = makeId('lab-document');
+      const base64 = await generateLaboratoryPdf({ kind: LAB_DOCUMENT_KINDS.DRAFT_CERTIFICATE, order, unit, generatedAt, generatedBy: account.contact });
+      const files = readCertificateFiles();
+      files[documentId] = { id: documentId, orderId, unitId, companyId: order.companyId, dataUrl: `data:application/pdf;base64,${base64}`, immutable: true, createdAt: generatedAt };
+      writeCertificateFiles(files);
+      const version = { id: documentId, type: 'draft_certificate', fileName: `${unit.certificateNumber || unit.id}-draft.pdf`, version: unit.labWork.certificateWorkflow.draftVersions.length + 1, status: 'draft', visibility: 'management', generatedAt, generatedBy: actorSnapshot(account), rawDataRevision: unit.labWork.worksheet?.revision, calculationVersion: unit.labWork.calculation?.methodVersion, immutable: true };
+      const nextUnit = { ...unit, labWork: { ...unit.labWork, status, documents: [...unit.labWork.documents, version], certificateWorkflow: { ...unit.labWork.certificateWorkflow, draftVersions: [...unit.labWork.certificateWorkflow.draftVersions, version] } } };
+      persistLaboratoryUnit({ account, order, index, action: 'draft_certificate_generated', nextUnit });
+      return clone({ ...version, dataUrl: files[documentId].dataUrl });
+    },
+
+    async submitCertificateForReview(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.GENERATE_DRAFT_CERTIFICATE);
+      const status = assertLabTransition(unit.labWork.status, 'submit_review');
+      return persistLaboratoryUnit({ account, order, index, action: 'certificate_submitted_for_review', nextUnit: { ...unit, labWork: { ...unit.labWork, status, certificateWorkflow: { ...unit.labWork.certificateWorkflow, reviewEvents: [...unit.labWork.certificateWorkflow.reviewEvents, { action: 'submitted', comment: String(input.comment || '').trim(), createdAt: now().toISOString(), actor: actorSnapshot(account), immutable: true }] } } } });
+    },
+
+    async returnCertificateForCorrection(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.APPROVE_CALCULATION_REVIEW);
+      const reason = String(input.reason || '').trim();
+      if (reason.length < 8) throw new ServiceError('Record the reason for returning the certificate.', { code: 'LAB_CORRECTION_REASON_REQUIRED', status: 422, fieldErrors: { reason: 'Provide a clear correction reason.' } });
+      const status = assertLabTransition(unit.labWork.status, 'return_correction');
+      return persistLaboratoryUnit({ account, order, index, action: 'certificate_returned_for_correction', reason, nextUnit: { ...unit, labWork: { ...unit.labWork, status, certificateWorkflow: { ...unit.labWork.certificateWorkflow, reviewEvents: [...unit.labWork.certificateWorkflow.reviewEvents, { action: 'returned', reason, createdAt: now().toISOString(), actor: actorSnapshot(account), immutable: true }] } } } });
+    },
+
+    async approveForSignature(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.APPROVE_CALCULATION_REVIEW);
+      if (unit.labWork.formulaValidationReview?.status !== 'accepted_for_mock_demo') throw new ServiceError('Formal method-validation evidence is still required before approval.', { code: 'LAB_METHOD_APPROVAL_REQUIRED', status: 409 });
+      if (input.confirmed !== true) throw new ServiceError('Confirm the raw data, method, standards and certificate values.', { code: 'LAB_MANAGEMENT_CONFIRMATION_REQUIRED', status: 422 });
+      const status = assertLabTransition(unit.labWork.status, 'approve_signature');
+      return persistLaboratoryUnit({ account, order, index, action: 'certificate_approved_for_signature', nextUnit: { ...unit, labWork: { ...unit.labWork, status, certificateWorkflow: { ...unit.labWork.certificateWorkflow, signatoryName: String(input.signatoryName || account.contact).trim(), issue: String(input.issue || 'Issue 1').trim(), approvedAt: now().toISOString(), approvedBy: actorSnapshot(account) } } } });
+    },
+
+    async generateUnsignedCertificate(orderId, unitId) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.GENERATE_DRAFT_CERTIFICATE);
+      const status = assertLabTransition(unit.labWork.status, 'generate_unsigned');
+      const generatedAt = now().toISOString();
+      const documentId = makeId('lab-document');
+      const base64 = await generateLaboratoryPdf({ kind: LAB_DOCUMENT_KINDS.UNSIGNED_CERTIFICATE, order, unit, generatedAt, generatedBy: account.contact });
+      const files = readCertificateFiles();
+      files[documentId] = { id: documentId, orderId, unitId, companyId: order.companyId, dataUrl: `data:application/pdf;base64,${base64}`, immutable: true, createdAt: generatedAt };
+      writeCertificateFiles(files);
+      const version = { id: documentId, type: 'unsigned_final_certificate', fileName: `${unit.certificateNumber || unit.id}-unsigned.pdf`, version: unit.labWork.certificateWorkflow.unsignedVersions.length + 1, status: 'unsigned', visibility: 'management', generatedAt, generatedBy: actorSnapshot(account), immutable: true };
+      persistLaboratoryUnit({ account, order, index, action: 'unsigned_certificate_generated', nextUnit: { ...unit, labWork: { ...unit.labWork, status, documents: [...unit.labWork.documents, version], certificateWorkflow: { ...unit.labWork.certificateWorkflow, unsignedVersions: [...unit.labWork.certificateWorkflow.unsignedVersions, version] } } } });
+      return clone({ ...version, dataUrl: files[documentId].dataUrl });
+    },
+
+    async uploadSignedCertificate(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.UPLOAD_SIGNED_CERTIFICATE);
+      const status = assertLabTransition(unit.labWork.status, 'upload_signed');
+      const existingActive = unit.labWork.certificateWorkflow.signedVersions.find(item => item.status === 'active');
+      const reason = String(input.reason || '').trim();
+      if (existingActive && reason.length < 8) throw new ServiceError('Provide a reason for replacing the signed certificate.', { code: 'LAB_SIGNED_REPLACEMENT_REASON_REQUIRED', status: 422, fieldErrors: { reason: 'Provide a replacement reason.' } });
+      const otherCertificates = readAllOrders().flatMap(item => item.laboratory?.units || []).filter(item => item.id !== unit.id).map(item => item.certificate).filter(Boolean);
+      const certificate = validateCertificateUpload({ ...input, certificateNumber: input.certificateNumber || unit.certificateNumber }, otherCertificates);
+      const dataUrl = await fileToDataUrl(input.file);
+      const hash = await hashFileSha256(input.file);
+      const certificateId = makeId('certificate');
+      const uploadedAt = now().toISOString();
+      const files = readCertificateFiles();
+      files[certificateId] = { id: certificateId, orderId, unitId, companyId: order.companyId, dataUrl, sha256: hash, immutable: true, createdAt: uploadedAt };
+      writeCertificateFiles(files);
+      const signedVersions = unit.labWork.certificateWorkflow.signedVersions.map(item => item.status === 'active' ? { ...item, status: 'superseded', supersededAt: uploadedAt, supersededReason: reason } : item);
+      const signed = { id: certificateId, ...certificate, type: 'signed_final_certificate', version: signedVersions.length + 1, status: 'active', visibility: 'management', sha256: hash, uploadedAt, uploadedBy: actorSnapshot(account), immutable: true, malwareScanStatus: 'required_in_production' };
+      signedVersions.push(signed);
+      const nextUnit = { ...unit, certificateId, certificateNumber: certificate.certificateNumber, certificateStatus: 'uploaded', certificateUploadedAt: uploadedAt, certificate: { ...signed, customerVisible: false, storageStatus: 'browser_mock' }, labWork: { ...unit.labWork, status, documents: [...unit.labWork.documents.map(item => item.id === existingActive?.id ? { ...item, status: 'superseded' } : item), signed], certificateWorkflow: { ...unit.labWork.certificateWorkflow, signedVersions } } };
+      persistLaboratoryUnit({ account, order, index, action: 'signed_certificate_uploaded', reason, nextUnit });
+      return clone(signed);
+    },
+
+    async releaseCertificate(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.RELEASE_CERTIFICATE);
+      const recipientRule = ['representative_only', 'customer_and_representative'].includes(input.recipientRule) ? input.recipientRule : '';
+      if (!recipientRule) throw new ServiceError('Select the approved certificate recipient rule.', { code: 'LAB_CERTIFICATE_RECIPIENT_REQUIRED', status: 422, fieldErrors: { recipientRule: 'Select the recipient rule.' } });
+      const status = assertLabTransition(unit.labWork.status, 'release_certificate');
+      const releasedAt = now().toISOString();
+      const nextUnit = { ...unit, certificateStatus: 'verified', certificate: { ...unit.certificate, customerVisible: recipientRule === 'customer_and_representative', releasedAt, recipientRule }, labWork: { ...unit.labWork, status, certificateWorkflow: { ...unit.labWork.certificateWorkflow, releasedAt, releasedBy: actorSnapshot(account), recipientRule } } };
+      return persistLaboratoryUnit({ account, order, index, action: 'certificate_released', nextUnit, customerMessage: recipientRule === 'customer_and_representative' ? `Calibration certificate ${unit.certificateNumber} has been released.` : '' });
+    },
+
+    async downloadLabDocument(documentId) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.DOWNLOAD_DRAFT_CERTIFICATE) && !accountCan(account, PERMISSIONS.DOWNLOAD_CERTIFICATES)) throw new ServiceError('Your account cannot download Laboratory documents.', { code: 'FORBIDDEN', status: 403 });
+      const order = readAllOrders().find(item => (item.laboratory?.units || []).some(unit => (unit.labWork?.documents || []).some(document => document.id === documentId)) && canReadRecord(account, item));
+      const unit = order?.laboratory?.units?.find(item => (item.labWork?.documents || []).some(document => document.id === documentId));
+      const document = unit?.labWork?.documents?.find(item => item.id === documentId);
+      const file = readCertificateFiles()[documentId];
+      if (!order || !document || !file || document.visibility === 'internal' && account.role === USER_ROLES.CUSTOMER) throw new ServiceError('The Laboratory document was not found for your authorised records.', { code: 'LAB_DOCUMENT_NOT_FOUND', status: 404 });
+      appendAuditEvent({ id: makeId('audit'), action: 'laboratory.document_downloaded', outcome: 'success', entityType: 'lab_document', entityId: documentId, companyId: order.companyId, reference: order.reference, actorId: account.id, actorRole: account.role, documentMetadata: [{ id: documentId, fileName: document.fileName, type: document.type }], immutable: true, createdAt: now().toISOString() });
+      return clone({ ...document, dataUrl: file.dataUrl });
     },
 
     async updateUnit(orderId, unitId, action, input = {}) {
@@ -3362,7 +3795,8 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       ));
       const unit = order?.laboratory?.units?.find(item => item.certificateId === certificateId);
       const file = readCertificateFiles()[certificateId];
-      if (!order || !unit?.certificate || !file) {
+      const customerAwaitingRelease = account.role === USER_ROLES.CUSTOMER && unit?.certificate?.customerVisible !== true;
+      if (!order || !unit?.certificate || !file || customerAwaitingRelease) {
         throw new ServiceError('The certificate was not found for your authorised records.', { code: 'CERTIFICATE_NOT_FOUND', status: 404 });
       }
       appendAuditEvent({

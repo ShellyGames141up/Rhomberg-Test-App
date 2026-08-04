@@ -1,4 +1,5 @@
 import { ServiceError } from '../services/contracts.js';
+import { createLaboratoryWorkflow } from './laboratoryCalibration.js';
 
 export const CERTIFICATION_TYPES = Object.freeze({
   SANAS: 'sanas',
@@ -56,7 +57,7 @@ export const createCalibrationUnits = order => {
       const unitNumber = index + 1;
       const lineItemId = item.lineId || item.id || `line-${lineIndex + 1}`;
       const existing = existingByKey.get(`${lineItemId}:${unitNumber}`);
-      return existing || {
+      const created = {
         id: `lab-unit-${order.id}-${lineIndex + 1}-${unitNumber}`,
         orderId: order.id,
         orderReference: order.reference,
@@ -81,6 +82,8 @@ export const createCalibrationUnits = order => {
         releasedAt: '',
         updatedAt: order.updatedAt || order.createdAt || '',
       };
+      const unit = { ...created, ...(existing || {}) };
+      return { ...unit, labWork: createLaboratoryWorkflow(unit.labWork || unit) };
     });
   });
 };
@@ -99,6 +102,7 @@ export const ensureLaboratoryRecord = order => {
     },
     laboratory: {
       status: order.laboratory?.status || 'awaiting_lab',
+      branchId: order.laboratory?.branchId || order.planning?.laboratoryBranchId || '',
       receivedAt: order.laboratory?.receivedAt || '',
       receivedBy: order.laboratory?.receivedBy || null,
       releasedAt: order.laboratory?.releasedAt || '',

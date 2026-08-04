@@ -2211,4 +2211,56 @@ CREATE TRIGGER qa_events_immutable
 BEFORE UPDATE OR DELETE ON app.qa_events
 FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
 
+CREATE TABLE app.lab_methods (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), method_code text NOT NULL, version text NOT NULL,
+  discipline text NOT NULL CHECK (discipline IN ('pressure','temperature')), approval_status text NOT NULL,
+  formula_definition jsonb NOT NULL, effective_from date, retired_at timestamptz,
+  UNIQUE (method_code, version)
+);
+CREATE TABLE app.lab_reference_standards (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), branch_id uuid NOT NULL REFERENCES app.branches(id),
+  standard_code text NOT NULL, discipline text NOT NULL, range_min numeric, range_max numeric, unit text,
+  resolution numeric, certificate_reference text, valid_from date, expires_on date, status text NOT NULL,
+  approved_method_versions jsonb NOT NULL DEFAULT '[]'::jsonb, UNIQUE (branch_id, standard_code)
+);
+CREATE TABLE app.lab_worksheet_revisions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), calibration_unit_id uuid NOT NULL REFERENCES app.calibration_units(id),
+  method_id uuid REFERENCES app.lab_methods(id), revision integer NOT NULL, raw_input jsonb NOT NULL,
+  locked_at timestamptz, created_by uuid NOT NULL REFERENCES app.users(id), created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (calibration_unit_id, revision)
+);
+CREATE TABLE app.lab_calculation_versions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), worksheet_revision_id uuid NOT NULL REFERENCES app.lab_worksheet_revisions(id),
+  calculation_version integer NOT NULL, derived_results jsonb NOT NULL, uncertainty_budget jsonb NOT NULL,
+  validation_warnings jsonb NOT NULL DEFAULT '[]'::jsonb, calculated_by uuid NOT NULL REFERENCES app.users(id),
+  calculated_at timestamptz NOT NULL DEFAULT now(), UNIQUE (worksheet_revision_id, calculation_version)
+);
+CREATE TABLE app.lab_reference_usage (
+  calculation_version_id uuid NOT NULL REFERENCES app.lab_calculation_versions(id),
+  reference_standard_id uuid NOT NULL REFERENCES app.lab_reference_standards(id),
+  certificate_snapshot jsonb NOT NULL, PRIMARY KEY (calculation_version_id, reference_standard_id)
+);
+CREATE TABLE app.lab_certificate_reviews (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), calibration_unit_id uuid NOT NULL REFERENCES app.calibration_units(id),
+  action text NOT NULL, reason text, checklist jsonb NOT NULL DEFAULT '{}'::jsonb,
+  actor_id uuid NOT NULL REFERENCES app.users(id), actor_role text NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE app.lab_signed_documents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), certificate_id uuid NOT NULL REFERENCES app.certificates(id),
+  version integer NOT NULL, storage_key text NOT NULL, sha256 text NOT NULL, signature_validation jsonb NOT NULL,
+  status text NOT NULL, uploaded_by uuid NOT NULL REFERENCES app.users(id), uploaded_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (certificate_id, version), UNIQUE (storage_key)
+);
+CREATE TABLE app.lab_unit_releases (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), calibration_unit_id uuid NOT NULL REFERENCES app.calibration_units(id),
+  destination text NOT NULL CHECK (destination IN ('dispatch','expediting')), package_count integer NOT NULL CHECK (package_count > 0),
+  bom_signed_off boolean NOT NULL, internal_note text, released_by uuid NOT NULL REFERENCES app.users(id),
+  released_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TRIGGER lab_worksheet_revisions_immutable BEFORE UPDATE OR DELETE ON app.lab_worksheet_revisions FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+CREATE TRIGGER lab_calculation_versions_immutable BEFORE UPDATE OR DELETE ON app.lab_calculation_versions FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+CREATE TRIGGER lab_certificate_reviews_immutable BEFORE UPDATE OR DELETE ON app.lab_certificate_reviews FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+CREATE TRIGGER lab_signed_documents_immutable BEFORE UPDATE OR DELETE ON app.lab_signed_documents FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+
 COMMIT;

@@ -390,6 +390,34 @@ export function createApiServices(config = {}) {
       input,
       { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `lab-unit-${Date.now()}` } },
     ),
+    receive: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/receive`, input),
+    startStabilisation: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/stabilisation/start`, input),
+    completeStabilisation: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/stabilisation/complete`, input),
+    inspect: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/inspection`, input),
+    bookIn: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/book-in`, input),
+    assignTechnician: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/assign-technician`, input),
+    saveWorksheet: (orderId, unitId, input) => client.put(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/worksheet`, input, { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `lab-worksheet-${Date.now()}` } }),
+    startCalibration: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/calibration/start`, input),
+    holdCalibration: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/calibration/hold`, input),
+    calculate: (orderId, unitId) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/calculate`, {}),
+    approveFormulaValidation: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/calculation-review/approval`, input),
+    completeCalibration: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/complete-calibration`, input),
+    completeLabelling: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/complete-labelling`, input),
+    releaseUnitToDispatch: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/release-to-dispatch`, input),
+    generateReviewPdf: (orderId, unitId) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/generate-review-pdf`, {}),
+    generateDraftCertificate: (orderId, unitId) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/generate-draft-certificate`, {}),
+    submitCertificateForReview: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/certificate/submit-for-review`, input),
+    returnCertificateForCorrection: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/certificate/return-for-correction`, input),
+    approveForSignature: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/certificate/approve-for-signature`, input),
+    generateUnsignedCertificate: (orderId, unitId) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/certificate/unsigned-pdf`, {}),
+    uploadSignedCertificate(orderId, unitId, input) {
+      const form = new FormData();
+      form.append('metadata', JSON.stringify({ certificateNumber: input.certificateNumber, issueDate: input.issueDate, reason: input.reason || '' }));
+      form.append('certificate', input.file, input.file.name);
+      return client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/certificate/signed-pdf`, form, { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `signed-certificate-${Date.now()}` } });
+    },
+    releaseCertificate: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/certificate/release`, input),
+    downloadLabDocument: documentId => client.get(`/laboratory/documents/${encodeURIComponent(documentId)}/download`),
     uploadCertificate(orderId, unitId, input) {
       const metadata = validateCertificateUpload(input);
       const form = new FormData();

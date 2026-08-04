@@ -103,3 +103,6 @@ The role switcher does not display passwords because it selects only pre-seeded 
 ## Production Exclusion
 
 The production build aliases the executive-demo React module to an empty production module, omits the `/demo/` route, excludes mock services and scans the output for executive warning/scenario markers. Demo accounts, passwords, role switching and reset controls must never be enabled by a production API.
+# Laboratory demonstration scenarios
+
+The Executive Demo includes a detailed Cape Town Pressure journey, Cape Town Temperature journey and Johannesburg Pressure branch-isolation journey. Use fabricated data only. Demonstrate receipt and equilibrium, controlled booking, method/standard selection, structured readings, calculation warning, management review, physical Dispatch transfer, draft/unsigned PDFs, externally signed upload and explicit customer release. Emphasise that managers review evidence without rewriting technician readings and that customer views exclude raw data, internal notes, calculations and audit details.

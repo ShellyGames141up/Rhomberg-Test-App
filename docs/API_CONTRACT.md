@@ -24,3 +24,10 @@ Future quotation upload processing must return verified extraction metadata (`qu
 All write endpoints require a secure session, CSRF defence, permission, company/assignment/queue scope, optimistic `expectedVersion`, shared validation, idempotency where retries are possible, immutable audit creation and public-safe error envelopes. Upload endpoints additionally require private object storage, allow-listed file types, size limits, malware scanning and short-lived download URLs.
 
 Examples use fabricated UUIDs and names. No endpoint in this proposal is connected to a production server.
+# Laboratory calibration API extension
+
+The future `/api/v1/laboratory` contract exposes branch-scoped queues and command endpoints for receipt, stabilisation, inspection, booking, assignment, worksheet revision, calculation, management review, calibration completion, labelling, physical release, PDF generation, certificate review, unsigned generation, signed upload and certificate release. Every mutation requires CSRF/session authentication, permission and company/branch checks, an idempotency key for retry-safe commands and a correlation ID.
+
+Worksheet requests contain structured points/readings, method version, standard IDs, environment and uncertainty sources; they never contain spreadsheet formula strings. Responses separate `rawInput`, `derivedResults`, `validationWarnings` and immutable version metadata. Customer responses omit all four internal structures and expose only safe progress plus explicitly released certificate metadata.
+
+Signed upload uses multipart PDF plus certificate number, issue date and replacement reason. Production responds with digest and `signatureValidation` (`pending`, `valid`, `invalid`); release is blocked until validation is valid. Errors use the common friendly envelope and never disclose storage keys, SQL, stack traces or security rules.

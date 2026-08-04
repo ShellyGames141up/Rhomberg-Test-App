@@ -105,6 +105,28 @@ export const ROLE_PROFILES = Object.freeze({
       queue: 'Laboratory queue',
     },
   }),
+  [USER_ROLES.LABORATORY_TECHNICIAN]: profile({
+    role: USER_ROLES.LABORATORY_TECHNICIAN,
+    label: 'Laboratory technician',
+    workspaceLabel: 'Laboratory',
+    dashboard: {
+      eyebrow: 'Technician workspace',
+      headline: 'Measure, calculate and preserve the raw record.',
+      description: 'Complete receipt, inspection, booking, method-specific readings, labelling and transfer without access to management-only certificate controls.',
+      queue: 'Assigned Laboratory jobs',
+    },
+  }),
+  [USER_ROLES.LABORATORY_TEMPERATURE_TECHNICIAN]: profile({
+    role: USER_ROLES.LABORATORY_TEMPERATURE_TECHNICIAN,
+    label: 'Temperature technician',
+    workspaceLabel: 'Laboratory',
+    dashboard: {
+      eyebrow: 'Temperature Laboratory',
+      headline: 'Temperature work, point by point.',
+      description: 'Capture repeated temperature measurements and approved reference-standard data in a structured worksheet.',
+      queue: 'Temperature calibration jobs',
+    },
+  }),
   [USER_ROLES.LABORATORY_MANAGER]: profile({
     role: USER_ROLES.LABORATORY_MANAGER,
     label: 'Laboratory manager',
@@ -116,6 +138,32 @@ export const ROLE_PROFILES = Object.freeze({
       headline: 'Calibration and certificates under control.',
       description: 'Review unit results, verify certificate completeness and authorise controlled Laboratory release.',
       queue: 'Laboratory release queue',
+    },
+  }),
+  [USER_ROLES.TECHNICAL_SIGNATORY]: profile({
+    role: USER_ROLES.TECHNICAL_SIGNATORY,
+    label: 'Technical signatory',
+    workspaceLabel: 'Laboratory review',
+    navigation: internalNavigation('Laboratory', true),
+    allowedViews: Object.freeze([...INTERNAL_VIEWS, 'audit']),
+    dashboard: {
+      eyebrow: 'Technical signatory review',
+      headline: 'Approve the evidence before release.',
+      description: 'Review calculations, certificate values and immutable signing records without overwriting technician raw data.',
+      queue: 'Certificates awaiting signature',
+    },
+  }),
+  [USER_ROLES.LABORATORY_ADMINISTRATOR]: profile({
+    role: USER_ROLES.LABORATORY_ADMINISTRATOR,
+    label: 'Laboratory administrator',
+    workspaceLabel: 'Laboratory control',
+    navigation: internalNavigation('Laboratory', true),
+    allowedViews: Object.freeze([...INTERNAL_VIEWS, 'audit']),
+    dashboard: {
+      eyebrow: 'Laboratory administration',
+      headline: 'Templates and standards under control.',
+      description: 'Maintain approved Laboratory configuration and reference-standard metadata without changing raw measurements or signed certificates.',
+      queue: 'Laboratory configuration',
     },
   }),
   [USER_ROLES.QUALITY_ASSURANCE]: profile({

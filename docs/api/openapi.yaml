@@ -1949,6 +1949,197 @@ paths:
                 properties:
                   data: { type: array, items: { $ref: '#/components/schemas/LaboratoryOrder' } }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /laboratory/orders/{orderId}/units/{unitId}/receive:
+    post:
+      operationId: receiveLaboratoryUnit
+      summary: Receive one physical unit at its authorised Laboratory branch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/UnitId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [branchId, conditionOnReceipt, packageCondition, numberOfUnits]
+              properties:
+                branchId: { type: string, enum: [cape_town, johannesburg] }
+                conditionOnReceipt: { type: string, maxLength: 1000 }
+                packageCondition: { type: string, maxLength: 1000 }
+                numberOfUnits: { type: integer, minimum: 1 }
+                visibleDamage: { type: string, maxLength: 1000 }
+                customerDocumentsReceived: { type: boolean }
+                internalNotes: { type: string, maxLength: 2000 }
+      responses:
+        '200': { description: Unit receipt and immutable event recorded }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /laboratory/orders/{orderId}/units/{unitId}/stabilisation/start:
+    post:
+      operationId: startLaboratoryStabilisation
+      summary: Start controlled thermal stabilisation
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/UnitId' }]
+      responses: { '200': { description: Stabilisation started }, '409': { $ref: '#/components/responses/ApiError' } }
+  /laboratory/orders/{orderId}/units/{unitId}/stabilisation/complete:
+    post:
+      operationId: completeLaboratoryStabilisation
+      summary: Confirm equilibrium and complete stabilisation
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/UnitId' }]
+      responses: { '200': { description: Equilibrium evidence recorded }, '422': { $ref: '#/components/responses/ApiError' } }
+  /laboratory/orders/{orderId}/units/{unitId}/inspection:
+    post:
+      operationId: inspectLaboratoryUnit
+      summary: Record controlled incoming inspection outcome
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/UnitId' }]
+      responses: { '200': { description: Inspection event recorded }, '422': { $ref: '#/components/responses/ApiError' } }
+  /laboratory/orders/{orderId}/units/{unitId}/book-in:
+    post:
+      operationId: bookInLaboratoryUnit
+      summary: Record instrument identity, method and branch-aware references
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/UnitId' }]
+      responses: { '200': { description: Unit booked in with unique job and certificate references }, '409': { $ref: '#/components/responses/ApiError' }, '422': { $ref: '#/components/responses/ApiError' } }
+  /laboratory/orders/{orderId}/units/{unitId}/assign-technician:
+    post:
+      operationId: assignLaboratoryTechnician
+      summary: Assign a branch-authorised technician with a required reason
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/UnitId' }]
+      responses: { '200': { description: Assignment and audit event recorded }, '403': { $ref: '#/components/responses/Forbidden' }, '422': { $ref: '#/components/responses/ApiError' } }
+  /laboratory/orders/{orderId}/units/{unitId}/worksheet:
+    put:
+      operationId: saveLaboratoryWorksheetRevision
+      summary: Save structured technician inputs as a new immutable revision
+      description: Requires an Idempotency-Key. Spreadsheet formula strings are not accepted.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/UnitId' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [methodId, standardIds, testPoints, uncertaintyContributions]
+              properties:
+                methodId: { type: string, enum: [pressure_master_gauge_comparison, pressure_dwt_700_bar, pressure_dwt_250_mpa, temperature_comparison] }
+                standardIds: { type: array, minItems: 1, items: { type: string } }
+                testPoints: { type: array, minItems: 1, items: { type: object } }
+                uncertaintyContributions: { type: array, minItems: 1, items: { type: object } }
+                coverageFactor: { type: number, exclusiveMinimum: 0 }
+                decimals: { type: integer, minimum: 0, maximum: 12 }
+                environmental: { type: object }
+                notes: { type: string, maxLength: 2000 }
+      responses: { '200': { description: New worksheet revision stored }, '403': { $ref: '#/components/responses/Forbidden' }, '422': { $ref: '#/components/responses/ApiError' } }
+  /laboratory/orders/{orderId}/units/{unitId}/calibration/start:
+    post:
+      operationId: startOrResumeLaboratoryCalibration
+      summary: Start or resume calibration
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/UnitId' }]
+      responses: { '200': { description: Calibration started or resumed }, '409': { $ref: '#/components/responses/ApiError' } }
+  /laboratory/orders/{orderId}/units/{unitId}/calibration/hold:
+    post:
+      operationId: holdLaboratoryCalibration
+      summary: Put calibration on controlled hold with a reason
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/UnitId' }]
+      responses: { '200': { description: Hold and notifications recorded }, '422': { $ref: '#/components/responses/ApiError' } }
+  /laboratory/orders/{orderId}/units/{unitId}/calculate:
+    post:
+      operationId: calculateLaboratoryWorksheet
+      summary: Lock raw input and create a versioned calculation
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/UnitId' }]
+      responses: { '200': { description: Derived results, uncertainty and warnings recorded }, '409': { $ref: '#/components/responses/ApiError' }, '422': { $ref: '#/components/responses/ApiError' } }
+  /laboratory/orders/{orderId}/units/{unitId}/calculation-review/approval:
+    post:
+      operationId: approveLaboratoryCalculationReview
+      summary: Record management review without altering technician raw inputs
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/UnitId' }]
+      responses: { '200': { description: Review evidence appended }, '403': { $ref: '#/components/responses/Forbidden' }, '422': { $ref: '#/components/responses/ApiError' } }
+  /laboratory/orders/{orderId}/units/{unitId}/complete-calibration:
+    post:
+      operationId: completeLaboratoryCalibrationUnit
+      summary: Complete the technically reviewed unit calibration
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/UnitId' }]
+      responses: { '200': { description: Calibration completed }, '409': { $ref: '#/components/responses/ApiError' } }
+  /laboratory/orders/{orderId}/units/{unitId}/complete-labelling:
+    post:
+      operationId: completeLaboratoryLabelling
+      summary: Record unit identification and calibration labelling
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/UnitId' }]
+      responses: { '200': { description: Labelling evidence recorded }, '422': { $ref: '#/components/responses/ApiError' } }
+  /laboratory/orders/{orderId}/units/{unitId}/release-to-dispatch:
+    post:
+      operationId: releaseLaboratoryUnitToDispatch
+      summary: Transfer a labelled physical unit while certificate work continues
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/UnitId' }]
+      responses: { '200': { description: Physical transfer and audit event recorded }, '409': { $ref: '#/components/responses/ApiError' } }
+  /laboratory/orders/{orderId}/units/{unitId}/generate-review-pdf:
+    post:
+      operationId: generateLaboratoryReviewPdf
+      summary: Generate an internal raw-data and calculation review PDF
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/UnitId' }]
+      responses: { '200': { description: Immutable internal PDF version generated }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /laboratory/orders/{orderId}/units/{unitId}/generate-draft-certificate:
+    post:
+      operationId: generateLaboratoryDraftCertificate
+      summary: Generate a watermarked management-only draft certificate
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/UnitId' }]
+      responses: { '200': { description: Immutable draft PDF version generated }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /laboratory/orders/{orderId}/units/{unitId}/certificate/{certificateAction}:
+    post:
+      operationId: progressLaboratoryCertificate
+      summary: Progress certificate review, signature preparation or controlled release
+      description: Each action has role-specific validation and appends rather than overwrites review history.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/OrderId' }
+        - { $ref: '#/components/parameters/UnitId' }
+        - name: certificateAction
+          in: path
+          required: true
+          schema: { type: string, enum: [submit-for-review, return-for-correction, approve-for-signature, unsigned-pdf, release] }
+      responses: { '200': { description: Certificate workflow action and audit event recorded }, '403': { $ref: '#/components/responses/Forbidden' }, '409': { $ref: '#/components/responses/ApiError' }, '422': { $ref: '#/components/responses/ApiError' } }
+  /laboratory/orders/{orderId}/units/{unitId}/certificate/signed-pdf:
+    post:
+      operationId: uploadSignedLaboratoryCertificate
+      summary: Upload, scan, validate and hash an externally signed certificate PDF
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/UnitId' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [metadata, certificate]
+              properties:
+                metadata: { type: string, description: JSON containing certificateNumber, issueDate and replacement reason }
+                certificate: { type: string, format: binary, description: PDF only }
+      responses: { '200': { description: Immutable signed version, SHA-256 and validation state recorded }, '409': { $ref: '#/components/responses/ApiError' }, '422': { $ref: '#/components/responses/ApiError' } }
+  /laboratory/documents/{documentId}/download:
+    get:
+      operationId: downloadLaboratoryDocument
+      summary: Create an audited, short-lived download for an authorised Laboratory document
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses: { '200': { description: Authorised document download }, '403': { $ref: '#/components/responses/Forbidden' }, '404': { $ref: '#/components/responses/ApiError' } }
   /laboratory/orders/{orderId}/receive:
     post:
       operationId: receiveLaboratoryOrder
