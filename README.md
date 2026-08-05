@@ -16,7 +16,7 @@ This repository contains the shared React implementation for Rhomberg Connect an
    Mobile access for Sales Representatives, including safe document upload for **Load Customer Order**, authorised managers and Expeditors. Planning, Laboratory, QA, Dispatch and Administration are desktop-only.
 
 4. [Rhomberg Operations - Internal Desktop](https://shellygames141up.github.io/Rhomberg-Test-App/preview/internal-desktop/)
-   Internal workspace for Sales Representatives, Sales Managers, Company Owner or authorised management, Planning, Laboratory, Expediting, Quality Assurance, Dispatch, Buyer and Administrator roles.
+   Internal workspace for Sales Representatives, Technical Advisors and Technical Managers, Sales Managers, Company Owner or authorised management, Planning, Laboratory, Expediting, Quality Assurance, Dispatch, Buyer and Administrator roles.
 
 5. [Executive Workflow Demo](https://shellygames141up.github.io/Rhomberg-Test-App/demo/executive-workflow/)
    Internal presentation route using fabricated data, guided scenarios and controlled role switching. It is not a production environment. Role-switching and executive-demo controls are excluded from production builds.
@@ -46,6 +46,7 @@ This repository contains the shared React implementation for Rhomberg Connect an
 - The controlled request covers assignment, review, routed information requests, append-only correspondence, recommendation and completion. Final quotation is blocked while review is active; only Sales Managers and Administrators have a reasoned audited override.
 - One active Technical Support cycle adds one 24-hour quotation allowance. Customer-safe status, messages and attachments are projected separately from internal questions, calculations, notes and warnings.
 - Central notifications, immutable audit events, management metrics, future API contracts and PostgreSQL proposals are included. Email/push remain simulated and mock attachments remain metadata-only.
+- Open the [Internal Desktop preview](https://shellygames141up.github.io/Rhomberg-Test-App/preview/internal-desktop/) and use the Technical Advisor credentials below. See the [Technical Support workflow](docs/TECHNICAL_SUPPORT_WORKFLOW.md) and [RFQ workflow](docs/RFQ_WORKFLOW.md) for the complete controlled process.
 
 ### Customer RFQs and representative-loaded orders
 
@@ -96,6 +97,9 @@ These accounts exist only in public mock builds. They use reserved `.invalid` or
 | --- | --- | --- | --- |
 | Customer | `customer.demo@example.invalid` | `Demo123!` | Connect desktop/mobile; Executive Demo |
 | Sales Representative | `sales.workflow@example.invalid` | `Sales123!` | Operations mobile/desktop; Executive Demo |
+| Technical Advisor (Technical Support) | `technical.support@example.invalid` | `TechnicalDemo123!` | Operations desktop; Executive Demo |
+| Technical Manager | `technical.manager@example.invalid` | `TechnicalManager123!` | Operations desktop; Executive Demo |
+| Technical Director | `technical.director@example.invalid` | `TechnicalDirector123!` | Operations desktop; Executive Demo |
 | Planning | `planning.workflow@example.invalid` | `Planning123!` | Operations desktop; Executive Demo |
 | Expeditor | `expeditor.workflow@example.invalid` | `Expedite123!` | Operations mobile/desktop; Executive Demo |
 | Laboratory User | `laboratory.workflow@example.invalid` | `Lab12345!` | Operations desktop; Executive Demo |
@@ -257,6 +261,8 @@ No infrastructure values, credentials or private endpoints belong in this reposi
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [RFQ workflow](docs/RFQ_WORKFLOW.md)
+- [Technical Support workflow](docs/TECHNICAL_SUPPORT_WORKFLOW.md)
 - [Order workflow](docs/ORDER_WORKFLOW.md)
 - [Representative workflow](docs/REPRESENTATIVE_WORKFLOW.md)
 - [Document access matrix](docs/DOCUMENT_ACCESS_MATRIX.md)

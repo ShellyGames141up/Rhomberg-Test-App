@@ -324,7 +324,7 @@ export const DEMO_LOGINS = Object.freeze([
   {
     id: 'technical_support',
     role: 'technical_support',
-    label: 'Use Technical Support login',
+    label: 'Use Technical Advisor login',
     description: 'Review and respond to RFQ technical questions',
     avatar: 'T',
     email: 'technical.support@example.invalid',
