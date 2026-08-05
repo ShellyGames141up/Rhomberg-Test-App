@@ -34,7 +34,6 @@ const buildPlainTextSummary = enquiry => [
   `Email: ${enquiry.email}`,
   `Area: ${enquiry.area}`,
   `Selected representative: ${enquiry.selectedRep?.name || 'Not selected'}${enquiry.selectedRep?.code ? ` (code ${enquiry.selectedRep.code}, ${enquiry.selectedRep.branchName})` : ''}`,
-  `Emergency: ${enquiry.emergency === 'yes' ? 'Yes - representative to determine emergency pricing' : 'No'}`,
   `Fulfilment: ${enquiry.fulfilment === 'collect' ? `Collect from ${enquiry.collectionBranch}` : `Delivery to ${enquiry.deliveryAddress}`}`,
   `Application: ${enquiry.application}`,
   `Medium: ${enquiry.medium || 'Not supplied'}`,
@@ -107,7 +106,6 @@ async function sendPublicTestFallback(enquiry, poFile, signal) {
   form.append('Selected representative', enquiry.selectedRep?.name ? `${enquiry.selectedRep.name} - code ${enquiry.selectedRep.code} - ${enquiry.selectedRep.branchName}` : 'Not selected');
   form.append('Application', enquiry.application);
   form.append('Process medium', enquiry.medium || 'Not supplied');
-  form.append('Emergency request', enquiry.emergency === 'yes' ? 'YES - emergency pricing to be determined by the representative' : 'No');
   form.append('Delivery or collection', enquiry.fulfilment === 'collect' ? `Collect - ${enquiry.collectionBranch}` : `Deliver - ${enquiry.deliveryAddress}`);
   form.append('Purchase Order', enquiry.poNumber || enquiry.poFileName || 'Not supplied');
   form.append('Additional notes', enquiry.notes || 'None');

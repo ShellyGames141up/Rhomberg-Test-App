@@ -116,6 +116,6 @@ export const planningQueueCounts = orders => {
     planning_in_progress: queue.filter(order => planningStageFor(order) === 'planning_in_progress').length,
     planned: queue.filter(order => planningStageFor(order) === 'planned').length,
     on_hold: queue.filter(order => order.trackingStatus === 'on_hold').length,
-    emergency: queue.filter(order => order.emergency === 'yes').length,
+    emergency: queue.filter(order => planningOrderPriority(order) === 'urgent').length,
   };
 };

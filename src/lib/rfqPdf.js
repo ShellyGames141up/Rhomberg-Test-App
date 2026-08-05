@@ -311,7 +311,6 @@ export async function buildRfqPdf(enquiry, options = {}) {
   drawParagraphCard(state, 'Application', enquiry.application, 'blue', label);
   drawInfoGrid(state, [
     ['Process medium', enquiry.medium || 'Not supplied'],
-    ['Emergency', enquiry.emergency === 'yes' ? 'YES - fee and feasibility to be determined by the representative' : 'No'],
     ['Fulfilment', enquiry.fulfilment === 'collect' ? `Collect - ${enquiry.collectionBranch}` : `Deliver - ${enquiry.deliveryAddress}`],
     ['Purchase order', enquiry.poNumber || enquiry.poFileName || 'Not supplied'],
   ], label);

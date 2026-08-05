@@ -13,7 +13,7 @@ This repository contains the shared React implementation for Rhomberg Connect an
    Touch-first customer interface using the same company-isolated workflows and service contracts.
 
 3. [Rhomberg Operations - Rep & Expeditor Mobile](https://shellygames141up.github.io/Rhomberg-Test-App/preview/internal-mobile/)
-   Mobile access for Sales Representatives, authorised managers and Expeditors. Planning, Laboratory, QA, Dispatch and Administration are desktop-only.
+   Mobile access for Sales Representatives, including safe document upload for **Load Customer Order**, authorised managers and Expeditors. Planning, Laboratory, QA, Dispatch and Administration are desktop-only.
 
 4. [Rhomberg Operations - Internal Desktop](https://shellygames141up.github.io/Rhomberg-Test-App/preview/internal-desktop/)
    Internal workspace for Sales Representatives, Sales Managers, Company Owner or authorised management, Planning, Laboratory, Expediting, Quality Assurance, Dispatch, Buyer and Administrator roles.
@@ -35,6 +35,15 @@ This repository contains the shared React implementation for Rhomberg Connect an
 - Documents: generated or simulated in the browser; production private storage is not connected
 - Email and push: simulated only
 - Production deployment: not started
+
+## Current Workflow Update
+
+- Customer RFQ forms no longer contain emergency, urgent or priority controls. The service rejects those fields even if a request is forged; authorised internal users retain controlled priority management.
+- Sales Representatives can use **Load Customer Order** on Operations desktop and mobile for approved offline orders received by email, telephone, in person, from an existing quotation or another explained source.
+- A representative-loaded order requires an authorised company/contact/branch/representative, at least one configured product with quantity, a customer quotation and Purchase Order, both references/dates, and the five-part representative confirmation.
+- Successful submissions create a permanent order directly in `awaiting_planning` with origin `representative_loaded_order`; no placeholder RFQ is created.
+- Duplicate matching and idempotency protect repeat submissions. Customer, Planning and internal notifications are generated, and source-document uploads, replacements and downloads are audited.
+- The GitHub Pages mock stores document metadata only. Production file bytes require private storage, backend validation and malware scanning.
 
 GitHub Pages is demonstration-only. Browser storage, browser-side permissions and fabricated passwords are not production security controls.
 
@@ -224,6 +233,8 @@ No infrastructure values, credentials or private endpoints belong in this reposi
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Order workflow](docs/ORDER_WORKFLOW.md)
+- [Representative workflow](docs/REPRESENTATIVE_WORKFLOW.md)
+- [Document access matrix](docs/DOCUMENT_ACCESS_MATRIX.md)
 - [Role and permission matrix](docs/ROLE_PERMISSION_MATRIX.md)
 - [API contract](docs/API_CONTRACT.md) and [OpenAPI](docs/api/openapi.yaml)
 - [Database schema](docs/DATABASE_SCHEMA.md) and [PostgreSQL proposal](docs/database/postgresql-schema.sql)

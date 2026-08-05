@@ -136,7 +136,7 @@ const matchesFilter = (order, filter) => {
   if (filter === 'collection') return order?.fulfilment === 'collect';
   if (filter === 'delivery') return order?.fulfilment === 'delivery';
   if (filter === 'handover_confirmed') return DISPATCH_COMPLETION_STATUSES.includes(dispatchStageFor(order));
-  if (filter === 'emergency') return order?.emergency === 'yes';
+  if (filter === 'emergency') return order?.priority === 'urgent' || order?.emergency === 'yes';
   return dispatchStageFor(order) === filter;
 };
 
@@ -179,6 +179,6 @@ export const dispatchQueueCounts = orders => {
     collection: queue.filter(order => order.fulfilment === 'collect').length,
     delivery: queue.filter(order => order.fulfilment === 'delivery').length,
     handoverConfirmed: queue.filter(order => DISPATCH_COMPLETION_STATUSES.includes(dispatchStageFor(order))).length,
-    emergency: queue.filter(order => order.emergency === 'yes').length,
+    emergency: queue.filter(order => order.priority === 'urgent' || order.emergency === 'yes').length,
   };
 };

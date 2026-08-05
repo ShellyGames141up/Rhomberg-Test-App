@@ -13,7 +13,6 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
   const [poFile, setPoFile] = useState(null);
   const [area, setArea] = useState(areas.includes(account.area) ? account.area : areas[0] || account.area);
   const [selectedRepId, setSelectedRepId] = useState('');
-  const [emergency, setEmergency] = useState('no');
   const [fulfilment, setFulfilment] = useState('');
   const [error, setError] = useState('');
   const [fallbackUrl, setFallbackUrl] = useState('');
@@ -94,7 +93,6 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
           ...selectedRepresentative,
           branchName: repSelection.branch.name,
         },
-        emergency,
         fulfilment,
         deliveryAddress: fulfilment === 'delivery' ? data.deliveryAddress.trim() : '',
         collectionBranch: fulfilment === 'collect' ? `${nearestBranch.name} - ${nearestBranch.address}` : '',
@@ -120,7 +118,6 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
     setPoMode('none');
     setPoFile(null);
     setSelectedRepId('');
-    setEmergency('no');
     setFulfilment('');
     submissionKey.current = globalThis.crypto?.randomUUID?.() || `rfq-form-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   };
@@ -161,15 +158,6 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
             <label className="form-field rep-select"><span>Select your representative</span><select required value={selectedRepId} onChange={event => setSelectedRepId(event.target.value)}><option value="" disabled>Choose a representative</option>{repSelection.representatives.map(representative => <option key={representative.id} value={representative.id}>{representative.name} · Code {representative.code}</option>)}</select></label>
           </div>
 
-          <fieldset className="rfq-choice-field">
-            <legend>Is this an emergency request?</legend>
-            <div className="compact-choice" role="radiogroup" aria-label="Emergency request">
-              <button type="button" role="radio" aria-checked={emergency === 'no'} className={emergency === 'no' ? 'selected' : ''} onClick={() => setEmergency('no')}><span>{emergency === 'no' ? '✓' : ''}</span><strong>No</strong></button>
-              <button type="button" role="radio" aria-checked={emergency === 'yes'} className={emergency === 'yes' ? 'selected emergency' : ''} onClick={() => setEmergency('yes')}><span>{emergency === 'yes' ? '✓' : ''}</span><strong>Yes</strong></button>
-            </div>
-            {emergency === 'yes' && <p className="fee-notice emergency-fee"><span>!</span><span><strong>Emergency pricing is assessed by the representative.</strong> Rhomberg will confirm feasibility and charges before processing.</span></p>}
-          </fieldset>
-
           <fieldset className="rfq-choice-field fulfilment-field">
             <legend>Delivery or collection?</legend>
             <div className="fulfilment-options" role="radiogroup" aria-label="Delivery or collection">
@@ -180,7 +168,7 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
             {fulfilment === 'collect' && <div className="nearest-branch-card"><span>⌖</span><div><small>Nearest branch based on {area}</small><strong>{nearestBranch.name}</strong><p>{nearestBranch.address}</p><a href={`tel:${nearestBranch.phone.replace(/\s/g, '')}`}>{nearestBranch.phone}</a></div></div>}
           </fieldset>
 
-          <label className="form-field"><span>Additional specifications <i>Optional</i></span><textarea name="notes" rows="3" placeholder="Plant standards, environment, urgency or other requirements..." /></label>
+          <label className="form-field"><span>Additional specifications <i>Optional</i></span><textarea name="notes" rows="3" placeholder="Plant standards, environment or other application requirements..." /></label>
         </section>
 
         <section className="enquiry-section form-panel po-panel">

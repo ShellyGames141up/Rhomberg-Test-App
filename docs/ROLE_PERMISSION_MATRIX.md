@@ -34,6 +34,18 @@ Management oversight requires `view_reports`. Representative reassignment, workf
 
 Customer projections must continue to remove internal notes, protected pricing, internal actor IDs, Planning detail, exception evidence and staff-only document metadata.
 
+## Representative-loaded order permissions
+
+| Capability | Customer | Sales representative | Sales manager | Generic manager | Planning / Expediting / Lab / QA / Dispatch / Buyer | Administrator |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Open **Load Customer Order** | No | Assigned scope | Authorised wider scope | No | No | Yes |
+| Select another dedicated representative | No | No | Authorised scope | No | No | Yes |
+| Set internal priority/urgency | No | Yes | Yes | Existing authorised internal controls | Existing authorised queue controls | Yes |
+| Download current customer quotation/PO | Own company | Assigned order | Authorised scope | Authorised scope | Authorised queue/order | Yes |
+| Replace quotation/PO version | No | Assigned order | No by default | No | No | Yes |
+
+The reusable permission codes are `load_customer_order`, `download_order_source_document` and `replace_order_source_document`. Navigation, forms and service methods consume these permissions; components do not compare role names for these actions. Customer requests containing urgency fields are rejected even if UI controls are bypassed.
+
 ## Dispatch permissions
 
 The Dispatch desktop workspace is selected centrally by `usesDispatchWorkspace()`, not by component role comparisons. `view_dispatch_queue` scopes records to Dispatch-owned stages; `confirm_collection` permits collection release/confirmation/completion; `confirm_delivery` permits delivery release/problem/confirmation/completion; `manage_order_hold` remains independent.

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Rhomberg Instruments Private-Cloud API
-  version: 0.7.0-proposed
+  version: 0.8.0-proposed
   description: |
     Proposed production contract for the completed RFQ-to-order workflow.
     No production service or database is connected. All examples are fabricated.
@@ -309,7 +309,8 @@ paths:
               properties:
                 payload:
                   type: string
-                  description: JSON-encoded EnquirySubmission
+                  description: JSON-encoded CustomerEnquirySubmission. Emergency, urgent and priority fields are forbidden for customer submissions.
+                  example: '{"application":"Fabricated water-line pressure monitoring","medium":"Clean water","area":"Western Cape","selectedRepresentativeId":"00000000-0000-4000-8000-000000000027","fulfilment":"collect","collectionBranchId":"00000000-0000-4000-8000-000000000101","notes":"Fabricated demonstration only","poMode":"none","items":[{"lineId":"line-demo-1","productId":"pbg","quantity":2,"configuration":{"dialSize":"100 mm"}}]}'
                 purchaseOrder:
                   type: string
                   format: binary
@@ -506,6 +507,231 @@ paths:
                       $ref: '#/components/schemas/Order'
                   meta:
                     $ref: '#/components/schemas/PageMeta'
+  /representatives/orders/options:
+    get:
+      operationId: getRepresentativeOrderOptions
+      description: Requires load_customer_order. Sales representatives receive only assigned companies and their own representative identity; Sales Managers and Administrators receive their authorised wider scope.
+      responses:
+        '200':
+          description: Server-owned customer, contact, branch, representative, product and source options
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/RepresentativeOrderOptions' }
+        '403':
+          $ref: '#/components/responses/ApiError'
+  /representatives/orders/duplicate-check:
+    post:
+      operationId: checkRepresentativeOrderDuplicate
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RepresentativeOrderDuplicateCandidate' }
+            example:
+              companyId: 00000000-0000-4000-8000-000000000201
+              quotationNumber: Q-DEMO-4102
+              purchaseOrderNumber: PO-DEMO-4102
+              items:
+                - lineId: line-demo-1
+                  productId: pbg
+                  quantity: 2
+                  configuration: { dialSize: 100 mm, range: 0 to 10 bar }
+      responses:
+        '200':
+          description: Possible duplicate comparison result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/RepresentativeOrderDuplicateCheck' }
+              example:
+                data:
+                  likelyDuplicate: false
+                  requiresExplicitConfirmation: false
+                  checkedAt: '2026-08-04T08:00:00Z'
+                  matches: []
+        '403':
+          $ref: '#/components/responses/ApiError'
+  /representatives/orders:
+    post:
+      operationId: createRepresentativeLoadedOrder
+      description: Requires load_customer_order. The server validates assignment, company scope, source confirmations, both documents, product snapshots, duplicates and idempotency before creating an awaiting_planning order without an RFQ.
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [payload, quotation, purchaseOrder]
+              properties:
+                payload:
+                  type: string
+                  description: JSON-encoded RepresentativeOrderSubmission. Customer urgency fields are forbidden; priority is internal and authorised here.
+                  example: '{"companyId":"00000000-0000-4000-8000-000000000201","customerContactId":"00000000-0000-4000-8000-000000000202","branchId":"00000000-0000-4000-8000-000000000101","representativeId":"00000000-0000-4000-8000-000000000027","orderSource":"email","application":"Fabricated water-line pressure monitoring","fulfilment":"collect","priority":"high","quotationNumber":"Q-DEMO-4102","quotationDate":"2026-08-04","purchaseOrderNumber":"PO-DEMO-4102","purchaseOrderDate":"2026-08-04","items":[{"lineId":"line-demo-1","productId":"pbg","quantity":2,"configuration":{"dialSize":"100 mm","range":"0 to 10 bar"}}],"sourceConfirmed":true}'
+                quotation:
+                  type: string
+                  format: binary
+                  description: Mandatory customer quotation; PDF preferred, approved DOC/DOCX/image supported, maximum 4 MB.
+                purchaseOrder:
+                  type: string
+                  format: binary
+                  description: Mandatory customer Purchase Order; PDF preferred, approved DOC/DOCX/image supported, maximum 4 MB.
+                supportingDocuments:
+                  type: array
+                  maxItems: 8
+                  items: { type: string, format: binary }
+      responses:
+        '201':
+          description: Representative-loaded order created and sent to Planning
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/RepresentativeOrderCreationResponse' }
+              example:
+                data:
+                  order:
+                    id: 00000000-0000-4000-8000-000000000301
+                    reference: OR-DEMO-4102
+                    orderOrigin: representative_loaded_order
+                    orderSource: email
+                    companyId: 00000000-0000-4000-8000-000000000201
+                    workflowType: order
+                    trackingStatus: awaiting_planning
+                    quotationNumber: Q-DEMO-4102
+                    purchaseOrderNumber: PO-DEMO-4102
+                    acceptedAt: '2026-08-04T08:01:00Z'
+                    items:
+                      - id: 00000000-0000-4000-8000-000000000302
+                        productId: pbg
+                        productCodeSnapshot: PBG
+                        productNameSnapshot: General-purpose pressure gauge
+                        quantity: 2
+                        configurationSnapshot: { dialSize: 100 mm, range: 0 to 10 bar }
+                    version: 1
+                    createdAt: '2026-08-04T08:01:00Z'
+                    updatedAt: '2026-08-04T08:01:00Z'
+                  duplicateCheck:
+                    likelyDuplicate: false
+                    requiresExplicitConfirmation: false
+                    checkedAt: '2026-08-04T08:01:00Z'
+                    matches: []
+                  idempotent: false
+        '403':
+          $ref: '#/components/responses/ApiError'
+        '409':
+          description: Likely duplicate unless explicitly confirmed under policy, or idempotency conflict
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '422':
+          $ref: '#/components/responses/ApiError'
+  /orders/{orderId}/source-documents:
+    get:
+      operationId: listOrderSourceDocuments
+      description: Returns only documents authorised for the current actor and company. Customer projections contain the customer quotation and their Purchase Order only.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Authorised versioned source-document metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/OrderSourceDocument' }
+        '404':
+          $ref: '#/components/responses/ApiError'
+  /orders/{orderId}/source-documents/{documentId}/download:
+    get:
+      operationId: authoriseOrderSourceDocumentDownload
+      description: Authorises and audits a download, then returns a short-lived signed location or streams the document. Never returns a public object URL.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - name: documentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Authorised download receipt
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [document, expiresAt]
+                    properties:
+                      document: { $ref: '#/components/schemas/OrderSourceDocument' }
+                      signedDownloadUrl: { type: string, format: uri }
+                      expiresAt: { type: string, format: date-time }
+        '404':
+          $ref: '#/components/responses/ApiError'
+  /orders/{orderId}/source-documents/{documentId}/versions:
+    post:
+      operationId: replaceOrderSourceDocument
+      description: Requires replace_order_source_document. Preserves the old version, requires a reason and creates immutable upload/replacement audit events.
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - name: documentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [payload, document]
+              properties:
+                payload:
+                  type: string
+                  description: JSON object containing a mandatory replacement reason.
+                document: { type: string, format: binary }
+      responses:
+        '201':
+          description: New immutable document version created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/OrderSourceDocument' }
+        '403':
+          $ref: '#/components/responses/ApiError'
+        '422':
+          $ref: '#/components/responses/ApiError'
   /orders/{orderId}/tracking-events:
     get:
       operationId: listOrderTrackingEvents
@@ -3823,9 +4049,36 @@ components:
         data:
           type: array
           items: { $ref: '#/components/schemas/WorkflowActionDescriptor' }
+    CustomerEnquirySubmission:
+      type: object
+      additionalProperties: false
+      description: Customer-created RFQ payload. Urgency and priority are intentionally absent and must be rejected if supplied.
+      required: [application, area, selectedRepresentativeId, fulfilment, items]
+      properties:
+        application: { type: string, minLength: 5, maxLength: 4000 }
+        medium: { type: string, maxLength: 500 }
+        area: { type: string, minLength: 1, maxLength: 200 }
+        selectedRepresentativeId: { type: string }
+        fulfilment: { type: string, enum: [delivery, collect] }
+        deliveryAddress: { type: string, maxLength: 2000 }
+        collectionBranchId: { type: string }
+        notes: { type: string, maxLength: 2000 }
+        poMode: { type: string, enum: [none, number, upload] }
+        poNumber: { type: string, maxLength: 100 }
+        items: { type: array, minItems: 1, items: { $ref: '#/components/schemas/EnquiryItemInput' } }
+      allOf:
+        - if:
+            properties: { fulfilment: { const: delivery } }
+          then: { required: [deliveryAddress] }
+        - if:
+            properties: { fulfilment: { const: collect } }
+          then: { required: [collectionBranchId] }
+        - if:
+            properties: { poMode: { const: number } }
+          then: { required: [poNumber] }
     Enquiry:
       type: object
-      required: [id, reference, companyId, submittingCustomerId, selectedRep, workflowType, items, trackingStatus, priority, submittedAt, version, createdAt, updatedAt]
+      required: [id, reference, companyId, submittingCustomerId, selectedRep, workflowType, items, trackingStatus, submittedAt, version, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         reference: { type: string }
@@ -3836,8 +4089,11 @@ components:
         phone: { type: string }
         application: { type: string }
         customerNotes: { type: string }
-        emergency: { type: string, enum: ['yes', 'no'] }
-        priority: { type: string, enum: [urgent, standard] }
+        priority:
+          type: string
+          enum: [urgent, standard]
+          readOnly: true
+          description: Internal representative projection only. The server MUST omit this field from every customer response.
         submittingCustomerId: { type: string, format: uuid }
         submittingCustomer:
           type: object
@@ -3945,17 +4201,53 @@ components:
                 pricedPdfAttached: { type: boolean }
     Order:
       type: object
-      required: [id, reference, sourceEnquiryId, companyId, workflowType, trackingStatus, sourceRfqStatus, acceptedAt, items, version, createdAt, updatedAt]
+      required: [id, reference, companyId, workflowType, trackingStatus, acceptedAt, items, version, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         reference: { type: string }
-        sourceEnquiryId: { type: string, format: uuid }
-        sourceRfqReference: { type: string }
+        orderOrigin:
+          type: string
+          enum: [customer_submitted_rfq_order, representative_loaded_order]
+          description: Internal projection only; customer serializers omit this field.
+        orderSource:
+          type: string
+          enum: [email, telephone, in_person, existing_quotation, other_approved_source]
+          description: Internal projection only for representative-loaded orders.
+        orderSourceOther:
+          type: string
+          maxLength: 500
+          description: Internal projection only when orderSource is other_approved_source.
+        createdByRepresentative:
+          type: boolean
+          description: Internal projection only; true for representative-loaded orders.
+        sourceEnquiryId:
+          type: [string, 'null']
+          format: uuid
+          description: Null for representative-loaded orders.
+        sourceRfqReference: { type: [string, 'null'] }
         companyId: { type: string, format: uuid }
         selectedRep: { $ref: '#/components/schemas/Representative' }
         workflowType: { type: string, const: order }
         trackingStatus: { $ref: '#/components/schemas/OrderStatus' }
-        sourceRfqStatus: { type: string, const: converted_to_order }
+        sourceRfqStatus:
+          type: [string, 'null']
+          enum: [converted_to_order, null]
+        quotationNumber: { type: string }
+        purchaseOrderNumber: { type: string }
+        quotationDocumentId: { type: string, format: uuid }
+        purchaseOrderDocumentId: { type: string, format: uuid }
+        sourceConfirmation:
+          allOf:
+            - $ref: '#/components/schemas/RepresentativeSourceConfirmation'
+          description: Internal projection only.
+        duplicateCheckResult:
+          allOf:
+            - $ref: '#/components/schemas/RepresentativeOrderDuplicateCheck'
+          description: Internal projection only.
+        documents:
+          type: array
+          items: { $ref: '#/components/schemas/OrderSourceDocument' }
+          description: Customer responses contain only company-authorised customer-visible documents.
         acceptedAt: { type: string, format: date-time }
         status: { type: string, description: Human-readable status label. }
         planning:
@@ -4001,16 +4293,134 @@ components:
         updatedAt: { type: string, format: date-time }
     OrderItemSnapshot:
       type: object
-      required: [id, sourceEnquiryItemId, productId, productCodeSnapshot, productNameSnapshot, quantity, configurationSnapshot]
+      required: [id, productId, productCodeSnapshot, productNameSnapshot, quantity, configurationSnapshot]
       properties:
         id: { type: string, format: uuid }
-        sourceEnquiryItemId: { type: string, format: uuid }
+        sourceEnquiryItemId:
+          type: [string, 'null']
+          format: uuid
+          description: Null for a representative-loaded order line.
         productId: { type: string, format: uuid }
         productCodeSnapshot: { type: string }
         productNameSnapshot: { type: string }
         quantity: { type: integer, minimum: 1, maximum: 9999 }
         configurationSnapshot: { type: object, additionalProperties: true }
         createdAt: { type: string, format: date-time }
+    RepresentativeOrderOptions:
+      type: object
+      required: [companies, contacts, branches, representatives, products, orderSources, priorities]
+      properties:
+        companies: { type: array, items: { type: object, additionalProperties: true } }
+        contacts: { type: array, items: { type: object, additionalProperties: true } }
+        branches: { type: array, items: { type: object, additionalProperties: true } }
+        representatives: { type: array, items: { $ref: '#/components/schemas/Representative' } }
+        products: { type: array, items: { type: object, additionalProperties: true } }
+        orderSources:
+          type: array
+          items:
+            type: object
+            required: [id, label]
+            properties:
+              id: { type: string, enum: [email, telephone, in_person, existing_quotation, other_approved_source] }
+              label: { type: string }
+        priorities: { type: array, items: { type: object, additionalProperties: true } }
+    RepresentativeOrderDuplicateCandidate:
+      type: object
+      required: [companyId, quotationNumber, purchaseOrderNumber, items]
+      properties:
+        companyId: { type: string, format: uuid }
+        quotationNumber: { type: string }
+        purchaseOrderNumber: { type: string }
+        items: { type: array, minItems: 1, items: { $ref: '#/components/schemas/EnquiryItemInput' } }
+    RepresentativeOrderDuplicateCheck:
+      type: object
+      required: [likelyDuplicate, requiresExplicitConfirmation, checkedAt, matches]
+      properties:
+        likelyDuplicate: { type: boolean }
+        requiresExplicitConfirmation: { type: boolean }
+        explicitlyConfirmed: { type: boolean }
+        checkedAt: { type: string, format: date-time }
+        matches:
+          type: array
+          items:
+            type: object
+            required: [orderId, orderReference]
+            properties:
+              orderId: { type: string, format: uuid }
+              orderReference: { type: string }
+              samePurchaseOrderNumber: { type: boolean }
+              sameQuotationNumber: { type: boolean }
+              sameProductLines: { type: boolean }
+              createdAt: { type: string, format: date-time }
+    RepresentativeSourceConfirmation:
+      type: object
+      required: [confirmed, confirmedAt, statements]
+      properties:
+        confirmed: { type: boolean, const: true }
+        confirmedAt: { type: string, format: date-time }
+        note: { type: string, maxLength: 2000 }
+        statements:
+          type: array
+          minItems: 5
+          items: { type: string }
+    RepresentativeOrderSubmission:
+      type: object
+      additionalProperties: false
+      required: [companyId, customerContactId, branchId, representativeId, orderSource, application, fulfilment, priority, quotationNumber, quotationDate, purchaseOrderNumber, purchaseOrderDate, items, sourceConfirmed]
+      properties:
+        companyId: { type: string, format: uuid }
+        customerContactId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        representativeId: { type: string, format: uuid }
+        orderSource: { type: string, enum: [email, telephone, in_person, existing_quotation, other_approved_source] }
+        orderSourceOther: { type: string, maxLength: 500 }
+        application: { type: string, minLength: 5, maxLength: 4000 }
+        fulfilment: { type: string, enum: [delivery, collect] }
+        deliveryAddress: { type: string, maxLength: 2000 }
+        customerNotes: { type: string, maxLength: 2000 }
+        internalRepresentativeNotes: { type: string, maxLength: 2000 }
+        requiredDate: { type: string, format: date }
+        priority: { type: string, enum: [standard, high, urgent], description: Internal-only authorised priority. }
+        quotationNumber: { type: string, maxLength: 100 }
+        quotationDate: { type: string, format: date }
+        quotationRevision: { type: string, maxLength: 60 }
+        purchaseOrderNumber: { type: string, maxLength: 100 }
+        purchaseOrderDate: { type: string, format: date }
+        items: { type: array, minItems: 1, items: { $ref: '#/components/schemas/EnquiryItemInput' } }
+        sourceConfirmed: { type: boolean, const: true }
+        confirmationNote: { type: string, maxLength: 2000 }
+        duplicateConfirmed: { type: boolean, default: false }
+      allOf:
+        - if:
+            properties: { orderSource: { const: other_approved_source } }
+          then: { required: [orderSourceOther] }
+        - if:
+            properties: { fulfilment: { const: delivery } }
+          then: { required: [deliveryAddress] }
+    RepresentativeOrderCreationResponse:
+      type: object
+      required: [order, duplicateCheck, idempotent]
+      properties:
+        order: { $ref: '#/components/schemas/Order' }
+        duplicateCheck: { $ref: '#/components/schemas/RepresentativeOrderDuplicateCheck' }
+        idempotent: { type: boolean }
+    OrderSourceDocument:
+      type: object
+      required: [id, documentType, fileName, mimeType, sizeBytes, version, isCurrentVersion, customerVisible, uploadedAt, storageStatus]
+      properties:
+        id: { type: string, format: uuid }
+        documentType: { type: string, enum: [customer_quotation, purchase_order, supporting_document] }
+        fileName: { type: string }
+        mimeType: { type: string }
+        sizeBytes: { type: integer, minimum: 1, maximum: 4194304 }
+        version: { type: integer, minimum: 1 }
+        isCurrentVersion: { type: boolean }
+        replacesDocumentId: { type: [string, 'null'], format: uuid }
+        replacementReason: { type: string, maxLength: 1000 }
+        customerVisible: { type: boolean }
+        uploadedAt: { type: string, format: date-time }
+        storageStatus: { type: string, enum: [pending, stored, quarantined, rejected] }
+        malwareScanStatus: { type: string, enum: [pending, clean, rejected, failed] }
     CustomerPersonalisation:
       type: object
       required: [schemaVersion, setupCompleted, themePreset, customColours, fontSize, density, appearanceMode, notificationPreferences]
@@ -4074,7 +4484,7 @@ components:
         id: { type: string, format: uuid }
         eventType:
           type: string
-          enum: [rfq_submitted, rfq_assigned, rfq_under_review, rfq_quoted, customer_acknowledgement, order_accepted, order_created, order_sent_to_planning, order_sent_to_expediting, customer_progress_update, order_delayed, order_on_hold, order_resumed, order_sent_to_dispatch, ready_for_collection, out_for_delivery, delivery_problem_reported, delivered, collected, completed, order_cancelled, rfq_cancelled, rfq_expired, workflow_override]
+          enum: [rfq_submitted, rfq_assigned, rfq_under_review, rfq_quoted, customer_acknowledgement, order_accepted, order_created, order_sent_to_planning, representative_order_submitted, customer_order_available, planning_order_received, representative_order_duplicate_confirmed, order_sent_to_expediting, customer_progress_update, order_delayed, order_on_hold, order_resumed, order_sent_to_dispatch, ready_for_collection, out_for_delivery, delivery_problem_reported, delivered, collected, completed, order_cancelled, rfq_cancelled, rfq_expired, workflow_override]
         category:
           type: string
           enum: [rfqUpdates, quotationNotifications, orderProgress, delayNotifications, fulfilmentNotifications, accountSecurity, maintenanceNotices, companyAnnouncements]

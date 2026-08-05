@@ -97,6 +97,12 @@ import {
 import { resolveManagementPeriod } from '../../domain/salesAnalytics.js';
 import { PLANNING_PRIORITIES } from '../../domain/planningQueue.js';
 import {
+  findRepresentativeOrderDuplicates,
+  ORDER_ORIGINS,
+  representativeOrderDocumentMetadata,
+  REPRESENTATIVE_ORDER_SOURCES,
+} from '../../domain/representativeOrders.js';
+import {
   createDeniedWorkflowAudit,
   createWorkflowActor,
   getAllowedWorkflowActions,
@@ -127,6 +133,7 @@ import {
   MAX_DISPATCH_PROOF_BYTES,
   MAX_PO_FILE_BYTES,
   MAX_QUOTATION_DOCUMENT_BYTES,
+  MAX_REPRESENTATIVE_ORDER_DOCUMENT_BYTES,
   validateOrderAcceptance,
   validatePersonalisation,
   validatePersonalisationImage,
@@ -139,6 +146,8 @@ import {
   validateExpeditingAction,
   validateQuotationConfirmation,
   validateRegistration,
+  validateRepresentativeDocumentReplacement,
+  validateRepresentativeLoadedOrder,
   validateRepresentativeAssignment,
   validateSignIn,
   validateWorkflowActionRequest,
@@ -250,20 +259,28 @@ const normaliseHistoryEvent = (event, fallbackCreatedAt) => {
 };
 
 const normaliseEnquiry = enquiry => {
+  const safeEnquiry = { ...enquiry };
+  const priority = ['standard', 'high', 'urgent'].includes(enquiry.priority)
+    ? enquiry.priority
+    : (enquiry.emergency === 'yes' || enquiry.urgent === true ? 'urgent' : 'standard');
+  delete safeEnquiry.emergency;
+  delete safeEnquiry.urgent;
   let trackingStatus = migrateStatus(enquiry.trackingStatus || 'submitted');
   if (!RFQ_STATUSES.includes(trackingStatus) && !ORDER_STATUSES.includes(trackingStatus)) trackingStatus = 'submitted';
   const createdAt = enquiry.createdAt || new Date().toISOString();
   const workflowType = enquiry.workflowType || (ORDER_STATUSES.includes(trackingStatus) ? 'order' : 'rfq');
   const definition = workflowStatusById(trackingStatus, workflowType);
   const isLegacyOrder = workflowType === 'order';
+  const isRepresentativeLoadedOrder = enquiry.orderOrigin === ORDER_ORIGINS.REPRESENTATIVE_LOADED;
   return {
-    ...enquiry,
+    ...safeEnquiry,
+    priority,
     version: Math.max(0, Number(enquiry.version) || 0),
     companyId: enquiry.companyId || enquiry.accountId,
     workflowType,
     trackingStatus,
     status: definition?.label || 'Workflow update',
-    sourceRfqStatus: enquiry.sourceRfqStatus || (isLegacyOrder ? 'converted_to_order' : ''),
+    sourceRfqStatus: enquiry.sourceRfqStatus || (isLegacyOrder && !isRepresentativeLoadedOrder ? 'converted_to_order' : ''),
     acceptedAt: enquiry.acceptedAt || (isLegacyOrder ? createdAt : ''),
     trackingHistory: enquiry.trackingHistory?.length
       ? enquiry.trackingHistory.map(event => normaliseHistoryEvent(event, createdAt))
@@ -282,6 +299,8 @@ const toCustomerVisibleDocument = document => {
     fileName: document.fileName,
     mimeType: document.mimeType,
     sizeBytes: document.sizeBytes,
+    version: document.version || 1,
+    isCurrentVersion: document.isCurrentVersion !== false,
     uploadedAt: document.uploadedAt,
     storageStatus: document.storageStatus,
   };
@@ -515,12 +534,11 @@ const toCustomerVisibleRecord = enquiry => {
     fulfilment: enquiry.fulfilment,
     deliveryAddress: enquiry.deliveryAddress,
     collectionBranch: enquiry.collectionBranch,
-    emergency: enquiry.emergency,
     notes: enquiry.notes,
     customerNotes: enquiry.customerNotes,
-    priority: enquiry.priority,
     poMode: enquiry.poMode,
     poNumber: enquiry.poNumber,
+    purchaseOrderNumber: enquiry.purchaseOrderNumber,
     poFileName: enquiry.poFileName,
     items: (enquiry.items || []).map(item => ({
       lineId: item.lineId,
@@ -533,6 +551,7 @@ const toCustomerVisibleRecord = enquiry => {
       configuration: sanitiseCustomerValue(item.configuration || {}, ['configuration']),
     })),
     documents: (enquiry.documents || [])
+      .filter(document => document.isCurrentVersion !== false)
       .map(toCustomerVisibleDocument)
       .filter(Boolean),
     selectedRep: enquiry.selectedRep ? {
@@ -1774,7 +1793,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
           industry: account.industry,
         },
         customerNotes: serialisableDetails.notes || '',
-        priority: serialisableDetails.emergency === 'yes' ? 'urgent' : 'standard',
+        priority: 'standard',
         documents: documentMetadata,
         items: clone(lines),
         workflowType: 'rfq',
@@ -1903,6 +1922,393 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     },
   };
 
+  const representativeOrderCustomersFor = account => {
+    const assignments = readCustomerRepresentativeAssignments();
+    const customerAccounts = readAccounts().filter(item => roleCan(item.role, PERMISSIONS.VIEW_OWN_COMPANY_ACCOUNT));
+    const canViewAll = accountCan(account, PERMISSIONS.VIEW_ALL_COMPANIES);
+    const assignedCompanyIds = new Set(readAllRecords()
+      .filter(record => (record.representativeId || record.selectedRep?.id) === account.representativeId)
+      .map(record => record.companyId));
+    return customerAccounts.filter(customer => {
+      if (Array.isArray(account.authorisedCompanyIds) && account.authorisedCompanyIds.length && !account.authorisedCompanyIds.includes(customer.companyId)) return false;
+      if (canViewAll) return true;
+      return assignments[customer.companyId]?.representativeId === account.representativeId
+        || assignedCompanyIds.has(customer.companyId);
+    });
+  };
+
+  const representativeOrders = {
+    async getOptions() {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.LOAD_CUSTOMER_ORDER)) {
+        throw new ServiceError('Your role cannot load customer orders.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const customerAccounts = representativeOrderCustomersFor(account);
+      const companies = [...new Map(customerAccounts.map(customer => [customer.companyId, {
+        id: customer.companyId,
+        name: customer.company,
+        area: customer.area,
+        industry: customer.industry,
+      }])).values()];
+      const contacts = customerAccounts.map(customer => ({
+        id: customer.id,
+        companyId: customer.companyId,
+        name: customer.contact,
+        email: customer.email,
+        phone: customer.phone,
+      }));
+      const availableRepresentatives = accountCan(account, PERMISSIONS.VIEW_ALL_COMPANIES)
+        ? representatives
+        : representatives.filter(representative => representative.id === account.representativeId);
+      return clone({
+        companies,
+        contacts,
+        branches,
+        representatives: availableRepresentatives.map(representative => ({
+          ...representative,
+          branchName: branches.find(branch => branch.id === representative.branchId)?.name || '',
+        })),
+        products: effectiveProducts().filter(product => product.status !== 'inactive'),
+        orderSources: REPRESENTATIVE_ORDER_SOURCES,
+        priorities: PLANNING_PRIORITIES,
+      });
+    },
+
+    async checkDuplicate(candidate = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.LOAD_CUSTOMER_ORDER)) {
+        throw new ServiceError('Your role cannot check customer orders.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const allowedCompanyIds = new Set(representativeOrderCustomersFor(account).map(customer => customer.companyId));
+      if (!allowedCompanyIds.has(candidate.companyId)) {
+        throw new ServiceError('The selected company is outside your authorised customer scope.', { code: 'COMPANY_NOT_AUTHORISED', status: 403 });
+      }
+      return clone(findRepresentativeOrderDuplicates({ candidate, orders: readAllOrders(), now: now() }));
+    },
+
+    async create(input = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.LOAD_CUSTOMER_ORDER)) {
+        throw new ServiceError('Your role cannot load customer orders.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const submissionKey = String(input.submissionKey || '').trim();
+      const idempotencyRecords = readIdempotencyRecords();
+      const idempotencyRecord = idempotencyRecords[`representative-order:${account.id}:${submissionKey}`];
+      if (idempotencyRecord) {
+        const existingOrder = readAllOrders().find(order => order.id === idempotencyRecord.entityId);
+        if (existingOrder && canReadRecord(account, existingOrder)) {
+          return clone({ order: presentRecord(account, existingOrder), idempotent: true, duplicateCheck: existingOrder.duplicateCheckResult });
+        }
+      }
+
+      const validated = validateRepresentativeLoadedOrder(input);
+      const candidate = validated.order;
+      validateConfiguredProducts(candidate.items);
+      const customerAccounts = representativeOrderCustomersFor(account);
+      const customer = customerAccounts.find(item => item.id === candidate.customerContactId && item.companyId === candidate.companyId);
+      if (!customer) {
+        throw new ServiceError('Select an authorised contact for an available customer company.', {
+          code: 'CUSTOMER_CONTACT_NOT_AUTHORISED',
+          status: 403,
+          fieldErrors: { customerContactId: 'This contact is outside your authorised customer scope.' },
+        });
+      }
+      const selectedRepresentative = representativeById(candidate.representativeId);
+      if (!selectedRepresentative) {
+        throw new ServiceError('Select a representative from the approved directory.', { code: 'REPRESENTATIVE_NOT_FOUND', status: 422, fieldErrors: { representativeId: 'Select an approved representative.' } });
+      }
+      if (!accountCan(account, PERMISSIONS.VIEW_ALL_COMPANIES) && selectedRepresentative.id !== account.representativeId) {
+        throw new ServiceError('Representatives may load orders only under their own assignment.', { code: 'REPRESENTATIVE_ASSIGNMENT_REQUIRED', status: 403 });
+      }
+      if (selectedRepresentative.branchId !== candidate.branchId) {
+        throw new ServiceError('The branch must match the dedicated representative.', { code: 'BRANCH_REPRESENTATIVE_MISMATCH', status: 422, fieldErrors: { branchId: 'Choose the representative\'s assigned branch.' } });
+      }
+      const branch = branches.find(item => item.id === candidate.branchId);
+      if (!branch) throw new ServiceError('Select an approved Rhomberg branch.', { code: 'BRANCH_NOT_FOUND', status: 422 });
+
+      const productDirectory = effectiveProducts();
+      const items = candidate.items.map(item => {
+        const product = productDirectory.find(entry => entry.id === item.productId);
+        const lineId = makeId('order-line');
+        return {
+          lineId,
+          orderItemId: lineId,
+          productId: product.id,
+          code: product.code,
+          name: product.name,
+          description: product.description,
+          image: product.image,
+          category: product.category,
+          variant: product.variant || '',
+          quantity: Number(item.quantity),
+          configuration: clone(item.configuration || {}),
+          configurationSnapshot: clone(item.configuration || {}),
+        };
+      });
+      const duplicateCheck = findRepresentativeOrderDuplicates({
+        candidate: { ...candidate, items },
+        orders: readAllOrders(),
+        now: now(),
+      });
+      if (duplicateCheck.likelyDuplicate && !candidate.duplicateConfirmed) {
+        throw new ServiceError('A possible duplicate order was found. Review it before creating another order.', {
+          code: 'LIKELY_DUPLICATE_ORDER',
+          status: 409,
+          fieldErrors: { duplicateConfirmation: 'Confirm that this is a separate authorised order before resubmitting.' },
+          details: { duplicateCheck },
+        });
+      }
+
+      const createdAt = now().toISOString();
+      const orderId = makeId('order');
+      const reference = nextOrderReference(readAllOrders());
+      const actor = createWorkflowActor(account);
+      const uploader = { id: account.id, role: account.role, displayName: account.contact };
+      const quotationDocument = representativeOrderDocumentMetadata({
+        id: makeId('document'), type: 'customer_quotation', file: validated.quotationFile, uploadedAt: createdAt, uploadedBy: uploader,
+      });
+      const purchaseOrderDocument = representativeOrderDocumentMetadata({
+        id: makeId('document'), type: 'purchase_order', file: validated.purchaseOrderFile, uploadedAt: createdAt, uploadedBy: uploader,
+      });
+      const supportingDocuments = validated.supportingDocuments.map(file => representativeOrderDocumentMetadata({
+        id: makeId('document'), type: 'supporting_document', file, uploadedAt: createdAt, uploadedBy: uploader, customerVisible: false,
+      }));
+      const sourceRecordId = makeId('representative-loaded-order');
+      const selectedRep = {
+        ...clone(selectedRepresentative),
+        branchName: branch.name,
+      };
+      const creationEvent = {
+        id: makeId('workflow-event'),
+        entityType: 'order',
+        action: 'create_representative_order',
+        fromStatus: '',
+        toStatus: 'awaiting_planning',
+        status: 'awaiting_planning',
+        label: 'Awaiting planning',
+        note: 'Your order has been created and sent to Planning.',
+        customerDescription: 'Your order has been created and sent to Planning.',
+        internalDescription: 'Order loaded by Sales Representative from an approved offline source.',
+        customerVisible: true,
+        actorId: account.id,
+        actorRole: account.role,
+        actor: account.contact,
+        createdAt,
+      };
+      const order = saveOrder({
+        id: orderId,
+        reference,
+        version: 0,
+        workflowType: 'order',
+        orderOrigin: ORDER_ORIGINS.REPRESENTATIVE_LOADED,
+        orderSource: candidate.orderSource,
+        orderSourceOther: candidate.orderSourceOther,
+        sourceRecordId,
+        createdByRepresentative: true,
+        createdByRepresentativeId: account.id,
+        createdBy: uploader,
+        representativeLoadedOrder: {
+          id: sourceRecordId,
+          source: candidate.orderSource,
+          sourceExplanation: candidate.orderSourceOther,
+          createdByRepresentativeId: account.id,
+          createdAt,
+        },
+        accountId: customer.id,
+        companyId: customer.companyId,
+        company: customer.company,
+        companySnapshot: { id: customer.companyId, name: customer.company, area: customer.area, industry: customer.industry },
+        contact: customer.contact,
+        email: customer.email,
+        phone: customer.phone,
+        customerContactId: customer.id,
+        submittingCustomerId: customer.id,
+        submittingCustomer: { id: customer.id, name: customer.contact, email: customer.email, phone: customer.phone },
+        selectedRep,
+        representativeId: selectedRep.id,
+        assignedAt: createdAt,
+        branchId: branch.id,
+        application: candidate.application,
+        fulfilment: candidate.fulfilment,
+        deliveryAddress: candidate.deliveryAddress,
+        collectionBranch: candidate.fulfilment === 'collect' ? `${branch.name} - ${branch.address}` : '',
+        customerNotes: candidate.customerNotes,
+        notes: candidate.customerNotes,
+        internalRepresentativeNotes: candidate.internalRepresentativeNotes,
+        requiredDate: candidate.requiredDate,
+        priority: candidate.priority,
+        internalUrgency: candidate.priority === 'urgent',
+        items,
+        quotationNumber: candidate.quotationNumber,
+        purchaseOrderNumber: candidate.purchaseOrderNumber,
+        customerPoNumber: candidate.purchaseOrderNumber,
+        poMode: 'upload',
+        poNumber: candidate.purchaseOrderNumber,
+        poFileName: purchaseOrderDocument.fileName,
+        quotationDocumentId: quotationDocument.id,
+        purchaseOrderDocumentId: purchaseOrderDocument.id,
+        quotation: {
+          number: candidate.quotationNumber,
+          date: candidate.quotationDate,
+          revision: candidate.quotationRevision,
+          emailed: true,
+          acceptedExternally: true,
+          documentCustomerVisible: true,
+          document: quotationDocument,
+        },
+        purchaseOrder: {
+          number: candidate.purchaseOrderNumber,
+          date: candidate.purchaseOrderDate,
+          documentId: purchaseOrderDocument.id,
+        },
+        documents: [quotationDocument, purchaseOrderDocument, ...supportingDocuments],
+        sourceConfirmation: {
+          confirmed: true,
+          confirmedBy: uploader,
+          confirmedAt: createdAt,
+          note: candidate.confirmationNote,
+          statements: [
+            'quotation_sent_and_accepted',
+            'purchase_order_matches_customer',
+            'quotation_and_purchase_order_match',
+            'products_and_quantities_checked',
+            'representative_authorised',
+          ],
+        },
+        duplicateCheckResult: { ...duplicateCheck, explicitlyConfirmed: duplicateCheck.likelyDuplicate && candidate.duplicateConfirmed },
+        trackingStatus: 'awaiting_planning',
+        status: 'Awaiting planning',
+        trackingHistory: [creationEvent],
+        acceptedAt: createdAt,
+        submittedAt: createdAt,
+        submittedToPlanningAt: createdAt,
+        createdAt,
+        updatedAt: createdAt,
+      });
+
+      appendAuditEvent({
+        id: makeId('audit'),
+        eventType: 'representative_loaded_order_created',
+        action: 'order.representative_loaded',
+        outcome: 'success',
+        entityType: 'order',
+        entityId: order.id,
+        companyId: order.companyId,
+        companyName: order.company,
+        reference: order.reference,
+        actorId: account.id,
+        actorRole: account.role,
+        actorDisplayName: account.contact,
+        fromStatus: '',
+        toStatus: 'awaiting_planning',
+        fieldsChanged: ['orderOrigin', 'orderSource', 'items', 'quotationDocumentId', 'purchaseOrderDocumentId', 'trackingStatus'],
+        details: { sourceRecordId, duplicateCheck, pricingStored: false },
+        immutable: true,
+        createdAt,
+      });
+      for (const document of order.documents) {
+        appendAuditEvent({
+          id: makeId('audit'),
+          eventType: 'document_uploaded',
+          action: 'document.uploaded',
+          outcome: 'success',
+          entityType: 'order',
+          entityId: order.id,
+          companyId: order.companyId,
+          reference: order.reference,
+          actorId: account.id,
+          actorRole: account.role,
+          documentMetadata: [{ id: document.id, documentType: document.documentType, fileName: document.fileName, mimeType: document.mimeType, sizeBytes: document.sizeBytes, version: document.version }],
+          immutable: true,
+          createdAt,
+        });
+      }
+      publishWorkflowNotifications({ action: 'create_representative_order', record: order, actor });
+      if (duplicateCheck.likelyDuplicate && candidate.duplicateConfirmed) {
+        publishWorkflowNotifications({ action: 'confirm_representative_order_duplicate', record: order, actor });
+        appendAuditEvent({
+          id: makeId('audit'), action: 'order.possible_duplicate_confirmed', outcome: 'success', entityType: 'order', entityId: order.id,
+          companyId: order.companyId, reference: order.reference, actorId: account.id, actorRole: account.role,
+          details: { duplicateCheck }, immutable: true, createdAt,
+        });
+      }
+      idempotencyRecords[`representative-order:${account.id}:${submissionKey}`] = {
+        entityType: 'order', entityId: order.id, createdAt,
+      };
+      writeIdempotencyRecords(idempotencyRecords);
+      return clone({ order: presentRecord(account, order), idempotent: false, duplicateCheck });
+    },
+
+    async listDocuments(orderId) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.DOWNLOAD_ORDER_SOURCE_DOCUMENT)) throw new ServiceError('Your role cannot access order source documents.', { code: 'FORBIDDEN', status: 403 });
+      const order = readAllOrders().find(item => item.id === orderId);
+      if (!order || !canReadRecord(account, order)) throw new ServiceError('The order was not found.', { code: 'ORDER_NOT_FOUND', status: 404 });
+      const available = (order.documents || []).filter(document => isInternalRole(account.role)
+        || (document.customerVisible !== false && document.isCurrentVersion !== false));
+      return clone(available);
+    },
+
+    async downloadDocument(orderId, documentId) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.DOWNLOAD_ORDER_SOURCE_DOCUMENT)) throw new ServiceError('Your role cannot download order source documents.', { code: 'FORBIDDEN', status: 403 });
+      const order = readAllOrders().find(item => item.id === orderId);
+      if (!order || !canReadRecord(account, order)) throw new ServiceError('The order was not found.', { code: 'ORDER_NOT_FOUND', status: 404 });
+      const document = (order.documents || []).find(item => item.id === documentId);
+      if (!document || (!isInternalRole(account.role) && (document.customerVisible === false || document.isCurrentVersion === false))) throw new ServiceError('The document was not found or is not authorised for this account.', { code: 'DOCUMENT_NOT_FOUND', status: 404 });
+      appendAuditEvent({
+        id: makeId('audit'), eventType: 'document_downloaded', action: 'document.downloaded', outcome: 'success', entityType: 'order', entityId: order.id,
+        companyId: order.companyId, reference: order.reference, actorId: account.id, actorRole: account.role,
+        documentMetadata: [{ id: document.id, documentType: document.documentType, fileName: document.fileName, version: document.version }], immutable: true, createdAt: now().toISOString(),
+      });
+      return clone({ ...document, simulated: true, downloadUrl: '', message: 'Document access was authorised and audited. The GitHub Pages mock stores metadata only.' });
+    },
+
+    async replaceDocument(orderId, documentId, input = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.REPLACE_ORDER_SOURCE_DOCUMENT)) throw new ServiceError('Your role cannot replace order source documents.', { code: 'FORBIDDEN', status: 403 });
+      const order = readAllOrders().find(item => item.id === orderId);
+      if (!order || !canReadRecord(account, order)) throw new ServiceError('The order was not found.', { code: 'ORDER_NOT_FOUND', status: 404 });
+      const documentIndex = (order.documents || []).findIndex(document => document.id === documentId && document.isCurrentVersion !== false);
+      if (documentIndex < 0) throw new ServiceError('The current document version was not found.', { code: 'DOCUMENT_NOT_FOUND', status: 404 });
+      const current = order.documents[documentIndex];
+      if (!['customer_quotation', 'purchase_order'].includes(current.documentType)) throw new ServiceError('Only the quotation or Purchase Order can be replaced through this workflow.', { code: 'DOCUMENT_TYPE_NOT_REPLACEABLE', status: 422 });
+      const replacement = validateRepresentativeDocumentReplacement(input);
+      if (current.fileName.toLowerCase() === replacement.file.name.toLowerCase() && current.sizeBytes === Number(replacement.file.size || 0)) {
+        throw new ServiceError('Choose a different document for the corrected version.', { code: 'DUPLICATE_DOCUMENT', status: 409, fieldErrors: { file: 'This file matches the current document metadata.' } });
+      }
+      const occurredAt = now().toISOString();
+      const documents = order.documents.map((document, index) => index === documentIndex ? { ...document, isCurrentVersion: false } : document);
+      const updatedDocument = representativeOrderDocumentMetadata({
+        id: makeId('document'),
+        type: current.documentType,
+        file: replacement.file,
+        uploadedAt: occurredAt,
+        uploadedBy: { id: account.id, role: account.role, displayName: account.contact },
+        version: Number(current.version || 1) + 1,
+        replacesDocumentId: current.id,
+        replacementReason: replacement.reason,
+      });
+      documents.push(updatedDocument);
+      const updated = saveOrder({
+        ...order,
+        documents,
+        quotationDocumentId: current.documentType === 'customer_quotation' ? updatedDocument.id : order.quotationDocumentId,
+        purchaseOrderDocumentId: current.documentType === 'purchase_order' ? updatedDocument.id : order.purchaseOrderDocumentId,
+        quotation: current.documentType === 'customer_quotation' ? { ...order.quotation, document: updatedDocument } : order.quotation,
+        purchaseOrder: current.documentType === 'purchase_order' ? { ...order.purchaseOrder, documentId: updatedDocument.id } : order.purchaseOrder,
+        updatedAt: occurredAt,
+      });
+      appendAuditEvent({
+        id: makeId('audit'), eventType: 'document_replaced', action: 'document.replaced', outcome: 'success', entityType: 'order', entityId: updated.id,
+        companyId: updated.companyId, reference: updated.reference, actorId: account.id, actorRole: account.role,
+        reason: replacement.reason, fieldsChanged: ['documents'], documentMetadata: [{ id: updatedDocument.id, replacesDocumentId: current.id, documentType: updatedDocument.documentType, fileName: updatedDocument.fileName, version: updatedDocument.version }],
+        immutable: true, createdAt: occurredAt,
+      });
+      return clone(updatedDocument);
+    },
+  };
+
   const locateWorkflowRecord = (state, recordId, requestedType = '') => {
     const types = requestedType === 'order' ? ['order'] : requestedType === 'rfq' ? ['rfq'] : ['rfq', 'order'];
     for (const entityType of types) {
@@ -1960,6 +2366,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       reference,
       version: 0,
       workflowType: 'order',
+      orderOrigin: ORDER_ORIGINS.CUSTOMER_RFQ,
       sourceEnquiryId: rfq.id,
       sourceRfqReference: rfq.reference,
       sourceRfqStatus: convertedRfq.trackingStatus,
@@ -4622,6 +5029,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     credentials,
     enquiries,
     orders,
+    representativeOrders,
     workflow,
     tracking: workflow,
     orderDocuments,
@@ -4645,6 +5053,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       maxQuotationDocumentBytes: MAX_QUOTATION_DOCUMENT_BYTES,
       maxAcceptanceDocumentBytes: MAX_ACCEPTANCE_DOCUMENT_BYTES,
       maxDispatchProofBytes: MAX_DISPATCH_PROOF_BYTES,
+      maxRepresentativeOrderDocumentBytes: MAX_REPRESENTATIVE_ORDER_DOCUMENT_BYTES,
       maxCertificateBytes: MAX_CERTIFICATE_BYTES,
       persistenceLabel: 'this browser',
     },

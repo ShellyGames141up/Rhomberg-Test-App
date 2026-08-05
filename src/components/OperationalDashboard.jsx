@@ -22,7 +22,7 @@ export function OperationalDashboard({ account, enquiries, onAction, canUpdate, 
   const [filter, setFilter] = useState(canUpdate ? 'actionable' : 'active');
   const [openId, setOpenId] = useState(null);
   const active = enquiries.filter(enquiry => !TERMINAL_STATUSES.has(enquiry.trackingStatus));
-  const emergency = active.filter(enquiry => enquiry.emergency === 'yes').length;
+  const emergency = active.filter(enquiry => enquiry.priority === 'urgent').length;
   const awaitingPo = active.filter(enquiry => !enquiry.poNumber && !enquiry.poFileName).length;
   const copy = roleProfileFor(account.role).dashboard;
 
@@ -81,7 +81,7 @@ function ExpeditorOrderCard({ enquiry, expanded, onToggle, onAction, canUpdate, 
   const availableActions = (enquiry.allowedWorkflowActions || []).filter(action => action.action !== 'override_workflow');
 
   return (
-    <article className={`expeditor-order-card ${enquiry.emergency === 'yes' ? 'is-emergency' : ''}`} id={`operational-record-${enquiry.id}`}>
+    <article className={`expeditor-order-card ${enquiry.priority === 'urgent' ? 'is-emergency' : ''}`} id={`operational-record-${enquiry.id}`}>
       <button type="button" className="expeditor-order-summary" onClick={onToggle} aria-expanded={expanded}>
         <span className="expeditor-order-id"><small>{enquiry.workflowType === 'order' ? 'ORDER' : 'RFQ'} · {enquiry.reference}{enquiry.isDemo ? ' · DEMO' : ''}</small><strong>{enquiry.company}</strong><em>{enquiry.contact}</em></span>
         <StatusBadge status={enquiry.trackingStatus} label={status.label} className="tracking-status" />

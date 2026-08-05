@@ -14,6 +14,23 @@ The secure Administrator extension additionally defines realm-scoped user/compan
 
 Executive Demo role switching and fabricated-data reset are intentionally not production API operations.
 
+## Representative-loaded orders
+
+The current extension adds these future private API contracts:
+
+- `GET /representatives/orders/options` returns only companies, contacts, branches, representatives and products within the caller's authorised load-order scope.
+- `POST /representatives/orders/duplicate-check` compares company, PO/quotation references, product/configuration signatures and the recent-submission window.
+- `POST /representatives/orders` accepts a JSON payload plus mandatory quotation and PO files and creates an `awaiting_planning` order without an RFQ.
+- `GET /orders/{orderId}/source-documents` returns an actor-safe list of versioned source documents.
+- `GET /orders/{orderId}/source-documents/{documentId}/download` authorises and audits a short-lived private download.
+- `POST /orders/{orderId}/source-documents/{documentId}/versions` creates a corrected version with a mandatory reason.
+
+The create endpoint requires `load_customer_order`, CSRF protection and `Idempotency-Key`. It derives the actor and company scope from the verified session, validates the selected customer/contact/branch/representative, requires both source documents and their reference/date metadata, checks every product quantity/configuration, evaluates duplicates, and commits the order, item snapshots, source record, document metadata, audit events and notifications atomically.
+
+Customer `POST /enquiries` payloads do not contain urgency or priority. `emergency`, `urgent`, `priority` and `internalPriority` are rejected when sent by a customer. Internal priority remains part of protected internal contracts only.
+
+The OpenAPI examples use fabricated data and the GitHub Pages adapter retains metadata only. A production endpoint must validate actual bytes, signatures and hashes, run malware scanning and keep documents in private storage.
+
 Restricted commercial reporting adds these future contracts:
 
 - `GET /management/performance-report-options` returns authorised representative, branch and rolling-period choices.

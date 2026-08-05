@@ -22,6 +22,7 @@ const canonicalEntities = {
   rfq_acceptances: 'CREATE TABLE app.rfq_acceptances',
   orders: 'CREATE TABLE app.orders',
   order_items: 'CREATE TABLE app.order_items',
+  representative_loaded_orders: 'CREATE TABLE app.representative_loaded_orders',
   planning_records: 'CREATE TABLE app.planning_records',
   expediting_updates: 'CREATE TABLE app.expediting_updates',
   dispatch_records: 'RENAME TO dispatch_records',
@@ -98,6 +99,12 @@ const requiredPaths = [
   '/enquiries/{enquiryId}/tracking-events:',
   '/enquiries/{enquiryId}/workflow-actions:',
   '/orders:',
+  '/representatives/orders/options:',
+  '/representatives/orders/duplicate-check:',
+  '/representatives/orders:',
+  '/orders/{orderId}/source-documents:',
+  '/orders/{orderId}/source-documents/{documentId}/download:',
+  '/orders/{orderId}/source-documents/{documentId}/versions:',
   '/orders/{orderId}/planning-record:',
   '/orders/{orderId}/expediting-updates:',
   '/orders/{orderId}/dispatch-record:',
@@ -116,10 +123,38 @@ for (const path of requiredPaths) {
   assert.ok(openapi.includes(`  ${path}`), `OpenAPI proposal must define ${path.slice(0, -1)}`);
 }
 
-assert.ok(openapi.includes('version: 0.7.0-proposed'));
+assert.ok(openapi.includes('version: 0.8.0-proposed'));
 assert.ok(openapi.includes('All examples are fabricated.'));
 assert.equal(openapi.includes('cookieSession'), false, 'OpenAPI must not reference the retired cookieSession security name');
 assert.equal(openapi.includes('csrfToken: []'), false, 'OpenAPI must not reference the retired csrfToken security name');
+
+const customerSubmissionStart = openapi.indexOf('    CustomerEnquirySubmission:');
+const customerSubmissionEnd = openapi.indexOf('\n    Enquiry:', customerSubmissionStart);
+const customerSubmissionSchema = openapi.slice(customerSubmissionStart, customerSubmissionEnd);
+assert.ok(customerSubmissionStart >= 0 && customerSubmissionEnd > customerSubmissionStart);
+assert.equal(/\b(emergency|urgent|priority)\s*:/.test(customerSubmissionSchema), false, 'customer RFQ contract must not accept urgency');
+for (const marker of [
+  'representative_loaded_order',
+  'load_customer_order',
+  'quotationDocumentId',
+  'purchaseOrderDocumentId',
+  'sourceConfirmation',
+  'duplicateCheckResult',
+  'representative_order_submitted',
+  'customer_order_available',
+  'planning_order_received',
+]) {
+  assert.ok(openapi.includes(marker), `OpenAPI representative-order contract must include ${marker}`);
+}
+for (const marker of [
+  'app.order_origin',
+  'app.order_source',
+  'representative_source_documents_required',
+  'orders_source_submission_key_idx',
+  'representative_loaded_orders_internal_scope',
+]) {
+  assert.ok(sql.includes(marker), `PostgreSQL representative-order proposal must include ${marker}`);
+}
 
 const componentDefinitions = new Map();
 let currentComponentType = null;

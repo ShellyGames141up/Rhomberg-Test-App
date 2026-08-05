@@ -450,7 +450,7 @@ function ManagementRecord({
   const timeline = [...(record.trackingHistory || [])].reverse().slice(0, 6);
   const set = (key, value) => onValues({ ...values, [key]: value });
   return (
-    <article className={`management-record ${record.emergency === 'yes' ? 'is-emergency' : ''}`}>
+    <article className={`management-record ${record.priority === 'urgent' ? 'is-emergency' : ''}`}>
       <button className="management-record-summary" type="button" onClick={onToggle} aria-expanded={expanded}>
         <span><small>{record.workflowType.toUpperCase()} · {record.reference}</small><strong>{record.company}</strong><em>{record.contact}</em></span>
         <span><small>Representative</small><strong>{record.selectedRep?.name || 'Unassigned'}</strong><em>{record.selectedRep?.branchName || 'No branch'}</em></span>
@@ -463,7 +463,7 @@ function ManagementRecord({
             <div><dt>Job number</dt><dd>{record.internalJobNumber || 'Not assigned'}</dd></div>
             <div><dt>Purchase Order</dt><dd>{record.customerPoNumber || record.poNumber || 'Not supplied'}</dd></div>
             <div><dt>Original RFQ</dt><dd>{record.sourceRfqReference || (record.workflowType === 'rfq' ? record.reference : 'Not recorded')}</dd></div>
-            <div><dt>Priority</dt><dd>{record.emergency === 'yes' ? 'Emergency' : humanise(record.priority || 'standard')}</dd></div>
+            <div><dt>Priority</dt><dd>{record.priority === 'urgent' ? 'Urgent' : humanise(record.priority || 'standard')}</dd></div>
           </dl>
           {(canReassign || canOverride) && <div className="management-actions">
             {canReassign && <section>

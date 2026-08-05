@@ -84,7 +84,6 @@ const submission = await services.enquiries.submit({
   medium: 'Water',
   area: 'Western Cape',
   selectedRep: { id: 'C-27' },
-  emergency: 'no',
   fulfilment: 'collect',
   collectionBranch: 'Cape Town demonstration branch',
   notes: 'Fabricated customer note for the complete workflow demonstration.',

@@ -4,6 +4,7 @@ import {
   MAX_DISPATCH_PROOF_BYTES,
   MAX_PO_FILE_BYTES,
   MAX_QUOTATION_DOCUMENT_BYTES,
+  MAX_REPRESENTATIVE_ORDER_DOCUMENT_BYTES,
   validateEnquiry,
   validateDispatchAction,
   validateDispatchReceipt,
@@ -15,6 +16,8 @@ import {
   validatePlanningSubmission,
   validateQuotationConfirmation,
   validateRegistration,
+  validateRepresentativeDocumentReplacement,
+  validateRepresentativeLoadedOrder,
   validateSignIn,
   validateWorkflowActionRequest,
 } from '../validation.js';
@@ -132,6 +135,41 @@ export function createApiServices(config = {}) {
   const orders = {
     list: filters => client.get('/orders', { query: filters }),
     getById: orderId => client.get(`/orders/${encodeURIComponent(orderId)}`),
+  };
+
+  const representativeOrders = {
+    getOptions: () => client.get('/representatives/orders/options'),
+    checkDuplicate: candidate => client.post('/representatives/orders/duplicate-check', candidate),
+    create(input) {
+      const { order, quotationFile, purchaseOrderFile, supportingDocuments } = validateRepresentativeLoadedOrder(input, { today: today() });
+      const { submissionKey, ...payload } = order;
+      const form = new FormData();
+      form.append('payload', JSON.stringify(payload));
+      form.append('quotation', quotationFile, quotationFile.name);
+      form.append('purchaseOrder', purchaseOrderFile, purchaseOrderFile.name);
+      supportingDocuments.forEach(file => form.append('supportingDocuments', file, file.name));
+      return client.post('/representatives/orders', form, {
+        headers: { 'Idempotency-Key': submissionKey },
+      });
+    },
+    listDocuments: orderId => client.get(`/orders/${encodeURIComponent(orderId)}/source-documents`),
+    async downloadDocument(orderId, documentId) {
+      const result = await client.get(`/orders/${encodeURIComponent(orderId)}/source-documents/${encodeURIComponent(documentId)}/download`);
+      return {
+        ...(result.document || {}),
+        downloadUrl: result.signedDownloadUrl || '',
+        expiresAt: result.expiresAt,
+      };
+    },
+    replaceDocument(orderId, documentId, input) {
+      const replacement = validateRepresentativeDocumentReplacement(input);
+      const form = new FormData();
+      form.append('payload', JSON.stringify({ reason: replacement.reason }));
+      form.append('document', replacement.file, replacement.file.name);
+      return client.post(`/orders/${encodeURIComponent(orderId)}/source-documents/${encodeURIComponent(documentId)}/versions`, form, {
+        headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `document-replacement-${Date.now()}` },
+      });
+    },
   };
 
   const workflow = {
@@ -481,6 +519,7 @@ export function createApiServices(config = {}) {
     products,
     enquiries,
     orders,
+    representativeOrders,
     workflow,
     tracking: workflow,
     audit,
@@ -503,6 +542,7 @@ export function createApiServices(config = {}) {
       maxQuotationDocumentBytes: MAX_QUOTATION_DOCUMENT_BYTES,
       maxAcceptanceDocumentBytes: MAX_ACCEPTANCE_DOCUMENT_BYTES,
       maxDispatchProofBytes: MAX_DISPATCH_PROOF_BYTES,
+      maxRepresentativeOrderDocumentBytes: MAX_REPRESENTATIVE_ORDER_DOCUMENT_BYTES,
       maxCertificateBytes: MAX_CERTIFICATE_BYTES,
       persistenceLabel: 'the secure company service',
     },

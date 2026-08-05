@@ -2,6 +2,24 @@
 
 This document describes the controlled mock workflow and the future server contract. React never changes a status directly; every action passes through the service layer and `src/domain/workflow.js`. Production must repeat every permission, state, evidence and company-scope check on the API.
 
+## Order origins
+
+The platform now supports two separately traceable paths into the existing order workflow:
+
+```text
+customer_submitted_rfq_order
+Customer RFQ -> quotation -> external acceptance verified -> order -> awaiting_planning
+
+representative_loaded_order
+Approved offline instruction -> representative validates quotation + PO -> order -> awaiting_planning
+```
+
+A representative-loaded order does not create a synthetic RFQ. It records the authorised company and contact, assigned branch and representative, approved source, immutable item/configuration snapshots, mandatory current quotation and PO documents, confirmation evidence, duplicate result and creating user. From `awaiting_planning` onward it uses the same controlled state machine, queues, notifications and audit history as an RFQ-derived order.
+
+Customers cannot set urgency on an RFQ or order. Customer forms omit those controls and customer submissions containing `emergency`, `urgent`, `priority` or `internalPriority` are rejected. Internal priority remains available only through permission-controlled internal workflows.
+
+Repeated representative submissions use an idempotency key. Likely duplicates are compared by company, PO number, quotation number, product/configuration signature and recent submission time. A separately authorised confirmation is required before a likely duplicate is created and that decision is audited.
+
 ```text
 Customer RFQ
      |

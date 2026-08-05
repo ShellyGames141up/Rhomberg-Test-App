@@ -1074,8 +1074,18 @@ const assertGuard = (entity, actor, transitionDefinition, input) => {
   } else if (transitionDefinition.guard?.startsWith('dispatch_') && input !== undefined) {
     assertDispatchUpdate(entity, input, transitionDefinition.action);
   }
-  if (transitionDefinition.guard === 'accepted_order' && !(entity.sourceRfqStatus === 'converted_to_order' && entity.acceptedAt)) {
-    throw new ServiceError('Planning cannot start until the source RFQ has been accepted and converted to an order.', { code: 'ORDER_NOT_ACCEPTED', status: 409 });
+  const hasAcceptedOrderOrigin = Boolean(entity.acceptedAt) && (
+    entity.sourceRfqStatus === 'converted_to_order'
+    || (
+      entity.orderOrigin === 'representative_loaded_order'
+      && entity.createdByRepresentative === true
+      && entity.sourceConfirmation?.confirmed === true
+      && entity.quotationDocumentId
+      && entity.purchaseOrderDocumentId
+    )
+  );
+  if (transitionDefinition.guard === 'accepted_order' && !hasAcceptedOrderOrigin) {
+    throw new ServiceError('Planning cannot start until the order has verified customer-acceptance evidence.', { code: 'ORDER_NOT_ACCEPTED', status: 409 });
   }
   if (transitionDefinition.guard === 'collection_order' && entity.fulfilment !== 'collect') {
     throw new ServiceError('Only a collection order can be marked ready for collection.', { code: 'INVALID_FULFILMENT_TRANSITION', status: 409 });

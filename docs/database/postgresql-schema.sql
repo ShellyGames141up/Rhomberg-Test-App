@@ -49,6 +49,8 @@ CREATE TYPE app.qa_task_status AS ENUM ('awaiting_qa', 'qa_in_progress', 'qa_fai
 CREATE TYPE app.qa_result AS ENUM ('passed', 'failed');
 CREATE TYPE app.auth_realm AS ENUM ('customer', 'internal');
 CREATE TYPE app.fulfilment_method AS ENUM ('delivery', 'collect');
+CREATE TYPE app.order_origin AS ENUM ('customer_submitted_rfq_order', 'representative_loaded_order');
+CREATE TYPE app.order_source AS ENUM ('email', 'telephone', 'in_person', 'existing_quotation', 'other_approved_source');
 CREATE TYPE app.dispatch_method AS ENUM ('collection', 'company_delivery', 'courier', 'third_party_delivery');
 CREATE TYPE app.dispatch_proof_type AS ENUM ('signed_delivery_note', 'collection_confirmation', 'courier_confirmation', 'photograph', 'other');
 CREATE TYPE app.acceptance_type AS ENUM ('purchase_order_received', 'payment_confirmed', 'written_acceptance_received', 'account_customer_authorisation', 'other');
@@ -263,11 +265,10 @@ CREATE TABLE app.enquiries (
   company_snapshot jsonb NOT NULL,
   requester_snapshot jsonb NOT NULL,
   status app.enquiry_status NOT NULL DEFAULT 'draft',
-  priority text NOT NULL DEFAULT 'standard' CHECK (priority IN ('standard', 'urgent')),
+  internal_priority text NOT NULL DEFAULT 'standard' CHECK (internal_priority IN ('standard', 'high', 'urgent')),
   application text NOT NULL CHECK (length(trim(application)) >= 5),
   process_medium text,
   area text NOT NULL,
-  emergency boolean NOT NULL DEFAULT false,
   fulfilment app.fulfilment_method NOT NULL,
   delivery_address text,
   collection_branch_id uuid REFERENCES app.branches(id),
@@ -384,15 +385,25 @@ CREATE TABLE app.retention_policies (
 CREATE TABLE app.orders (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   enquiry_id uuid UNIQUE REFERENCES app.enquiries(id),
+  order_origin app.order_origin NOT NULL DEFAULT 'customer_submitted_rfq_order',
+  order_source app.order_source,
+  order_source_explanation text CHECK (order_source_explanation IS NULL OR length(trim(order_source_explanation)) BETWEEN 5 AND 500),
+  created_by_representative boolean NOT NULL DEFAULT false,
+  created_by_representative_user_id uuid REFERENCES app.users(id),
   company_id uuid NOT NULL REFERENCES app.companies(id),
   representative_id uuid REFERENCES app.representatives(id),
   order_number text NOT NULL UNIQUE,
   erp_order_id text UNIQUE,
   status app.order_status NOT NULL DEFAULT 'awaiting_planning',
-  source_rfq_status app.enquiry_status NOT NULL DEFAULT 'converted_to_order',
+  source_rfq_status app.enquiry_status,
   accepted_at timestamptz NOT NULL,
   internal_job_number text,
   customer_po_number text,
+  quotation_number text,
+  purchase_order_number text,
+  source_confirmation jsonb,
+  duplicate_check_result jsonb,
+  source_submission_key text,
   customer_po_exception_authorised boolean NOT NULL DEFAULT false,
   customer_po_exception_reason text,
   planning_notes text,
@@ -445,6 +456,34 @@ CREATE TABLE app.orders (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   row_version integer NOT NULL DEFAULT 1 CHECK (row_version > 0),
+  CONSTRAINT order_origin_requirements CHECK (
+    (
+      order_origin = 'customer_submitted_rfq_order'
+      AND enquiry_id IS NOT NULL
+      AND created_by_representative = false
+      AND created_by_representative_user_id IS NULL
+      AND order_source IS NULL
+      AND source_rfq_status = 'converted_to_order'
+    )
+    OR
+    (
+      order_origin = 'representative_loaded_order'
+      AND enquiry_id IS NULL
+      AND created_by_representative = true
+      AND created_by_representative_user_id IS NOT NULL
+      AND order_source IS NOT NULL
+      AND source_rfq_status IS NULL
+      AND quotation_number IS NOT NULL
+      AND purchase_order_number IS NOT NULL
+      AND source_confirmation IS NOT NULL
+      AND jsonb_typeof(source_confirmation) = 'object'
+      AND source_confirmation ->> 'confirmed' = 'true'
+    )
+  ),
+  CONSTRAINT representative_other_source_explanation CHECK (
+    order_source <> 'other_approved_source'
+    OR order_source_explanation IS NOT NULL
+  ),
   CONSTRAINT planning_po_exception_reason CHECK (
     NOT customer_po_exception_authorised
     OR (
@@ -482,7 +521,7 @@ CREATE TABLE app.orders (
 CREATE TABLE app.order_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   order_id uuid NOT NULL REFERENCES app.orders(id) ON DELETE CASCADE,
-  source_enquiry_item_id uuid NOT NULL REFERENCES app.enquiry_items(id),
+  source_enquiry_item_id uuid REFERENCES app.enquiry_items(id),
   line_number integer NOT NULL CHECK (line_number > 0),
   product_id uuid NOT NULL REFERENCES app.products(id),
   product_code_snapshot text NOT NULL,
@@ -644,6 +683,10 @@ CREATE TABLE app.uploaded_documents (
   customer_visible boolean NOT NULL DEFAULT false,
   customer_visibility_authorised_by uuid REFERENCES app.users(id),
   customer_visibility_authorised_at timestamptz,
+  parent_document_id uuid REFERENCES app.uploaded_documents(id),
+  version_number integer NOT NULL DEFAULT 1 CHECK (version_number > 0),
+  is_current_version boolean NOT NULL DEFAULT true,
+  replacement_reason text CHECK (replacement_reason IS NULL OR length(trim(replacement_reason)) BETWEEN 8 AND 1000),
   created_at timestamptz NOT NULL DEFAULT now(),
   deleted_at timestamptz,
   CONSTRAINT document_parent CHECK (num_nonnulls(product_id, enquiry_id, order_id) = 1),
@@ -651,6 +694,43 @@ CREATE TABLE app.uploaded_documents (
     (NOT customer_visible AND customer_visibility_authorised_by IS NULL AND customer_visibility_authorised_at IS NULL)
     OR
     (customer_visible AND customer_visibility_authorised_by IS NOT NULL AND customer_visibility_authorised_at IS NOT NULL)
+  )
+);
+
+ALTER TABLE app.orders
+  ADD COLUMN quotation_document_id uuid REFERENCES app.uploaded_documents(id),
+  ADD COLUMN purchase_order_document_id uuid REFERENCES app.uploaded_documents(id),
+  ADD CONSTRAINT representative_source_documents_required CHECK (
+    order_origin <> 'representative_loaded_order'
+    OR (quotation_document_id IS NOT NULL AND purchase_order_document_id IS NOT NULL)
+  );
+
+CREATE TABLE app.representative_loaded_orders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL UNIQUE REFERENCES app.orders(id) ON DELETE RESTRICT,
+  company_id uuid NOT NULL REFERENCES app.companies(id),
+  customer_contact_user_id uuid NOT NULL REFERENCES app.users(id),
+  branch_id uuid NOT NULL REFERENCES app.branches(id),
+  representative_id uuid NOT NULL REFERENCES app.representatives(id),
+  created_by_representative_user_id uuid NOT NULL REFERENCES app.users(id),
+  order_source app.order_source NOT NULL,
+  order_source_explanation text,
+  quotation_number text NOT NULL CHECK (length(trim(quotation_number)) BETWEEN 1 AND 100),
+  quotation_date date NOT NULL,
+  quotation_revision text CHECK (quotation_revision IS NULL OR length(quotation_revision) <= 60),
+  quotation_document_id uuid NOT NULL REFERENCES app.uploaded_documents(id),
+  purchase_order_number text NOT NULL CHECK (length(trim(purchase_order_number)) BETWEEN 1 AND 100),
+  purchase_order_date date NOT NULL,
+  purchase_order_document_id uuid NOT NULL REFERENCES app.uploaded_documents(id),
+  source_confirmation jsonb NOT NULL CHECK (jsonb_typeof(source_confirmation) = 'object' AND source_confirmation ->> 'confirmed' = 'true'),
+  duplicate_check_result jsonb NOT NULL CHECK (jsonb_typeof(duplicate_check_result) = 'object'),
+  idempotency_key_hash text NOT NULL UNIQUE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  row_version integer NOT NULL DEFAULT 1 CHECK (row_version > 0),
+  CONSTRAINT representative_loaded_order_source_explanation CHECK (
+    order_source <> 'other_approved_source'
+    OR (order_source_explanation IS NOT NULL AND length(trim(order_source_explanation)) >= 5)
   )
 );
 
@@ -987,6 +1067,11 @@ CREATE INDEX rfq_acceptances_verified_idx ON app.rfq_acceptances (verified_by_us
 CREATE INDEX orders_company_updated_idx ON app.orders (company_id, updated_at DESC);
 CREATE INDEX orders_rep_updated_idx ON app.orders (representative_id, updated_at DESC);
 CREATE INDEX orders_status_updated_idx ON app.orders (status, updated_at DESC);
+CREATE UNIQUE INDEX orders_source_submission_key_idx ON app.orders (source_submission_key)
+  WHERE source_submission_key IS NOT NULL;
+CREATE INDEX orders_representative_source_duplicate_idx ON app.orders (
+  company_id, purchase_order_number, quotation_number, created_at DESC
+) WHERE order_origin = 'representative_loaded_order';
 CREATE INDEX orders_planning_queue_idx ON app.orders (status, planning_priority, created_at)
   WHERE status IN ('awaiting_planning', 'planning_in_progress', 'planned');
 CREATE INDEX orders_planning_user_idx ON app.orders (assigned_planning_user_id, status, updated_at DESC)
@@ -1014,6 +1099,14 @@ CREATE INDEX notification_deliveries_work_idx ON app.notification_deliveries (st
   WHERE status IN ('email_pending', 'email_failed', 'push_pending', 'push_failed');
 CREATE INDEX notification_preferences_company_idx ON app.notification_preferences (company_id, updated_at DESC);
 CREATE INDEX documents_company_idx ON app.uploaded_documents (company_id, created_at DESC) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX documents_current_order_source_kind_idx ON app.uploaded_documents (order_id, kind)
+  WHERE deleted_at IS NULL AND is_current_version AND kind IN ('purchase_order', 'quotation');
+CREATE INDEX representative_loaded_orders_company_created_idx
+  ON app.representative_loaded_orders (company_id, created_at DESC);
+CREATE INDEX representative_loaded_orders_rep_created_idx
+  ON app.representative_loaded_orders (representative_id, created_at DESC);
+CREATE INDEX representative_loaded_orders_references_idx
+  ON app.representative_loaded_orders (company_id, purchase_order_number, quotation_number, created_at DESC);
 CREATE UNIQUE INDEX customer_identity_images_active_kind_idx
   ON app.customer_identity_images (user_id, kind) WHERE deleted_at IS NULL;
 CREATE INDEX customer_personalisations_company_idx ON app.customer_personalisations (company_id, updated_at DESC);
@@ -1046,6 +1139,17 @@ CREATE INDEX user_permission_overrides_active_idx ON app.user_permission_overrid
 -- final duplicate-conversion guard. An idempotent replay returns that existing
 -- order. Supporting files are private uploaded_documents rows with the enquiry
 -- parent and kind = order_acceptance_evidence.
+
+-- POST /representatives/orders is a separate atomic transaction and never
+-- creates an RFQ. The API must verify load_customer_order, the selected company,
+-- contact, branch and representative; reserve the idempotency key; lock and
+-- evaluate possible duplicate references/product signatures; quarantine and
+-- scan both mandatory source files; allocate the permanent order reference;
+-- insert orders/order_items/representative_loaded_orders/uploaded_documents;
+-- append immutable document/order audit events; and enqueue customer, Planning
+-- and representative notifications. A duplicate override is itself audited and
+-- may additionally require manager approval under the deployed policy. The
+-- transaction commits only when both current source-document IDs are present.
 
 -- Every Expediting action must also be one transaction: lock the authorised
 -- order, verify its current state/expected row version and the active progress
@@ -1231,6 +1335,7 @@ ALTER TABLE app.notification_deliveries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.notification_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.audit_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.uploaded_documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.representative_loaded_orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.customer_personalisations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.customer_identity_images ENABLE ROW LEVEL SECURITY;
 
@@ -1303,6 +1408,17 @@ CREATE POLICY enquiry_drafts_authorised_scope ON app.enquiry_drafts
 CREATE POLICY orders_authorised_scope ON app.orders
   USING (app.can_access_order(id))
   WITH CHECK (app.can_access_order(id));
+
+CREATE POLICY representative_loaded_orders_internal_scope ON app.representative_loaded_orders
+  USING (
+    app.current_user_role() <> 'customer'
+    AND app.can_access_order(order_id)
+  )
+  WITH CHECK (
+    app.current_user_has_permission('load_customer_order')
+    AND app.can_access_order(order_id)
+    AND app.can_access_company(company_id)
+  );
 
 CREATE POLICY order_items_authorised_scope ON app.order_items
   USING (EXISTS (

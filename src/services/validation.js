@@ -16,12 +16,14 @@ import {
   validateNotificationPreferences,
 } from '../domain/notifications.js';
 import { PLANNING_PRIORITY_VALUES, RFQ_ACCEPTANCE_TYPES, ServiceError } from './contracts.js';
+import { REPRESENTATIVE_ORDER_SOURCE_IDS } from '../domain/representativeOrders.js';
 
 export const MAX_PO_FILE_BYTES = 4 * 1024 * 1024;
 export const ALLOWED_PO_FILE_PATTERN = /\.(pdf|doc|docx|png|jpe?g|webp|gif|heic)$/i;
 export const MAX_QUOTATION_DOCUMENT_BYTES = 4 * 1024 * 1024;
 export const MAX_ACCEPTANCE_DOCUMENT_BYTES = 4 * 1024 * 1024;
 export const MAX_DISPATCH_PROOF_BYTES = 4 * 1024 * 1024;
+export const MAX_REPRESENTATIVE_ORDER_DOCUMENT_BYTES = 4 * 1024 * 1024;
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const referencePattern = /^[\p{L}\p{N}][\p{L}\p{N} ._/#-]*$/u;
@@ -103,6 +105,10 @@ export function validatePoFile(file) {
 
 export function validateEnquiry(details, items) {
   const errors = {};
+  const customerUrgencyFields = ['emergency', 'urgent', 'priority', 'internalPriority'];
+  if (customerUrgencyFields.some(field => Object.prototype.hasOwnProperty.call(details || {}, field))) {
+    errors.urgency = 'Priority and urgent processing are managed only by authorised Rhomberg staff.';
+  }
   if (present(details.application).length < 5) errors.application = 'Please describe the application before submitting the RFQ.';
   if (!present(details.area)) errors.area = 'Please select the area.';
   if (!details.selectedRep?.id) errors.selectedRep = 'Please select a representative for this RFQ.';
@@ -116,6 +122,143 @@ export function validateEnquiry(details, items) {
   }
   if (Object.keys(errors).length) throwValidation(errors, 'Check the RFQ details.');
   validatePoFile(details.poFile);
+}
+
+const validateRequiredSourceDocument = (file, field, label) => {
+  if (!file) {
+    throwValidation({ [field]: `Attach the customer ${label}.` }, `The customer ${label} is required.`);
+  }
+  validateDocumentMetadata(file, field);
+  if (!ALLOWED_PO_FILE_PATTERN.test(file.name || '')) {
+    throwValidation(
+      { [field]: `Choose a PDF, DOCX, DOC or supported image ${label}.` },
+      `The customer ${label} is not supported.`,
+    );
+  }
+  if (Number(file.size || 0) > MAX_REPRESENTATIVE_ORDER_DOCUMENT_BYTES) {
+    throwValidation(
+      { [field]: `The ${label} must be 4 MB or smaller.` },
+      `The customer ${label} is too large.`,
+    );
+  }
+};
+
+const sameFileMetadata = (left, right) => Boolean(left && right
+  && present(left.name).toLowerCase() === present(right.name).toLowerCase()
+  && Number(left.size || 0) === Number(right.size || 0)
+  && present(left.type).toLowerCase() === present(right.type).toLowerCase());
+
+export function validateRepresentativeLoadedOrder(data = {}, { today = new Date().toISOString().slice(0, 10) } = {}) {
+  const errors = {};
+  const companyId = present(data.companyId);
+  const customerContactId = present(data.customerContactId);
+  const branchId = present(data.branchId);
+  const representativeId = present(data.representativeId);
+  const orderSource = present(data.orderSource);
+  const orderSourceOther = present(data.orderSourceOther);
+  const application = present(data.application);
+  const fulfilment = present(data.fulfilment);
+  const deliveryAddress = present(data.deliveryAddress);
+  const customerNotes = present(data.customerNotes);
+  const internalRepresentativeNotes = present(data.internalRepresentativeNotes);
+  const requiredDate = present(data.requiredDate);
+  const priority = present(data.priority) || 'standard';
+  const quotationNumber = present(data.quotationNumber);
+  const quotationDate = present(data.quotationDate);
+  const quotationRevision = present(data.quotationRevision);
+  const purchaseOrderNumber = present(data.purchaseOrderNumber);
+  const purchaseOrderDate = present(data.purchaseOrderDate);
+  const confirmationNote = present(data.confirmationNote);
+  const submissionKey = present(data.submissionKey);
+  const items = Array.isArray(data.items) ? data.items : [];
+  const supportingDocuments = Array.isArray(data.supportingDocuments) ? data.supportingDocuments.filter(Boolean) : [];
+
+  if (!companyId) errors.companyId = 'Select an existing customer company.';
+  if (!customerContactId) errors.customerContactId = 'Select an authorised customer contact.';
+  if (!branchId) errors.branchId = 'Select the assigned branch.';
+  if (!representativeId) errors.representativeId = 'Select the dedicated representative.';
+  if (!REPRESENTATIVE_ORDER_SOURCE_IDS.includes(orderSource)) errors.orderSource = 'Select an approved order source.';
+  if (orderSource === 'other_approved_source' && orderSourceOther.length < 5) errors.orderSourceOther = 'Explain the other approved source.';
+  if (application.length < 5) errors.application = 'Describe the customer application or requirement.';
+  if (!['delivery', 'collect'].includes(fulfilment)) errors.fulfilment = 'Choose delivery or collection.';
+  if (fulfilment === 'delivery' && deliveryAddress.length < 5) errors.deliveryAddress = 'Enter the authorised delivery address.';
+  if (customerNotes.length > 2000) errors.customerNotes = 'Keep customer notes below 2,000 characters.';
+  if (internalRepresentativeNotes.length > 2000) errors.internalRepresentativeNotes = 'Keep internal notes below 2,000 characters.';
+  if (requiredDate && !validDateOnly(requiredDate)) errors.requiredDate = 'Enter a valid required date.';
+  else if (requiredDate && requiredDate < today) errors.requiredDate = 'The required date cannot be in the past.';
+  if (!PLANNING_PRIORITY_VALUES.includes(priority)) errors.priority = 'Select a valid internal priority.';
+  if (!quotationNumber) errors.quotationNumber = 'Enter the quotation number.';
+  else if (!referencePattern.test(quotationNumber) || quotationNumber.length > 100) errors.quotationNumber = 'Use a valid quotation number below 100 characters.';
+  if (!validDateOnly(quotationDate)) errors.quotationDate = 'Enter a valid quotation date.';
+  else if (quotationDate > today) errors.quotationDate = 'The quotation date cannot be in the future.';
+  if (quotationRevision.length > 60) errors.quotationRevision = 'Keep the quotation revision below 60 characters.';
+  if (!purchaseOrderNumber) errors.purchaseOrderNumber = 'Enter the customer Purchase Order number.';
+  else if (!referencePattern.test(purchaseOrderNumber) || purchaseOrderNumber.length > 100) errors.purchaseOrderNumber = 'Use a valid Purchase Order number below 100 characters.';
+  if (!validDateOnly(purchaseOrderDate)) errors.purchaseOrderDate = 'Enter a valid Purchase Order date.';
+  else if (purchaseOrderDate > today) errors.purchaseOrderDate = 'The Purchase Order date cannot be in the future.';
+  if (!items.length) errors.items = 'Add at least one configured product.';
+  if (items.some(item => !present(item.productId))) errors.items = 'Every order line must identify a product.';
+  if (items.some(item => !Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1 || Number(item.quantity) > 9999)) {
+    errors.items = 'Every product must have a quantity between 1 and 9,999.';
+  }
+  if (data.sourceConfirmed !== true) errors.sourceConfirmed = 'Confirm all representative order checks before submitting.';
+  if (confirmationNote.length > 2000) errors.confirmationNote = 'Keep the confirmation note below 2,000 characters.';
+  if (submissionKey.length < 8 || submissionKey.length > 160) errors.submission = 'Refresh the form to create a valid duplicate-protection key.';
+  if (supportingDocuments.length > 8) errors.supportingDocuments = 'Attach no more than eight supporting documents.';
+  if (['price', 'pricing', 'total', 'linePrices'].some(field => data[field] !== undefined)) {
+    errors.commercialData = 'Pricing information is not permitted in this preview workflow.';
+  }
+  if (Object.keys(errors).length) throwValidation(errors, 'Check the customer order details.');
+
+  validateRequiredSourceDocument(data.quotationFile, 'quotationFile', 'quotation document');
+  validateRequiredSourceDocument(data.purchaseOrderFile, 'purchaseOrderFile', 'Purchase Order document');
+  if (sameFileMetadata(data.quotationFile, data.purchaseOrderFile)) {
+    throwValidation(
+      { purchaseOrderFile: 'The quotation and Purchase Order must be two different files.' },
+      'Duplicate source documents are not permitted.',
+    );
+  }
+  supportingDocuments.forEach((file, index) => validateRequiredSourceDocument(file, `supportingDocuments.${index}`, 'supporting document'));
+
+  return {
+    order: {
+      submissionKey,
+      companyId,
+      customerContactId,
+      branchId,
+      representativeId,
+      orderSource,
+      orderSourceOther: orderSource === 'other_approved_source' ? orderSourceOther : '',
+      application,
+      fulfilment,
+      deliveryAddress: fulfilment === 'delivery' ? deliveryAddress : '',
+      customerNotes,
+      internalRepresentativeNotes,
+      requiredDate,
+      priority,
+      quotationNumber,
+      quotationDate,
+      quotationRevision,
+      purchaseOrderNumber,
+      purchaseOrderDate,
+      confirmationNote,
+      sourceConfirmed: true,
+      duplicateConfirmed: data.duplicateConfirmed === true,
+      items,
+    },
+    quotationFile: data.quotationFile,
+    purchaseOrderFile: data.purchaseOrderFile,
+    supportingDocuments,
+  };
+}
+
+export function validateRepresentativeDocumentReplacement(data = {}) {
+  const reason = present(data.reason);
+  if (reason.length < 8 || reason.length > 1000) {
+    throwValidation({ reason: 'Explain the correction in 8 to 1,000 characters.' }, 'A controlled replacement reason is required.');
+  }
+  validateRequiredSourceDocument(data.file, 'file', 'replacement document');
+  return { reason, file: data.file };
 }
 
 export function validateCustomerAccountForRfq(account) {

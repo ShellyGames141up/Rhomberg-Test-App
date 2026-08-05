@@ -180,14 +180,14 @@ function ExpeditingOrder({ order, expanded, onToggle, onAction, account, options
   const updates = [...(order.expediting?.updates || [])].reverse();
 
   return (
-    <article className={`expediting-order-card ${expanded ? 'is-open' : ''} ${order.emergency === 'yes' ? 'is-emergency' : ''} ${approaching ? 'is-approaching' : ''}`} id={`expediting-order-${order.id}`}>
+    <article className={`expediting-order-card ${expanded ? 'is-open' : ''} ${priority === 'urgent' ? 'is-emergency' : ''} ${approaching ? 'is-approaching' : ''}`} id={`expediting-order-${order.id}`}>
       <button type="button" className="expediting-order-summary" onClick={onToggle} aria-expanded={expanded}>
         <span className="expediting-order-reference"><small>Order / RFQ</small><strong>{order.reference}</strong><em>{order.sourceRfqReference || 'No linked RFQ'} · {ageLabel(order)}</em></span>
         <span><small>Customer</small><strong>{order.company}</strong><em>{order.contact}</em></span>
         <span><small>Representative</small><strong>{order.selectedRep?.name || 'Unassigned'}</strong><em>{order.selectedRep?.branchName || order.area}</em></span>
         <span><small>Current progress</small><strong>{currentStep.label}</strong><StatusBadge as="em" status={order.trackingStatus} label={stage.label} className="tracking-status" /></span>
         <span><small>Estimate</small><strong>{formatDate(estimate)}</strong><em>{approaching ? 'Due soon or overdue' : 'Current completion estimate'}</em></span>
-        <span><small>Priority</small><strong className={`expediting-priority priority-${priority}`}>{titleCase(priority)}</strong><em>{order.emergency === 'yes' ? 'Emergency fees apply' : `${lineItems} line item${lineItems === 1 ? '' : 's'}`}</em></span>
+        <span><small>Priority</small><strong className={`expediting-priority priority-${priority}`}>{titleCase(priority)}</strong><em>{priority === 'urgent' ? 'Urgent internal priority' : `${lineItems} line item${lineItems === 1 ? '' : 's'}`}</em></span>
         <span><small>Last update</small><strong>{formatDateTime(expeditorOrderLastActivityAt(order))}</strong><em>Oldest updates are prioritised</em></span>
         <b className="expediting-open-label">{expanded ? 'Close' : 'Open order'} <i>{expanded ? '−' : '→'}</i></b>
       </button>
@@ -196,7 +196,7 @@ function ExpeditingOrder({ order, expanded, onToggle, onAction, account, options
         <div className="expediting-order-detail">
           <header className="expediting-detail-heading">
             <div><span className="eyebrow">Expediting order detail</span><h3>{order.reference} · {order.company}</h3><p>{order.application || 'No application description recorded.'}</p></div>
-            <div><span>{order.fulfilment === 'collect' ? 'Collection' : 'Delivery'}</span><span>{unitQuantity} unit{unitQuantity === 1 ? '' : 's'}</span>{order.emergency === 'yes' && <span className="is-emergency">Emergency</span>}</div>
+            <div><span>{order.fulfilment === 'collect' ? 'Collection' : 'Delivery'}</span><span>{unitQuantity} unit{unitQuantity === 1 ? '' : 's'}</span>{priority === 'urgent' && <span className="is-emergency">Urgent</span>}</div>
           </header>
 
           <div className="expediting-fact-grid">

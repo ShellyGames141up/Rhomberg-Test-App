@@ -19,13 +19,23 @@ const internalNavigation = (workspaceLabel, includeAudit = false, includeArchive
   navItem('account', '○', 'Account'),
 ]);
 
+const representativeOrderNavigation = (workspaceLabel, includeAudit = false) => Object.freeze([
+  navItem('expeditor', 'R', workspaceLabel),
+  navItem('load-order', '+', 'Load order'),
+  navItem('notifications', '!', 'Alerts'),
+  ...(includeAudit ? [navItem('audit', 'A', 'Audit')] : []),
+  navItem('account', 'O', 'Account'),
+]);
+
 const CUSTOMER_VIEWS = Object.freeze(['home', 'catalogue', 'product', 'configurator', 'enquiry', 'tracking', 'notifications', 'account', 'settings']);
 const INTERNAL_VIEWS = Object.freeze(['expeditor', 'notifications', 'account']);
+const REPRESENTATIVE_ORDER_VIEWS = Object.freeze([...INTERNAL_VIEWS, 'load-order']);
 const OVERSIGHT_VIEWS = Object.freeze([...INTERNAL_VIEWS, 'archive', 'audit']);
-const ADMIN_VIEWS = Object.freeze(['administration', ...OVERSIGHT_VIEWS]);
+const ADMIN_VIEWS = Object.freeze(['administration', 'load-order', ...OVERSIGHT_VIEWS]);
 const ADMIN_NAVIGATION = Object.freeze([
   navItem('administration', 'A', 'Admin'),
   navItem('expeditor', '\u25C7', 'Overview'),
+  navItem('load-order', '+', 'Load order'),
   navItem('notifications', '!', 'Alerts'),
   navItem('archive', '\u25A1', 'Archive'),
   navItem('audit', '\u2261', 'Audit'),
@@ -65,6 +75,8 @@ export const ROLE_PROFILES = Object.freeze({
     role: USER_ROLES.SALES_REPRESENTATIVE,
     label: 'Sales representative',
     workspaceLabel: 'RFQs',
+    navigation: representativeOrderNavigation('RFQs'),
+    allowedViews: REPRESENTATIVE_ORDER_VIEWS,
     dashboard: {
       eyebrow: 'Sales representative inbox',
       headline: 'Your RFQs are ready.',
@@ -216,8 +228,8 @@ export const ROLE_PROFILES = Object.freeze({
     role: USER_ROLES.SALES_MANAGER,
     label: 'Sales manager',
     workspaceLabel: 'Sales analytics',
-    navigation: internalNavigation('Sales', true),
-    allowedViews: Object.freeze([...INTERNAL_VIEWS, 'audit']),
+    navigation: representativeOrderNavigation('Sales', true),
+    allowedViews: Object.freeze([...REPRESENTATIVE_ORDER_VIEWS, 'audit']),
     commercialReporting: { representativeFilterLabel: 'Representative' },
     dashboard: {
       eyebrow: 'Sales management',

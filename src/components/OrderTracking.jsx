@@ -15,6 +15,7 @@ export function OrderTracking({
   onAction,
   serviceMode,
   certificateActions,
+  sourceDocumentActions,
   focusRecordId = '',
 }) {
   const ordered = useMemo(() => [...enquiries].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)), [enquiries]);
@@ -48,6 +49,7 @@ export function OrderTracking({
               onAction={onAction}
               serviceMode={serviceMode}
               certificateActions={certificateActions}
+              sourceDocumentActions={sourceDocumentActions}
             />
           ))}
         </div>
@@ -60,7 +62,7 @@ export function OrderTracking({
   );
 }
 
-function TrackingCard({ enquiry, expanded, onToggle, onAction, serviceMode, certificateActions }) {
+function TrackingCard({ enquiry, expanded, onToggle, onAction, serviceMode, certificateActions, sourceDocumentActions }) {
   const status = statusById(enquiry.trackingStatus, enquiry.workflowType);
   const progress = progressForStatus(enquiry.trackingStatus, enquiry.workflowType);
   const totalQuantity = (enquiry.items || []).reduce((sum, item) => sum + Number(item.quantity || 1), 0);
@@ -81,9 +83,10 @@ function TrackingCard({ enquiry, expanded, onToggle, onAction, serviceMode, cert
         <div className="tracking-details">
           <div className="tracking-detail-grid">
             <span><small>Representative</small><strong>{enquiry.selectedRep?.name || 'To be assigned'}</strong><em>{enquiry.selectedRep?.branchName || enquiry.area}</em></span>
-            <span><small>Purchase Order</small><strong>{enquiry.poNumber || enquiry.poFileName || 'Not supplied'}</strong><em>{enquiry.emergency === 'yes' ? 'Emergency request' : 'Standard request'}</em></span>
+            <span><small>Purchase Order</small><strong>{enquiry.purchaseOrderNumber || enquiry.poNumber || enquiry.poFileName || 'Not supplied'}</strong><em>{enquiry.fulfilment === 'collect' ? 'Collection requested' : 'Delivery requested'}</em></span>
           </div>
           {!isOrder && enquiry.quotation && <CustomerQuotationPanel enquiry={enquiry} onAction={onAction} serviceMode={serviceMode} />}
+          {isOrder && (enquiry.documents || []).some(document => document.isCurrentVersion !== false) && <CustomerSourceDocuments order={enquiry} actions={sourceDocumentActions} serviceMode={serviceMode} />}
           <div className="tracking-products">
             <h3>Requested instruments</h3>
             {(enquiry.items || []).map(item => <span key={item.lineId}><img src={item.image} alt="" /><b>{item.code}</b><small>{item.name}</small><strong>× {item.quantity}</strong></span>)}
@@ -105,6 +108,47 @@ function TrackingCard({ enquiry, expanded, onToggle, onAction, serviceMode, cert
         </div>
       )}
     </article>
+  );
+}
+
+function CustomerSourceDocuments({ order, actions, serviceMode }) {
+  const [busyId, setBusyId] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const documents = (order.documents || []).filter(document => document.isCurrentVersion !== false);
+  const labels = { customer_quotation: 'Customer quotation', purchase_order: 'Your Purchase Order', supporting_document: 'Supporting document' };
+
+  const download = async document => {
+    if (!actions?.downloadDocument || busyId) return;
+    setBusyId(document.id);
+    setMessage('');
+    setError('');
+    try {
+      const result = await actions.downloadDocument(order.id, document.id);
+      if (result.downloadUrl) {
+        const link = globalThis.document.createElement('a');
+        link.href = result.downloadUrl;
+        link.download = result.fileName;
+        globalThis.document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+      setMessage(result.message || `${result.fileName} is ready.`);
+    } catch (downloadError) {
+      setError(downloadError?.message || 'The document could not be downloaded.');
+    } finally {
+      setBusyId('');
+    }
+  };
+
+  return (
+    <section className="customer-source-documents" aria-label="Order documents">
+      <header><span>DOC</span><div><small>Authorised source documents</small><h3>Quotation and Purchase Order</h3></div></header>
+      <div>{documents.map(document => <article key={document.id}><div><small>{labels[document.documentType] || 'Order document'} · Version {document.version || 1}</small><strong>{document.fileName}</strong></div><button type="button" disabled={Boolean(busyId)} onClick={() => download(document)}>{busyId === document.id ? 'Checking…' : serviceMode === 'mock' ? 'Verify access' : 'Download'}</button></article>)}</div>
+      {message && <p className="form-success" role="status">{message}</p>}
+      {error && <p className="form-error" role="alert">{error}</p>}
+      {serviceMode === 'mock' && <p>Mock mode stores document metadata only; access checks and download audit entries are fully simulated.</p>}
+    </section>
   );
 }
 

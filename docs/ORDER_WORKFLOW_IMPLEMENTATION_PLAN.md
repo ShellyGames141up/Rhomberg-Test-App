@@ -195,7 +195,7 @@ The mock persistence record also contains a fabricated plaintext demo password. 
 ```text
 id, reference, version, accountId, companyId,
 company/contact/email/phone display snapshots,
-area, application, medium, emergency,
+area, application, medium, fulfilment,
 fulfilment, deliveryAddress, collectionBranch, notes,
 poMode, poNumber, poFileName,
 selectedRep, items,

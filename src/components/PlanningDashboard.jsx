@@ -156,13 +156,13 @@ function PlanningOrder({ order, expanded, onToggle, onAction, account, planningO
   const laboratoryRoute = orderRequiresLaboratory(order);
 
   return (
-    <article className={`planning-order ${expanded ? 'is-open' : ''} ${order.emergency === 'yes' ? 'is-emergency' : ''}`} role="rowgroup" id={`planning-order-${order.id}`}>
+    <article className={`planning-order ${expanded ? 'is-open' : ''} ${priority === 'urgent' ? 'is-emergency' : ''}`} role="rowgroup" id={`planning-order-${order.id}`}>
       <div className="planning-order-row" role="row">
         <span className="planning-order-reference" role="cell" data-label="Order / RFQ"><strong>{order.reference}</strong><small>{order.sourceRfqReference || 'No linked RFQ'} · {planningOrderAgeLabel(order)}</small></span>
         <span role="cell" data-label="Customer"><strong>{order.company}</strong><small>{order.contact}</small></span>
         <span role="cell" data-label="Representative"><strong>{order.selectedRep?.name || 'Unassigned'}</strong><small>{order.selectedRep?.branchName || order.area || 'No branch'}</small></span>
         <span role="cell" data-label="Stage"><StatusBadge as="i" status={order.trackingStatus} label={stage.label} className="tracking-status" /></span>
-        <span role="cell" data-label="Priority"><i className={`planning-priority priority-${priority}`}>{titleCase(priority)}</i>{order.emergency === 'yes' && <small className="planning-emergency">Emergency</small>}</span>
+        <span role="cell" data-label="Priority"><i className={`planning-priority priority-${priority}`}>{titleCase(priority)}</i>{priority === 'urgent' && <small className="planning-emergency">Urgent</small>}</span>
         <span role="cell" data-label="PO / items"><strong>{customerPo || (planning.customerPoException?.authorised ? 'PO exception' : 'PO pending')}</strong><small>{lineItems} line item{lineItems === 1 ? '' : 's'}</small></span>
         <span role="cell" data-label="Last update"><strong>{formatDateTime(planningOrderLastActivityAt(order))}</strong><small>{order.updatedAt !== order.createdAt ? 'Workflow activity' : 'Order received'}</small></span>
         <span className="planning-open-cell" role="cell" data-label="Action"><button type="button" onClick={onToggle} aria-expanded={expanded}>{expanded ? 'Close' : 'Open order'} <b>{expanded ? '−' : '→'}</b></button></span>
@@ -172,7 +172,7 @@ function PlanningOrder({ order, expanded, onToggle, onAction, account, planningO
         <div className="planning-order-detail">
           <header className="planning-detail-heading">
             <div><span className="eyebrow">Order detail</span><h3>{order.reference} · {order.company}</h3><p>{order.application || 'No application description recorded.'}</p></div>
-            <div className="planning-detail-badges"><span>{order.fulfilment === 'collect' ? 'Collection' : 'Delivery'}</span><span>{lineItems} line item{lineItems === 1 ? '' : 's'}</span>{order.emergency === 'yes' && <span className="is-emergency">Emergency fees apply</span>}</div>
+            <div className="planning-detail-badges"><span>{order.fulfilment === 'collect' ? 'Collection' : 'Delivery'}</span><span>{lineItems} line item{lineItems === 1 ? '' : 's'}</span>{priority === 'urgent' && <span className="is-emergency">Urgent internal priority</span>}</div>
           </header>
 
           <div className="planning-detail-grid">

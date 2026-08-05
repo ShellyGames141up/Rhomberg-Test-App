@@ -20,7 +20,7 @@ const formatDate = value => value ? new Date(value).toLocaleString('en-ZA', {
   minute: '2-digit',
 }) : 'Not recorded';
 
-export function SalesRepresentativeDashboard({ account, rfqs, onAction, serviceMode, focusRecordId = '' }) {
+export function SalesRepresentativeDashboard({ account, rfqs, onAction, onLoadCustomerOrder, serviceMode, focusRecordId = '' }) {
   const [search, setSearch] = useState('');
   const [group, setGroup] = useState('all');
   const [priority, setPriority] = useState('all');
@@ -47,6 +47,7 @@ export function SalesRepresentativeDashboard({ account, rfqs, onAction, serviceM
         <span className="eyebrow">{serviceMode === 'mock' ? 'Test · ' : ''}{copy.eyebrow}</span>
         <h1 id="sales-inbox-title">Good day, {account.contact.split(/\s+/)[0]}.<br /><em>{copy.headline}</em></h1>
         <p>{copy.description}</p>
+        <button className="primary-button sales-load-order-action" type="button" onClick={onLoadCustomerOrder}>Load Customer Order <span>→</span></button>
         <div className="expeditor-kpis">
           <span><strong>{counts.new || 0}</strong><small>New RFQs</small></span>
           <span><strong>{counts.under_review || 0}</strong><small>Under review</small></span>

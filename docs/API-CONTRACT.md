@@ -101,7 +101,6 @@ Passwords and password hashes are never returned.
   "selectedRep": { "id": "uuid", "code": "20", "name": "Assigned Representative", "branchId": "uuid", "branchName": "Johannesburg" },
   "application": "Pump discharge pressure monitoring",
   "area": "Gauteng",
-  "emergency": "no",
   "fulfilment": "delivery",
   "poNumber": "PO-DEMO-1001",
   "poFileName": "",
@@ -121,7 +120,7 @@ The API may include display snapshots such as company, product and representativ
 
 ### Order summary
 
-An order is a separate resource. It is created only from an accepted RFQ and keeps immutable item/configuration snapshots:
+An order is a separate resource. It is created either from an accepted RFQ or from the controlled Representative-loaded order endpoint, and keeps immutable item/configuration snapshots:
 
 ```json
 {
@@ -301,7 +300,7 @@ Supported inbox groups:
 - `accepted`: `accepted`, `converted_to_order`;
 - `closed`: `cancelled`, `expired`.
 
-`priority` accepts `urgent` or `standard`. Results expose authorised company/customer contact information, submitted time, last activity, priority/emergency state and the workflow actions currently allowed for that representative.
+`priority` accepts `urgent` or `standard` for the internal Representative inbox only. Results expose authorised company/customer contact information, submitted time, last activity, internal priority state and the workflow actions currently allowed for that representative.
 
 #### `GET /enquiries/{enquiryId}`
 
@@ -323,7 +322,6 @@ Example `payload` value:
     "medium": "Process water",
     "area": "Gauteng",
     "selectedRep": { "id": "uuid" },
-    "emergency": "no",
     "fulfilment": "delivery",
     "deliveryAddress": "Demo address",
     "collectionBranch": "",
@@ -347,6 +345,8 @@ Example `payload` value:
 }
 ```
 
+Customer RFQ payloads must not contain `emergency`, `urgent`, `priority` or `internalPriority`. The server rejects those keys even if a caller bypasses the form. Internal users manage priority only through permission-controlled internal services.
+
 The server must ignore company/contact/representative/product display snapshots supplied by the browser. It reloads the signed-in customer, authorised company, selected representative, product and configuration rules from authoritative records.
 
 One database transaction must:
@@ -354,7 +354,7 @@ One database transaction must:
 1. verify the customer account is active and authorised for the company;
 2. verify and load the selected representative from the approved area/branch assignment;
 3. generate an immutable permanent RFQ reference;
-4. insert the RFQ with company, submitting customer, representative, submission time, notes, priority and fulfilment details;
+4. insert the RFQ with company, submitting customer, representative, submission time, notes, server-managed default internal priority and fulfilment details;
 5. insert every configured line item;
 6. insert uploaded-document metadata while the file is queued for malware scanning/encrypted object storage;
 7. append the customer submission workflow event and first audit event;
@@ -384,6 +384,19 @@ Response `201`:
 ```
 
 The customer response uses the customer-visible `submitted` projection even though the internal record is already `assigned_to_rep`. Email should be queued through an outbox/job worker; a temporary SMTP problem must not roll back a successfully stored RFQ.
+
+#### `POST /representatives/orders`
+
+Sales Representative, Sales Manager or Administrator only. Content type is `multipart/form-data` with:
+
+- `payload`: JSON matching `RepresentativeOrderSubmission`;
+- `quotation`: mandatory customer quotation document;
+- `purchaseOrder`: mandatory customer Purchase Order document;
+- `supportingDocuments`: up to eight optional approved files.
+
+The `Idempotency-Key` header is mandatory. The server validates the actor, customer-company scope, authorised contact, branch, dedicated Representative, source explanation, items/configurations/quantities, quotation and PO metadata, confirmation evidence, documents and duplicates. It creates the order directly in `awaiting_planning`, records `representative_loaded_order`, creates no RFQ, and commits item snapshots, source record, document metadata, audit events and notifications atomically.
+
+Related endpoints are `GET /representatives/orders/options`, `POST /representatives/orders/duplicate-check`, `GET /orders/{orderId}/source-documents`, the audited source-document download endpoint and the controlled source-document version-replacement endpoint. Customer projections return only their current quotation/PO and never internal origin, priority, notes or duplicate evidence.
 
 #### `GET /enquiries/{enquiryId}/workflow-actions`
 

@@ -14,8 +14,8 @@ The proposed model and OpenAPI contract now include the certification, Laborator
 The SQL proposal adds per-unit calibration/certificate constraints, immutable certificate/inspection history, company-scoped Lab/QA records, separate physical receipts, one-time credential challenges and pricing-safe aggregates. No production connection or migration has been created.
 
 Status: design proposal only
-Specification version: 0.6
-Last updated: 29 July 2026
+Specification version: 0.8
+Last updated: 4 August 2026
 
 This document reconciles the completed mock RFQ-to-order workflow with the proposed private-cloud API and PostgreSQL model. It does not connect the preview to a database, identity provider, mail server, file store, or production infrastructure. Every example in the OpenAPI file is fabricated.
 
@@ -33,6 +33,7 @@ The executable design artefacts are:
 - Quotation pricing remains outside the customer-facing application.
 - Document bytes belong in private object storage. PostgreSQL stores metadata, hashes, scan status, and authorisation only.
 - Important actions write an append-only audit event in the same transaction as the business change.
+- Customer RFQ/order requests contain no urgency control. The API rejects customer urgency fields and applies only a server-owned internal default; authorised internal services manage priority separately.
 
 ## Canonical entity catalogue
 
@@ -56,6 +57,7 @@ The executable design artefacts are:
 | `rfq_acceptances` | `id` UUID | one-to-one unique `rfq_id`; FK verifier | derived from RFQ | immutable verified acceptance evidence |
 | `orders` | `id` UUID | unique permanent `order_number`; one-to-one source RFQ; optional unique ERP ID | direct | order status timestamps, hold/archive fields, `row_version` |
 | `order_items` | `id` UUID | unique `(order_id, line_number)` and `(order_id, source_rfq_item_id)` | derived from order | immutable accepted snapshot |
+| `representative_loaded_orders` | `id` UUID | one-to-one unique `order_id`; FK company/contact/branch/representative/creator/current quotation/current PO; unique idempotency hash | direct | immutable origin evidence plus `row_version` |
 | `planning_records` | `id` UUID | one-to-one unique `order_id`; unique job number; FK assigned planner/branch | direct | `started_at`, `submitted_at`, `row_version` |
 | `expediting_updates` | `id` UUID | FK order, progress step, updating user | derived from order | append-only |
 | `dispatch_records` | `order_id` UUID | one-to-one FK order; optional proof document | derived from order | current Dispatch summary timestamps |
@@ -88,6 +90,8 @@ Supporting production tables in the SQL proposal include branches, representativ
 - Fulfilment: `delivery`, `collect`
 - Dispatch: `collection`, `company_delivery`, `courier`, `third_party_delivery`
 - Acceptance: `purchase_order_received`, `payment_confirmed`, `written_acceptance_received`, `account_customer_authorisation`, `other`
+- Order origin: `customer_submitted_rfq_order`, `representative_loaded_order`
+- Representative order source: `email`, `telephone`, `in_person`, `existing_quotation`, `other_approved_source`
 - Notification delivery: `in_app`, `email_pending`, `email_sent`, `email_failed`, `push_pending`, `push_sent`, `push_failed`
 - Workflow override: `requested`, `approved`, `rejected`, `executed`, `cancelled`
 - Archive action: `eligible`, `archived`, `restored`, `legal_hold_applied`, `legal_hold_released`, `deletion_requested`, `deletion_cancelled`
@@ -99,13 +103,15 @@ Only the workflow module and service layer may choose a target RFQ or order stat
 1. Permanent RFQ, order, job, quotation, and approved external-reference identifiers are unique.
 2. RFQ and order line numbers are unique within their parent.
 3. A quotation and acceptance can exist at most once for an RFQ.
-4. Order creation and RFQ conversion are one transaction and are protected by an idempotency key.
-5. Planning requires a job number, assigned planner, submission date, and either a customer PO number or an authorised exception.
-6. Dispatch and Expediting dates cannot move backwards relative to required earlier dates.
-7. Notification and tracking records identify exactly one RFQ or order.
-8. Document metadata identifies exactly one product, RFQ, or order parent.
-9. Raw passwords, API keys, payment-card data, bank credentials, real pricing, and object-storage secrets are prohibited.
-10. Optimistic concurrency uses `row_version`/`expectedVersion`; stale changes return HTTP 409.
+4. RFQ conversion and Representative-loaded order creation are separate atomic paths protected by idempotency keys.
+5. An RFQ-derived order requires a converted source RFQ. A Representative-loaded order requires no RFQ but must have an authorised creator, source, confirmation, quotation and PO references, and both current document IDs.
+6. Only one current quotation and one current PO document may exist per order; replacement preserves older versions and requires a reason.
+7. Planning requires a job number, assigned planner, submission date, and either a customer PO number or an authorised exception.
+8. Dispatch and Expediting dates cannot move backwards relative to required earlier dates.
+9. Notification and tracking records identify exactly one RFQ or order.
+10. Document metadata identifies exactly one product, RFQ, or order parent.
+11. Raw passwords, API keys, payment-card data, bank credentials, real pricing, and object-storage secrets are prohibited.
+12. Optimistic concurrency uses `row_version`/`expectedVersion`; stale changes return HTTP 409.
 
 ## Index strategy
 
@@ -175,6 +181,7 @@ The following operations are atomic:
 - Start review and every controlled workflow transition.
 - Quotation confirmation plus notifications and audit.
 - Acceptance verification, RFQ conversion, order/item creation, Planning notification, and audit.
+- Representative-loaded order validation, duplicate/idempotency decision, order/item/source/document creation, Planning/customer notifications and audit.
 - Planning save/submission plus queue hand-off.
 - Each Expediting update plus timeline, notification, audit, and order summary update.
 - Dispatch status/evidence update plus timeline, notifications, and audit.
@@ -192,6 +199,7 @@ The full proposed contract is in `docs/api/openapi.yaml`. Resource groups includ
 - Products and versioned configurations: `/products/*`, `/products/{productId}/configurations`
 - RFQs: `/enquiries`, `/enquiries/inbox`, `/enquiries/{enquiryId}`, line items, quotation, acceptance, documents, timeline, and controlled workflow actions
 - Orders: `/orders`, `/orders/{orderId}`, Planning, Expediting, Dispatch, timeline, documents, archive, and workflow actions
+- Representative-loaded orders: `/representatives/orders/options`, `/representatives/orders/duplicate-check`, `POST /representatives/orders`, and versioned source-document list/download/replacement endpoints
 - Notifications and preferences: `/notifications/*`, `/users/me/notification-preferences`
 - Audit and management: `/audit-events`, `/management/*`, `/workflow-overrides`
 - Retention: `/admin/retention-policy`, `/archived-orders`, per-order archive/restore/hold/export endpoints

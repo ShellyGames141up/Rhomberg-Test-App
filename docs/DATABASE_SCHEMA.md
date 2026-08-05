@@ -6,6 +6,10 @@ The executable design proposal is [database/postgresql-schema.sql](database/post
 
 Phase 21 adds `order_routing`, `lab_tasks`, `calibration_units`, `certificate_requirements`, `certificates`, `certificate_versions`, `lab_events`, `lab_monthly_metrics`, `qa_tasks`, `qa_inspections`, `qa_failures`, `qa_rework_cycles`, `qa_events`, `qa_monthly_metrics`, `department_receipts`, `verification_codes`, `credential_change_requests`, `product_statistics`, `representative_statistics` and `operational_metrics`.
 
+The representative-loaded-order extension adds `order_origin` and `order_source` enums; nullable RFQ linkage for direct orders; source/reference/confirmation/duplicate/idempotency fields on `orders`; version controls on `uploaded_documents`; and the one-to-one `representative_loaded_orders` origin record. An RFQ-derived order requires its converted RFQ. A representative-loaded order requires no RFQ but does require its creating Representative, approved source, quotation/PO numbers, current quotation/PO document IDs and confirmation object.
+
+Customer RFQs retain an internal `internal_priority` default controlled by the server, but expose no customer urgency input. The customer may not set or update that column. Internal queue roles continue to use approved priority controls.
+
 Important constraints include:
 
 - one physical calibration row per `(order_item_id, unit_sequence)`;
@@ -18,6 +22,9 @@ Important constraints include:
 - legal-hold/archive fields;
 - append-only Lab/QA/certificate event triggers;
 - row-level security as defence in depth.
+- partial unique idempotency and current source-document indexes;
+- company/reference/time indexes for duplicate detection;
+- RLS on `representative_loaded_orders`, with customer access occurring only through the safe order/document projections.
 
 The API must still enforce scope; RLS is not a substitute for application authorisation. Production migrations need transactional deployment, role grants, backup/restore rehearsal, retention approval and performance validation using fabricated volumes before any customer data is imported.
 

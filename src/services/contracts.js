@@ -40,6 +40,9 @@ export const PERMISSIONS = Object.freeze({
   VIEW_OWN_COMPANY_ACCOUNT: 'view_own_company_account',
   VIEW_ALL_COMPANIES: 'view_all_companies',
   CREATE_RFQ: 'create_rfq',
+  LOAD_CUSTOMER_ORDER: 'load_customer_order',
+  REPLACE_ORDER_SOURCE_DOCUMENT: 'replace_order_source_document',
+  DOWNLOAD_ORDER_SOURCE_DOCUMENT: 'download_order_source_document',
   VIEW_OWN_COMPANY_RFQS: 'view_own_company_rfqs',
   VIEW_ASSIGNED_RFQS: 'view_assigned_rfqs',
   VIEW_ALL_RFQS: 'view_all_rfqs',
@@ -138,6 +141,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.CREATE_RFQ,
     PERMISSIONS.VIEW_OWN_COMPANY_RFQS,
     PERMISSIONS.VIEW_OWN_COMPANY_ORDERS,
+    PERMISSIONS.DOWNLOAD_ORDER_SOURCE_DOCUMENT,
     PERMISSIONS.ACKNOWLEDGE_QUOTATION,
     PERMISSIONS.CANCEL_RFQ,
     PERMISSIONS.DOWNLOAD_CERTIFICATES,
@@ -149,6 +153,9 @@ export const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.READ_CATALOGUE,
     PERMISSIONS.VIEW_ASSIGNED_RFQS,
     PERMISSIONS.VIEW_ASSIGNED_ORDERS,
+    PERMISSIONS.LOAD_CUSTOMER_ORDER,
+    PERMISSIONS.REPLACE_ORDER_SOURCE_DOCUMENT,
+    PERMISSIONS.DOWNLOAD_ORDER_SOURCE_DOCUMENT,
     PERMISSIONS.MARK_RFQ_UNDER_REVIEW,
     PERMISSIONS.MARK_RFQ_QUOTED,
     PERMISSIONS.ACCEPT_CUSTOMER_ORDER,
@@ -345,6 +352,8 @@ export const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.VIEW_ALL_COMPANIES,
     PERMISSIONS.VIEW_ALL_RFQS,
     PERMISSIONS.VIEW_ALL_ORDERS,
+    PERMISSIONS.LOAD_CUSTOMER_ORDER,
+    PERMISSIONS.DOWNLOAD_ORDER_SOURCE_DOCUMENT,
     PERMISSIONS.REASSIGN_REPRESENTATIVE,
     PERMISSIONS.MARK_RFQ_UNDER_REVIEW,
     PERMISSIONS.MARK_RFQ_QUOTED,
@@ -492,12 +501,13 @@ export const roleCanPerformWorkflow = role => roleCanAny(role, WORKFLOW_PERMISSI
 export const accountCanPerformWorkflow = account => WORKFLOW_PERMISSIONS.some(permission => accountCan(account, permission));
 
 export class ServiceError extends Error {
-  constructor(message, { code = 'SERVICE_ERROR', status = 400, fieldErrors = {}, cause } = {}) {
+  constructor(message, { code = 'SERVICE_ERROR', status = 400, fieldErrors = {}, details = undefined, cause } = {}) {
     super(message);
     this.name = 'ServiceError';
     this.code = code;
     this.status = status;
     this.fieldErrors = fieldErrors;
+    if (details !== undefined) this.details = details;
     if (cause) this.cause = cause;
   }
 }
