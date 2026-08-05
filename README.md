@@ -35,8 +35,12 @@ This repository contains the shared React implementation for Rhomberg Connect an
 - Documents: generated or simulated in the browser; production private storage is not connected
 - Email and push: simulated only
 - Production deployment: not started
+- Current `main` scope: representative-loaded customer orders and the controlled Laboratory calibration workflow are integrated in mock mode
+- Current verification: 82 React source files compile, the complete automated suite passes, and all five preview applications build successfully
 
-## Current Workflow Update
+## Current Updates
+
+### Customer RFQs and representative-loaded orders
 
 - Customer RFQ forms no longer contain emergency, urgent or priority controls. The service rejects those fields even if a request is forged; authorised internal users retain controlled priority management.
 - Sales Representatives can use **Load Customer Order** on Operations desktop and mobile for approved offline orders received by email, telephone, in person, from an existing quotation or another explained source.
@@ -44,6 +48,18 @@ This repository contains the shared React implementation for Rhomberg Connect an
 - Successful submissions create a permanent order directly in `awaiting_planning` with origin `representative_loaded_order`; no placeholder RFQ is created.
 - Duplicate matching and idempotency protect repeat submissions. Customer, Planning and internal notifications are generated, and source-document uploads, replacements and downloads are audited.
 - The GitHub Pages mock stores document metadata only. Production file bytes require private storage, backend validation and malware scanning.
+
+### Controlled Laboratory calibration
+
+- Cape Town and Johannesburg Laboratory queues are separated by branch, staff assignment and role permissions.
+- Every physical calibration unit receives its own controlled workflow record, job number, worksheet revisions, certificate requirement and audit history.
+- The workflow covers receipt, thermal stabilisation, inspection, booking, technician assignment, calibration, management review, labelling and transfer to Dispatch or Expediting.
+- Pressure and Temperature work remain separate. The mock includes Pressure master-gauge, 700 bar dead-weight-tester, 250 MPa dead-weight-tester and Temperature comparison methods.
+- Structured readings feed named calculation functions and versioned uncertainty budgets. Raw inputs lock after calculation, and corrections create traceable revisions instead of overwriting evidence.
+- Laboratory document handling includes internal-review PDFs, draft and final unsigned certificates, approved external-signature hand-off, signed-PDF re-upload, SHA-256 evidence, superseded-version preservation and explicit certificate release.
+- Customer projections expose only safe progress and explicitly released certificates belonging to the authorised company. Raw readings, calculations, internal notes, management comments and audit metadata remain internal.
+- Laboratory notifications, unit history, the document centre, certificate register, monthly measures, future API contracts, PostgreSQL proposals and automated tests are included.
+- Laboratory features are implemented for controlled review only. Formal technical validation and approval remain required from authorised Rhomberg Laboratory Management and Technical Signatories before production use.
 
 GitHub Pages is demonstration-only. Browser storage, browser-side permissions and fabricated passwords are not production security controls.
 
@@ -59,9 +75,9 @@ Role-aware internal interfaces for Sales, Planning, Laboratory, Expediting, Qual
 
 Both products use the same domain rules, validation, notifications, audit model, product data and replaceable service contracts.
 
-### Controlled Laboratory calibration workspace (local development)
+### Controlled Laboratory calibration workspace
 
-The current local branch adds the complete unit-level Laboratory journey for Cape Town and Johannesburg: receipt, stabilisation, inspection, booking, branch/technician assignment, separate Pressure and Temperature methods, structured readings, uncertainty calculation, management review, labelling, Dispatch transfer, internal review PDFs, draft/final certificate versions, external-signature re-upload, explicit certificate release, audit history and notifications. Reference registers and test records are fabricated. Supplied customer workbooks and certificates are excluded from the repository.
+The current `main` branch includes the complete fabricated unit-level Laboratory journey for Cape Town and Johannesburg. Reference registers and test records are fabricated, while supplied customer workbooks, certificates and other private source material are excluded from the repository.
 
 This feature is an implementation for review, not a metrology or accreditation approval. Legacy external workbook links and a Temperature repeatability-count discrepancy require formal resolution before production.
 
@@ -225,6 +241,8 @@ No infrastructure values, credentials or private endpoints belong in this reposi
 - No cross-device data persistence exists in mock mode.
 - The Buyer workflow is prepared but inactive.
 - Outlook quotation preparation and customer payment/PO exchange remain external to the application.
+- Laboratory calculations, methods, uncertainty models, reference standards and certificate templates require formal technical and accreditation review before production use.
+- External certificate signing remains outside the application; the mock records the controlled hand-off, signed-PDF return and release evidence only.
 - Mobile native packaging, signing, store submission and Windows distribution require IT-owned processes.
 - Retention, archive and permanent deletion require approved server-side jobs.
 - GitHub Pages cannot enforce private access to the demonstration.
@@ -254,7 +272,7 @@ No infrastructure values, credentials or private endpoints belong in this reposi
 - [Preview guide](docs/PREVIEW_GUIDE.md)
 - [Build and deployment](docs/BUILD_AND_DEPLOYMENT.md)
 - [Mock-mode limitations](docs/MOCK_MODE_LIMITATIONS.md)
-- [Laboratory workflow](docs/LAB_WORKFLOW.md), [template analysis](docs/LAB_TEMPLATE_ANALYSIS.md), [calculation specification](docs/LAB_CALCULATION_SPECIFICATION.md), [validation report](docs/LAB_CALCULATION_VALIDATION_REPORT.md), [role matrix](docs/LAB_ROLE_PERMISSION_MATRIX.md), [certificate workflow](docs/LAB_CERTIFICATE_WORKFLOW.md) and [test plan](docs/LAB_TEST_PLAN.md)
+- [Laboratory workflow](docs/LAB_WORKFLOW.md), [implementation completion report](docs/LAB_IMPLEMENTATION_COMPLETION_REPORT.md), [template analysis](docs/LAB_TEMPLATE_ANALYSIS.md), [calculation specification](docs/LAB_CALCULATION_SPECIFICATION.md), [validation report](docs/LAB_CALCULATION_VALIDATION_REPORT.md), [reference standards](docs/LAB_REFERENCE_STANDARDS.md), [uncertainty budget](docs/UNCERTAINTY_BUDGET.md), [PDF templates](docs/LAB_PDF_TEMPLATES.md), [role matrix](docs/LAB_ROLE_PERMISSION_MATRIX.md), [certificate workflow](docs/LAB_CERTIFICATE_WORKFLOW.md), [signature workflow](docs/LAB_SIGNATURE_WORKFLOW.md) and [test plan](docs/LAB_TEST_PLAN.md)
 - [QA workflow](docs/QA_WORKFLOW.md)
 - [Authentication](docs/AUTHENTICATION.md)
 - [Management analytics](docs/MANAGEMENT_ANALYTICS.md)
