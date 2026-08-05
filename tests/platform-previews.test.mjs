@@ -52,7 +52,12 @@ for (const definition of PREVIEW_DEFINITIONS) {
   const page = readFileSync(path.resolve(definition.sourcePath, 'index.html'), 'utf8');
   assert.match(page, new RegExp(`<meta name="rhomberg-preview" content="${definition.id}">`));
   assert.ok(page.includes('<base href="../../">'), `${definition.id} must preserve the GitHub Pages base path`);
+  assert.ok(page.includes('app.js?v=37'), `${definition.id} must request the current application bundle`);
 }
+const rootPage = readFileSync(path.resolve('index.html'), 'utf8');
+const serviceWorker = readFileSync(path.resolve('sw.js'), 'utf8');
+assert.ok(rootPage.includes('app.js?v=37'), 'Preview Centre must request the current application bundle');
+assert.ok(serviceWorker.includes("'./app.js?v=37'"), 'service worker must cache the same application bundle version');
 const readme = readFileSync(path.resolve('README.md'), 'utf8');
 for (const definition of PREVIEW_DEFINITIONS) {
   assert.ok(readme.includes(`https://shellygames141up.github.io/Rhomberg-Test-App${definition.route}`), `README must launch ${definition.id}`);
@@ -94,7 +99,7 @@ for (const role of [USER_ROLES.SALES_REPRESENTATIVE, USER_ROLES.MANAGER, USER_RO
 for (const role of [USER_ROLES.PLANNING, USER_ROLES.DISPATCH, USER_ROLES.BUYER, USER_ROLES.ADMINISTRATOR, USER_ROLES.CUSTOMER]) {
   assert.equal(previewAllowsRole(internalMobile, role), false);
 }
-for (const role of [USER_ROLES.SALES_REPRESENTATIVE, USER_ROLES.MANAGER, USER_ROLES.EXPEDITOR, USER_ROLES.PLANNING, USER_ROLES.DISPATCH, USER_ROLES.BUYER, USER_ROLES.ADMINISTRATOR]) {
+for (const role of [USER_ROLES.SALES_REPRESENTATIVE, USER_ROLES.TECHNICAL_SUPPORT, USER_ROLES.TECHNICAL_MANAGER, USER_ROLES.TECHNICAL_DIRECTOR, USER_ROLES.MANAGER, USER_ROLES.EXPEDITOR, USER_ROLES.PLANNING, USER_ROLES.DISPATCH, USER_ROLES.BUYER, USER_ROLES.ADMINISTRATOR]) {
   assert.ok(previewAllowsRole(internalDesktop, role));
 }
 assert.equal(previewAllowsRole(internalDesktop, USER_ROLES.CUSTOMER), false);
@@ -111,6 +116,8 @@ assert.deepEqual(
   new Set([USER_ROLES.SALES_REPRESENTATIVE, USER_ROLES.MANAGER, USER_ROLES.EXPEDITOR]),
 );
 assert.equal(filterDemoLoginsForPreview(demoLogins, internalDesktop).some(login => login.role === USER_ROLES.CUSTOMER), false);
+assert.ok(filterDemoLoginsForPreview(demoLogins, internalDesktop).some(login => login.role === USER_ROLES.TECHNICAL_SUPPORT && login.label === 'Use Technical Advisor login'));
+assert.ok(filterDemoLoginsForPreview(demoLogins, internalDesktop).some(login => login.role === USER_ROLES.TECHNICAL_MANAGER));
 
 await services.auth.signIn({ email: DEMO_ACCOUNT.email, password: DEMO_ACCOUNT.password });
 const initial = await services.personalisation.get();
