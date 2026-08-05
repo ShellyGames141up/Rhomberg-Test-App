@@ -41,7 +41,6 @@ assert.deepEqual(Object.values(USER_ROLES), [
   'customer',
   'sales_representative',
   'technical_support',
-  'technical_manager',
   'technical_director',
   'planning',
   'expeditor',
@@ -63,7 +62,7 @@ assert.deepEqual(Object.values(USER_ROLES), [
 assert.deepEqual(
   new Set((await services.auth.getDemoLogins()).map(login => login.id)),
   new Set([
-    'customer', 'cape_customer', 'sales_representative', 'technical_support', 'technical_manager', 'planning', 'expeditor',
+    'customer', 'cape_customer', 'sales_representative', 'technical_support', 'planning', 'expeditor',
     'laboratory_user', 'laboratory_manager', 'quality_assurance', 'quality_manager',
     'dispatch', 'buyer', 'sales_manager', 'company_owner', 'manager', 'administrator',
   ]),

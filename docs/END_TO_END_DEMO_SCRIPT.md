@@ -132,7 +132,7 @@ Mock mode validates document metadata but does not retain the file bytes, so the
 1. Customer submits a fabricated RFQ; expect `assigned_to_rep` and no urgency field.
 2. Representative starts review and submits **Technical Support Required** for a line item; expect one 24-hour extension and safe notifications.
 3. Attempt **Mark as Quoted**; expect `TECHNICAL_REVIEW_PENDING`.
-4. Technical Manager assigns Technical Support; expect `technical_support_assigned`.
+4. Technical Advisor assigns the request in the combined workspace; expect `technical_support_assigned`.
 5. Technical Support starts review and requests customer information through Sales.
 6. Representative forwards safe wording; Customer replies in the RFQ thread. Internal messages must remain absent from customer payloads.
 7. Technical Support submits a recommendation and completes review; expect the block cleared, audit events and customer/Representative notifications.

@@ -27,6 +27,8 @@ assert.equal(normaliseViewForRole(USER_ROLES.TECHNICAL_SUPPORT, 'technical'), 't
 assert.equal(roleCan(USER_ROLES.CUSTOMER, PERMISSIONS.REQUEST_TECHNICAL_SUPPORT), false);
 assert.equal(roleCan(USER_ROLES.SALES_REPRESENTATIVE, PERMISSIONS.REQUEST_TECHNICAL_SUPPORT), true);
 assert.equal(roleCan(USER_ROLES.PLANNING, PERMISSIONS.REQUEST_TECHNICAL_SUPPORT), false);
+assert.equal(roleCan(USER_ROLES.TECHNICAL_SUPPORT, PERMISSIONS.ASSIGN_TECHNICAL_SUPPORT), true, 'Technical Advisor must assign requests in the combined workspace');
+assert.equal(roleCan(USER_ROLES.TECHNICAL_SUPPORT, PERMISSIONS.VIEW_TECHNICAL_METRICS), true, 'Technical Advisor must retain combined reporting access');
 assert.equal(roleCan(USER_ROLES.SALES_MANAGER, PERMISSIONS.OVERRIDE_TECHNICAL_QUOTATION_BLOCK), true);
 assert.equal(roleCan(USER_ROLES.MANAGER, PERMISSIONS.OVERRIDE_TECHNICAL_QUOTATION_BLOCK), false);
 assert.equal(readFileSync('src/components/Enquiry.jsx', 'utf8').includes('emergency'), false, 'customer RFQ UI must not restore emergency controls');
@@ -35,6 +37,11 @@ assert.ok(readFileSync('src/components/TechnicalSupport.jsx', 'utf8').includes('
 let clock = new Date('2026-08-05T08:00:00.000Z');
 const services = createMockServices({ storage: new TestStorage(), now: () => new Date(clock), emailSender: async () => ({ ok: true }) });
 await services.initialize();
+await assert.rejects(
+  () => services.auth.signIn({ email: 'technical.manager@example.invalid', password: 'TechnicalManager123!' }),
+  error => error instanceof ServiceError && error.code === 'INVALID_CREDENTIALS',
+  'the retired Technical Manager login must not remain active',
+);
 
 await services.auth.signIn({ email: 'cape.demo@client.test', password: 'Demo123!' });
 const catalogue = await services.products.getCatalogue();
@@ -65,13 +72,10 @@ const overridden = await services.enquiries.getById(rfqId);
 assert.equal(overridden.technicalSupport.quotationOverride.active, true);
 
 await services.auth.signOut();
-await services.auth.signIn({ email: 'technical.manager@example.invalid', password: 'TechnicalManager123!' });
+await services.auth.signIn({ email: 'technical.support@example.invalid', password: 'TechnicalDemo123!' });
 let queue = await services.technicalSupport.listQueue();
 assert.ok(queue.some(item => item.id === rfqId));
 await services.technicalSupport.assign(requestId, { technicalUserId: 'staff-technical-support-demo' });
-
-await services.auth.signOut();
-await services.auth.signIn({ email: 'technical.support@example.invalid', password: 'TechnicalDemo123!' });
 await services.technicalSupport.startReview(requestId);
 await services.technicalSupport.requestInformation(requestId, { target: 'customer', message: 'Please ask the customer to confirm the fabricated process connection orientation.' });
 

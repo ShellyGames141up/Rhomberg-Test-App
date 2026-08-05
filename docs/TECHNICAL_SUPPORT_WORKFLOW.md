@@ -7,7 +7,7 @@ This phase adds a controlled, RFQ-linked Technical Support workflow in mock mode
 1. The assigned Sales Representative starts an RFQ review and selects **Technical Support Required**.
 2. The service validates the category, question, RFQ line item, internal priority, visibility and confirmation.
 3. One active request is created and the quotation target receives a single 24-hour allowance. Repeated messages do not extend it again.
-4. A Technical Manager assigns an authorised Technical user, who starts review.
+4. The Technical Advisor assigns the request within the combined workspace and starts review.
 5. Technical Support and Sales use the immutable correspondence thread. Technical Support routes customer questions through the assigned Representative.
 6. Customer-safe requests and replies appear in the customer RFQ area; internal messages and documents never do.
 7. Technical Support submits a recommendation and completes the review. The final quotation action remains blocked while an active request exists.

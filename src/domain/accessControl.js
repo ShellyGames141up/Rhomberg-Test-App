@@ -94,7 +94,7 @@ export const ROLE_PROFILES = Object.freeze({
   }),
   [USER_ROLES.TECHNICAL_SUPPORT]: profile({
     role: USER_ROLES.TECHNICAL_SUPPORT,
-    label: 'Technical Support',
+    label: 'Technical Advisor',
     workspaceLabel: 'Technical Support',
     defaultView: 'technical',
     navigation: technicalNavigation(),
@@ -105,14 +105,6 @@ export const ROLE_PROFILES = Object.freeze({
       description: 'Review assigned product and application questions while keeping every message linked to the RFQ.',
       queue: 'Technical Support queue',
     },
-  }),
-  [USER_ROLES.TECHNICAL_MANAGER]: profile({
-    role: USER_ROLES.TECHNICAL_MANAGER,
-    label: 'Technical manager',
-    workspaceLabel: 'Technical Support',
-    defaultView: 'technical',
-    navigation: technicalNavigation(),
-    allowedViews: TECHNICAL_VIEWS,
   }),
   [USER_ROLES.TECHNICAL_DIRECTOR]: profile({
     role: USER_ROLES.TECHNICAL_DIRECTOR,

@@ -228,7 +228,9 @@ const hashFileSha256 = async file => {
 };
 
 const normaliseAccount = account => {
-  const role = account.role || USER_ROLES.CUSTOMER;
+  const role = account.role === 'technical_manager'
+    ? USER_ROLES.TECHNICAL_SUPPORT
+    : account.role || USER_ROLES.CUSTOMER;
   return {
     ...account,
     role,
@@ -1322,7 +1324,9 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   const initialize = async () => {
     let accounts = store.get(STORE_KEYS.accounts, null);
     if (!accounts) accounts = store.get(LEGACY_STORE_KEYS.accounts, []);
-    accounts = accounts.map(normaliseAccount);
+    accounts = accounts
+      .filter(account => account.id !== 'staff-technical-manager-demo' && account.email?.toLowerCase() !== 'technical.manager@example.invalid')
+      .map(normaliseAccount);
     for (const seed of [
       DEMO_ACCOUNT,
       SALES_ACCOUNT,
