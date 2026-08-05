@@ -2379,4 +2379,97 @@ CREATE TRIGGER lab_calculation_versions_immutable BEFORE UPDATE OR DELETE ON app
 CREATE TRIGGER lab_certificate_reviews_immutable BEFORE UPDATE OR DELETE ON app.lab_certificate_reviews FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
 CREATE TRIGGER lab_signed_documents_immutable BEFORE UPDATE OR DELETE ON app.lab_signed_documents FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
 
+-- Proposed RFQ Technical Support extension. No migration has been applied.
+CREATE TABLE app.technical_support_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), reference text NOT NULL UNIQUE,
+  rfq_id uuid NOT NULL REFERENCES app.rfqs(id), company_id uuid NOT NULL REFERENCES app.companies(id),
+  representative_id uuid NOT NULL REFERENCES app.representatives(id), requested_by uuid NOT NULL REFERENCES app.users(id),
+  category text NOT NULL, other_explanation text, question text NOT NULL, rfq_item_id uuid NOT NULL REFERENCES app.rfq_items(id),
+  priority text NOT NULL CHECK (priority IN ('standard','high','urgent')), requested_department text,
+  requested_technical_user_id uuid REFERENCES app.users(id), classification text NOT NULL CHECK (classification IN ('internal_only','customer_safe')),
+  status text NOT NULL CHECK (status IN ('technical_support_requested','technical_support_assigned','technical_review_in_progress','awaiting_representative_information','awaiting_customer_information','technical_response_submitted','technical_support_completed','technical_support_cancelled')),
+  original_quotation_target_at timestamptz NOT NULL, revised_quotation_target_at timestamptz NOT NULL,
+  allowance_hours integer NOT NULL DEFAULT 24 CHECK (allowance_hours = 24), active_cycle integer NOT NULL DEFAULT 1,
+  correlation_id uuid NOT NULL DEFAULT gen_random_uuid(), requested_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz, cancelled_at timestamptz, updated_at timestamptz NOT NULL DEFAULT now(), deleted_at timestamptz,
+  UNIQUE (rfq_id, active_cycle)
+);
+CREATE UNIQUE INDEX technical_support_one_active_cycle ON app.technical_support_requests(rfq_id)
+  WHERE completed_at IS NULL AND cancelled_at IS NULL AND deleted_at IS NULL;
+CREATE INDEX technical_support_queue_idx ON app.technical_support_requests(status, priority, revised_quotation_target_at);
+CREATE INDEX technical_support_company_idx ON app.technical_support_requests(company_id, requested_at DESC);
+
+CREATE TABLE app.technical_support_assignments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), request_id uuid NOT NULL REFERENCES app.technical_support_requests(id),
+  company_id uuid NOT NULL REFERENCES app.companies(id), technical_user_id uuid NOT NULL REFERENCES app.users(id),
+  assigned_by uuid NOT NULL REFERENCES app.users(id), assigned_at timestamptz NOT NULL DEFAULT now(), ended_at timestamptz
+);
+CREATE INDEX technical_support_assignment_user_idx ON app.technical_support_assignments(technical_user_id, ended_at);
+
+CREATE TABLE app.technical_support_messages (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), request_id uuid NOT NULL REFERENCES app.technical_support_requests(id),
+  rfq_id uuid NOT NULL REFERENCES app.rfqs(id), company_id uuid NOT NULL REFERENCES app.companies(id),
+  sender_id uuid NOT NULL REFERENCES app.users(id), sender_role text NOT NULL, message_text text NOT NULL,
+  classification text NOT NULL CHECK (classification IN ('internal_only','customer_safe')),
+  customer_visible boolean NOT NULL DEFAULT false, correction_of_message_id uuid REFERENCES app.technical_support_messages(id),
+  created_at timestamptz NOT NULL DEFAULT now(), read_at timestamptz
+);
+CREATE INDEX technical_support_messages_thread_idx ON app.technical_support_messages(request_id, created_at);
+
+CREATE TABLE app.technical_support_attachments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), request_id uuid NOT NULL REFERENCES app.technical_support_requests(id),
+  message_id uuid REFERENCES app.technical_support_messages(id), company_id uuid NOT NULL REFERENCES app.companies(id),
+  uploaded_document_id uuid NOT NULL REFERENCES app.uploaded_documents(id), customer_visible boolean NOT NULL DEFAULT false,
+  uploaded_by uuid NOT NULL REFERENCES app.users(id), uploaded_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE app.technical_support_status_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), request_id uuid NOT NULL REFERENCES app.technical_support_requests(id),
+  company_id uuid NOT NULL REFERENCES app.companies(id), previous_status text, new_status text NOT NULL,
+  actor_id uuid NOT NULL REFERENCES app.users(id), actor_role text NOT NULL, reason text,
+  correlation_id uuid NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE app.customer_information_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), technical_request_id uuid NOT NULL REFERENCES app.technical_support_requests(id),
+  company_id uuid NOT NULL REFERENCES app.companies(id), requested_via_representative_id uuid NOT NULL REFERENCES app.representatives(id),
+  customer_safe_message text NOT NULL, requested_at timestamptz NOT NULL DEFAULT now(), responded_at timestamptz, closed_at timestamptz
+);
+CREATE TABLE app.quotation_due_date_adjustments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), rfq_id uuid NOT NULL REFERENCES app.rfqs(id),
+  technical_request_id uuid NOT NULL REFERENCES app.technical_support_requests(id), company_id uuid NOT NULL REFERENCES app.companies(id),
+  original_target_at timestamptz NOT NULL, allowance_hours integer NOT NULL CHECK (allowance_hours > 0), revised_target_at timestamptz NOT NULL,
+  reason text NOT NULL, acted_by uuid NOT NULL REFERENCES app.users(id), created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (technical_request_id)
+);
+CREATE TABLE app.technical_support_overrides (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), request_id uuid NOT NULL REFERENCES app.technical_support_requests(id),
+  company_id uuid NOT NULL REFERENCES app.companies(id), reason text NOT NULL, approved_by uuid NOT NULL REFERENCES app.users(id),
+  approved_role text NOT NULL, active boolean NOT NULL DEFAULT true, created_at timestamptz NOT NULL DEFAULT now(), revoked_at timestamptz
+);
+CREATE TABLE app.technical_support_metrics (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL REFERENCES app.companies(id),
+  period_start date NOT NULL, period_end date NOT NULL, dimensions jsonb NOT NULL DEFAULT '{}'::jsonb,
+  measures jsonb NOT NULL DEFAULT '{}'::jsonb, generated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (company_id, period_start, period_end, dimensions)
+);
+
+ALTER TABLE app.technical_support_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.technical_support_assignments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.technical_support_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.technical_support_attachments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.technical_support_status_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.customer_information_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.quotation_due_date_adjustments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.technical_support_overrides ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.technical_support_metrics ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY technical_support_requests_company_scope ON app.technical_support_requests USING (app.can_access_company(company_id)) WITH CHECK (app.can_access_company(company_id));
+CREATE POLICY technical_support_messages_company_scope ON app.technical_support_messages USING (app.can_access_company(company_id)) WITH CHECK (app.can_access_company(company_id));
+CREATE POLICY technical_support_attachments_company_scope ON app.technical_support_attachments USING (app.can_access_company(company_id)) WITH CHECK (app.can_access_company(company_id));
+CREATE POLICY customer_information_requests_company_scope ON app.customer_information_requests USING (app.can_access_company(company_id)) WITH CHECK (app.can_access_company(company_id));
+
+CREATE TRIGGER technical_support_messages_immutable BEFORE UPDATE OR DELETE ON app.technical_support_messages FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+CREATE TRIGGER technical_support_status_events_immutable BEFORE UPDATE OR DELETE ON app.technical_support_status_events FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+CREATE TRIGGER quotation_due_adjustments_immutable BEFORE UPDATE OR DELETE ON app.quotation_due_date_adjustments FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+CREATE TRIGGER technical_support_overrides_immutable BEFORE UPDATE OR DELETE ON app.technical_support_overrides FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+
 COMMIT;

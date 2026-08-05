@@ -58,6 +58,21 @@ import {
 } from '../../domain/qualityAssurance.js';
 import { buildPhase21Analytics } from '../../domain/analytics.js';
 import {
+  addHours,
+  assertTechnicalTransition,
+  isTechnicalSupportActive,
+  technicalSupportMetrics,
+  TECHNICAL_INFORMATION_TARGETS,
+  TECHNICAL_MESSAGE_CLASSIFICATIONS,
+  TECHNICAL_SUPPORT_ALLOWANCE_HOURS,
+  TECHNICAL_SUPPORT_CATEGORIES,
+  TECHNICAL_SUPPORT_PRIORITIES,
+  TECHNICAL_SUPPORT_STATUSES,
+  validateTechnicalMessage,
+  validateTechnicalResponse,
+  validateTechnicalSupportRequest,
+} from '../../domain/technicalSupport.js';
+import {
   DEFAULT_EXECUTIVE_DEMO_STATE,
   EXECUTIVE_DEMO_ROLES,
   EXECUTIVE_DEMO_SCENARIOS,
@@ -575,6 +590,32 @@ const toCustomerVisibleRecord = enquiry => {
     completedAt: enquiry.completedAt,
     createdAt: enquiry.createdAt,
     updatedAt: enquiry.updatedAt,
+    quotationTargetAt: enquiry.revisedQuotationTargetAt || enquiry.quotationTargetAt || '',
+    technicalSupport: enquiry.technicalSupport ? {
+      reference: enquiry.technicalSupport.reference,
+      status: enquiry.technicalSupport.status,
+      requestedAt: enquiry.technicalSupport.requestedAt,
+      revisedQuotationTargetAt: enquiry.technicalSupport.revisedQuotationTargetAt,
+      additionalAllowanceHours: enquiry.technicalSupport.additionalAllowanceHours,
+      customerMessage: isTechnicalSupportActive(enquiry.technicalSupport)
+        ? 'Technical review is required for your enquiry. Your representative remains your point of contact.'
+        : 'The technical review for your enquiry is complete.',
+      messages: (enquiry.technicalSupport.messages || [])
+        .filter(message => message.classification === 'customer_safe')
+        .map(message => ({
+          id: message.id,
+          message: message.message,
+          sender: message.senderRole === USER_ROLES.CUSTOMER ? 'You' : 'Rhomberg Instruments',
+          senderRole: message.senderRole === USER_ROLES.CUSTOMER ? USER_ROLES.CUSTOMER : 'rhomberg_staff',
+          createdAt: message.createdAt,
+          readAt: message.readAt || '',
+          attachments: (message.attachments || []).filter(document => document.customerVisible).map(toCustomerVisibleDocument).filter(Boolean),
+        })),
+      customerInformationRequest: enquiry.technicalSupport.customerInformationRequest?.active ? {
+        message: enquiry.technicalSupport.customerInformationRequest.message,
+        requestedAt: enquiry.technicalSupport.customerInformationRequest.requestedAt,
+      } : null,
+    } : undefined,
     isDemo: enquiry.isDemo,
   };
   return {
@@ -5009,6 +5050,296 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     },
   };
 
+  const technicalOptions = () => ({
+    categories: TECHNICAL_SUPPORT_CATEGORIES.map(id => ({ id, label: id.replaceAll('_', ' ').replace(/\b\w/g, character => character.toUpperCase()) })),
+    priorities: TECHNICAL_SUPPORT_PRIORITIES,
+    classifications: TECHNICAL_MESSAGE_CLASSIFICATIONS,
+    informationTargets: TECHNICAL_INFORMATION_TARGETS,
+    statuses: TECHNICAL_SUPPORT_STATUSES,
+    technicalUsers: readAccounts()
+      .filter(candidate => accountCan(candidate, PERMISSIONS.VIEW_TECHNICAL_QUEUE))
+      .map(candidate => ({ id: candidate.id, name: candidate.contact, role: candidate.role })),
+  });
+
+  const technicalAttachmentMetadata = (file, actor, customerVisible = false) => file ? ({
+    id: makeId('technical-document'),
+    documentType: 'technical_support_attachment',
+    fileName: file.name,
+    mimeType: file.type,
+    sizeBytes: Number(file.size),
+    version: 1,
+    isCurrentVersion: true,
+    customerVisible,
+    storageStatus: 'mock_metadata_only',
+    uploadedBy: actor,
+    uploadedAt: now().toISOString(),
+  }) : null;
+
+  const locateTechnicalRfq = requestIdOrRfqId => {
+    const rfq = readAllEnquiries().find(candidate => (
+      candidate.id === requestIdOrRfqId
+      || candidate.technicalSupport?.id === requestIdOrRfqId
+      || candidate.technicalSupport?.reference === requestIdOrRfqId
+    ));
+    if (!rfq?.technicalSupport && rfq?.id !== requestIdOrRfqId) return null;
+    return rfq || null;
+  };
+
+  const assertTechnicalRecordAccess = (account, rfq) => {
+    if (!rfq || !canReadRecord(account, rfq)) {
+      throw new ServiceError('The Technical Support request was not found or is outside your authorised scope.', { code: 'TECHNICAL_SUPPORT_NOT_FOUND', status: 404 });
+    }
+  };
+
+  const assertAssignedTechnicalUser = (account, request) => {
+    if (
+      accountCan(account, PERMISSIONS.ASSIGN_TECHNICAL_SUPPORT)
+      || accountCan(account, PERMISSIONS.VIEW_ALL_RFQS)
+      || request.assignedTechnicalUser?.id === account.id
+    ) return;
+    throw new ServiceError('This Technical Support request is assigned to another technical user.', { code: 'TECHNICAL_SUPPORT_NOT_ASSIGNED', status: 403 });
+  };
+
+  const addTechnicalAudit = ({ rfq, action, actor, previousStatus = '', newStatus = '', messageType = '', attachments = [], reason = '', overrideReason = '' }) => {
+    const request = rfq.technicalSupport;
+    const occurredAt = now().toISOString();
+    appendAuditEvent({
+      id: makeId('audit'), eventType: action, action: `technical_support.${action}`, outcome: 'success',
+      entityType: 'rfq', entityId: rfq.id, companyId: rfq.companyId, companyName: rfq.company,
+      reference: rfq.reference, technicalRequestId: request?.id || '', technicalRequestReference: request?.reference || '',
+      representativeId: rfq.representativeId || rfq.selectedRep?.id || '', technicalUserId: request?.assignedTechnicalUser?.id || '',
+      actorId: actor.id, actorRole: actor.role, actorDisplayName: actor.displayName,
+      previousStatus, newStatus, fromStatus: previousStatus, toStatus: newStatus,
+      messageType, documentMetadata: attachments, originalDueDate: request?.originalQuotationTargetAt || '',
+      revisedDueDate: request?.revisedQuotationTargetAt || '', reason, overrideReason,
+      requestId: request?.id || makeId('technical-request'), correlationId: request?.correlationId || request?.id || '',
+      immutable: true, createdAt: occurredAt,
+    });
+  };
+
+  const addTechnicalTimeline = (rfq, { action, note, customerVisible = false, previousStatus = '', newStatus = '', actor }) => ({
+    ...rfq,
+    trackingHistory: [...(rfq.trackingHistory || []), {
+      id: makeId('event'), entityType: 'rfq', action: `technical_support.${action}`,
+      fromStatus: previousStatus || rfq.trackingStatus, toStatus: newStatus || rfq.trackingStatus,
+      status: rfq.trackingStatus, label: note, note, customerDescription: customerVisible ? note : '',
+      actor: customerVisible && actor.role !== USER_ROLES.CUSTOMER ? 'Rhomberg Instruments' : actor.displayName,
+      actorRole: actor.role, customerVisible, createdAt: now().toISOString(),
+    }],
+  });
+
+  const technicalMessage = (input, account, { customer = false } = {}) => {
+    const validated = validateTechnicalMessage(input, { customer });
+    const actor = createWorkflowActor(account);
+    const attachment = technicalAttachmentMetadata(validated.attachment, actor, validated.classification === 'customer_safe');
+    return {
+      id: makeId('technical-message'), message: validated.message, classification: validated.classification,
+      senderId: account.id, senderName: account.contact || account.company, senderRole: account.role,
+      attachments: attachment ? [attachment] : [], readBy: [account.id], createdAt: now().toISOString(),
+    };
+  };
+
+  const technicalSupport = {
+    async getOptions() {
+      requireAccount();
+      return clone(technicalOptions());
+    },
+
+    async getByRfq(rfqId) {
+      const account = requireAccount();
+      const rfq = readAllEnquiries().find(candidate => candidate.id === rfqId);
+      assertTechnicalRecordAccess(account, rfq);
+      if (!rfq.technicalSupport) return null;
+      return clone(presentRecord(account, rfq).technicalSupport);
+    },
+
+    async listQueue({ query = '', status = '', priority = '', sort = 'oldest' } = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.VIEW_TECHNICAL_QUEUE) && !accountCan(account, PERMISSIONS.VIEW_TECHNICAL_METRICS)) {
+        throw new ServiceError('Your role cannot access the Technical Support queue.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const term = String(query || '').trim().toLowerCase();
+      const records = readAllEnquiries().filter(rfq => rfq.technicalSupport && canReadRecord(account, rfq)).filter(rfq => {
+        const request = rfq.technicalSupport;
+        return (!status || request.status === status)
+          && (!priority || request.priority === priority)
+          && (!term || `${rfq.reference} ${rfq.company} ${rfq.contact} ${rfq.selectedRep?.name || ''} ${request.category} ${request.question}`.toLowerCase().includes(term));
+      });
+      for (const rfq of records.filter(item => isTechnicalSupportActive(item.technicalSupport))) {
+        const hoursRemaining = (new Date(rfq.technicalSupport.revisedQuotationTargetAt) - now()) / 36e5;
+        const eventType = hoursRemaining <= 0 ? 'technical_request_overdue' : hoursRemaining <= 24 ? 'technical_approaching_due' : '';
+        if (eventType && !readNotifications().some(notification => notification.entityId === rfq.id && notification.eventType === eventType)) {
+          publishWorkflowNotifications({ action: eventType === 'technical_request_overdue' ? 'technical_support_overdue' : 'technical_support_approaching_due', record: rfq, actor: { id: 'technical-deadline-service', role: SYSTEM_ACTOR_ROLE, displayName: 'Technical deadline service' } });
+        }
+      }
+      records.sort((left, right) => (sort === 'newest' ? -1 : 1) * (new Date(left.technicalSupport.requestedAt) - new Date(right.technicalSupport.requestedAt)));
+      return clone(records.map(rfq => presentRecord(account, rfq)));
+    },
+
+    async request(rfqId, input = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.REQUEST_TECHNICAL_SUPPORT)) throw new ServiceError('Your role cannot request Technical Support.', { code: 'FORBIDDEN', status: 403 });
+      const rfq = readAllEnquiries().find(candidate => candidate.id === rfqId);
+      assertTechnicalRecordAccess(account, rfq);
+      const assignedRepresentativeId = rfq.representativeId || rfq.selectedRep?.id || '';
+      if (!accountCan(account, PERMISSIONS.VIEW_ALL_RFQS) && assignedRepresentativeId !== account.representativeId) {
+        throw new ServiceError('Only the assigned representative may request Technical Support for this RFQ.', { code: 'RFQ_NOT_ASSIGNED', status: 403 });
+      }
+      if (isTechnicalSupportActive(rfq.technicalSupport)) throw new ServiceError('An active Technical Support request already exists for this RFQ.', { code: 'TECHNICAL_SUPPORT_ALREADY_ACTIVE', status: 409 });
+      if (!['assigned_to_rep', 'under_rep_review'].includes(rfq.trackingStatus)) throw new ServiceError('Technical Support can be requested only after the RFQ reaches the representative.', { code: 'TECHNICAL_SUPPORT_STAGE_INVALID', status: 409 });
+      const validated = validateTechnicalSupportRequest(input, rfq);
+      const actor = createWorkflowActor(account);
+      const occurredAt = now().toISOString();
+      const originalQuotationTargetAt = rfq.quotationTargetAt || addHours(rfq.submittedAt || rfq.createdAt || occurredAt, 72);
+      const revisedQuotationTargetAt = addHours(originalQuotationTargetAt, TECHNICAL_SUPPORT_ALLOWANCE_HOURS);
+      const attachment = technicalAttachmentMetadata(validated.attachment, actor, validated.classification === 'customer_safe');
+      const existingTechnicalRequestCount = readAllEnquiries().reduce((total, item) => total + (item.technicalSupport ? 1 : 0) + (item.technicalSupportHistory || []).length, 0);
+      const request = {
+        id: makeId('technical-request'), reference: `TS-PREVIEW-${String(existingTechnicalRequestCount + 1).padStart(4, '0')}`,
+        correlationId: makeId('technical-correlation'), rfqId: rfq.id, companyId: rfq.companyId,
+        representativeId: assignedRepresentativeId, category: validated.category, otherExplanation: validated.otherExplanation,
+        question: validated.question, lineItemId: validated.lineItemId, priority: validated.priority,
+        requestedDepartment: validated.requestedDepartment, requestedTechnicalUserId: validated.requestedTechnicalUserId,
+        classification: validated.classification, status: 'technical_support_requested', requestedAt: occurredAt,
+        requestedBy: actor, assignedTechnicalUser: null, originalQuotationTargetAt, revisedQuotationTargetAt,
+        additionalAllowanceHours: TECHNICAL_SUPPORT_ALLOWANCE_HOURS, extensionAppliedAt: occurredAt,
+        extensionReason: 'Technical review required before quotation.', messages: [], attachments: attachment ? [attachment] : [],
+        statusEvents: [{ id: makeId('technical-status'), previousStatus: '', newStatus: 'technical_support_requested', actor, createdAt: occurredAt }],
+        customerInformationRequest: null, response: null, quotationOverride: null, completedAt: '', updatedAt: occurredAt,
+      };
+      const saved = saveEnquiry(addTechnicalTimeline({ ...rfq, technicalSupportHistory: [...(rfq.technicalSupportHistory || []), ...(rfq.technicalSupport ? [rfq.technicalSupport] : [])], technicalSupport: request, quotationTargetAt: originalQuotationTargetAt, revisedQuotationTargetAt, updatedAt: occurredAt }, {
+        action: 'requested', note: 'Technical review is required. The quotation timeframe has been extended by up to 24 hours.', customerVisible: true, actor,
+      }));
+      addTechnicalAudit({ rfq: saved, action: 'requested', actor, newStatus: request.status, attachments: request.attachments, reason: request.extensionReason });
+      addTechnicalAudit({ rfq: saved, action: 'quotation_due_date_extended', actor, previousStatus: originalQuotationTargetAt, newStatus: revisedQuotationTargetAt, reason: request.extensionReason });
+      publishWorkflowNotifications({ action: 'request_technical_support', record: saved, actor });
+      return clone(presentRecord(account, saved));
+    },
+
+    async assign(requestId, input = {}) {
+      const account = requireAccount();
+      const rfq = locateTechnicalRfq(requestId); assertTechnicalRecordAccess(account, rfq);
+      const request = rfq.technicalSupport; const transition = assertTechnicalTransition(request, 'assign', account);
+      const technicalUser = readAccounts().find(candidate => candidate.id === input.technicalUserId && accountCan(candidate, PERMISSIONS.RESPOND_TECHNICAL_SUPPORT));
+      if (!technicalUser) throw new ServiceError('Select an authorised Technical Support user.', { code: 'TECHNICAL_USER_INVALID', status: 422, fieldErrors: { technicalUserId: 'Select a Technical Support user.' } });
+      const actor = createWorkflowActor(account); const occurredAt = now().toISOString();
+      const updatedRequest = { ...request, status: transition.to, assignedTechnicalUser: createWorkflowActor(technicalUser), assignedAt: occurredAt, updatedAt: occurredAt, statusEvents: [...request.statusEvents, { id: makeId('technical-status'), previousStatus: request.status, newStatus: transition.to, actor, createdAt: occurredAt }] };
+      const saved = saveEnquiry(addTechnicalTimeline({ ...rfq, technicalSupport: updatedRequest, updatedAt: occurredAt }, { action: 'assigned', note: `Technical request assigned to ${technicalUser.contact}.`, previousStatus: request.status, newStatus: transition.to, actor }));
+      addTechnicalAudit({ rfq: saved, action: 'assigned', actor, previousStatus: request.status, newStatus: transition.to });
+      publishWorkflowNotifications({ action: 'assign_technical_support', record: saved, actor });
+      return clone(presentRecord(account, saved));
+    },
+
+    async startReview(requestId) {
+      const account = requireAccount(); const rfq = locateTechnicalRfq(requestId); assertTechnicalRecordAccess(account, rfq);
+      assertAssignedTechnicalUser(account, rfq.technicalSupport);
+      const transition = assertTechnicalTransition(rfq.technicalSupport, 'start_review', account); const actor = createWorkflowActor(account); const occurredAt = now().toISOString();
+      const updatedRequest = { ...rfq.technicalSupport, status: transition.to, reviewStartedAt: occurredAt, updatedAt: occurredAt, statusEvents: [...rfq.technicalSupport.statusEvents, { id: makeId('technical-status'), previousStatus: rfq.technicalSupport.status, newStatus: transition.to, actor, createdAt: occurredAt }] };
+      const saved = saveEnquiry(addTechnicalTimeline({ ...rfq, technicalSupport: updatedRequest, updatedAt: occurredAt }, { action: 'review_started', note: 'Technical review started.', previousStatus: rfq.technicalSupport.status, newStatus: transition.to, actor }));
+      addTechnicalAudit({ rfq: saved, action: 'review_started', actor, previousStatus: rfq.technicalSupport.status, newStatus: transition.to });
+      return clone(presentRecord(account, saved));
+    },
+
+    async postMessage(requestId, input = {}) {
+      const account = requireAccount(); const rfq = locateTechnicalRfq(requestId); assertTechnicalRecordAccess(account, rfq);
+      const request = rfq.technicalSupport; const customer = account.role === USER_ROLES.CUSTOMER;
+      if (customer) {
+        if (!accountCan(account, PERMISSIONS.RESPOND_CUSTOMER_TECHNICAL_REQUEST) || request.status !== 'awaiting_customer_information') throw new ServiceError('A customer reply is not currently requested.', { code: 'TECHNICAL_CUSTOMER_REPLY_NOT_ALLOWED', status: 403 });
+      } else if (!accountCan(account, PERMISSIONS.POST_TECHNICAL_MESSAGE) && !accountCan(account, PERMISSIONS.RESPOND_TECHNICAL_SUPPORT)) throw new ServiceError('Your role cannot post Technical Support messages.', { code: 'FORBIDDEN', status: 403 });
+      const message = technicalMessage(input, account, { customer }); const actor = createWorkflowActor(account);
+      let status = request.status;
+      if (customer) status = assertTechnicalTransition(request, 'customer_reply', account).to;
+      else if (request.status === 'awaiting_representative_information' && accountCan(account, PERMISSIONS.REQUEST_TECHNICAL_SUPPORT)) status = assertTechnicalTransition(request, 'representative_reply', account).to;
+      const updatedRequest = { ...request, status, messages: [...request.messages, message], updatedAt: message.createdAt, customerInformationRequest: customer ? { ...request.customerInformationRequest, active: false, respondedAt: message.createdAt } : request.customerInformationRequest, statusEvents: status === request.status ? request.statusEvents : [...request.statusEvents, { id: makeId('technical-status'), previousStatus: request.status, newStatus: status, actor, createdAt: message.createdAt }] };
+      const saved = saveEnquiry(addTechnicalTimeline({ ...rfq, technicalSupport: updatedRequest, updatedAt: message.createdAt }, { action: customer ? 'customer_response_received' : 'message_posted', note: message.classification === 'customer_safe' ? message.message : 'An internal Technical Support message was posted.', customerVisible: message.classification === 'customer_safe', previousStatus: request.status, newStatus: status, actor }));
+      addTechnicalAudit({ rfq: saved, action: customer ? 'customer_response_received' : 'message_posted', actor, previousStatus: request.status, newStatus: status, messageType: message.classification, attachments: message.attachments });
+      if (customer || status !== request.status) publishWorkflowNotifications({ action: 'technical_information_received', record: saved, actor });
+      return clone(presentRecord(account, saved));
+    },
+
+    async requestInformation(requestId, input = {}) {
+      const account = requireAccount(); const rfq = locateTechnicalRfq(requestId); assertTechnicalRecordAccess(account, rfq); assertAssignedTechnicalUser(account, rfq.technicalSupport);
+      const transition = assertTechnicalTransition(rfq.technicalSupport, 'request_representative_information', account);
+      const target = TECHNICAL_INFORMATION_TARGETS.includes(input.target) ? input.target : 'representative';
+      const requestKind = input.returnForCorrection === true ? 'rfq_correction' : 'more_information';
+      const message = technicalMessage({ message: input.message, classification: 'internal_only', attachment: input.attachment }, account); const actor = createWorkflowActor(account);
+      const updatedRequest = { ...rfq.technicalSupport, status: transition.to, messages: [...rfq.technicalSupport.messages, message], pendingInformationTarget: target, pendingRequestKind: requestKind, updatedAt: message.createdAt, statusEvents: [...rfq.technicalSupport.statusEvents, { id: makeId('technical-status'), previousStatus: rfq.technicalSupport.status, newStatus: transition.to, actor, createdAt: message.createdAt }] };
+      const saved = saveEnquiry(addTechnicalTimeline({ ...rfq, technicalSupport: updatedRequest, updatedAt: message.createdAt }, { action: requestKind === 'rfq_correction' ? 'returned_for_correction' : 'information_requested', note: requestKind === 'rfq_correction' ? 'Technical Support returned the RFQ to Sales for correction.' : 'Technical Support requested more information from Sales.', previousStatus: rfq.technicalSupport.status, newStatus: transition.to, actor }));
+      addTechnicalAudit({ rfq: saved, action: requestKind === 'rfq_correction' ? 'returned_for_correction' : 'information_requested', actor, previousStatus: rfq.technicalSupport.status, newStatus: transition.to, messageType: 'internal_only', attachments: message.attachments });
+      publishWorkflowNotifications({ action: 'request_technical_information', record: saved, actor });
+      return clone(presentRecord(account, saved));
+    },
+
+    async forwardCustomerRequest(requestId, input = {}) {
+      const account = requireAccount(); const rfq = locateTechnicalRfq(requestId); assertTechnicalRecordAccess(account, rfq);
+      const transition = assertTechnicalTransition(rfq.technicalSupport, 'forward_customer_information_request', account);
+      const assignedRepresentativeId = rfq.representativeId || rfq.selectedRep?.id || '';
+      if (!accountCan(account, PERMISSIONS.VIEW_ALL_RFQS) && assignedRepresentativeId !== account.representativeId) throw new ServiceError('Only the assigned representative may contact this customer.', { code: 'RFQ_NOT_ASSIGNED', status: 403 });
+      const message = technicalMessage({ message: input.message, classification: 'customer_safe', attachment: input.attachment }, account); const actor = createWorkflowActor(account);
+      const updatedRequest = { ...rfq.technicalSupport, status: transition.to, messages: [...rfq.technicalSupport.messages, message], customerInformationRequest: { active: true, message: message.message, requestedAt: message.createdAt, requestedBy: actor }, updatedAt: message.createdAt, statusEvents: [...rfq.technicalSupport.statusEvents, { id: makeId('technical-status'), previousStatus: rfq.technicalSupport.status, newStatus: transition.to, actor, createdAt: message.createdAt }] };
+      const saved = saveEnquiry(addTechnicalTimeline({ ...rfq, technicalSupport: updatedRequest, updatedAt: message.createdAt }, { action: 'customer_information_requested', note: message.message, customerVisible: true, previousStatus: rfq.technicalSupport.status, newStatus: transition.to, actor }));
+      addTechnicalAudit({ rfq: saved, action: 'customer_information_requested', actor, previousStatus: rfq.technicalSupport.status, newStatus: transition.to, messageType: 'customer_safe', attachments: message.attachments });
+      publishWorkflowNotifications({ action: 'request_customer_technical_information', record: saved, actor });
+      return clone(presentRecord(account, saved));
+    },
+
+    async respond(requestId, input = {}) {
+      const account = requireAccount(); const rfq = locateTechnicalRfq(requestId); assertTechnicalRecordAccess(account, rfq); assertAssignedTechnicalUser(account, rfq.technicalSupport);
+      const transition = assertTechnicalTransition(rfq.technicalSupport, input.approveConfiguration ? 'approve_configuration' : 'submit_response', account);
+      const response = validateTechnicalResponse(input); const actor = createWorkflowActor(account); const occurredAt = now().toISOString();
+      const attachment = technicalAttachmentMetadata(response.attachment, actor, response.attachmentCustomerVisible);
+      const responseMessage = { id: makeId('technical-message'), message: response.response, classification: 'internal_only', senderId: account.id, senderName: account.contact, senderRole: account.role, attachments: attachment ? [attachment] : [], readBy: [account.id], createdAt: occurredAt };
+      const customerMessage = response.customerSafeNote ? { ...responseMessage, id: makeId('technical-message'), message: response.customerSafeNote, classification: 'customer_safe', attachments: attachment?.customerVisible ? [attachment] : [] } : null;
+      const updatedRequest = { ...rfq.technicalSupport, status: transition.to, response: { ...response, attachment: attachment || null, submittedBy: actor, submittedAt: occurredAt }, messages: [...rfq.technicalSupport.messages, responseMessage, ...(customerMessage ? [customerMessage] : [])], updatedAt: occurredAt, statusEvents: [...rfq.technicalSupport.statusEvents, { id: makeId('technical-status'), previousStatus: rfq.technicalSupport.status, newStatus: transition.to, actor, createdAt: occurredAt }] };
+      const saved = saveEnquiry(addTechnicalTimeline({ ...rfq, technicalSupport: updatedRequest, updatedAt: occurredAt }, { action: 'recommendation_submitted', note: response.customerSafeNote || 'A technical recommendation was submitted to the representative.', customerVisible: Boolean(response.customerSafeNote), previousStatus: rfq.technicalSupport.status, newStatus: transition.to, actor }));
+      addTechnicalAudit({ rfq: saved, action: 'recommendation_submitted', actor, previousStatus: rfq.technicalSupport.status, newStatus: transition.to, messageType: 'technical_response', attachments: attachment ? [attachment] : [] });
+      publishWorkflowNotifications({ action: 'submit_technical_response', record: saved, actor });
+      return clone(presentRecord(account, saved));
+    },
+
+    async complete(requestId, input = {}) {
+      const account = requireAccount(); const rfq = locateTechnicalRfq(requestId); assertTechnicalRecordAccess(account, rfq); assertAssignedTechnicalUser(account, rfq.technicalSupport);
+      const transition = assertTechnicalTransition(rfq.technicalSupport, 'complete', account); const actor = createWorkflowActor(account); const occurredAt = now().toISOString();
+      const updatedRequest = { ...rfq.technicalSupport, status: transition.to, completedAt: occurredAt, completionNote: String(input.note || '').trim(), completedBy: actor, updatedAt: occurredAt, statusEvents: [...rfq.technicalSupport.statusEvents, { id: makeId('technical-status'), previousStatus: rfq.technicalSupport.status, newStatus: transition.to, actor, createdAt: occurredAt }] };
+      const saved = saveEnquiry(addTechnicalTimeline({ ...rfq, technicalSupport: updatedRequest, updatedAt: occurredAt }, { action: 'completed', note: 'Technical review completed. Quotation preparation may continue.', customerVisible: true, previousStatus: rfq.technicalSupport.status, newStatus: transition.to, actor }));
+      addTechnicalAudit({ rfq: saved, action: 'completed', actor, previousStatus: rfq.technicalSupport.status, newStatus: transition.to });
+      publishWorkflowNotifications({ action: 'complete_technical_support', record: saved, actor });
+      return clone(presentRecord(account, saved));
+    },
+
+    async override(requestId, input = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.OVERRIDE_TECHNICAL_QUOTATION_BLOCK)) throw new ServiceError('Your role cannot override the Technical Review quotation block.', { code: 'FORBIDDEN', status: 403 });
+      const reason = String(input.reason || '').trim();
+      if (reason.length < 10) throw new ServiceError('Record a clear reason for the Technical Review override.', { code: 'TECHNICAL_OVERRIDE_REASON_REQUIRED', status: 422, fieldErrors: { reason: 'Enter at least 10 characters.' } });
+      const rfq = locateTechnicalRfq(requestId); assertTechnicalRecordAccess(account, rfq);
+      if (!isTechnicalSupportActive(rfq.technicalSupport)) throw new ServiceError('This Technical Support request is no longer active.', { code: 'TECHNICAL_OVERRIDE_NOT_REQUIRED', status: 409 });
+      const actor = createWorkflowActor(account); const occurredAt = now().toISOString();
+      const updatedRequest = { ...rfq.technicalSupport, quotationOverride: { active: true, reason, approvedBy: actor, approvedAt: occurredAt }, updatedAt: occurredAt };
+      const saved = saveEnquiry(addTechnicalTimeline({ ...rfq, technicalSupport: updatedRequest, updatedAt: occurredAt }, { action: 'override_used', note: 'An authorised quotation workflow override was recorded.', actor }));
+      addTechnicalAudit({ rfq: saved, action: 'override_used', actor, previousStatus: rfq.technicalSupport.status, newStatus: rfq.technicalSupport.status, overrideReason: reason });
+      publishWorkflowNotifications({ action: 'override_technical_support', record: saved, actor });
+      return clone(presentRecord(account, saved));
+    },
+
+    async downloadAttachment(requestId, attachmentId) {
+      const account = requireAccount(); const rfq = locateTechnicalRfq(requestId); assertTechnicalRecordAccess(account, rfq);
+      if (!accountCan(account, PERMISSIONS.DOWNLOAD_TECHNICAL_DOCUMENTS)) throw new ServiceError('Your role cannot download Technical Support documents.', { code: 'FORBIDDEN', status: 403 });
+      const documents = [...(rfq.technicalSupport.attachments || []), ...(rfq.technicalSupport.messages || []).flatMap(message => message.attachments || []), ...(rfq.technicalSupport.response?.attachment ? [rfq.technicalSupport.response.attachment] : [])];
+      const document = documents.find(candidate => candidate.id === attachmentId);
+      if (!document || (account.role === USER_ROLES.CUSTOMER && !document.customerVisible)) throw new ServiceError('The document was not found or is not available to your account.', { code: 'DOCUMENT_NOT_FOUND', status: 404 });
+      addTechnicalAudit({ rfq, action: 'document_downloaded', actor: createWorkflowActor(account), messageType: 'document_download', attachments: [document] });
+      return clone({ ...document, downloadUrl: '', mockMessage: 'The GitHub Pages preview stores document metadata only.' });
+    },
+
+    async getMetrics() {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.VIEW_TECHNICAL_METRICS)) throw new ServiceError('Your role cannot view Technical Support reporting.', { code: 'FORBIDDEN', status: 403 });
+      const requests = readAllEnquiries().filter(rfq => rfq.technicalSupport && canReadRecord(account, rfq)).map(rfq => ({ ...rfq.technicalSupport, representativeName: rfq.selectedRep?.name || '', productFamily: rfq.items?.find(item => item.lineId === rfq.technicalSupport.lineItemId)?.category || rfq.items?.find(item => item.lineId === rfq.technicalSupport.lineItemId)?.code || 'Other' }));
+      return clone({ ...technicalSupportMetrics(requests), byRepresentative: Object.fromEntries([...new Set(requests.map(request => request.representativeName || 'Unassigned'))].map(name => [name, requests.filter(request => (request.representativeName || 'Unassigned') === name).length])), byProductFamily: Object.fromEntries([...new Set(requests.map(request => request.productFamily))].map(name => [name, requests.filter(request => request.productFamily === name).length])) });
+    },
+  };
+
   const preferences = {
     async getTheme() {
       return store.get(STORE_KEYS.theme, null) || (globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -5042,6 +5373,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     laboratory,
     qualityAssurance,
     dispatch,
+    technicalSupport,
     administration,
     executiveDemo,
     personalisation,

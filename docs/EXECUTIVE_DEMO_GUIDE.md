@@ -106,3 +106,7 @@ The production build aliases the executive-demo React module to an empty product
 # Laboratory demonstration scenarios
 
 The Executive Demo includes a detailed Cape Town Pressure journey, Cape Town Temperature journey and Johannesburg Pressure branch-isolation journey. Use fabricated data only. Demonstrate receipt and equilibrium, controlled booking, method/standard selection, structured readings, calculation warning, management review, physical Dispatch transfer, draft/unsigned PDFs, externally signed upload and explicit customer release. Emphasise that managers review evidence without rewriting technician readings and that customer views exclude raw data, internal notes, calculations and audit details.
+
+# RFQ Technical Support scenario
+
+Choose **RFQ Technical Support** to present the Representative request, one-time 24-hour extension, Technical queue, routed customer information request, in-app correspondence, recommendation, completion, quotation unblock and management measures. Use fabricated accounts only; attachment bytes are not retained in the preview.

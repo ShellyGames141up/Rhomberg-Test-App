@@ -11,6 +11,7 @@ import {
 import { statusById } from '../domain/tracking.js';
 import { StatusBadge } from './StatusBadge.jsx';
 import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
+import { RepresentativeTechnicalSupport } from './TechnicalSupport.jsx';
 
 const formatDate = value => value ? new Date(value).toLocaleString('en-ZA', {
   day: '2-digit',
@@ -20,7 +21,7 @@ const formatDate = value => value ? new Date(value).toLocaleString('en-ZA', {
   minute: '2-digit',
 }) : 'Not recorded';
 
-export function SalesRepresentativeDashboard({ account, rfqs, onAction, onLoadCustomerOrder, serviceMode, focusRecordId = '' }) {
+export function SalesRepresentativeDashboard({ account, rfqs, onAction, onLoadCustomerOrder, technicalSupportActions, onRecordsChanged, serviceMode, focusRecordId = '' }) {
   const [search, setSearch] = useState('');
   const [group, setGroup] = useState('all');
   const [priority, setPriority] = useState('all');
@@ -79,6 +80,9 @@ export function SalesRepresentativeDashboard({ account, rfqs, onAction, onLoadCu
             expanded={openId === rfq.id}
             onToggle={() => setOpenId(current => current === rfq.id ? null : rfq.id)}
             onAction={onAction}
+            account={account}
+            technicalSupportActions={technicalSupportActions}
+            onRecordsChanged={onRecordsChanged}
           />
         ))}
         {!filtered.length && <div className="expeditor-empty"><span>✓</span><strong>No RFQs match this view</strong><p>Try another inbox group, priority or search term.</p></div>}
@@ -89,7 +93,7 @@ export function SalesRepresentativeDashboard({ account, rfqs, onAction, onLoadCu
   );
 }
 
-function SalesRfqCard({ rfq, expanded, onToggle, onAction }) {
+function SalesRfqCard({ rfq, expanded, onToggle, onAction, account, technicalSupportActions, onRecordsChanged }) {
   const status = statusById(rfq.trackingStatus, 'rfq');
   const priority = representativeRfqPriority(rfq);
   const quantity = (rfq.items || []).reduce((sum, item) => sum + Number(item.quantity || 1), 0);
@@ -125,6 +129,7 @@ function SalesRfqCard({ rfq, expanded, onToggle, onAction }) {
           {rfq.quotation && <RepresentativeQuotationSummary rfq={rfq} />}
           {rfq.acceptance && <RepresentativeAcceptanceSummary rfq={rfq} />}
           <div className="expeditor-products">{(rfq.items || []).map(item => <span key={item.lineId}><img src={item.image} alt="" /><strong>{item.code}</strong><small>{item.name}</small><b>× {item.quantity}</b></span>)}</div>
+          {technicalSupportActions && <RepresentativeTechnicalSupport rfq={rfq} account={account} actions={technicalSupportActions} onChanged={onRecordsChanged} />}
           {actions.length
             ? <WorkflowActionPanel record={rfq} actions={actions} onAction={onAction} title="RFQ actions" description="Actions are controlled by assignment, role and current RFQ stage" preferredAction="start_rep_review" />
             : <p className="tracking-storage-note expeditor-readonly-note"><span>i</span><span><strong>No action at this stage</strong> This RFQ is retained in your inbox for reference and follow-up.</span></p>}

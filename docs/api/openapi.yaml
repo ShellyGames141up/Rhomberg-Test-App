@@ -2882,6 +2882,136 @@ paths:
         '409': { $ref: '#/components/responses/ApiError' }
         '422': { $ref: '#/components/responses/ApiError' }
 
+  /rfqs/{rfqId}/technical-support:
+    parameters:
+      - $ref: '#/components/parameters/RfqId'
+    get:
+      operationId: getRfqTechnicalSupport
+      responses:
+        '200':
+          description: Permission-filtered Technical Support request or null
+          content: { application/json: { schema: { $ref: '#/components/schemas/TechnicalSupportRequest' } } }
+        '404': { $ref: '#/components/responses/ApiError' }
+    post:
+      operationId: requestRfqTechnicalSupport
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [payload]
+              properties:
+                payload: { type: string, description: JSON-encoded TechnicalSupportCreate }
+                attachment: { type: string, format: binary }
+      responses:
+        '201':
+          description: Request created and quotation target extended once
+          content: { application/json: { schema: { $ref: '#/components/schemas/TechnicalSupportRequest' } } }
+        '409': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /technical-support/queue:
+    get:
+      operationId: listTechnicalSupportQueue
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: priority, in: query, schema: { type: string, enum: [standard, high, urgent] } }
+        - { name: query, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Company- and role-scoped Technical Support queue
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/TechnicalSupportRequest' } } } }
+  /technical-support/{requestId}/assign:
+    post:
+      operationId: assignTechnicalSupport
+      parameters: [{ $ref: '#/components/parameters/TechnicalRequestId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [technicalUserId], properties: { technicalUserId: { type: string, format: uuid } } } } }
+      responses: { '200': { description: Request assigned, content: { application/json: { schema: { $ref: '#/components/schemas/TechnicalSupportRequest' } } } } }
+  /technical-support/{requestId}/start-review:
+    post:
+      operationId: startTechnicalSupportReview
+      parameters: [{ $ref: '#/components/parameters/TechnicalRequestId' }]
+      responses: { '200': { description: Assigned technical review started } }
+  /technical-support/{requestId}/messages:
+    post:
+      operationId: postTechnicalSupportMessage
+      parameters: [{ $ref: '#/components/parameters/TechnicalRequestId' }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [payload]
+              properties:
+                payload: { type: string, description: JSON with message and classification }
+                attachment: { type: string, format: binary }
+      responses: { '201': { description: Append-only correspondence message created } }
+  /technical-support/{requestId}/request-information:
+    post:
+      operationId: requestTechnicalInformation
+      parameters: [{ $ref: '#/components/parameters/TechnicalRequestId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [target, message], properties: { target: { type: string, enum: [representative, customer] }, message: { type: string, minLength: 2 } } } } }
+      responses: { '200': { description: Information request routed through the assigned Representative } }
+  /technical-support/{requestId}/request-information/customer:
+    post:
+      operationId: forwardCustomerTechnicalInformationRequest
+      parameters: [{ $ref: '#/components/parameters/TechnicalRequestId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [message], properties: { message: { type: string, minLength: 2 } } } } }
+      responses: { '200': { description: Assigned Representative approved and sent customer-safe wording } }
+  /technical-support/{requestId}/respond:
+    post:
+      operationId: respondToTechnicalSupport
+      parameters: [{ $ref: '#/components/parameters/TechnicalRequestId' }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [payload]
+              properties:
+                payload: { type: string, description: JSON-encoded technical response and recommendation }
+                attachment: { type: string, format: binary }
+      responses: { '200': { description: Technical recommendation submitted } }
+  /technical-support/{requestId}/complete:
+    post:
+      operationId: completeTechnicalSupport
+      parameters: [{ $ref: '#/components/parameters/TechnicalRequestId' }]
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { note: { type: string } } } } }
+      responses: { '200': { description: Review completed and quotation block cleared } }
+  /technical-support/{requestId}/override:
+    post:
+      operationId: overrideTechnicalQuotationBlock
+      parameters: [{ $ref: '#/components/parameters/TechnicalRequestId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 10 } } } } }
+      responses: { '200': { description: Reasoned Sales Manager or Administrator override recorded } }
+  /technical-support/{requestId}/attachments/{attachmentId}/download:
+    get:
+      operationId: downloadTechnicalSupportAttachment
+      parameters:
+        - { $ref: '#/components/parameters/TechnicalRequestId' }
+        - { name: attachmentId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Authorised short-lived private download }
+        '404': { $ref: '#/components/responses/ApiError' }
+  /technical-support/metrics:
+    get:
+      operationId: getTechnicalSupportMetrics
+      responses:
+        '200':
+          description: Authorised aggregate Technical Support measures
+          content: { application/json: { schema: { type: object, additionalProperties: true } } }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -2893,6 +3023,16 @@ components:
       in: header
       name: X-CSRF-Token
   parameters:
+    RfqId:
+      name: rfqId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TechnicalRequestId:
+      name: requestId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     ProductId:
       name: productId
       in: path
@@ -2992,6 +3132,45 @@ components:
               message: You do not have access to this record.
               correlationId: corr-demo-403
   schemas:
+    TechnicalSupportRequest:
+      type: object
+      required: [id, reference, rfqId, companyId, category, lineItemId, priority, status, requestedAt, originalQuotationTargetAt, revisedQuotationTargetAt, additionalAllowanceHours]
+      properties:
+        id: { type: string, format: uuid, example: 00000000-0000-4000-8000-000000000901 }
+        reference: { type: string, example: TS-DEMO-0001 }
+        rfqId: { type: string, format: uuid, example: 00000000-0000-4000-8000-000000000101 }
+        companyId: { type: string, format: uuid, example: 00000000-0000-4000-8000-000000000201 }
+        category: { type: string, example: product_compatibility }
+        question: { type: string, example: Confirm suitability for the fabricated process application. }
+        lineItemId: { type: string, format: uuid, example: 00000000-0000-4000-8000-000000000301 }
+        priority: { type: string, enum: [standard, high, urgent] }
+        classification: { type: string, enum: [internal_only, customer_safe] }
+        status:
+          type: string
+          enum: [technical_support_requested, technical_support_assigned, technical_review_in_progress, awaiting_representative_information, awaiting_customer_information, technical_response_submitted, technical_support_completed, technical_support_cancelled]
+        assignedTechnicalUserId: { type: string, format: uuid, nullable: true }
+        requestedAt: { type: string, format: date-time }
+        originalQuotationTargetAt: { type: string, format: date-time }
+        revisedQuotationTargetAt: { type: string, format: date-time }
+        additionalAllowanceHours: { type: integer, const: 24 }
+        messages:
+          type: array
+          items:
+            type: object
+            required: [id, message, classification, senderRole, createdAt]
+            properties:
+              id: { type: string, format: uuid }
+              message: { type: string }
+              classification: { type: string, enum: [internal_only, customer_safe] }
+              senderRole: { type: string }
+              createdAt: { type: string, format: date-time }
+        quotationOverride:
+          type: object
+          nullable: true
+          properties:
+            active: { type: boolean }
+            reason: { type: string }
+            approvedAt: { type: string, format: date-time }
     CalibrationUnit:
       type: object
       required: [id, orderId, orderItemId, unitSequence, productModel, calibrationType, status, certificateStatus]

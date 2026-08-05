@@ -48,3 +48,7 @@ The future `/api/v1/laboratory` contract exposes branch-scoped queues and comman
 Worksheet requests contain structured points/readings, method version, standard IDs, environment and uncertainty sources; they never contain spreadsheet formula strings. Responses separate `rawInput`, `derivedResults`, `validationWarnings` and immutable version metadata. Customer responses omit all four internal structures and expose only safe progress plus explicitly released certificate metadata.
 
 Signed upload uses multipart PDF plus certificate number, issue date and replacement reason. Production responds with digest and `signatureValidation` (`pending`, `valid`, `invalid`); release is blocked until validation is valid. Errors use the common friendly envelope and never disclose storage keys, SQL, stack traces or security rules.
+
+## Technical Support additions
+
+The proposed API adds `POST/GET /rfqs/{rfqId}/technical-support`, plus assignment, start-review, messages, request-information, response, completion, override, attachment download, queue and metrics operations under `/technical-support`. Multipart request bodies separate JSON payloads from optional files. The backend must enforce session, CSRF, company and assignment scope, controlled transitions, the one-time deadline adjustment, document access, idempotency and transactional audit/outbox writes.

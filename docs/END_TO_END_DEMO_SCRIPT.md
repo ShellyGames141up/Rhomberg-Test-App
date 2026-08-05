@@ -126,3 +126,14 @@ Use fabricated files only, for example two different small PDFs named `Q-DEMO-41
 | R8 | Another fabricated customer | Sign in as `customer.demo@example.invalid` and attempt to access the recorded order/document. | Request is not found/denied. | None. | A production denial audit is required. | No cross-company record or document data is disclosed. |
 
 Mock mode validates document metadata but does not retain the file bytes, so the download action returns an audited simulation message. Production demonstrations must wait for private storage, scanning and IT approval.
+
+## Technical Support RFQ scenario
+
+1. Customer submits a fabricated RFQ; expect `assigned_to_rep` and no urgency field.
+2. Representative starts review and submits **Technical Support Required** for a line item; expect one 24-hour extension and safe notifications.
+3. Attempt **Mark as Quoted**; expect `TECHNICAL_REVIEW_PENDING`.
+4. Technical Manager assigns Technical Support; expect `technical_support_assigned`.
+5. Technical Support starts review and requests customer information through Sales.
+6. Representative forwards safe wording; Customer replies in the RFQ thread. Internal messages must remain absent from customer payloads.
+7. Technical Support submits a recommendation and completes review; expect the block cleared, audit events and customer/Representative notifications.
+8. Sales Manager or Company Owner reviews metrics. The Sales Manager override demonstration must require a reason.

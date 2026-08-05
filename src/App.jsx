@@ -22,6 +22,7 @@ import { QualityDashboard } from './components/QualityDashboard.jsx';
 import { ProductDetail } from './components/ProductDetail.jsx';
 import { RepresentativeOrderLoader } from './components/RepresentativeOrderLoader.jsx';
 import { SalesRepresentativeDashboard } from './components/SalesRepresentativeDashboard.jsx';
+import { TechnicalSupportWorkspace } from './components/TechnicalSupport.jsx';
 import { CustomerPersonalisation } from './apps/customer/CustomerPersonalisation.jsx';
 import { PreviewLanding } from './apps/PreviewLanding.jsx';
 import { ExecutiveDemoControls, ExecutiveDemoLauncher } from './apps/ExecutiveWorkflowDemo.jsx';
@@ -548,6 +549,17 @@ export default function App() {
     setAuditEvents(loadedAuditEvents);
   };
 
+  const refreshTechnicalRecords = async () => {
+    const [loadedEnquiries, loadedNotifications, loadedAuditEvents] = await Promise.all([
+      listEnquiriesForAccount(account),
+      services.notifications.list(),
+      accountCan(account, PERMISSIONS.READ_AUDIT_HISTORY) ? services.audit.list() : Promise.resolve([]),
+    ]);
+    setEnquiries(loadedEnquiries);
+    setNotifications(loadedNotifications);
+    setAuditEvents(loadedAuditEvents);
+  };
+
   const representativeOrderCreated = async order => {
     await refreshOperationalRecords();
     notify(`${order.reference} created and sent to Planning`);
@@ -754,7 +766,7 @@ export default function App() {
               {view === 'load-order' && <RepresentativeOrderLoader actions={services.representativeOrders} serviceMode={services.mode} maxDocumentBytes={services.preview.maxRepresentativeOrderDocumentBytes} onCreated={representativeOrderCreated} onClose={() => navigate('expeditor')} />}
               {view === 'expeditor' && (accountCan(account, PERMISSIONS.VIEW_ASSIGNED_RFQS)
                 && notificationTarget?.entityType !== 'order'
-                ? <SalesRepresentativeDashboard account={account} rfqs={enquiries} onAction={performWorkflowAction} onLoadCustomerOrder={() => navigate('load-order')} serviceMode={services.mode} focusRecordId={notificationTarget?.entityId} />
+                ? <SalesRepresentativeDashboard account={account} rfqs={enquiries} onAction={performWorkflowAction} onLoadCustomerOrder={() => navigate('load-order')} technicalSupportActions={services.technicalSupport} onRecordsChanged={refreshTechnicalRecords} serviceMode={services.mode} focusRecordId={notificationTarget?.entityId} />
                 : isPlanningWorkspace
                   ? <PlanningDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} planningOptions={planningOptions} focusRecordId={notificationTarget?.entityId} documentActions={orderDocumentActions} />
                   : isExpeditorWorkspace
@@ -768,6 +780,7 @@ export default function App() {
                     : isManagementWorkspace
                       ? <ManagementDashboard account={account} managementActions={services.management} serviceMode={services.mode} onRecordsChanged={refreshAfterManagementAction} onOpenAudit={() => navigate('audit')} />
                       : <OperationalDashboard account={account} enquiries={staffRecords} onAction={performWorkflowAction} canUpdate={canPerformWorkflow} serviceMode={services.mode} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} documentActions={orderDocumentActions} />)}
+              {view === 'technical' && <TechnicalSupportWorkspace account={account} actions={services.technicalSupport} onChanged={refreshTechnicalRecords} focusRecordId={notificationTarget?.entityId} />}
               {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
               {view === 'archive' && <ArchivedOrders account={account} archiveActions={services.archive} serviceMode={services.mode} onRecordsChanged={refreshAfterRetentionAction} />}
               {view === 'audit' && <AuditTrail events={auditEvents} serviceMode={services.mode} />}
@@ -780,7 +793,7 @@ export default function App() {
               {view === 'product' && selectedProduct && <ProductDetail product={selectedProduct} category={selectedCategory} onConfigure={() => startConfigurator(null, 'product')} />}
               {view === 'configurator' && selectedProduct && <Configurator product={selectedProduct} existingLine={editingLine} onSave={saveConfiguredLine} onCancel={backFromDetail} />}
               {view === 'enquiry' && <Enquiry account={account} lines={draft} registrationOptions={registrationOptions} deliverySettings={services.preview} onAddProducts={() => navigate('catalogue')} onEdit={line => startConfigurator(line, 'enquiry')} onRemove={removeLine} onQuantity={updateQuantity} onSubmit={submitEnquiry} success={success} onCloseSuccess={() => { setSuccess(null); navigate('tracking'); }} />}
-              {view === 'tracking' && <OrderTracking account={account} enquiries={accountRecords} onStartEnquiry={() => navigate('enquiry')} onAction={performWorkflowAction} serviceMode={services.mode} certificateActions={services.laboratory} sourceDocumentActions={services.representativeOrders} focusRecordId={notificationTarget?.entityId} />}
+              {view === 'tracking' && <OrderTracking account={account} enquiries={accountRecords} onStartEnquiry={() => navigate('enquiry')} onAction={performWorkflowAction} serviceMode={services.mode} certificateActions={services.laboratory} sourceDocumentActions={services.representativeOrders} technicalSupportActions={services.technicalSupport} onRecordsChanged={refreshTechnicalRecords} focusRecordId={notificationTarget?.entityId} />}
               {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
               {view === 'account' && <Account account={account} enquiries={accountRecords} onSignOut={signOut} serviceMode={services.mode} onOpenSettings={() => navigate('settings')} personalisation={customerPersonalisation} credentialActions={services.credentials} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} />}
               {view === 'settings' && <CustomerPersonalisation account={account} initialValue={customerPersonalisation} mode="settings" onSave={saveCustomerPersonalisation} onCancel={() => navigate('account')} onUploadImage={uploadCustomerImage} onRemoveImage={removeCustomerImage} />}

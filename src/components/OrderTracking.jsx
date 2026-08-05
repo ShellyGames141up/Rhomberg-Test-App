@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { progressForStatus, statusById } from '../domain/tracking.js';
 import { StatusBadge } from './StatusBadge.jsx';
+import { CustomerTechnicalSupport } from './TechnicalSupport.jsx';
 
 const TERMINAL_STATUSES = new Set(['completed', 'cancelled', 'expired', 'converted_to_order', 'archived']);
 
@@ -16,6 +17,8 @@ export function OrderTracking({
   serviceMode,
   certificateActions,
   sourceDocumentActions,
+  technicalSupportActions,
+  onRecordsChanged,
   focusRecordId = '',
 }) {
   const ordered = useMemo(() => [...enquiries].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)), [enquiries]);
@@ -50,6 +53,8 @@ export function OrderTracking({
               serviceMode={serviceMode}
               certificateActions={certificateActions}
               sourceDocumentActions={sourceDocumentActions}
+              technicalSupportActions={technicalSupportActions}
+              onRecordsChanged={onRecordsChanged}
             />
           ))}
         </div>
@@ -62,7 +67,7 @@ export function OrderTracking({
   );
 }
 
-function TrackingCard({ enquiry, expanded, onToggle, onAction, serviceMode, certificateActions, sourceDocumentActions }) {
+function TrackingCard({ enquiry, expanded, onToggle, onAction, serviceMode, certificateActions, sourceDocumentActions, technicalSupportActions, onRecordsChanged }) {
   const status = statusById(enquiry.trackingStatus, enquiry.workflowType);
   const progress = progressForStatus(enquiry.trackingStatus, enquiry.workflowType);
   const totalQuantity = (enquiry.items || []).reduce((sum, item) => sum + Number(item.quantity || 1), 0);
@@ -86,6 +91,7 @@ function TrackingCard({ enquiry, expanded, onToggle, onAction, serviceMode, cert
             <span><small>Purchase Order</small><strong>{enquiry.purchaseOrderNumber || enquiry.poNumber || enquiry.poFileName || 'Not supplied'}</strong><em>{enquiry.fulfilment === 'collect' ? 'Collection requested' : 'Delivery requested'}</em></span>
           </div>
           {!isOrder && enquiry.quotation && <CustomerQuotationPanel enquiry={enquiry} onAction={onAction} serviceMode={serviceMode} />}
+          {!isOrder && enquiry.technicalSupport && technicalSupportActions && <CustomerTechnicalSupport rfq={enquiry} actions={technicalSupportActions} onChanged={onRecordsChanged} />}
           {isOrder && (enquiry.documents || []).some(document => document.isCurrentVersion !== false) && <CustomerSourceDocuments order={enquiry} actions={sourceDocumentActions} serviceMode={serviceMode} />}
           <div className="tracking-products">
             <h3>Requested instruments</h3>

@@ -7,3 +7,7 @@ Phase 21 adds recipient-scoped events for Laboratory receipt/progress/release, c
 Mock mode fully persists in-app notifications in the current browser and simulates `email_*` and `push_*` delivery states. It sends nothing externally.
 
 Production delivery needs an outbox worker, Microsoft 365 or approved SMTP connection, mobile push provider, templates, suppression/preferences, retry/backoff, idempotency, bounce handling, delivery audit, monitoring and correlation IDs. Credentials belong in a secrets manager. Recipient addresses must be resolved server-side from authorised records and validated immediately before send.
+
+## Technical Support events
+
+The central catalogue includes request submitted, assignment, information required/received, response submitted, review completed, quotation deadline extended and override-used events. Customers receive safe wording only. Technical roles receive queue notifications, the assigned Representative receives RFQ-linked updates, and Sales Management receives deadline and override oversight. Mock mode persists in-app delivery and simulates email/push; production approaching-due and overdue events require a scheduled outbox producer.

@@ -54,6 +54,18 @@ export const NOTIFICATION_EVENT_TYPES = Object.freeze({
   RFQ_CANCELLED: 'rfq_cancelled',
   RFQ_EXPIRED: 'rfq_expired',
   WORKFLOW_OVERRIDE: 'workflow_override',
+  TECHNICAL_REQUEST_SUBMITTED: 'technical_request_submitted',
+  TECHNICAL_REQUEST_ASSIGNED: 'technical_request_assigned',
+  TECHNICAL_INFORMATION_REQUIRED: 'technical_information_required',
+  TECHNICAL_INFORMATION_RECEIVED: 'technical_information_received',
+  TECHNICAL_CUSTOMER_INFORMATION_REQUESTED: 'technical_customer_information_requested',
+  TECHNICAL_HIGH_PRIORITY: 'technical_high_priority',
+  TECHNICAL_APPROACHING_DUE: 'technical_approaching_due',
+  TECHNICAL_REQUEST_OVERDUE: 'technical_request_overdue',
+  TECHNICAL_RESPONSE_SUBMITTED: 'technical_response_submitted',
+  TECHNICAL_REVIEW_COMPLETED: 'technical_review_completed',
+  TECHNICAL_DEADLINE_EXTENDED: 'technical_deadline_extended',
+  TECHNICAL_OVERRIDE_USED: 'technical_override_used',
 });
 
 export const NOTIFICATION_PREFERENCE_CATEGORIES = Object.freeze([
@@ -626,6 +638,85 @@ export const NOTIFICATION_EVENT_CATALOG = Object.freeze({
       internal: record => `An authorised workflow correction was recorded for ${referenceText(record)}.`,
     },
   }),
+  [NOTIFICATION_EVENT_TYPES.TECHNICAL_REQUEST_SUBMITTED]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.TECHNICAL_REQUEST_SUBMITTED,
+    title: 'Technical review required', category: 'rfqUpdates', status: 'technical_support_requested',
+    recipients: ['customer', 'assigned_representative', 'technical_support', 'technical_manager', 'sales_manager'],
+    messages: {
+      customer: record => `Technical review is required for ${referenceText(record)}. Your representative remains your point of contact.`,
+      assigned_representative: record => `The Technical Support request for ${referenceText(record)} was submitted.`,
+      technical_support: record => `New Technical Support request for ${referenceText(record)} is ready in the queue.`,
+      technical_manager: record => `New Technical Support request for ${referenceText(record)} is ready for assignment.`,
+      sales_manager: record => `Technical review was requested for ${referenceText(record)}.`,
+      internal: record => `Technical review was requested for ${referenceText(record)}.`,
+    },
+  }),
+  [NOTIFICATION_EVENT_TYPES.TECHNICAL_REQUEST_ASSIGNED]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.TECHNICAL_REQUEST_ASSIGNED,
+    title: 'Technical request assigned', category: 'rfqUpdates', status: 'technical_support_assigned',
+    recipients: ['assigned_representative', 'technical_support', 'technical_manager'], customerVisible: false,
+    messages: { internal: record => `The Technical Support request for ${referenceText(record)} was assigned.` },
+  }),
+  [NOTIFICATION_EVENT_TYPES.TECHNICAL_INFORMATION_REQUIRED]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.TECHNICAL_INFORMATION_REQUIRED,
+    title: 'More technical information required', category: 'rfqUpdates', status: 'awaiting_representative_information',
+    recipients: ['assigned_representative', 'technical_support', 'technical_manager'], customerVisible: false,
+    messages: { assigned_representative: record => `Technical Support needs more information for ${referenceText(record)}.`, internal: record => `More information is required for ${referenceText(record)}.` },
+  }),
+  [NOTIFICATION_EVENT_TYPES.TECHNICAL_INFORMATION_RECEIVED]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.TECHNICAL_INFORMATION_RECEIVED,
+    title: 'Technical information received', category: 'rfqUpdates', status: 'technical_review_in_progress',
+    recipients: ['assigned_representative', 'technical_support', 'technical_manager'], customerVisible: false,
+    messages: { internal: record => `New information was received for ${referenceText(record)}.` },
+  }),
+  [NOTIFICATION_EVENT_TYPES.TECHNICAL_CUSTOMER_INFORMATION_REQUESTED]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.TECHNICAL_CUSTOMER_INFORMATION_REQUESTED,
+    title: 'Additional information required', category: 'rfqUpdates', status: 'awaiting_customer_information',
+    recipients: ['customer', 'assigned_representative', 'technical_support', 'technical_manager'],
+    messages: { customer: record => `Your representative needs additional information to complete the technical review for ${referenceText(record)}.`, assigned_representative: record => `A customer-safe information request is active for ${referenceText(record)}.`, internal: record => `Customer information was requested for ${referenceText(record)}.` },
+  }),
+  [NOTIFICATION_EVENT_TYPES.TECHNICAL_HIGH_PRIORITY]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.TECHNICAL_HIGH_PRIORITY,
+    title: 'High-priority technical request', category: 'rfqUpdates', status: 'technical_support_requested',
+    recipients: ['technical_manager', 'sales_manager', 'manager'], customerVisible: false, priority: 'high',
+    messages: { internal: record => `High-priority Technical Support is required for ${referenceText(record)}.` },
+  }),
+  [NOTIFICATION_EVENT_TYPES.TECHNICAL_APPROACHING_DUE]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.TECHNICAL_APPROACHING_DUE,
+    title: 'Technical request approaching due date', category: 'delayNotifications', status: '',
+    recipients: ['assigned_representative', 'technical_support', 'technical_manager'], customerVisible: false, priority: 'high',
+    messages: { internal: record => `Technical Support for ${referenceText(record)} is approaching its revised quotation target.` },
+  }),
+  [NOTIFICATION_EVENT_TYPES.TECHNICAL_REQUEST_OVERDUE]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.TECHNICAL_REQUEST_OVERDUE,
+    title: 'Technical request overdue', category: 'delayNotifications', status: '',
+    recipients: ['assigned_representative', 'technical_support', 'technical_manager', 'sales_manager', 'manager'], customerVisible: false, priority: 'high',
+    messages: { assigned_representative: record => `Technical Support for ${referenceText(record)} is overdue.`, internal: record => `Technical Support for ${referenceText(record)} is overdue.` },
+  }),
+  [NOTIFICATION_EVENT_TYPES.TECHNICAL_RESPONSE_SUBMITTED]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.TECHNICAL_RESPONSE_SUBMITTED,
+    title: 'Technical response received', category: 'rfqUpdates', status: 'technical_response_submitted',
+    recipients: ['assigned_representative', 'technical_support', 'technical_manager'], customerVisible: false,
+    messages: { assigned_representative: record => `Technical Support responded on ${referenceText(record)}.`, internal: record => `A Technical Support response was submitted for ${referenceText(record)}.` },
+  }),
+  [NOTIFICATION_EVENT_TYPES.TECHNICAL_REVIEW_COMPLETED]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.TECHNICAL_REVIEW_COMPLETED,
+    title: 'Technical review completed', category: 'rfqUpdates', status: 'technical_support_completed',
+    recipients: ['customer', 'assigned_representative', 'technical_support', 'technical_manager'],
+    messages: { customer: record => `The technical review for ${referenceText(record)} is complete and quotation preparation may continue.`, assigned_representative: record => `Technical review is complete for ${referenceText(record)}.`, internal: record => `Technical review completed for ${referenceText(record)}.` },
+  }),
+  [NOTIFICATION_EVENT_TYPES.TECHNICAL_DEADLINE_EXTENDED]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.TECHNICAL_DEADLINE_EXTENDED,
+    title: 'Quotation timeline revised', category: 'quotationNotifications', status: 'technical_support_requested',
+    recipients: ['customer', 'assigned_representative', 'technical_support', 'technical_manager', 'sales_manager', 'manager'],
+    messages: { customer: record => `Technical review is required for ${referenceText(record)}. The quotation timeframe has been extended by up to 24 hours.`, internal: record => `The quotation target for ${referenceText(record)} was extended by 24 hours.` },
+  }),
+  [NOTIFICATION_EVENT_TYPES.TECHNICAL_OVERRIDE_USED]: eventDefinition({
+    type: NOTIFICATION_EVENT_TYPES.TECHNICAL_OVERRIDE_USED,
+    title: 'Technical quotation block overridden', category: 'quotationNotifications', status: '',
+    recipients: ['assigned_representative', 'technical_manager', 'sales_manager', 'manager'], customerVisible: false, priority: 'high',
+    messages: { internal: record => `An authorised Technical Support quotation override was recorded for ${referenceText(record)}.` },
+  }),
 });
 
 const ACTION_EVENT_TYPES = Object.freeze({
@@ -683,6 +774,16 @@ const ACTION_EVENT_TYPES = Object.freeze({
   cancel_rfq: freezeList([NOTIFICATION_EVENT_TYPES.RFQ_CANCELLED]),
   expire_rfq: freezeList([NOTIFICATION_EVENT_TYPES.RFQ_EXPIRED]),
   override_workflow: freezeList([NOTIFICATION_EVENT_TYPES.WORKFLOW_OVERRIDE]),
+  request_technical_support: freezeList([NOTIFICATION_EVENT_TYPES.TECHNICAL_REQUEST_SUBMITTED, NOTIFICATION_EVENT_TYPES.TECHNICAL_DEADLINE_EXTENDED]),
+  assign_technical_support: freezeList([NOTIFICATION_EVENT_TYPES.TECHNICAL_REQUEST_ASSIGNED]),
+  request_technical_information: freezeList([NOTIFICATION_EVENT_TYPES.TECHNICAL_INFORMATION_REQUIRED]),
+  request_customer_technical_information: freezeList([NOTIFICATION_EVENT_TYPES.TECHNICAL_CUSTOMER_INFORMATION_REQUESTED]),
+  technical_information_received: freezeList([NOTIFICATION_EVENT_TYPES.TECHNICAL_INFORMATION_RECEIVED]),
+  submit_technical_response: freezeList([NOTIFICATION_EVENT_TYPES.TECHNICAL_RESPONSE_SUBMITTED]),
+  complete_technical_support: freezeList([NOTIFICATION_EVENT_TYPES.TECHNICAL_REVIEW_COMPLETED]),
+  override_technical_support: freezeList([NOTIFICATION_EVENT_TYPES.TECHNICAL_OVERRIDE_USED]),
+  technical_support_approaching_due: freezeList([NOTIFICATION_EVENT_TYPES.TECHNICAL_APPROACHING_DUE]),
+  technical_support_overdue: freezeList([NOTIFICATION_EVENT_TYPES.TECHNICAL_REQUEST_OVERDUE]),
 });
 
 const delayReasonFor = (record, input) => (
@@ -698,6 +799,9 @@ export const notificationRequestsForWorkflowAction = ({
   input = {},
 }) => {
   const eventTypes = [...(ACTION_EVENT_TYPES[action] || [])];
+  if (action === 'request_technical_support' && ['high', 'urgent'].includes(record?.technicalSupport?.priority)) {
+    eventTypes.push(NOTIFICATION_EVENT_TYPES.TECHNICAL_HIGH_PRIORITY);
+  }
   if (action === 'submit_to_expediting') {
     eventTypes.push(
       record?.trackingStatus === 'awaiting_lab'
@@ -844,7 +948,7 @@ export const createNotificationRecord = ({
       entityId: record.id,
       reference: record.reference,
       customerView: 'tracking',
-      internalView: 'expeditor',
+      internalView: eventType.startsWith('technical_') ? 'technical' : 'expeditor',
     },
     audit: {
       sourceAction,

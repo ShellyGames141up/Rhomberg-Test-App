@@ -270,6 +270,18 @@ export const EXTRA_DEMO_ACCOUNTS = Object.freeze([
     id: 'staff-lab-administrator-demo', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Laboratory Administrator Demo', email: 'lab.admin@example.invalid',
     phone: 'Fabricated internal account', area: 'National', industry: 'Internal laboratory', role: 'laboratory_administrator', labBranchId: 'cape_town', authorisedLabBranchIds: ['cape_town', 'johannesburg'], labRoles: ['laboratory_administrator'], password: 'LabAdminDemo123!', createdAt: '2026-08-03T08:25:00.000Z',
   },
+  {
+    id: 'staff-technical-support-demo', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Technical Support Demo', email: 'technical.support@example.invalid',
+    phone: 'Fabricated internal account', area: 'National', industry: 'Internal technical support', role: 'technical_support', password: 'TechnicalDemo123!', createdAt: '2026-08-05T07:00:00.000Z',
+  },
+  {
+    id: 'staff-technical-manager-demo', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Technical Manager Demo', email: 'technical.manager@example.invalid',
+    phone: 'Fabricated internal account', area: 'National', industry: 'Internal technical support', role: 'technical_manager', password: 'TechnicalManager123!', createdAt: '2026-08-05T07:05:00.000Z',
+  },
+  {
+    id: 'staff-technical-director-demo', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Technical Director Demo', email: 'technical.director@example.invalid',
+    phone: 'Fabricated internal account', area: 'National', industry: 'Internal technical support', role: 'technical_director', password: 'TechnicalDirector123!', createdAt: '2026-08-05T07:10:00.000Z',
+  },
 ]);
 
 export const DEMO_LOGINS = Object.freeze([
@@ -308,6 +320,24 @@ export const DEMO_LOGINS = Object.freeze([
     avatar: 'P',
     email: PLANNING_ACCOUNT.email,
     password: PLANNING_ACCOUNT.password,
+  },
+  {
+    id: 'technical_support',
+    role: 'technical_support',
+    label: 'Use Technical Support login',
+    description: 'Review and respond to RFQ technical questions',
+    avatar: 'T',
+    email: 'technical.support@example.invalid',
+    password: 'TechnicalDemo123!',
+  },
+  {
+    id: 'technical_manager',
+    role: 'technical_manager',
+    label: 'Use Technical Manager login',
+    description: 'Assign and complete technical reviews',
+    avatar: 'T',
+    email: 'technical.manager@example.invalid',
+    password: 'TechnicalManager123!',
   },
   {
     id: 'expeditor',

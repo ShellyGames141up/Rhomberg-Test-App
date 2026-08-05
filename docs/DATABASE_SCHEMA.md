@@ -29,3 +29,7 @@ Important constraints include:
 The API must still enforce scope; RLS is not a substitute for application authorisation. Production migrations need transactional deployment, role grants, backup/restore rehearsal, retention approval and performance validation using fabricated volumes before any customer data is imported.
 
 The Laboratory calibration extension adds versioned `lab_methods`, branch-controlled `lab_reference_standards`, immutable `lab_worksheet_revisions`, derived `lab_calculation_versions`, standard-usage snapshots, certificate reviews, signed-document versions and physical-unit releases. Raw input, derived output and signed files are deliberately separate. Production object storage keeps files; PostgreSQL keeps their metadata and SHA-256 digest. Server transactions must allocate job/certificate references and enforce branch, assignment, one-unit/one-certificate and release rules.
+
+## Technical Support additions
+
+The proposal adds company-scoped requests, assignments, append-only messages, attachment links, immutable status events, customer information requests, quotation due-date adjustments, reasoned overrides and reporting snapshots. RFQ/company foreign keys are mandatory. `customer_visible` and `internal_only` are server-controlled. RLS combines company scope with Representative/Technical assignment and named wider permissions. Messages, statuses, adjustments, overrides and document access remain auditable and append-only.

@@ -31,6 +31,10 @@ import {
   validateQaRework,
   validateQaStart,
 } from '../../domain/qualityAssurance.js';
+import {
+  validateTechnicalMessage,
+  validateTechnicalResponse,
+} from '../../domain/technicalSupport.js';
 
 export function createApiServices(config = {}) {
   const client = new HttpClient({ baseUrl: config.apiBaseUrl, timeoutMs: config.requestTimeoutMs, fetchImplementation: config.fetchImplementation });
@@ -477,6 +481,44 @@ export function createApiServices(config = {}) {
     getDashboard: filters => client.get('/quality-assurance/dashboard', { query: filters }),
   };
 
+  const technicalMultipart = (payload, attachment) => {
+    const form = new FormData();
+    form.append('payload', JSON.stringify({ ...payload, attachment: undefined }));
+    if (attachment) form.append('attachment', attachment, attachment.name);
+    return form;
+  };
+
+  const technicalSupport = {
+    getOptions: () => client.get('/technical-support/options'),
+    getByRfq: rfqId => client.get(`/rfqs/${encodeURIComponent(rfqId)}/technical-support`),
+    listQueue: filters => client.get('/technical-support/queue', { query: filters }),
+    request(rfqId, input) {
+      return client.post(`/rfqs/${encodeURIComponent(rfqId)}/technical-support`, technicalMultipart(input, input.attachment));
+    },
+    assign: (requestId, input) => client.post(`/technical-support/${encodeURIComponent(requestId)}/assign`, input),
+    startReview: requestId => client.post(`/technical-support/${encodeURIComponent(requestId)}/start-review`, {}),
+    postMessage(requestId, input) {
+      validateTechnicalMessage(input, { customer: false });
+      return client.post(`/technical-support/${encodeURIComponent(requestId)}/messages`, technicalMultipart(input, input.attachment));
+    },
+    requestInformation(requestId, input) {
+      validateTechnicalMessage({ ...input, classification: 'internal_only' });
+      return client.post(`/technical-support/${encodeURIComponent(requestId)}/request-information`, technicalMultipart(input, input.attachment));
+    },
+    forwardCustomerRequest(requestId, input) {
+      validateTechnicalMessage({ ...input, classification: 'customer_safe' });
+      return client.post(`/technical-support/${encodeURIComponent(requestId)}/request-information/customer`, technicalMultipart(input, input.attachment));
+    },
+    respond(requestId, input) {
+      validateTechnicalResponse(input);
+      return client.post(`/technical-support/${encodeURIComponent(requestId)}/respond`, technicalMultipart(input, input.attachment));
+    },
+    complete: (requestId, input) => client.post(`/technical-support/${encodeURIComponent(requestId)}/complete`, input),
+    override: (requestId, input) => client.post(`/technical-support/${encodeURIComponent(requestId)}/override`, input),
+    downloadAttachment: (requestId, attachmentId) => client.get(`/technical-support/${encodeURIComponent(requestId)}/attachments/${encodeURIComponent(attachmentId)}/download`),
+    getMetrics: filters => client.get('/technical-support/metrics', { query: filters }),
+  };
+
   const personalisation = {
     get: () => client.get('/users/me/personalisation'),
     save(candidate) {
@@ -534,6 +576,7 @@ export function createApiServices(config = {}) {
     laboratory,
     qualityAssurance,
     dispatch,
+    technicalSupport,
     personalisation,
     preferences,
     preview: {

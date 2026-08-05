@@ -119,12 +119,35 @@ export const EXECUTIVE_DEMO_SCENARIOS = Object.freeze([
       'Open Administration controls',
     ]),
   }),
+  Object.freeze({
+    id: 'technical-support-rfq',
+    label: 'RFQ Technical Support',
+    summary: 'A controlled technical review extends the quotation target and keeps all correspondence linked to the RFQ.',
+    steps: Object.freeze([
+      'Customer submits a configured RFQ',
+      'Sales representative starts review',
+      'Representative identifies that technical assistance is required',
+      'Representative submits the Technical Support request',
+      'The quotation target increases once by 24 hours',
+      'Technical Support receives and starts the request',
+      'Technical Support asks the Representative for more information',
+      'The Representative sends a customer-safe request and the customer replies in the app',
+      'Technical Support submits a recommendation',
+      'The Representative receives the controlled response',
+      'Technical Support completes the review',
+      'The quotation block clears and Sales proceeds',
+      'Management reporting reflects response time and outcome',
+    ]),
+  }),
 ]);
 
 export const EXECUTIVE_DEMO_ROLES = Object.freeze([
   Object.freeze({ role: USER_ROLES.CUSTOMER, label: 'Customer', stage: 'RFQ and tracking', device: 'Rhomberg Connect' }),
   Object.freeze({ role: USER_ROLES.SALES_REPRESENTATIVE, label: 'Sales representative', stage: 'Quotation review', device: 'Operations' }),
   Object.freeze({ role: USER_ROLES.SALES_MANAGER, label: 'Sales manager', stage: 'Sales analytics', device: 'Operations' }),
+  Object.freeze({ role: USER_ROLES.TECHNICAL_SUPPORT, label: 'Technical Support', stage: 'Technical review', device: 'Operations Desktop' }),
+  Object.freeze({ role: USER_ROLES.TECHNICAL_MANAGER, label: 'Technical manager', stage: 'Assignment and completion', device: 'Operations Desktop' }),
+  Object.freeze({ role: USER_ROLES.TECHNICAL_DIRECTOR, label: 'Technical director', stage: 'Technical oversight', device: 'Operations Desktop' }),
   Object.freeze({ role: USER_ROLES.COMPANY_OWNER, label: 'Company owner', stage: 'Executive oversight', device: 'Operations' }),
   Object.freeze({ role: USER_ROLES.PLANNING, label: 'Planning', stage: 'Job planning', device: 'Operations' }),
   Object.freeze({ role: USER_ROLES.LABORATORY_USER, label: 'Laboratory user', stage: 'Calibration', device: 'Operations' }),
@@ -139,7 +162,7 @@ export const EXECUTIVE_DEMO_ROLES = Object.freeze([
 ]);
 
 export const DEFAULT_EXECUTIVE_DEMO_STATE = Object.freeze({
-  scenarioId: EXECUTIVE_DEMO_SCENARIOS[0].id,
+  scenarioId: 'standard-order',
   stepIndex: 0,
   presentationMode: false,
   layoutMode: 'full',

@@ -74,3 +74,5 @@ Planning
 | Dispatch | `awaiting_dispatch`, `ready_for_collection`, `out_for_delivery`, `delivered`, `collected` |
 
 Every important action creates an immutable audit entry and, when customer-visible, a simplified tracking entry. Internal notes are excluded from customer projections.
+
+RFQ Technical Support is completed before quotation/order conversion and does not change order statuses. See [TECHNICAL_SUPPORT_WORKFLOW.md](TECHNICAL_SUPPORT_WORKFLOW.md). Customer RFQ urgency controls remain removed; existing authorised internal order priority remains unchanged.

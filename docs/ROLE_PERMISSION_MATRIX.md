@@ -79,4 +79,18 @@ The table is explanatory. `src/services/contracts.js`, service scoping and workf
 
 The Administrator desktop workspace is opened by `administer_users`. Mutations then require separate capabilities for customer companies, customer contacts, internal staff, roles/permissions, notification preferences, catalogue data and approved record corrections. An Administrator account may carry only a subset; the role name alone does not grant a mutation. Components never perform browser-storage writes. See [ADMINISTRATOR_MANAGEMENT.md](ADMINISTRATOR_MANAGEMENT.md).
 
-The Executive Workflow Demo is a mock-only presentation layer. Its eleven switchable role perspectives reuse the canonical permission catalogue and existing workspaces. Switching a demonstration role does not grant any new permission, and all fabricated role/scenario markers are excluded from production builds.
+The Executive Workflow Demo is a mock-only presentation layer. Its switchable role perspectives reuse the canonical permission catalogue and existing workspaces. Switching a demonstration role does not grant any new permission, and all fabricated role/scenario markers are excluded from production builds.
+
+## Technical Support permissions
+
+| Capability | Customer | Sales representative | Sales manager | Technical Support | Technical manager/director | Manager | Administrator |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| Request review | No | Assigned RFQ | Yes | No | No | Yes | Yes |
+| View Technical queue | No | No | Yes | Yes | Yes | Yes | Yes |
+| Assign request | No | No | No | No | Yes | Yes | Yes |
+| Respond/message | Safe reply only | Assigned RFQ | Yes | Assigned request | Yes | Yes | Yes |
+| Complete request | No | No | No | Assigned request | Yes | Yes | Yes |
+| View metrics | No | No | Yes | No | Yes | Yes | Yes |
+| Override quotation block | No | No | Reason required | No | No | No | Reason required |
+
+The new desktop-only roles are `technical_support`, `technical_manager` and `technical_director`. Capability codes are defined centrally in `src/services/contracts.js`; customer direct URL access normalises back to the customer home view.

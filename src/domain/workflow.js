@@ -19,6 +19,7 @@ import {
   allLaboratoryUnitsCalibrated,
   orderRequiresLaboratory,
 } from './certification.js';
+import { isQuotationBlockedByTechnicalSupport } from './technicalSupport.js';
 
 export const WORKFLOW_ENTITY_TYPES = Object.freeze({
   RFQ: 'rfq',
@@ -1003,6 +1004,12 @@ const assertDispatchUpdate = (entity, input, action) => {
 };
 
 const assertGuard = (entity, actor, transitionDefinition, input) => {
+  if (transitionDefinition.action === 'mark_quoted' && isQuotationBlockedByTechnicalSupport(entity)) {
+    throw new ServiceError('Complete the Technical Support review before marking this RFQ as quoted.', {
+      code: 'TECHNICAL_REVIEW_PENDING',
+      status: 409,
+    });
+  }
   if (transitionDefinition.guard === 'quotation_confirmation' && input !== undefined) assertQuotationConfirmation(input);
   if (transitionDefinition.guard === 'order_acceptance' && input !== undefined) assertOrderAcceptance(input);
   if (transitionDefinition.guard === 'planning_submission' && input !== undefined) assertPlanningDetails(input.planning);

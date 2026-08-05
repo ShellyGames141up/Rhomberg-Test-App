@@ -35,10 +35,17 @@ This repository contains the shared React implementation for Rhomberg Connect an
 - Documents: generated or simulated in the browser; production private storage is not connected
 - Email and push: simulated only
 - Production deployment: not started
-- Current `main` scope: representative-loaded customer orders and the controlled Laboratory calibration workflow are integrated in mock mode
-- Current verification: 82 React source files compile, the complete automated suite passes, and all five preview applications build successfully
+- Current `main` scope: representative-loaded customer orders, controlled Laboratory calibration and RFQ Technical Support are integrated in mock mode
+- Current verification: 84 React source files compile; final test and preview-build results are recorded at phase completion
 
 ## Current Updates
+
+### RFQ Technical Support
+
+- Assigned representatives can request Technical Support against a specific RFQ line item. Dedicated Technical Support, Technical Manager and Technical Director fabricated roles use Operations desktop.
+- The controlled request covers assignment, review, routed information requests, append-only correspondence, recommendation and completion. Final quotation is blocked while review is active; only Sales Managers and Administrators have a reasoned audited override.
+- One active Technical Support cycle adds one 24-hour quotation allowance. Customer-safe status, messages and attachments are projected separately from internal questions, calculations, notes and warnings.
+- Central notifications, immutable audit events, management metrics, future API contracts and PostgreSQL proposals are included. Email/push remain simulated and mock attachments remain metadata-only.
 
 ### Customer RFQs and representative-loaded orders
 

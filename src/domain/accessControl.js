@@ -27,14 +27,22 @@ const representativeOrderNavigation = (workspaceLabel, includeAudit = false) => 
   navItem('account', 'O', 'Account'),
 ]);
 
+const technicalNavigation = () => Object.freeze([
+  navItem('technical', 'T', 'Technical'),
+  navItem('notifications', '!', 'Alerts'),
+  navItem('account', 'O', 'Account'),
+]);
+
 const CUSTOMER_VIEWS = Object.freeze(['home', 'catalogue', 'product', 'configurator', 'enquiry', 'tracking', 'notifications', 'account', 'settings']);
 const INTERNAL_VIEWS = Object.freeze(['expeditor', 'notifications', 'account']);
 const REPRESENTATIVE_ORDER_VIEWS = Object.freeze([...INTERNAL_VIEWS, 'load-order']);
+const TECHNICAL_VIEWS = Object.freeze(['technical', 'notifications', 'account']);
 const OVERSIGHT_VIEWS = Object.freeze([...INTERNAL_VIEWS, 'archive', 'audit']);
-const ADMIN_VIEWS = Object.freeze(['administration', 'load-order', ...OVERSIGHT_VIEWS]);
+const ADMIN_VIEWS = Object.freeze(['administration', 'load-order', 'technical', ...OVERSIGHT_VIEWS]);
 const ADMIN_NAVIGATION = Object.freeze([
   navItem('administration', 'A', 'Admin'),
   navItem('expeditor', '\u25C7', 'Overview'),
+  navItem('technical', 'T', 'Technical'),
   navItem('load-order', '+', 'Load order'),
   navItem('notifications', '!', 'Alerts'),
   navItem('archive', '\u25A1', 'Archive'),
@@ -83,6 +91,36 @@ export const ROLE_PROFILES = Object.freeze({
       description: 'Open newly assigned requests, start the review and keep every quotation moving through the controlled RFQ workflow.',
       queue: 'Representative inbox',
     },
+  }),
+  [USER_ROLES.TECHNICAL_SUPPORT]: profile({
+    role: USER_ROLES.TECHNICAL_SUPPORT,
+    label: 'Technical Support',
+    workspaceLabel: 'Technical Support',
+    defaultView: 'technical',
+    navigation: technicalNavigation(),
+    allowedViews: TECHNICAL_VIEWS,
+    dashboard: {
+      eyebrow: 'Technical Support workspace',
+      headline: 'Technical RFQ questions need a controlled response.',
+      description: 'Review assigned product and application questions while keeping every message linked to the RFQ.',
+      queue: 'Technical Support queue',
+    },
+  }),
+  [USER_ROLES.TECHNICAL_MANAGER]: profile({
+    role: USER_ROLES.TECHNICAL_MANAGER,
+    label: 'Technical manager',
+    workspaceLabel: 'Technical Support',
+    defaultView: 'technical',
+    navigation: technicalNavigation(),
+    allowedViews: TECHNICAL_VIEWS,
+  }),
+  [USER_ROLES.TECHNICAL_DIRECTOR]: profile({
+    role: USER_ROLES.TECHNICAL_DIRECTOR,
+    label: 'Technical director',
+    workspaceLabel: 'Technical Support',
+    defaultView: 'technical',
+    navigation: technicalNavigation(),
+    allowedViews: TECHNICAL_VIEWS,
   }),
   [USER_ROLES.PLANNING]: profile({
     role: USER_ROLES.PLANNING,
@@ -228,8 +266,8 @@ export const ROLE_PROFILES = Object.freeze({
     role: USER_ROLES.SALES_MANAGER,
     label: 'Sales manager',
     workspaceLabel: 'Sales analytics',
-    navigation: representativeOrderNavigation('Sales', true),
-    allowedViews: Object.freeze([...REPRESENTATIVE_ORDER_VIEWS, 'audit']),
+    navigation: Object.freeze([...representativeOrderNavigation('Sales', true), navItem('technical', 'T', 'Technical')]),
+    allowedViews: Object.freeze([...REPRESENTATIVE_ORDER_VIEWS, 'audit', 'technical']),
     commercialReporting: { representativeFilterLabel: 'Representative' },
     dashboard: {
       eyebrow: 'Sales management',
@@ -242,8 +280,8 @@ export const ROLE_PROFILES = Object.freeze({
     role: USER_ROLES.COMPANY_OWNER,
     label: 'Company owner',
     workspaceLabel: 'Executive',
-    navigation: internalNavigation('Executive', true, true),
-    allowedViews: OVERSIGHT_VIEWS,
+    navigation: Object.freeze([...internalNavigation('Executive', true, true), navItem('technical', 'T', 'Technical')]),
+    allowedViews: Object.freeze([...OVERSIGHT_VIEWS, 'technical']),
     commercialReporting: { representativeFilterLabel: 'Representative scope' },
     dashboard: {
       eyebrow: 'Executive overview',
@@ -256,8 +294,8 @@ export const ROLE_PROFILES = Object.freeze({
     role: USER_ROLES.MANAGER,
     label: 'Manager',
     workspaceLabel: 'Oversight',
-    navigation: internalNavigation('Oversight', true, true),
-    allowedViews: OVERSIGHT_VIEWS,
+    navigation: Object.freeze([...internalNavigation('Oversight', true, true), navItem('technical', 'T', 'Technical')]),
+    allowedViews: Object.freeze([...OVERSIGHT_VIEWS, 'technical']),
     dashboard: {
       eyebrow: 'Management oversight',
       headline: 'Workflow health at a glance.',
@@ -334,6 +372,7 @@ export const usesQualityWorkspace = account => (
   accountCan(account, PERMISSIONS.VIEW_QA_QUEUE)
   && !accountCan(account, PERMISSIONS.VIEW_ALL_ORDERS)
 );
+export const usesTechnicalWorkspace = account => accountCan(account, PERMISSIONS.VIEW_TECHNICAL_QUEUE);
 
 export const ORDER_QUEUE_SCOPES = Object.freeze({
   [PERMISSIONS.VIEW_PLANNING_QUEUE]: Object.freeze(['awaiting_planning', 'planning_in_progress', 'planned']),
@@ -390,6 +429,8 @@ export const canAccessRecord = (account, record) => {
   if (!isOrder && roleCan(account.role, PERMISSIONS.VIEW_ASSIGNED_RFQS)) {
     return Boolean(account.representativeId) && representativeIdFor(record) === account.representativeId;
   }
+
+  if (!isOrder && roleCan(account.role, PERMISSIONS.VIEW_TECHNICAL_QUEUE) && record.technicalSupport) return true;
 
   if (
     isOrder
