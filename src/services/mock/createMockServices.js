@@ -179,6 +179,7 @@ import {
   EXPEDITOR_ACCOUNT,
   EXTRA_DEMO_ACCOUNTS,
   LAB_ACCOUNT,
+  LAB_END_TO_END_ACCOUNT,
   LAB_MANAGER_ACCOUNT,
   LEGACY_STORE_KEYS,
   MANAGER_ACCOUNT,
@@ -1333,6 +1334,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       PLANNING_ACCOUNT,
       EXPEDITOR_ACCOUNT,
       LAB_ACCOUNT,
+      LAB_END_TO_END_ACCOUNT,
       LAB_MANAGER_ACCOUNT,
       QA_ACCOUNT,
       QA_MANAGER_ACCOUNT,
@@ -3638,6 +3640,19 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     return { order, unit, index };
   };
 
+  const canOperateLaboratoryMethod = (account, method) => {
+    const roles = new Set([account.role, ...(account.labRoles || [])]);
+    if (method?.discipline === 'temperature') return roles.has(USER_ROLES.LABORATORY_TEMPERATURE_TECHNICIAN);
+    return roles.has(USER_ROLES.LABORATORY_USER) || roles.has(USER_ROLES.LABORATORY_TECHNICIAN);
+  };
+
+  const requireMethodTechnician = (account, method) => {
+    if (!method || !canOperateLaboratoryMethod(account, method)) {
+      const discipline = method?.discipline === 'temperature' ? 'Temperature' : 'Pressure';
+      throw new ServiceError(`An authorised ${discipline} Laboratory technician must complete this action.`, { code: 'LAB_METHOD_TECHNICIAN_REQUIRED', status: 403 });
+    }
+  };
+
   const persistLaboratoryUnit = ({ account, order, index, nextUnit, action, reason = '', customerMessage = '' }) => {
     const occurredAt = now().toISOString();
     const previousUnit = order.laboratory.units[index];
@@ -3829,12 +3844,11 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
 
     async saveWorksheet(orderId, unitId, input = {}) {
       const account = requireAccount();
-      const technicianRoles = [USER_ROLES.LABORATORY_USER, USER_ROLES.LABORATORY_TECHNICIAN, USER_ROLES.LABORATORY_TEMPERATURE_TECHNICIAN];
-      if (!technicianRoles.includes(account.role) && !(account.labRoles || []).some(role => [LABORATORY_ROLES.TECHNICIAN, LABORATORY_ROLES.TEMPERATURE_TECHNICIAN].includes(role))) throw new ServiceError('Management cannot overwrite technician raw readings. Return the worksheet to an authorised technician.', { code: 'LAB_RAW_DATA_ROLE_FORBIDDEN', status: 403 });
       const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.ENTER_RAW_CALIBRATION_DATA);
-      if (!['worksheet_ready', 'calibration_in_progress', 'calibration_on_hold', 'management_changes_required'].includes(unit.labWork.status)) throw new ServiceError('Complete booking-in before entering worksheet data.', { code: 'LAB_WORKSHEET_STAGE_INVALID', status: 409 });
       const method = methodById(input.methodId || unit.labWork.booking?.methodId);
       if (!method) throw new ServiceError('Select the calibration method.', { code: 'LAB_METHOD_REQUIRED', status: 422, fieldErrors: { methodId: 'Select a method.' } });
+      requireMethodTechnician(account, method);
+      if (!['worksheet_ready', 'calibration_in_progress', 'calibration_on_hold', 'management_changes_required'].includes(unit.labWork.status)) throw new ServiceError('Complete booking-in before entering worksheet data.', { code: 'LAB_WORKSHEET_STAGE_INVALID', status: 409 });
       const testPoints = (input.testPoints || []).map((point, pointIndex) => ({
         id: point.id || `point-${pointIndex + 1}`,
         direction: method.discipline === 'pressure' ? (point.direction === 'decreasing' ? 'decreasing' : 'increasing') : 'temperature',
@@ -3867,6 +3881,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const account = requireAccount();
       const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.START_LAB_CALIBRATION);
       if (!unit.labWork.worksheet) throw new ServiceError('Save the structured worksheet before calibration starts.', { code: 'LAB_WORKSHEET_REQUIRED', status: 409 });
+      requireMethodTechnician(account, methodById(unit.labWork.worksheet.methodId));
       const status = assertLabTransition(unit.labWork.status, 'start_calibration');
       return persistLaboratoryUnit({ account, order, index, action: 'calibration_started', nextUnit: { ...unit, startedAt: unit.startedAt || now().toISOString(), labWork: { ...unit.labWork, status, calibrationStartedAt: unit.labWork.calibrationStartedAt || now().toISOString(), startNote: String(input.note || '').trim().slice(0, 1000) } }, customerMessage: 'Calibration of your instrument has started.' });
     },
@@ -3874,6 +3889,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     async holdCalibration(orderId, unitId, input = {}) {
       const account = requireAccount();
       const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.START_LAB_CALIBRATION);
+      requireMethodTechnician(account, methodById(unit.labWork.worksheet?.methodId));
       const reason = String(input.reason || '').trim();
       if (reason.length < 8) throw new ServiceError('Record why calibration is being put on hold.', { code: 'LAB_HOLD_REASON_REQUIRED', status: 422, fieldErrors: { reason: 'Provide a clear hold reason.' } });
       const status = assertLabTransition(unit.labWork.status, 'hold_calibration');
@@ -3884,6 +3900,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const account = requireAccount();
       const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.ENTER_RAW_CALIBRATION_DATA);
       if (unit.labWork.status !== 'calibration_in_progress') throw new ServiceError('Start calibration before calculating the worksheet.', { code: 'LAB_CALCULATION_STAGE_INVALID', status: 409 });
+      requireMethodTechnician(account, methodById(unit.labWork.worksheet?.methodId));
       const calculation = calculateLaboratoryWorksheet(unit.labWork.worksheet);
       const status = assertLabTransition(unit.labWork.status, 'submit_raw_data');
       return persistLaboratoryUnit({ account, order, index, action: 'calculation_completed', nextUnit: { ...unit, labWork: { ...unit.labWork, status, worksheet: { ...unit.labWork.worksheet, locked: true }, calculation: { ...calculation, calculatedBy: actorSnapshot(account) } } } });
@@ -3901,6 +3918,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     async completeCalibration(orderId, unitId, input = {}) {
       const account = requireAccount();
       const { order, unit, index } = laboratoryContext(account, orderId, unitId, PERMISSIONS.COMPLETE_LAB_CALIBRATION);
+      requireMethodTechnician(account, methodById(unit.labWork.worksheet?.methodId));
       if (!unit.labWork.calculation) throw new ServiceError('Run and review the calculation before completing calibration.', { code: 'LAB_CALCULATION_REQUIRED', status: 409 });
       if (unit.labWork.formulaValidationReview?.status !== 'accepted_for_mock_demo') throw new ServiceError('Laboratory Management must review the unresolved reference-template warnings before this mock workflow can continue.', { code: 'LAB_FORMULA_VALIDATION_REQUIRED', status: 409 });
       if (input.technicianConfirmed !== true) throw new ServiceError('Confirm that the raw readings and required repeatability readings are complete.', { code: 'LAB_TECHNICIAN_CONFIRMATION_REQUIRED', status: 422 });

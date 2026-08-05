@@ -502,10 +502,16 @@ export const roleCanAny = (role, permissions) => permissions.some(permission => 
 export const permissionsForRole = role => [...(ROLE_PERMISSIONS[role] || [])];
 export const rolesForPermission = permission => Object.values(USER_ROLES).filter(role => roleCan(role, permission));
 
+export const permissionsForAccount = account => {
+  if (!account) return [];
+  if (Array.isArray(account.permissions)) return [...account.permissions];
+  const inheritedRoles = [account.role, ...(Array.isArray(account.labRoles) ? account.labRoles : [])];
+  return [...new Set(inheritedRoles.flatMap(role => ROLE_PERMISSIONS[role] || []))];
+};
+
 export const accountCan = (account, permission) => {
   if (!account) return false;
-  const effectivePermissions = Array.isArray(account.permissions) ? account.permissions : ROLE_PERMISSIONS[account.role] || [];
-  return effectivePermissions.includes(permission);
+  return permissionsForAccount(account).includes(permission);
 };
 
 export const WORKFLOW_ACTION_PERMISSIONS = Object.freeze({
@@ -583,9 +589,7 @@ export const toPublicAccount = account => {
   } = account;
   return {
     ...safeAccount,
-    permissions: Array.isArray(safeAccount.permissions)
-      ? [...safeAccount.permissions]
-      : permissionsForRole(safeAccount.role),
+    permissions: permissionsForAccount(safeAccount),
   };
 };
 

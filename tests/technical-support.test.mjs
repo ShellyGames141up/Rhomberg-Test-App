@@ -32,7 +32,9 @@ assert.equal(roleCan(USER_ROLES.TECHNICAL_SUPPORT, PERMISSIONS.VIEW_TECHNICAL_ME
 assert.equal(roleCan(USER_ROLES.SALES_MANAGER, PERMISSIONS.OVERRIDE_TECHNICAL_QUOTATION_BLOCK), true);
 assert.equal(roleCan(USER_ROLES.MANAGER, PERMISSIONS.OVERRIDE_TECHNICAL_QUOTATION_BLOCK), false);
 assert.equal(readFileSync('src/components/Enquiry.jsx', 'utf8').includes('emergency'), false, 'customer RFQ UI must not restore emergency controls');
-assert.ok(readFileSync('src/components/TechnicalSupport.jsx', 'utf8').includes('Technical Support Required'));
+assert.ok(readFileSync('src/components/TechnicalSupport.jsx', 'utf8').includes('Send to Technical for Assistance'));
+assert.ok(readFileSync('src/components/TechnicalSupport.jsx', 'utf8').includes('Quote the client or ask Technical'));
+assert.ok(readFileSync('src/components/TechnicalSupport.jsx', 'utf8').includes('Send Answer Back to Sales'));
 
 let clock = new Date('2026-08-05T08:00:00.000Z');
 const services = createMockServices({ storage: new TestStorage(), now: () => new Date(clock), emailSender: async () => ({ ok: true }) });
@@ -98,6 +100,27 @@ clock = new Date('2026-08-05T12:00:00.000Z');
 await services.technicalSupport.complete(requestId, { note: 'Fabricated review complete.' });
 const completed = await services.enquiries.getById(rfqId);
 assert.equal(completed.technicalSupport.status, 'technical_support_completed');
+
+await services.auth.signOut();
+await services.auth.signIn({ email: 'sales.workflow@example.invalid', password: 'Sales123!' });
+let returnedToSales = (await services.enquiries.listRepresentativeInbox()).find(item => item.id === rfqId);
+assert.equal(returnedToSales.technicalSupport.response.response, 'The submitted configuration is technically suitable for this fabricated application.');
+assert.ok(returnedToSales.allowedWorkflowActions.some(action => action.action === 'mark_quoted'), 'Sales must be able to quote after Technical sends the completed answer back');
+returnedToSales = await services.workflow.performAction(rfqId, {
+  entityType: 'rfq',
+  action: 'mark_quoted',
+  expectedVersion: returnedToSales.version,
+  data: {
+    quotationNumber: 'Q-TECHNICAL-RETURN-001',
+    quotationDate: '2026-08-05',
+    quotationExpiryMode: 'dated',
+    quotationExpiryDate: '2026-09-05',
+    quotationEmailed: true,
+    quotationCustomerNote: 'Your quotation was prepared after the completed technical review.',
+  },
+});
+assert.equal(returnedToSales.trackingStatus, 'quoted');
+
 await services.auth.signOut();
 await services.auth.signIn({ email: 'administrator.workflow@example.invalid', password: 'Admin123!' });
 const audits = await services.audit.list();
@@ -110,6 +133,9 @@ await services.auth.signIn({ email: 'cape.demo@client.test', password: 'Demo123!
 const customerNotifications = await services.notifications.list();
 assert.ok(customerNotifications.some(notification => notification.entityId === rfqId && notification.eventType === 'technical_deadline_extended'));
 assert.ok(customerNotifications.some(notification => notification.entityId === rfqId && notification.eventType === 'technical_review_completed'));
+assert.ok(customerNotifications.some(notification => notification.entityId === rfqId && notification.eventType === 'rfq_quoted'));
+const completedCustomerRfq = await services.enquiries.getById(rfqId);
+assert.equal(completedCustomerRfq.technicalSupport.response, undefined, 'internal Technical answer must not leak to the customer');
 const otherCompanyRecords = await services.enquiries.list();
 assert.ok(otherCompanyRecords.every(record => record.companyId === 'company-demo-cape'), 'company isolation must remain enforced');
 

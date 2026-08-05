@@ -42,9 +42,11 @@ This repository contains the shared React implementation for Rhomberg Connect an
 
 ### RFQ Technical Support
 
-- Assigned representatives can request Technical Support against a specific RFQ line item. One Technical Advisor role now handles assignment, review, correspondence, completion and reporting in a single Operations Desktop workspace; Technical Director oversight remains separate.
+- Assigned representatives now receive a clear **Quote Client** or **Send to Technical for Assistance** decision while reviewing an RFQ. The Technical option records a required question or note against a specific line item, with category, priority and optional supporting attachment.
+- One Technical Advisor role handles assignment, review, correspondence, completion and reporting in a single Operations Desktop workspace; Technical Director oversight remains separate.
+- Technical Advisors can return a concise controlled answer to Sales in one action. The assigned representative sees the answer and recommendation on the RFQ and can continue directly to the quotation form once the review is complete.
 - The controlled request covers assignment, review, routed information requests, append-only correspondence, recommendation and completion. Final quotation is blocked while review is active; only Sales Managers and Administrators have a reasoned audited override.
-- One active Technical Support cycle adds one 24-hour quotation allowance. Customer-safe status, messages and attachments are projected separately from internal questions, calculations, notes and warnings.
+- One active Technical Support cycle adds one 24-hour quotation allowance. The customer is notified when the RFQ moves to Technical and again when it returns to the representative, while internal questions, answers, calculations, notes and warnings remain protected.
 - Central notifications, immutable audit events, management metrics, future API contracts and PostgreSQL proposals are included. Email/push remain simulated and mock attachments remain metadata-only.
 - Open the [Internal Desktop preview](https://shellygames141up.github.io/Rhomberg-Test-App/preview/internal-desktop/) and use the Technical Advisor credentials below. See the [Technical Support workflow](docs/TECHNICAL_SUPPORT_WORKFLOW.md) and [RFQ workflow](docs/RFQ_WORKFLOW.md) for the complete controlled process.
 
@@ -65,6 +67,8 @@ This repository contains the shared React implementation for Rhomberg Connect an
 - Pressure and Temperature work remain separate. The mock includes Pressure master-gauge, 700 bar dead-weight-tester, 250 MPa dead-weight-tester and Temperature comparison methods.
 - Structured readings feed named calculation functions and versioned uncertainty budgets. Raw inputs lock after calculation, and corrections create traceable revisions instead of overwriting evidence.
 - Laboratory document handling includes internal-review PDFs, draft and final unsigned certificates, approved external-signature hand-off, signed-PDF re-upload, SHA-256 evidence, superseded-version preservation and explicit certificate release.
+- The Laboratory interface now shows a seven-stage progress path, the responsible next role and numbered signing/re-upload instructions. Secondary Laboratory roles are recognised correctly, preventing the workflow from stalling after thermal stabilisation.
+- Automated end-to-end journeys verify both Pressure SANAS and Temperature Traceable work from receipt through calibration, management review, Dispatch transfer, unsigned certificate download, signed-PDF re-upload and final certificate release.
 - Customer projections expose only safe progress and explicitly released certificates belonging to the authorised company. Raw readings, calculations, internal notes, management comments and audit metadata remain internal.
 - Laboratory notifications, unit history, the document centre, certificate register, monthly measures, future API contracts, PostgreSQL proposals and automated tests are included.
 - Laboratory features are implemented for controlled review only. Formal technical validation and approval remain required from authorised Rhomberg Laboratory Management and Technical Signatories before production use.
@@ -103,6 +107,7 @@ These accounts exist only in public mock builds. They use reserved `.invalid` or
 | Expeditor | `expeditor.workflow@example.invalid` | `Expedite123!` | Operations mobile/desktop; Executive Demo |
 | Laboratory User | `laboratory.workflow@example.invalid` | `Lab12345!` | Operations desktop; Executive Demo |
 | Laboratory Manager | `laboratory.manager@example.invalid` | `LabManager123!` | Operations desktop; Executive Demo |
+| Laboratory End-to-End Demo | `laboratory.endtoend@example.invalid` | `LabJourney123!` | Operations desktop; complete Pressure and Temperature workflow |
 | Quality Assurance | `quality.workflow@example.invalid` | `Quality123!` | Operations desktop; Executive Demo |
 | Quality Manager | `quality.manager@example.invalid` | `QualityManager123!` | Operations desktop |
 | Dispatch | `dispatch.workflow@example.invalid` | `Dispatch123!` | Operations desktop; Executive Demo |

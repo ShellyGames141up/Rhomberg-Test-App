@@ -1,6 +1,7 @@
 await import('./catalogue-rules.test.mjs');
 await import('./laboratory-calibration.test.mjs');
 await import('./laboratory-workflow.test.mjs');
+await import('./laboratory-complete-journeys.test.mjs');
 await import('./permissions.test.mjs');
 await import('./rfq-inbox.test.mjs');
 await import('./planning-queue.test.mjs');
