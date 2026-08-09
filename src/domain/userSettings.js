@@ -64,7 +64,7 @@ export const createDefaultUserSettings = () => ({
   },
   sounds: {
     enabled: true,
-    volume: 0.32,
+    volume: 0.48,
     categories: enabledMap(SOUND_CATEGORIES),
   },
   haptics: {
@@ -143,25 +143,29 @@ export const validateUserSettings = candidate => {
 export const TUTORIALS = Object.freeze([
   { id: 'full', label: 'Replay Full Tutorial', startStep: 0 },
   { id: 'catalogue', label: 'Product Catalogue Tutorial', startStep: 1 },
-  { id: 'rfq', label: 'RFQ Tutorial', startStep: 3 },
-  { id: 'quotation', label: 'Quotations and PO Tutorial', startStep: 6 },
-  { id: 'tracking', label: 'Tracking Tutorial', startStep: 8 },
-  { id: 'notifications', label: 'Notifications Tutorial', startStep: 9 },
-  { id: 'documents', label: 'Documents Tutorial', startStep: 10 },
+  { id: 'rfq', label: 'RFQ Tutorial', startStep: 6 },
+  { id: 'tracking', label: 'Tracking Tutorial', startStep: 10 },
 ]);
 
 export const TUTORIAL_STEPS = Object.freeze([
-  { target: 'home', title: 'Your dashboard', copy: 'Start from a concise view of your latest RFQs, orders and recommended catalogue areas.' },
-  { target: 'catalogue', title: 'Browse the product catalogue', copy: 'Search Rhomberg product families and open the instrument that fits your application.' },
-  { target: 'configuration', title: 'Configure the instrument', copy: 'Choose only valid product options. The configurator keeps dependencies and required fields clear.' },
-  { target: 'rfq', title: 'Create an RFQ', copy: 'Add configured units, quantities, application details and delivery or collection requirements.' },
-  { target: 'review', title: 'Review before submitting', copy: 'Check every line and customer requirement. This guided record is labelled Tutorial Example and is never submitted.' },
-  { target: 'submit', title: 'Submit securely', copy: 'A real submission is sent through the service layer. Tutorial data stays isolated from operational queues and reports.' },
-  { target: 'quotation', title: 'Review quotations', copy: 'Open the RFQ timeline when your representative marks a quotation available.' },
-  { target: 'po', title: 'Accept and provide a PO', copy: 'After accepting the quotation, upload the authorised Purchase Order where the workflow requests it.' },
-  { target: 'tracking', title: 'Track the order', copy: 'Follow customer-safe progress from acceptance through Planning, production, Laboratory, Dispatch and completion.' },
-  { target: 'notifications', title: 'Stay informed', copy: 'Unread alerts link directly to the relevant RFQ or order. Email and push remain simulated in mock mode.' },
-  { target: 'documents', title: 'Download documents', copy: 'Authorised quotations, certificates and delivery documents are available from their related records.' },
-  { target: 'profile', title: 'Profile and Settings', copy: 'Open Profile for account details, security actions and role-appropriate Rhomberg Connect settings.' },
-  { target: 'help', title: 'Help whenever you need it', copy: 'Replay the full tutorial or a focused feature tutorial from Settings → Help & Tutorials.' },
+  { target: 'welcome', title: 'Learn by creating a fake RFQ', copy: 'This guided journey asks you to perform each step yourself. The example stays completely separate from real records.' },
+  { target: 'catalogue', title: 'Open the Catalogue', copy: 'Select the highlighted Catalogue control to begin choosing an instrument.' },
+  { target: 'category', title: 'Choose Pressure', copy: 'Select the highlighted Pressure family to see suitable units.' },
+  { target: 'unit', title: 'Choose a unit', copy: 'Choose the PBG pressure gauge for this fabricated water-line application.' },
+  { target: 'product', title: 'Open the configurator', copy: 'Review the product summary, then select Configure this unit.' },
+  { target: 'configuration', title: 'Configure the instrument', copy: 'Choose a pressure range and process connection, then add the configured unit.' },
+  { target: 'rfq', title: 'Review the configured unit', copy: 'Confirm the product and continue to the RFQ details.' },
+  { target: 'details', title: 'Complete the RFQ details', copy: 'Describe the application, confirm collection or delivery, and notice the remembered representative.' },
+  { target: 'review', title: 'Review before submitting', copy: 'Check every field and confirm that this is a fabricated tutorial RFQ.' },
+  { target: 'submit', title: 'Submit the fake RFQ', copy: 'Use the highlighted control. No operational service call is made.' },
+  { target: 'confirmation', title: 'Open tracking', copy: 'The fake reference demonstrates a successful result. Select Track this fake RFQ.' },
+  { target: 'tracking', title: 'Follow customer-safe progress', copy: 'Review the fabricated timeline and finish. You can replay this tutorial from Settings at any time.' },
 ]);
+
+export const tutorialDraftForStep = step => ({
+  range: step > 5 ? '0 to 10 bar' : '',
+  connection: step > 5 ? '1/2 inch BSP' : '',
+  application: step > 7 ? 'Water-line pressure monitoring tutorial' : '',
+  fulfilment: step > 7 ? 'collect' : '',
+  consent: step > 8,
+});

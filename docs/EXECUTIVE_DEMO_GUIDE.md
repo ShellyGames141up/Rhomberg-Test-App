@@ -110,3 +110,6 @@ The Executive Demo includes a detailed Cape Town Pressure journey, Cape Town Tem
 # RFQ Technical Support scenario
 
 Choose **RFQ Technical Support** to present the Representative request, one-time 24-hour extension, Technical queue, routed customer information request, in-app correspondence, recommendation, completion, quotation unblock and management measures. Use fabricated accounts only; attachment bytes are not retained in the preview.
+# Sales visit scenarios
+
+`Sales Representative Client Visit` demonstrates the Clients page, monthly coverage, appointment, fabricated geofence, customer/QR confirmation, verification score and Sales Manager update. `Missed Client Visit` demonstrates expiry, immutable missed event, warning, manager drill-down and rescheduling without overwriting the original appointment.

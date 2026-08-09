@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createMockServices } from '../src/services/mock/createMockServices.js';
 import { LAB_END_TO_END_ACCOUNT } from '../src/services/mock/seedData.js';
 import { PERMISSIONS } from '../src/services/contracts.js';
+import { PRESSURE_POINT_SEQUENCE } from '../src/domain/laboratoryCalibration.js';
 
 class TestStorage {
   constructor() { this.values = new Map(); }
@@ -35,7 +36,9 @@ for (const journey of journeys) {
     standardIds: [journey.standardId],
     coverageFactor: 2,
     decimals: 5,
-    testPoints: [{ id: 'point-1', applied: journey.applied, direction: journey.discipline === 'Pressure' ? 'increasing' : 'temperature', readings: journey.readings }],
+    testPoints: journey.discipline === 'Pressure'
+      ? PRESSURE_POINT_SEQUENCE.map((point, index) => ({ ...point, applied: point.direction === 'repeatability' ? journey.applied : index, readings: [point.direction === 'repeatability' ? journey.applied + index / 100 : index] }))
+      : [{ id: 'point-1', applied: journey.applied, direction: 'temperature', referenceReadings: [20, 20, 20, 20, 20, 20], readings: journey.readings, readingTimestamps: Array.from({ length: 6 }, (_, index) => `2026-08-05T09:${30 + index}:00.000Z`), ambientTemperature: 21, immersionDepth: '100 mm', stabilisationConfirmed: true, resultStatus: 'satisfactory' }],
     uncertaintyContributions: [{ source: 'Fabricated reference standard', uncertainty: 0.04, divisor: 2, sensitivity: 1, degreesOfFreedom: 200 }],
     environmental: { temperature: 21, humidity: 50 },
   });

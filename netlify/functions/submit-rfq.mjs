@@ -86,8 +86,8 @@ function validateEnquiry(enquiry) {
 async function sendEmail(enquiry, pricing, pdfBytes, poFile) {
   const apiKey = safe(process.env.RESEND_API_KEY, 500);
   const from = safe(process.env.RFQ_FROM_EMAIL, 320);
-  const to = safe(process.env.RFQ_TO_EMAIL || 'Ericuv@Rhom.co.za', 240);
-  if (!apiKey || !from) throw new Error('The private email service has not been configured.');
+  const to = safe(process.env.RFQ_TO_EMAIL, 240);
+  if (!apiKey || !from || !to) throw new Error('The private email service has not been configured.');
 
   const attachments = [{
     filename: rfqPdfFilename(enquiry, true),

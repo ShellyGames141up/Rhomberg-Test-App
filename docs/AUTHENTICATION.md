@@ -1,5 +1,9 @@
 # Authentication and credential-change design
 
+Internal identities support one or more role assignments and one active workspace. Work email is preferred; an approved username is supported when no email exists. The employee profile remains independent of the authentication method so Microsoft Entra ID, Active Directory or another approved provider can replace local authentication without losing historical ownership.
+
+New local accounts start as `pending_activation`. A temporary password is displayed once, hashed before storage, invalidated on change and never audited. First login opens Security settings and requires a replacement password. Production must use MFA, IT-approved slow password hashing and policy, breached-password checks, rate limiting, lockout, reset expiry and session revocation.
+
 The preview uses fabricated browser-only accounts and is not production authentication.
 
 ## Separate realms

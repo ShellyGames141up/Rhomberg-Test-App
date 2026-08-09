@@ -25,6 +25,7 @@ import { SalesRepresentativeDashboard } from './components/SalesRepresentativeDa
 import { TechnicalSupportWorkspace } from './components/TechnicalSupport.jsx';
 import { Settings } from './components/Settings.jsx';
 import { CustomerTutorial, FirstCustomerWelcome } from './components/CustomerOnboarding.jsx';
+import { ClientVisitsDashboard } from './components/ClientVisitsDashboard.jsx';
 import { PreviewLanding } from './apps/PreviewLanding.jsx';
 import { ExecutiveDemoControls, ExecutiveDemoLauncher } from './apps/ExecutiveWorkflowDemo.jsx';
 import { createDefaultNotificationPreferences } from './domain/notifications.js';
@@ -220,7 +221,7 @@ export default function App() {
         setQualityOptions(loadedQualityOptions);
         setExecutiveDemoCatalogue(loadedExecutiveDemo);
         setExecutiveDemoState(loadedExecutiveDemo.current);
-        setView(session ? defaultViewForRole(session.role) : 'home');
+        setView(session ? (session.forcePasswordChange ? 'settings' : defaultViewForRole(session.role)) : 'home');
         setAppStatus('ready');
       } catch (error) {
         if (!active) return;
@@ -250,7 +251,19 @@ export default function App() {
     const handleInteraction = event => {
       const control = event.target.closest?.('button, input[type="checkbox"], input[type="radio"]');
       if (!control || control.disabled || control.dataset.noFeedback === 'true') return;
-      const type = control.closest('.bottom-nav') ? 'navigation' : control.matches('input') ? 'toggle' : control.classList.contains('primary-button') ? 'buttons' : 'buttons';
+      const type = control.closest('.bottom-nav,.tutorial-stage nav')
+        ? 'navigation'
+        : control.matches('input')
+          ? 'toggle'
+          : control.closest('.tutorial-interactive')
+            ? 'step'
+            : control.classList.contains('primary-button')
+              ? 'primary'
+              : control.classList.contains('secondary-button')
+                ? 'secondary'
+                : control.getAttribute('role') === 'radio'
+                  ? 'selection'
+                  : 'buttons';
       playUiSound(userSettings, type);
       if (PREVIEW_CONTEXT.platform?.toLowerCase().includes('mobile')) triggerHaptic(userSettings, 'buttons');
     };
@@ -303,7 +316,7 @@ export default function App() {
     if (!previewAllowsRole(PREVIEW_CONTEXT, signedInAccount.role)) {
       throw new Error(`This ${signedInAccount.role.replaceAll('_', ' ')} account is not supported in ${PREVIEW_CONTEXT.displayName}.`);
     }
-    const [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedAuditEvents, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedLaboratoryOptions, loadedQualityOptions, loadedPersonalisation, loadedUserSettings] = await Promise.all([
+    const [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedAuditEvents, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedLaboratoryOptions, loadedQualityOptions, loadedPersonalisation, loadedUserSettings, loadedRegistrationOptions] = await Promise.all([
       accountCan(signedInAccount, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
       listEnquiriesForAccount(signedInAccount),
       services.orders.list(),
@@ -331,6 +344,7 @@ export default function App() {
         ? services.personalisation.get()
         : Promise.resolve(createDefaultCustomerPersonalisation()),
       services.userSettings.get(),
+      services.accounts.getRegistrationOptions(),
     ]);
     setAccount(signedInAccount);
     setDraft(loadedDraft);
@@ -347,9 +361,10 @@ export default function App() {
     setCustomerPersonalisation(normaliseCustomerPersonalisation(loadedPersonalisation));
     const normalisedSettings = normaliseUserSettings(loadedUserSettings);
     setUserSettings(normalisedSettings);
+    setRegistrationOptions(loadedRegistrationOptions);
     setWelcomeVisible(Boolean(isCustomerAccount(signedInAccount) && !loadedUserSettings.onboarding?.welcomeCompleted));
     setTutorialSession(null);
-    setView(defaultViewForRole(signedInAccount.role));
+    setView(signedInAccount.forcePasswordChange ? 'settings' : defaultViewForRole(signedInAccount.role));
     return normalisedSettings;
   };
 
@@ -444,10 +459,14 @@ export default function App() {
     provideFeedback(userSettings, 'rfqSubmission', 'importantWorkflow');
     try {
       const result = await services.enquiries.submit(details, draft);
-      const updatedEnquiries = await listEnquiriesForAccount(account);
-      const updatedNotifications = await services.notifications.list();
+      const [updatedEnquiries, updatedNotifications, updatedRegistrationOptions] = await Promise.all([
+        listEnquiriesForAccount(account),
+        services.notifications.list(),
+        services.accounts.getRegistrationOptions(),
+      ]);
       setEnquiries(updatedEnquiries);
       setNotifications(updatedNotifications);
+      setRegistrationOptions(updatedRegistrationOptions);
       setDraft([]);
       const delivery = result.delivery || { ok: true };
       setSuccess({
@@ -613,6 +632,12 @@ export default function App() {
     } catch (error) {
       throw new Error(friendlyServiceError(error, 'Your settings could not be saved. Please review the choices and try again.'));
     }
+  };
+
+  const switchWorkspace = async role => {
+    const switchedAccount = await services.auth.switchWorkspace(role);
+    await loadAccountWorkspace(switchedAccount);
+    setToast(`Switched to ${role.replaceAll('_', ' ')} workspace.`);
   };
 
   const resetUserSettings = async () => {
@@ -843,11 +868,12 @@ export default function App() {
                       ? <ManagementDashboard account={account} managementActions={services.management} serviceMode={services.mode} onRecordsChanged={refreshAfterManagementAction} onOpenAudit={() => navigate('audit')} />
                       : <OperationalDashboard account={account} enquiries={staffRecords} onAction={performWorkflowAction} canUpdate={canPerformWorkflow} serviceMode={services.mode} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} documentActions={orderDocumentActions} />)}
               {view === 'technical' && <TechnicalSupportWorkspace account={account} actions={services.technicalSupport} onChanged={refreshTechnicalRecords} focusRecordId={notificationTarget?.entityId} />}
+              {view === 'clients' && <ClientVisitsDashboard account={account} actions={services.clientVisits} serviceMode={services.mode} />}
               {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
               {view === 'archive' && <ArchivedOrders account={account} archiveActions={services.archive} serviceMode={services.mode} onRecordsChanged={refreshAfterRetentionAction} />}
               {view === 'audit' && <AuditTrail events={auditEvents} serviceMode={services.mode} />}
               {view === 'account' && <Account account={account} enquiries={staffRecords} onSignOut={signOut} serviceMode={services.mode} onOpenSettings={() => navigate('settings')} credentialActions={services.credentials} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} />}
-              {view === 'settings' && <Settings account={account} initialValue={userSettings} notificationPreferences={notificationPreferences} serviceMode={services.mode} credentialActions={services.credentials} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} onSignOut={signOut} onSave={saveUserSettings} onSaveNotifications={saveNotificationPreferences} onReset={resetUserSettings} onReplayTutorial={replayTutorial} onTestSound={value => provideFeedback(value, 'success', 'success')} onTestHaptic={value => triggerHaptic(value, 'success')} onClose={() => navigate('account')} />}
+              {view === 'settings' && <Settings account={account} initialValue={userSettings} notificationPreferences={notificationPreferences} serviceMode={services.mode} credentialActions={services.credentials} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} onSwitchWorkspace={switchWorkspace} onSignOut={signOut} onSave={saveUserSettings} onSaveNotifications={saveNotificationPreferences} onReset={resetUserSettings} onReplayTutorial={replayTutorial} onTestSound={value => provideFeedback(value, 'success', 'success')} onTestHaptic={value => triggerHaptic(value, 'success')} onClose={() => navigate('account')} />}
             </>
           ) : (
             <>
@@ -859,7 +885,7 @@ export default function App() {
               {view === 'tracking' && <OrderTracking account={account} enquiries={accountRecords} onStartEnquiry={() => navigate('enquiry')} onAction={performWorkflowAction} serviceMode={services.mode} certificateActions={services.laboratory} sourceDocumentActions={services.representativeOrders} technicalSupportActions={services.technicalSupport} onRecordsChanged={refreshTechnicalRecords} focusRecordId={notificationTarget?.entityId} />}
               {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
               {view === 'account' && <Account account={account} enquiries={accountRecords} onSignOut={signOut} serviceMode={services.mode} onOpenSettings={() => navigate('settings')} personalisation={customerPersonalisation} credentialActions={services.credentials} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} />}
-              {view === 'settings' && <Settings account={account} initialValue={userSettings} notificationPreferences={notificationPreferences} serviceMode={services.mode} credentialActions={services.credentials} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} onSignOut={signOut} onSave={saveUserSettings} onSaveNotifications={saveNotificationPreferences} onReset={resetUserSettings} onReplayTutorial={replayTutorial} onTestSound={value => provideFeedback(value, 'success', 'success')} onTestHaptic={value => triggerHaptic(value, 'success')} onClose={() => navigate('account')} />}
+              {view === 'settings' && <Settings account={account} initialValue={userSettings} notificationPreferences={notificationPreferences} serviceMode={services.mode} credentialActions={services.credentials} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} onSwitchWorkspace={switchWorkspace} onSignOut={signOut} onSave={saveUserSettings} onSaveNotifications={saveNotificationPreferences} onReset={resetUserSettings} onReplayTutorial={replayTutorial} onTestSound={value => provideFeedback(value, 'success', 'success')} onTestHaptic={value => triggerHaptic(value, 'success')} onClose={() => navigate('account')} />}
             </>
           )}
         </main>

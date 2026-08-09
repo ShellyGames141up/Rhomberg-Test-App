@@ -21,6 +21,7 @@ const internalNavigation = (workspaceLabel, includeAudit = false, includeArchive
 
 const representativeOrderNavigation = (workspaceLabel, includeAudit = false) => Object.freeze([
   navItem('expeditor', 'R', workspaceLabel),
+  navItem('clients', 'C', 'Clients'),
   navItem('load-order', '+', 'Load order'),
   navItem('notifications', '!', 'Alerts'),
   ...(includeAudit ? [navItem('audit', 'A', 'Audit')] : []),
@@ -35,14 +36,15 @@ const technicalNavigation = () => Object.freeze([
 
 const CUSTOMER_VIEWS = Object.freeze(['home', 'catalogue', 'product', 'configurator', 'enquiry', 'tracking', 'notifications', 'account', 'settings']);
 const INTERNAL_VIEWS = Object.freeze(['expeditor', 'notifications', 'account', 'settings']);
-const REPRESENTATIVE_ORDER_VIEWS = Object.freeze([...INTERNAL_VIEWS, 'load-order']);
+const REPRESENTATIVE_ORDER_VIEWS = Object.freeze([...INTERNAL_VIEWS, 'load-order', 'clients']);
 const TECHNICAL_VIEWS = Object.freeze(['technical', 'notifications', 'account', 'settings']);
 const OVERSIGHT_VIEWS = Object.freeze([...INTERNAL_VIEWS, 'archive', 'audit']);
-const ADMIN_VIEWS = Object.freeze(['administration', 'load-order', 'technical', 'settings', ...OVERSIGHT_VIEWS]);
+const ADMIN_VIEWS = Object.freeze(['administration', 'load-order', 'technical', 'clients', 'settings', ...OVERSIGHT_VIEWS]);
 const ADMIN_NAVIGATION = Object.freeze([
   navItem('administration', 'A', 'Admin'),
   navItem('expeditor', '\u25C7', 'Overview'),
   navItem('technical', 'T', 'Technical'),
+  navItem('clients', 'L', 'Locations'),
   navItem('load-order', '+', 'Load order'),
   navItem('notifications', '!', 'Alerts'),
   navItem('archive', '\u25A1', 'Archive'),
@@ -104,6 +106,20 @@ export const ROLE_PROFILES = Object.freeze({
       headline: 'Technical RFQ questions need a controlled response.',
       description: 'Review assigned product and application questions while keeping every message linked to the RFQ.',
       queue: 'Technical Support queue',
+    },
+  }),
+  [USER_ROLES.TECHNICAL_MANAGER]: profile({
+    role: USER_ROLES.TECHNICAL_MANAGER,
+    label: 'Technical manager',
+    workspaceLabel: 'Technical Support',
+    defaultView: 'technical',
+    navigation: technicalNavigation(),
+    allowedViews: TECHNICAL_VIEWS,
+    dashboard: {
+      eyebrow: 'Technical Support management',
+      headline: 'Technical questions, assignments and escalations.',
+      description: 'Manage the Technical Support queue, recommendations, correspondence and reporting without bypassing the RFQ workflow.',
+      queue: 'Technical Support oversight',
     },
   }),
   [USER_ROLES.TECHNICAL_DIRECTOR]: profile({
@@ -181,6 +197,20 @@ export const ROLE_PROFILES = Object.freeze({
       description: 'Review unit results, verify certificate completeness and authorise controlled Laboratory release.',
       queue: 'Laboratory release queue',
     },
+  }),
+  [USER_ROLES.LABORATORY_MANAGER_PRESSURE]: profile({
+    role: USER_ROLES.LABORATORY_MANAGER_PRESSURE,
+    label: 'Laboratory manager - Pressure',
+    workspaceLabel: 'Pressure Laboratory',
+    navigation: internalNavigation('Pressure Lab', true),
+    allowedViews: Object.freeze([...INTERNAL_VIEWS, 'audit']),
+  }),
+  [USER_ROLES.LABORATORY_MANAGER_TEMPERATURE]: profile({
+    role: USER_ROLES.LABORATORY_MANAGER_TEMPERATURE,
+    label: 'Laboratory manager - Temperature',
+    workspaceLabel: 'Temperature Laboratory',
+    navigation: internalNavigation('Temperature Lab', true),
+    allowedViews: Object.freeze([...INTERNAL_VIEWS, 'audit']),
   }),
   [USER_ROLES.TECHNICAL_SIGNATORY]: profile({
     role: USER_ROLES.TECHNICAL_SIGNATORY,
@@ -266,6 +296,20 @@ export const ROLE_PROFILES = Object.freeze({
       headline: 'Customer activity and unit demand.',
       description: 'Review representative workload, RFQ movement and product quantities without exposing protected pricing.',
       queue: 'Sales overview',
+    },
+  }),
+  [USER_ROLES.BRANCH_MANAGER]: profile({
+    role: USER_ROLES.BRANCH_MANAGER,
+    label: 'Branch manager',
+    workspaceLabel: 'Branch overview',
+    navigation: representativeOrderNavigation('Branch', true),
+    allowedViews: Object.freeze([...REPRESENTATIVE_ORDER_VIEWS, 'audit']),
+    commercialReporting: { representativeFilterLabel: 'Branch representative' },
+    dashboard: {
+      eyebrow: 'Branch management',
+      headline: 'Your branch activity in one place.',
+      description: 'Review authorised branch customers, RFQs, orders, exceptions and performance without company-wide access.',
+      queue: 'Branch overview',
     },
   }),
   [USER_ROLES.COMPANY_OWNER]: profile({

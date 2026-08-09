@@ -26,7 +26,7 @@ CREATE TYPE app.user_role AS ENUM (
   'administrator'
 );
 
-CREATE TYPE app.record_status AS ENUM ('pending', 'active', 'suspended', 'archived');
+CREATE TYPE app.record_status AS ENUM ('pending', 'pending_activation', 'active', 'temporarily_locked', 'disabled', 'suspended', 'archived');
 CREATE TYPE app.enquiry_status AS ENUM ('draft', 'submitted', 'assigned_to_rep', 'under_rep_review', 'quoted', 'awaiting_customer_acceptance', 'accepted', 'cancelled', 'expired', 'converted_to_order');
 CREATE TYPE app.order_status AS ENUM (
   'awaiting_planning', 'planning_in_progress', 'planned',
@@ -101,7 +101,7 @@ ALTER TABLE app.companies
 CREATE TABLE app.users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   username citext UNIQUE,
-  email citext NOT NULL UNIQUE,
+  email citext UNIQUE,
   display_name text NOT NULL,
   phone text,
   branch_id uuid REFERENCES app.branches(id),
@@ -118,7 +118,8 @@ CREATE TABLE app.users (
   deleted_at timestamptz,
   CONSTRAINT users_password_or_external_identity CHECK (
     password_hash IS NOT NULL OR (identity_provider IS NOT NULL AND external_subject IS NOT NULL)
-  )
+  ),
+  CONSTRAINT users_login_identifier_required CHECK (email IS NOT NULL OR username IS NOT NULL)
 );
 
 CREATE TABLE app.administration_step_up_sessions (
@@ -2499,5 +2500,146 @@ CREATE TRIGGER technical_support_messages_immutable BEFORE UPDATE OR DELETE ON a
 CREATE TRIGGER technical_support_status_events_immutable BEFORE UPDATE OR DELETE ON app.technical_support_status_events FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
 CREATE TRIGGER quotation_due_adjustments_immutable BEFORE UPDATE OR DELETE ON app.quotation_due_date_adjustments FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
 CREATE TRIGGER technical_support_overrides_immutable BEFORE UPDATE OR DELETE ON app.technical_support_overrides FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+
+-- Reusable internal employee and authentication lifecycle model.
+CREATE TABLE app.departments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), code text NOT NULL UNIQUE, name text NOT NULL,
+  is_active boolean NOT NULL DEFAULT true, created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE app.internal_staff_profiles (
+  user_id uuid PRIMARY KEY REFERENCES app.users(id), first_name text NOT NULL, surname text,
+  display_name text NOT NULL, employee_number text UNIQUE, last_working_date date,
+  first_login_completed_at timestamptz, archived_at timestamptz, metadata jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE TABLE app.user_branch_assignments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES app.users(id), branch_id uuid NOT NULL REFERENCES app.branches(id),
+  effective_from date NOT NULL, effective_to date, reason text NOT NULL CHECK (length(trim(reason)) >= 8),
+  assigned_by uuid NOT NULL REFERENCES app.users(id), created_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (effective_to IS NULL OR effective_to >= effective_from)
+);
+CREATE TABLE app.user_department_assignments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES app.users(id), department_id uuid NOT NULL REFERENCES app.departments(id),
+  effective_from date NOT NULL, effective_to date, reason text NOT NULL CHECK (length(trim(reason)) >= 8),
+  assigned_by uuid NOT NULL REFERENCES app.users(id), created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE app.authentication_methods (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES app.users(id),
+  method text NOT NULL CHECK (method IN ('password','microsoft_entra_id','active_directory','approved_external_provider')),
+  provider_subject text, password_hash text, is_primary boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now(), revoked_at timestamptz,
+  CHECK (password_hash IS NOT NULL OR provider_subject IS NOT NULL)
+);
+CREATE TABLE app.account_activation_tokens (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES app.users(id), token_hash text NOT NULL UNIQUE,
+  expires_at timestamptz NOT NULL, consumed_at timestamptz, created_by uuid REFERENCES app.users(id), created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE app.password_reset_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES app.users(id), token_hash text NOT NULL UNIQUE,
+  requested_by uuid REFERENCES app.users(id), expires_at timestamptz NOT NULL, consumed_at timestamptz, invalidated_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE app.user_preferences (
+  user_id uuid PRIMARY KEY REFERENCES app.users(id), notification_preferences jsonb NOT NULL DEFAULT '{}'::jsonb,
+  app_preferences jsonb NOT NULL DEFAULT '{}'::jsonb, security_preferences jsonb NOT NULL DEFAULT '{}'::jsonb,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE app.user_profile_images (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES app.users(id), storage_object_key text NOT NULL,
+  media_type text NOT NULL CHECK (media_type IN ('image/jpeg','image/png','image/webp')), byte_size integer NOT NULL CHECK (byte_size BETWEEN 1 AND 2097152),
+  width integer NOT NULL CHECK (width BETWEEN 96 AND 4096), height integer NOT NULL CHECK (height BETWEEN 96 AND 4096),
+  scan_status app.scan_status NOT NULL DEFAULT 'pending', uploaded_by uuid NOT NULL REFERENCES app.users(id), created_at timestamptz NOT NULL DEFAULT now(), replaced_at timestamptz
+);
+CREATE TABLE app.account_status_history (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, user_id uuid NOT NULL REFERENCES app.users(id),
+  previous_status app.record_status, new_status app.record_status NOT NULL, reason text NOT NULL CHECK (length(trim(reason)) >= 8),
+  changed_by uuid NOT NULL REFERENCES app.users(id), changed_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE app.user_audit_events (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, user_id uuid NOT NULL REFERENCES app.users(id), event_type text NOT NULL,
+  previous_value jsonb, new_value jsonb, fields_changed text[] NOT NULL DEFAULT '{}', reason text,
+  actor_user_id uuid REFERENCES app.users(id), actor_role text NOT NULL, request_id text NOT NULL, correlation_id text NOT NULL,
+  occurred_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TRIGGER user_audit_events_immutable BEFORE UPDATE OR DELETE ON app.user_audit_events FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+
+-- Client visit, appointment, privacy and location-verification proposal.
+CREATE TABLE app.client_visit_requirements (
+  company_id uuid PRIMARY KEY REFERENCES app.companies(id), default_visit_cycle_days integer NOT NULL DEFAULT 30 CHECK (default_visit_cycle_days >= 7),
+  advance_reminder_days integer NOT NULL DEFAULT 7 CHECK (advance_reminder_days >= 1), location_event_retention_days integer NOT NULL DEFAULT 90,
+  routine_location_analytics_enabled boolean NOT NULL DEFAULT false, updated_by uuid REFERENCES app.users(id), updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE app.office_locations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), branch_id uuid NOT NULL REFERENCES app.branches(id), address text NOT NULL,
+  latitude numeric(9,6) NOT NULL CHECK (latitude BETWEEN -90 AND 90), longitude numeric(9,6) NOT NULL CHECK (longitude BETWEEN -180 AND 180),
+  geofence_radius_metres integer NOT NULL CHECK (geofence_radius_metres >= 25), time_zone text NOT NULL, working_hours jsonb NOT NULL,
+  active boolean NOT NULL DEFAULT true, created_by uuid REFERENCES app.users(id), created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE app.customer_locations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL REFERENCES app.companies(id), address text NOT NULL,
+  latitude numeric(9,6) NOT NULL, longitude numeric(9,6) NOT NULL, geofence_radius_metres integer NOT NULL CHECK (geofence_radius_metres >= 25),
+  active boolean NOT NULL DEFAULT true, configured_by uuid REFERENCES app.users(id), created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE app.working_hour_policies (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), branch_id uuid REFERENCES app.branches(id), employee_group text,
+  days_of_week smallint[] NOT NULL, start_local time NOT NULL, end_local time NOT NULL, time_zone text NOT NULL,
+  effective_from date NOT NULL, effective_to date, active boolean NOT NULL DEFAULT true, CHECK (end_local > start_local)
+);
+CREATE TABLE app.client_appointments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL REFERENCES app.companies(id), representative_user_id uuid NOT NULL REFERENCES app.users(id),
+  branch_id uuid NOT NULL REFERENCES app.branches(id), customer_location_id uuid REFERENCES app.customer_locations(id), scheduled_at timestamptz NOT NULL,
+  expected_duration_minutes integer NOT NULL CHECK (expected_duration_minutes BETWEEN 15 AND 480), purpose text NOT NULL, customer_contact text NOT NULL,
+  address text NOT NULL, agenda text, notes text, status text NOT NULL CHECK (status IN ('scheduled','in_progress','completed','missed_visit','cancelled')),
+  created_by uuid NOT NULL REFERENCES app.users(id), created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE app.client_visits (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), appointment_id uuid NOT NULL REFERENCES app.client_appointments(id), company_id uuid NOT NULL REFERENCES app.companies(id),
+  representative_user_id uuid NOT NULL REFERENCES app.users(id), started_at timestamptz, completed_at timestamptz, duration_minutes integer,
+  verification_status text NOT NULL CHECK (verification_status IN ('unverified','partially_verified','verified','exception_review')),
+  verification_score integer NOT NULL DEFAULT 0, completion_notes text, created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE app.visit_verification_events (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, visit_id uuid REFERENCES app.client_visits(id), appointment_id uuid NOT NULL REFERENCES app.client_appointments(id),
+  event_type text NOT NULL, actor_user_id uuid REFERENCES app.users(id), actor_role text NOT NULL, evidence jsonb NOT NULL DEFAULT '{}'::jsonb,
+  request_id text NOT NULL, correlation_id text NOT NULL, occurred_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE app.visit_geofence_checks (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, appointment_id uuid NOT NULL REFERENCES app.client_appointments(id), representative_user_id uuid NOT NULL REFERENCES app.users(id),
+  permission_status text NOT NULL CHECK (permission_status IN ('enabled','disabled','denied','unavailable')), measured_distance_metres numeric,
+  approved_radius_metres integer, matched boolean, coordinate_ciphertext bytea, checked_at timestamptz NOT NULL DEFAULT now(), retention_until timestamptz NOT NULL
+);
+CREATE TABLE app.visit_customer_confirmations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), appointment_id uuid NOT NULL REFERENCES app.client_appointments(id), customer_user_id uuid REFERENCES app.users(id),
+  confirmation_method text NOT NULL CHECK (confirmation_method IN ('manual','same_geofence','qr')), confirmed_at timestamptz NOT NULL DEFAULT now(), evidence jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE TABLE app.visit_qr_tokens (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), appointment_id uuid NOT NULL REFERENCES app.client_appointments(id), company_id uuid NOT NULL REFERENCES app.companies(id),
+  token_hash text NOT NULL UNIQUE, expires_at timestamptz NOT NULL, used_at timestamptz, used_by uuid REFERENCES app.users(id), created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE app.representative_location_events (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, representative_user_id uuid NOT NULL REFERENCES app.users(id), event_category text NOT NULL,
+  office_location_id uuid REFERENCES app.office_locations(id), customer_location_id uuid REFERENCES app.customer_locations(id), collected_at timestamptz NOT NULL,
+  retention_until timestamptz NOT NULL, authorisation_basis text NOT NULL, approximate_data jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE TABLE app.representative_workday_summaries (
+  representative_user_id uuid NOT NULL REFERENCES app.users(id), work_date date NOT NULL, office_minutes integer NOT NULL DEFAULT 0,
+  client_minutes integer NOT NULL DEFAULT 0, field_minutes integer NOT NULL DEFAULT 0, unclassified_minutes integer NOT NULL DEFAULT 0,
+  unavailable_minutes integer NOT NULL DEFAULT 0, generated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (representative_user_id, work_date)
+);
+CREATE TABLE app.visit_compliance_metrics (
+  representative_user_id uuid NOT NULL REFERENCES app.users(id), period_start date NOT NULL, period_end date NOT NULL,
+  assigned_customers integer NOT NULL, verified_visits integer NOT NULL, missed_visits integer NOT NULL, overdue_customers integer NOT NULL,
+  compliance_percentage numeric(5,2) NOT NULL, generated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (representative_user_id, period_start, period_end)
+);
+CREATE TABLE app.missed_visit_events (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, appointment_id uuid NOT NULL REFERENCES app.client_appointments(id), detected_at timestamptz NOT NULL,
+  reason text, rescheduled_appointment_id uuid REFERENCES app.client_appointments(id), representative_note text, reviewed_by uuid REFERENCES app.users(id), reviewed_at timestamptz
+);
+ALTER TABLE app.client_appointments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.client_visits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.visit_verification_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.customer_locations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY client_appointments_company_scope ON app.client_appointments USING (app.can_access_company(company_id)) WITH CHECK (app.can_access_company(company_id));
+CREATE POLICY client_visits_company_scope ON app.client_visits USING (app.can_access_company(company_id)) WITH CHECK (app.can_access_company(company_id));
+CREATE TRIGGER visit_verification_events_immutable BEFORE UPDATE OR DELETE ON app.visit_verification_events FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+CREATE TRIGGER missed_visit_events_immutable BEFORE UPDATE OR DELETE ON app.missed_visit_events FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
 
 COMMIT;

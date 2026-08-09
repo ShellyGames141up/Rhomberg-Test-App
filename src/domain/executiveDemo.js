@@ -139,6 +139,36 @@ export const EXECUTIVE_DEMO_SCENARIOS = Object.freeze([
       'Management reporting reflects response time and outcome',
     ]),
   }),
+  Object.freeze({
+    id: 'sales-representative-client-visit',
+    label: 'Sales Representative Client Visit',
+    summary: 'A fabricated appointment progresses through consented geofence and customer confirmation to a verified visit.',
+    steps: Object.freeze([
+      'Representative opens Clients and reviews the monthly overview',
+      'A customer is shown as due for a visit',
+      'Representative schedules a linked appointment',
+      'Representative starts the visit at the fabricated customer location',
+      'A consented fabricated geofence check matches',
+      'Customer confirmation or one-time QR verification is recorded',
+      'Representative completes the visit',
+      'Verification evidence is scored and preserved',
+      'Sales Manager compliance updates',
+    ]),
+  }),
+  Object.freeze({
+    id: 'missed-client-visit',
+    label: 'Missed Client Visit',
+    summary: 'An expired appointment becomes an immutable exception and is rescheduled without overwriting history.',
+    steps: Object.freeze([
+      'Representative schedules a fabricated appointment',
+      'The appointment expires without valid verification',
+      'The service records a missed_visit event',
+      'Representative receives an in-app warning',
+      'Sales Manager opens the missed-visit exception',
+      'Representative supplies the reason and rescheduled date',
+      'The original appointment remains in the audit history',
+    ]),
+  }),
 ]);
 
 export const EXECUTIVE_DEMO_ROLES = Object.freeze([

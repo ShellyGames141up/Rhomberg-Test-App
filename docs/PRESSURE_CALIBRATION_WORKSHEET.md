@@ -1,5 +1,11 @@
 # Pressure calibration worksheet
 
-The structured Pressure worksheet records method family, unit, range, resolution, reference-standard IDs, environmental conditions, increasing/decreasing direction, applied value, reference correction and repeat readings. Derived mean, corrected mean, indication error, correction, repeatability and percent-full-scale values are read-only.
+Every Pressure method uses three visibly separated cycles in this exact order:
 
-The three Pressure method families are selectable only when the branch, range and approved reference standard match. Master-gauge, 700 bar DWT and 250 MPa DWT methods are never interchangeable. Saving creates a revision; calculating locks that revision. A correction creates a later revision and never overwrites the prior evidence.
+1. Increasing 1-6.
+2. Repeatability 1-5.
+3. Decreasing 1-5.
+
+The service rejects any worksheet that does not contain exactly 6/5/5 records. Each point can store nominal pressure, actual/reference pressure, UUT indication, correction, error, reference standard, environmental conditions, technician, timestamp, calculation and uncertainty result. Calculated worksheets lock; corrections create a revision and immutable audit event.
+
+Legacy workbook formulas and external reliability links remain management-review warnings. Production use requires approved method/range mappings and historical comparison datasets.

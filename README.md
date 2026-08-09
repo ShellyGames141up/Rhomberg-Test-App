@@ -1,10 +1,18 @@
 # Rhomberg Connect - IT Handover Repository
 
+## Secure employee account management
+
+The Administrator desktop now includes a reusable Internal User Directory with branch, department, role and status filters; employee creation; multi-role workspace assignments; effective-dated branch transfers; username-only Laboratory logins; one-time temporary credentials; forced first-login password changes; login and immutable audit history; profile-image validation; account disabling; and safe employee archiving. Real staff identities remain in an ignored private configuration file and never appear in GitHub Pages demo logins or the public bundle.
+
 Functional application and workflow implementation is complete in mock mode. Production infrastructure and backend integration remain subject to IT review and staging deployment.
+
+The latest update adds corrected Laboratory worksheets and secure Sales client-visit management. Pressure calibration now enforces 6 Increasing, 5 Repeatability and 5 Decreasing points. Temperature technicians can add, duplicate and reorder any number of calibration points, with at least six paired Reference Standard/UUT readings, actual timestamps, ambient/immersion/stabilisation evidence and controlled post-calculation corrections. The supplied Pressure/Temperature workbooks and Digital/Mechanical thermometer procedures were reviewed; unresolved external formulas remain clearly blocked for Laboratory Management and Technical Signatory approval.
+
+Sales Representatives now have a responsive **Clients** workspace with assigned-customer isolation, monthly visit health, appointment scheduling, advance reminders, overdue and missed-visit handling, consented fabricated geofence checks, customer confirmation and short-lived one-time QR verification. Sales Managers receive visit-compliance and exception reporting. Administrators can configure fabricated office locations and visit-cycle policy. Public mock mode never enables routine GPS collection, and production location processing remains disabled pending formal Rhomberg, IT, HR/legal and privacy approval.
 
 This repository contains the shared React implementation for **Rhomberg Connect**, including its customer and internal role-specific workspaces. The GitHub Pages site is a demonstration environment that uses fabricated browser-local records. It is not a production system and must not receive real customer, employee, pricing, credential or infrastructure data.
 
-The official experience now includes refined responsive Rhomberg Connect logo assets, a professional startup splash, one-time customer welcome, isolated guided customer tutorial, optional UI sounds/mobile haptics, restrained micro-interactions and a dedicated service-backed Settings area for every user role. Customer-defined application colours and company-logo branding have been removed; Light, Dark, System and approved accessibility options use the protected official design system.
+The official experience now includes refined responsive Rhomberg Connect logo assets, a professional startup splash, one-time customer welcome, an interactive isolated fake-RFQ tutorial, varied adjustable UI sounds/mobile haptics, restrained micro-interactions and a dedicated service-backed Settings area for every user role. Customer-defined application colours and company-logo branding have been removed; Light, Dark, System and approved accessibility options use the protected official design system. A customer's first authorised representative choice is remembered at company level and reused on later RFQs.
 
 ## Application Previews
 
@@ -27,7 +35,7 @@ The official experience now includes refined responsive Rhomberg Connect logo as
 
 ## Project Status
 
-- Version: `5.0.0`
+- Version: `5.1.0`
 - Handover scope: executive demonstration and Innovate IT technical review
 - Front end: React 19 and shared CSS
 - Current public service: browser-local mock adapter
@@ -38,9 +46,28 @@ The official experience now includes refined responsive Rhomberg Connect logo as
 - Email and push: simulated only
 - Production deployment: not started
 - Current `main` scope: representative-loaded customer orders, controlled Laboratory calibration and RFQ Technical Support are integrated in mock mode
-- Current verification: 84 React source files compile; final test and preview-build results are recorded at phase completion
+- Current verification: 90 React source files compile; final test and preview-build results are recorded at phase completion
 
 ## Current Updates
+
+### Laboratory worksheets and Sales client visits
+
+- Pressure worksheets use the required 6 Increasing + 5 Repeatability + 5 Decreasing structure.
+- Temperature worksheets support dynamic points, six-or-more paired readings, timestamps, ambient conditions, immersion depth, stabilisation evidence, interval review and immutable calculated revisions.
+- The private workbook review records sheet protection, formulas, inputs, outputs, external links and unresolved errors without publishing source workbooks or credentials.
+- Representative Clients shows assigned customers only, green/amber/red monthly visit health, activity measures and linked appointment history on mobile and desktop.
+- Visit verification combines appointment, explicit geofence check, customer confirmation or one-time QR, start/end time and duration. GPS alone cannot automatically verify a visit or drive disciplinary action.
+- Sales Manager compliance includes visited, scheduled, missed, overdue, average frequency/duration and approximate fabricated working-location summaries.
+- Administrator Locations manages branch offices, coordinates, radius, working hours and visit-cycle settings through audited service actions.
+- API `0.9.0` and the PostgreSQL proposal include appointment, verification, QR, location, retention and compliance entities. No production connection or real location tracking is active.
+- See [Workbook Review 2](docs/LAB_WORKBOOK_REVIEW_2.md), [Calculation Comparison 2](docs/LAB_CALCULATION_COMPARISON_2.md), [Temperature Worksheet](docs/TEMPERATURE_CALIBRATION_WORKSHEET.md), [Pressure Worksheet](docs/PRESSURE_CALIBRATION_WORKSHEET.md), [Rep Client Visits](docs/SALES_REP_CLIENT_VISITS.md), [Manager Compliance](docs/SALES_MANAGER_VISIT_COMPLIANCE.md) and [Location Privacy](docs/REP_LOCATION_AND_VISIT_PRIVACY.md).
+
+### Interactive customer experience
+
+- The customer tutorial now requires the user to perform a complete fabricated journey: Catalogue → Pressure → PBG → Configure → RFQ details → Review → Submit → Tracking.
+- Tutorial actions are highlighted and progress only after the required interaction. The fake `RQ-TUTORIAL-0001` record never calls the operational RFQ service and cannot enter customer history, representative queues, notifications, reports or audit history.
+- UI feedback now has louder adjustable defaults and small randomised tone variants for navigation, primary/secondary actions, selections, toggles and tutorial steps, while warnings, errors, success and RFQ submissions remain distinct.
+- The first genuine representative selected by a customer is stored as the authoritative company assignment. Later RFQ forms reload and display that representative automatically; audited management reassignment remains available.
 
 ### RFQ Technical Support
 

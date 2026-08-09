@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Rhomberg Instruments Private-Cloud API
-  version: 0.8.0-proposed
+  version: 0.9.0-proposed
   description: |
     Proposed production contract for the completed RFQ-to-order workflow.
     No production service or database is connected. All examples are fabricated.
@@ -101,7 +101,7 @@ paths:
       operationId: getRegistrationReferenceData
       responses:
         '200':
-          description: Registration, branch and representative options
+          description: Registration, branch and representative options. An authenticated customer also receives the authoritative remembered company representative.
           content:
             application/json:
               schema:
@@ -990,8 +990,8 @@ paths:
               type: object
               required: [step, tutorialKind, completed]
               properties:
-                step: { type: integer, minimum: 0, maximum: 12 }
-                tutorialKind: { type: string, enum: [full, submit-rfq, track-rfq, notifications, profile-settings] }
+                step: { type: integer, minimum: 0, maximum: 11 }
+                tutorialKind: { type: string, enum: [full, catalogue, rfq, tracking] }
                 completed: { type: boolean }
       responses:
         '200':
@@ -3107,6 +3107,286 @@ paths:
           description: Authorised aggregate Technical Support measures
           content: { application/json: { schema: { type: object, additionalProperties: true } } }
 
+  /admin/users:
+    get:
+      operationId: listInternalUsers
+      summary: Search the sanitised internal user directory
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: branchId, in: query, schema: { type: string, format: uuid } }
+        - { name: departmentId, in: query, schema: { type: string, format: uuid } }
+        - { name: role, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [pending_activation, active, temporarily_locked, disabled, suspended, archived] } }
+      responses:
+        '200': { description: Permission and branch scoped user directory }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createInternalUser
+      summary: Create an auditable internal employee identity
+      description: Requires an email or username. No password, hash or token is accepted in the durable employee payload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [firstName, displayName, branchId, department, primaryRole, authenticationType, activationMethod, reason]
+              properties:
+                firstName: { type: string, minLength: 2 }
+                surname: { type: string }
+                displayName: { type: string, minLength: 2 }
+                email: { type: string, format: email }
+                username: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$' }
+                branchId: { type: string, format: uuid }
+                department: { type: string }
+                primaryRole: { type: string }
+                additionalRoles: { type: array, items: { type: string }, uniqueItems: true }
+                authenticationType: { type: string, enum: [password, microsoft_entra_id, active_directory, approved_external_provider] }
+                activationMethod: { type: string, enum: [administrator_temporary_password, verified_email_invitation, identity_provider_provisioning] }
+                reason: { type: string, minLength: 8 }
+      responses:
+        '201': { description: Sanitised user and optional one-time display secret }
+        '409': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
+  /admin/users/{userId}:
+    get:
+      operationId: getInternalUser
+      summary: Return one sanitised employee profile
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      responses: { '200': { description: Authorised employee profile }, '404': { $ref: '#/components/responses/ApiError' } }
+    patch:
+      operationId: updateInternalUser
+      summary: Update approved employee identity fields and audit before/after values
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      responses: { '200': { description: Updated sanitised profile }, '422': { $ref: '#/components/responses/ApiError' } }
+  /admin/users/{userId}/roles:
+    post:
+      operationId: assignInternalUserRoles
+      summary: Replace an employee's approved multi-role assignment
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      responses: { '200': { description: Roles assigned and audited }, '409': { $ref: '#/components/responses/ApiError' } }
+  /admin/users/{userId}/roles/{roleId}:
+    delete:
+      operationId: removeInternalUserRole
+      summary: Revoke one role after active-work impact review
+      parameters:
+        - { $ref: '#/components/parameters/UserId' }
+        - { name: roleId, in: path, required: true, schema: { type: string } }
+      responses: { '204': { description: Role revoked and audited }, '409': { $ref: '#/components/responses/ApiError' } }
+  /admin/users/{userId}/branch:
+    post:
+      operationId: assignInternalUserBranch
+      summary: Record an effective-dated branch assignment and impact snapshot
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      responses: { '200': { description: Branch assignment recorded } }
+  /admin/users/{userId}/department:
+    post:
+      operationId: assignInternalUserDepartment
+      summary: Record an effective-dated department assignment
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      responses: { '200': { description: Department assignment recorded } }
+  /admin/users/{userId}/temporary-password:
+    post:
+      operationId: generateInternalUserTemporaryPassword
+      summary: Generate a one-time temporary credential after step-up verification
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      responses: { '200': { description: One-time display response; credential is never returned again } }
+  /admin/users/{userId}/force-password-reset:
+    post:
+      operationId: forceInternalUserPasswordReset
+      summary: Invalidate sessions and require a password change
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      responses: { '202': { description: Reset requirement recorded and audited } }
+  /admin/users/{userId}/activate:
+    post:
+      operationId: activateInternalUser
+      summary: Activate an eligible employee account
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      responses: { '200': { description: Account activated and audited } }
+  /admin/users/{userId}/disable:
+    post:
+      operationId: disableInternalUser
+      summary: Disable login after step-up confirmation
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      responses: { '200': { description: Account disabled and sessions revoked } }
+  /admin/users/{userId}/enable:
+    post:
+      operationId: enableInternalUser
+      summary: Re-enable an approved account
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      responses: { '200': { description: Account enabled and audited } }
+  /admin/users/{userId}/archive:
+    post:
+      operationId: archiveInternalUser
+      summary: Archive an employee while preserving ownership and history
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      responses: { '200': { description: Employee archived }, '409': { $ref: '#/components/responses/ApiError' } }
+  /admin/users/{userId}/audit:
+    get:
+      operationId: getInternalUserAudit
+      summary: Return immutable authorised user audit history
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      responses: { '200': { description: Sanitised immutable history } }
+  /admin/users/{userId}/login-history:
+    get:
+      operationId: getInternalUserLoginHistory
+      summary: Return security-safe login outcomes without credential data
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      responses: { '200': { description: Permission-controlled login history } }
+  /admin/users/{userId}/profile-image:
+    post:
+      operationId: uploadInternalUserProfileImage
+      summary: Upload a private validated staff profile image
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      responses: { '201': { description: Image queued for scanning and private storage }, '415': { $ref: '#/components/responses/ApiError' } }
+  /auth/workspace:
+    post:
+      operationId: switchAssignedWorkspace
+      summary: Select one role already assigned to the current identity
+      responses: { '200': { description: Session active role changed }, '403': { $ref: '#/components/responses/Forbidden' } }
+
+  /representatives/clients:
+    get:
+      operationId: listAssignedRepresentativeClients
+      responses:
+        '200': { description: Assigned customer visit-health list; server scoped to the Representative }
+  /representatives/client-activity:
+    get:
+      operationId: getRepresentativeClientActivity
+      responses:
+        '200': { description: Monthly or custom-period client activity }
+  /representatives/appointments:
+    get:
+      operationId: listRepresentativeAppointments
+      responses:
+        '200': { description: Authorised appointments }
+  /clients/{clientId}/appointments:
+    post:
+      operationId: scheduleClientAppointment
+      parameters:
+        - { name: clientId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [scheduledAt, expectedDurationMinutes, purpose, contact, address], additionalProperties: true }
+      responses:
+        '201': { description: Appointment created and audited }
+  /appointments/{appointmentId}/start:
+    post:
+      operationId: startClientVisit
+      parameters:
+        - { name: appointmentId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Visit start recorded }
+  /appointments/{appointmentId}/location-check:
+    post:
+      operationId: recordVisitLocationCheck
+      parameters:
+        - { name: appointmentId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permissionStatus]
+              properties:
+                permissionStatus: { type: string, enum: [enabled, disabled, denied, unavailable] }
+                latitude: { type: number, minimum: -90, maximum: 90 }
+                longitude: { type: number, minimum: -180, maximum: 180 }
+      responses:
+        '200': { description: One-off consented geofence result; no background tracking }
+  /appointments/{appointmentId}/customer-confirmation:
+    post:
+      operationId: confirmRepresentativePresent
+      parameters:
+        - { name: appointmentId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Customer confirmation recorded }
+  /appointments/{appointmentId}/qr:
+    post:
+      operationId: createVisitQrToken
+      parameters:
+        - { name: appointmentId, in: path, required: true, schema: { type: string } }
+      responses:
+        '201': { description: Short-lived, one-time, customer-bound token }
+  /appointments/{appointmentId}/qr/verify:
+    post:
+      operationId: verifyVisitQrToken
+      parameters:
+        - { name: appointmentId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [token], properties: { token: { type: string } } }
+      responses:
+        '200': { description: Token consumed and verification event appended }
+        '409': { description: Token already used }
+        '410': { description: Token expired }
+  /appointments/{appointmentId}/complete:
+    post:
+      operationId: completeClientVisit
+      parameters:
+        - { name: appointmentId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Visit completed and verification score calculated }
+  /appointments/{appointmentId}/missed-reason:
+    post:
+      operationId: recordMissedVisitReason
+      parameters:
+        - { name: appointmentId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Reason/reschedule appended without changing original history }
+  /sales-manager/visit-compliance:
+    get:
+      operationId: getVisitCompliance
+      responses:
+        '200': { description: Authorised Representative compliance metrics }
+  /sales-manager/missed-visits:
+    get:
+      operationId: listMissedVisits
+      responses:
+        '200': { description: Missed visit exceptions }
+  /sales-manager/representative/{repId}/visits:
+    get:
+      operationId: listRepresentativeVisitEvidence
+      parameters:
+        - { name: repId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Authorised appointment and verification evidence }
+  /admin/locations:
+    get:
+      operationId: listOfficeLocations
+      responses:
+        '200': { description: Office location configurations }
+    post:
+      operationId: createOfficeLocation
+      responses:
+        '201': { description: Office location created and audited }
+  /admin/locations/{locationId}:
+    patch:
+      operationId: updateOfficeLocation
+      parameters:
+        - { name: locationId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Office location updated and audited }
+  /admin/visit-policy:
+    get:
+      operationId: getVisitPolicy
+      responses:
+        '200': { description: Visit-cycle, retention and working-hours policy }
+    put:
+      operationId: updateVisitPolicy
+      responses:
+        '200': { description: Visit policy updated and audited }
+  /representatives/work-location-summary:
+    get:
+      operationId: getOwnWorkLocationSummary
+      responses:
+        '200': { description: Own approximate working-hours-only summary }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -3763,6 +4043,11 @@ components:
                 properties:
                   branch: { $ref: '#/components/schemas/Branch' }
                   representatives: { type: array, items: { $ref: '#/components/schemas/Representative' } }
+            preferredRepresentative:
+              description: Authenticated customer-company assignment reused for later RFQs; null for anonymous registration requests.
+              oneOf:
+                - $ref: '#/components/schemas/Representative'
+                - type: 'null'
     ProductCategory:
       type: object
       required: [id, name]
@@ -4782,7 +5067,7 @@ components:
           properties:
             welcomeCompleted: { type: boolean }
             tutorialCompleted: { type: boolean }
-            tutorialProgress: { type: integer, minimum: 0, maximum: 12 }
+            tutorialProgress: { type: integer, minimum: 0, maximum: 11 }
             tutorialKind: { type: string }
         roleNotifications:
           type: object

@@ -20,11 +20,16 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
   const submissionKey = useRef(globalThis.crypto?.randomUUID?.() || `rfq-form-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   const totalQuantity = lines.reduce((sum, line) => sum + line.quantity, 0);
   const repSelection = useMemo(() => areaDirectory[area] || { branch: registrationOptions?.branches?.[0] || {}, representatives: [] }, [area, areaDirectory, registrationOptions]);
+  const preferredRepresentative = registrationOptions?.preferredRepresentative || null;
   const nearestBranch = repSelection.branch;
 
   useEffect(() => {
+    if (preferredRepresentative?.id) {
+      setSelectedRepId(preferredRepresentative.id);
+      return;
+    }
     if (selectedRepId && !repSelection.representatives.some(representative => representative.id === selectedRepId)) setSelectedRepId('');
-  }, [repSelection, selectedRepId]);
+  }, [preferredRepresentative, repSelection, selectedRepId]);
 
   const selectPoFile = event => {
     const file = event.target.files?.[0] || null;
@@ -81,7 +86,9 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
       return;
     }
 
-    const selectedRepresentative = repSelection.representatives.find(representative => representative.id === selectedRepId);
+    const selectedRepresentative = preferredRepresentative?.id === selectedRepId
+      ? preferredRepresentative
+      : repSelection.representatives.find(representative => representative.id === selectedRepId);
     setIsSubmitting(true);
     let result;
     try {
@@ -117,7 +124,7 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
     form.reset();
     setPoMode('none');
     setPoFile(null);
-    setSelectedRepId('');
+    setSelectedRepId(preferredRepresentative?.id || '');
     setFulfilment('');
     submissionKey.current = globalThis.crypto?.randomUUID?.() || `rfq-form-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   };
@@ -155,7 +162,7 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
           <div className="rep-selection-card">
             <span className="rep-branch-mark">R</span>
             <div className="rep-selection-copy"><small>Representatives for your nearest branch</small><strong>{repSelection.branch.name}</strong><p>Only representatives assigned to this branch are shown.</p></div>
-            <label className="form-field rep-select"><span>Select your representative</span><select required value={selectedRepId} onChange={event => setSelectedRepId(event.target.value)}><option value="" disabled>Choose a representative</option>{repSelection.representatives.map(representative => <option key={representative.id} value={representative.id}>{representative.name} · Code {representative.code}</option>)}</select></label>
+            <label className="form-field rep-select"><span>{preferredRepresentative ? 'Your remembered representative' : 'Select your representative'}</span><select required value={selectedRepId} disabled={Boolean(preferredRepresentative)} onChange={event => setSelectedRepId(event.target.value)}><option value="" disabled>Choose a representative</option>{preferredRepresentative && !repSelection.representatives.some(item => item.id === preferredRepresentative.id) && <option value={preferredRepresentative.id}>{preferredRepresentative.name} · Code {preferredRepresentative.code}</option>}{repSelection.representatives.map(representative => <option key={representative.id} value={representative.id}>{representative.name} · Code {representative.code}</option>)}</select>{preferredRepresentative && <small className="remembered-representative-note">Remembered for your company. An authorised manager can change this assignment if needed.</small>}</label>
           </div>
 
           <fieldset className="rfq-choice-field fulfilment-field">
@@ -185,11 +192,11 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
 
         <section className="enquiry-section submit-panel">
           <div className="client-summary"><span className="client-avatar">{account.company.slice(0, 1)}</span><div><strong>{account.company}</strong><small>{account.contact} · {account.email} · {account.phone}</small></div></div>
-          <label className="consent-row"><input type="checkbox" required /><span>{deliverySettings?.emailRecipient ? 'I confirm this is an RFQ and agree that these details, the structured RFQ PDF and any PO attachment may be emailed to Rhomberg through the test delivery service.' : 'I confirm this is an RFQ and agree that these details and any PO attachment may be securely submitted to Rhomberg for processing.'}</span></label>
+          <label className="consent-row"><input type="checkbox" required /><span>{deliverySettings?.emailRecipient ? 'I confirm this is an RFQ and agree that these details and any PO attachment may be submitted through the mock Rhomberg workflow. No real email is sent in public demo mode.' : 'I confirm this is an RFQ and agree that these details and any PO attachment may be securely submitted to Rhomberg for processing.'}</span></label>
           {error && <p className="form-error submit-error" role="alert">{error}</p>}
           {fallbackUrl && <a className="email-fallback" href={fallbackUrl}>Open my email app with this RFQ summary <span>→</span></a>}
           <button className="primary-button full submit-enquiry" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Submitting RFQ…' : 'Submit RFQ'} <span>{isSubmitting ? '•••' : '→'}</span></button>
-          <p className="preview-submit-note">{deliverySettings?.emailRecipient ? <>Test RFQs are sent to {deliverySettings.emailRecipient}. The protected service adds rep-only price-list estimates to the PDF; the public fallback never exposes pricing to the client.</> : <>RFQs are submitted to the private company service and routed according to the customer’s authorised company and representative assignment.</>}</p>
+          <p className="preview-submit-note">{deliverySettings?.emailRecipient ? <>Public demo delivery is simulated through the {deliverySettings.emailRecipient}. Real recipient addresses and private pricing remain server-side.</> : <>RFQs are submitted to the private company service and routed according to the customer’s authorised company and representative assignment.</>}</p>
         </section>
       </form>
 
@@ -223,7 +230,7 @@ function SuccessDialog({ success, onClose, persistenceLabel }) {
         <p>Your RFQ has been permanently saved in {persistenceLabel} and placed in <strong>{success.representative}</strong>’s representative inbox.{success.emailFailed ? ' The optional test email delivery still needs attention.' : ''}</p>
         <strong className="success-reference">{success.reference}</strong>
         <p className="success-routing-note">Submitted {new Date(success.submittedAt).toLocaleString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} · You can track this reference from your account.</p>
-        {success.pricedPdfAttached ? <p className="priced-pdf-note"><span>PDF</span> A protected rep-only PDF with internal price-list estimates was attached.</p> : !success.emailFailed && <p className="activation-note"><span>i</span> The public test fallback sent an unpriced RFQ PDF. Pricing remains private and must be added by the protected service.</p>}
+        {success.pricedPdfAttached ? <p className="priced-pdf-note"><span>PDF</span> A protected rep-only PDF with internal price-list estimates was attached.</p> : !success.emailFailed && <p className="activation-note"><span>i</span> Public demo delivery was simulated. No real email was sent, and private pricing was not exposed.</p>}
         {success.warning && <p className="activation-note"><span>!</span>{success.warning}</p>}
         {success.fallbackUrl && <a className="email-fallback" href={success.fallbackUrl}>Open my email app with the saved RFQ <span>→</span></a>}
         {success.activationMayBeRequired && <p className="activation-note"><span>i</span> First test only: open the FormSubmit activation email in {success.recipient}. Once confirmed, the queued RFQ will be forwarded.</p>}

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createMockServices } from '../src/services/mock/createMockServices.js';
 import { DEMO_ACCOUNT, LAB_ACCOUNT, LAB_MANAGER_ACCOUNT } from '../src/services/mock/seedData.js';
 import { ServiceError } from '../src/services/contracts.js';
+import { PRESSURE_POINT_SEQUENCE } from '../src/domain/laboratoryCalibration.js';
 
 class TestStorage { constructor() { this.values = new Map(); } getItem(key) { return this.values.get(key) ?? null; } setItem(key, value) { this.values.set(key, String(value)); } removeItem(key) { this.values.delete(key); } }
 const services = createMockServices({ storage: new TestStorage(), now: () => new Date('2026-08-03T10:00:00.000Z') });
@@ -22,7 +23,7 @@ await services.laboratory.inspect(order.id, unit.id, { outcome: 'no_visible_defe
 await services.laboratory.bookIn(order.id, unit.id, { instrumentDescription: 'Fabricated pressure indicator', manufacturer: 'Fabricated manufacturer', serialNumber: 'DEMO-LAB-001', rangeMinimum: 0, rangeMaximum: 700, unit: 'bar', resolution: 0.01, methodId: 'pressure_dwt_700_bar', sanasOrTraceable: 'sanas' });
 await services.laboratory.saveWorksheet(order.id, unit.id, {
   methodId: 'pressure_dwt_700_bar', standardIds: ['std-ct-dwt-700'], coverageFactor: 2, decimals: 5,
-  testPoints: [{ id: 'p1', applied: 350, direction: 'increasing', readings: [350.01, 350, 350.01, 350, 350.01] }],
+  testPoints: PRESSURE_POINT_SEQUENCE.map((point, index) => ({ ...point, applied: point.direction === 'repeatability' ? 350 : index * 40, readings: [point.direction === 'repeatability' ? 350 + index / 100 : index * 40] })),
   uncertaintyContributions: [{ source: 'Fabricated standard', uncertainty: 0.04, divisor: 2, sensitivity: 1, degreesOfFreedom: 200 }],
   environmental: { temperature: 21, humidity: 50 },
 });

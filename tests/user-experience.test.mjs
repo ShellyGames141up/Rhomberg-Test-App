@@ -6,6 +6,7 @@ import {
   notificationGroupsForRole,
   normaliseUserSettings,
   settingsSectionsForRole,
+  tutorialDraftForStep,
   TUTORIAL_STEPS,
 } from '../src/domain/userSettings.js';
 import { playUiSound, triggerHaptic } from '../src/shared/experience/feedback.js';
@@ -31,7 +32,12 @@ assert.ok(settingsSource.includes('Security & Sign-In'));
 assert.ok(settingsSource.includes('Available after production integration'));
 assert.ok(introSource.includes('animated-gauge'));
 assert.ok(onboardingSource.includes('Tutorial Example'));
-assert.equal(TUTORIAL_STEPS.length, 13);
+assert.equal(TUTORIAL_STEPS.length, 12);
+for (const requiredAction of ['Start guided RFQ', 'Catalogue', 'Choose PBG', 'Configure this unit', 'Add configured unit to RFQ', 'Review fake RFQ', 'Submit fake RFQ', 'Track this fake RFQ', 'Finish tutorial']) {
+  assert.ok(onboardingSource.includes(requiredAction), `interactive tutorial must include ${requiredAction}`);
+}
+assert.deepEqual(tutorialDraftForStep(0), { range: '', connection: '', application: '', fulfilment: '', consent: false });
+assert.equal(tutorialDraftForStep(11).application, 'Water-line pressure monitoring tutorial');
 
 for (const asset of [
   'rhomberg-connect-logo-master-transparent.png',
@@ -63,6 +69,7 @@ assert.equal(settingsSectionsForRole(USER_ROLES.DISPATCH).includes('privacy'), f
 const defaults = createDefaultUserSettings();
 assert.deepEqual(defaults.appearance.mode, 'system');
 assert.equal(defaults.sounds.enabled, true);
+assert.ok(defaults.sounds.volume >= 0.45, 'default feedback should be clearly audible while remaining user-adjustable');
 assert.equal(defaults.haptics.enabled, true);
 assert.equal(playUiSound({ ...defaults, sounds: { ...defaults.sounds, enabled: false } }, 'success'), false);
 assert.equal(triggerHaptic({ ...defaults, haptics: { ...defaults.haptics, enabled: false } }, 'success'), false);
@@ -77,7 +84,7 @@ await services.auth.signIn({ email: 'cape.demo@client.test', password: 'Demo123!
 const beforeRecords = await services.enquiries.list();
 let saved = await services.userSettings.save({ ...defaults, appearance: { ...defaults.appearance, mode: 'dark', increasedText: true }, sounds: { ...defaults.sounds, enabled: false } });
 saved = await services.userSettings.completeWelcome();
-saved = await services.userSettings.saveTutorialProgress({ step: 7, tutorialKind: 'quotation', completed: false });
+saved = await services.userSettings.saveTutorialProgress({ step: 7, tutorialKind: 'rfq', completed: false });
 assert.equal(saved.onboarding.welcomeCompleted, true);
 assert.equal(saved.onboarding.tutorialProgress, 7);
 assert.equal(saved.appearance.mode, 'dark');

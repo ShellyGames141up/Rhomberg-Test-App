@@ -34,6 +34,7 @@ export function Settings({
   serviceMode,
   credentialActions,
   onCredentialChanged,
+  onSwitchWorkspace,
   onSignOut,
   onSave,
   onSaveNotifications,
@@ -43,7 +44,7 @@ export function Settings({
   onTestHaptic,
   onClose,
 }) {
-  const [section, setSection] = useState('home');
+  const [section, setSection] = useState(account.forcePasswordChange ? 'security' : 'home');
   const [draft, setDraft] = useState(() => normaliseUserSettings(initialValue));
   const [notificationDraft, setNotificationDraft] = useState(notificationPreferences);
   const [busy, setBusy] = useState(false);
@@ -80,13 +81,14 @@ export function Settings({
     <div className="settings-layout">
       <nav className="settings-sidebar" aria-label="Settings categories">{sections.map(id => <button key={id} type="button" className={section === id ? 'is-active' : ''} onClick={() => { setSection(id); setMessage(''); setError(''); }}><span>{SECTION_META[id][2]}</span><strong>{SECTION_META[id][0]}</strong></button>)}</nav>
       <div className="settings-content">
+        {account.forcePasswordChange && <div className="operations-message is-warning" role="alert"><strong>First login security step required.</strong> Change the temporary password before continuing. Confirm your profile, branch, department and notification preferences with your Administrator if anything is incorrect.</div>}
         {section === 'home' && <SettingsHome sections={sections.filter(id => id !== 'home')} onOpen={setSection} />}
         {section === 'app' && <AppSettings value={draft.app} onChange={values => patch('app', values)} onResetTutorial={isCustomerAccount(account) ? () => onReplayTutorial('reset') : null} />}
         {section === 'sounds' && <SoundSettings value={draft} onPatch={patch} onToggleMap={toggleMap} onTestSound={() => onTestSound(draft)} onTestHaptic={() => onTestHaptic(draft)} />}
         {section === 'notifications' && <NotificationSettings groups={notificationGroups} settings={draft} onSettings={setDraft} value={notificationDraft} onChange={setNotificationDraft} serviceMode={serviceMode} />}
         {section === 'appearance' && <AppearanceSettings value={draft.appearance} onChange={values => patch('appearance', values)} />}
         {section === 'accessibility' && <AccessibilitySettings value={draft} onPatch={patch} />}
-        {section === 'security' && <SecuritySettings account={account} actions={credentialActions} serviceMode={serviceMode} onChanged={onCredentialChanged} onSignOut={onSignOut} />}
+        {section === 'security' && <SecuritySettings account={account} actions={credentialActions} serviceMode={serviceMode} onChanged={onCredentialChanged} onSwitchWorkspace={onSwitchWorkspace} onSignOut={onSignOut} />}
         {section === 'tutorials' && <TutorialSettings account={account} serviceMode={serviceMode} onReplay={onReplayTutorial} />}
         {section === 'privacy' && <PrivacySettings serviceMode={serviceMode} />}
         {section === 'about' && <AboutSettings serviceMode={serviceMode} />}
@@ -126,9 +128,12 @@ function AccessibilitySettings({ value, onPatch }) {
   return <SettingsPanel title="Accessibility preferences"><SettingToggle label="Reduce Motion" help="Replaces movement with simple fades and disables the gauge sweep." checked={value.accessibility.reduceMotion} onChange={reduceMotion => onPatch('accessibility', { reduceMotion })} /><SettingToggle label="Disable Decorative Animations" checked={!value.accessibility.decorativeAnimations} onChange={disabled => onPatch('accessibility', { decorativeAnimations: !disabled })} /><SettingToggle label="Increase Text Size" checked={value.appearance.increasedText} onChange={increasedText => onPatch('appearance', { increasedText })} /><SettingToggle label="High Contrast" checked={value.appearance.highContrast} onChange={highContrast => onPatch('appearance', { highContrast })} /><SettingToggle label="Reduce Transparency" checked={value.appearance.reducedTransparency} onChange={reducedTransparency => onPatch('appearance', { reducedTransparency })} /><SettingToggle label="Disable UI Sounds" checked={!value.sounds.enabled} onChange={disabled => onPatch('sounds', { enabled: !disabled })} /><SettingToggle label="Disable Haptic Feedback" checked={!value.haptics.enabled} onChange={disabled => onPatch('haptics', { enabled: !disabled })} /><SettingToggle label="Screen Reader Optimisation" checked={value.accessibility.screenReaderOptimisation} onChange={screenReaderOptimisation => onPatch('accessibility', { screenReaderOptimisation })} /></SettingsPanel>;
 }
 
-function SecuritySettings({ account, actions, serviceMode, onChanged, onSignOut }) {
-  return <div className="settings-stack"><SettingsPanel title="Active session"><dl className="settings-session"><div><dt>Signed in as</dt><dd>{account.email}</dd></div><div><dt>Authentication realm</dt><dd>{account.authRealm === 'customer' ? 'Customer' : 'Internal staff'}</dd></div><div><dt>Email verification</dt><dd>Verified test identity</dd></div><div><dt>Multi-factor authentication</dt><dd>Future production integration</dd></div></dl></SettingsPanel>{actions && <CredentialChangePanel account={account} actions={actions} serviceMode={serviceMode} onChanged={onChanged} />}<button className="sign-out" type="button" onClick={onSignOut}>Sign out of Rhomberg Connect</button></div>;
+function SecuritySettings({ account, actions, serviceMode, onChanged, onSwitchWorkspace, onSignOut }) {
+  const roles = account.roles || [account.role];
+  return <div className="settings-stack"><SettingsPanel title="Active session"><dl className="settings-session"><div><dt>Signed in as</dt><dd>{account.email || account.signInName}</dd></div><div><dt>Authentication realm</dt><dd>{account.authRealm === 'customer' ? 'Customer' : 'Internal staff'}</dd></div><div><dt>Account status</dt><dd>{humaniseStatus(account.status)}</dd></div><div><dt>First-login onboarding</dt><dd>{account.forcePasswordChange ? 'Password change required' : 'Complete'}</dd></div><div><dt>Multi-factor authentication</dt><dd>Future production integration</dd></div></dl></SettingsPanel>{roles.length > 1 && <SettingsPanel title="Switch Workspace"><p>Use one identity for every role assigned to you.</p><div className="settings-inline-actions">{roles.map(role => <button type="button" className={role === account.role ? 'primary-button' : 'secondary-button'} disabled={role === account.role} key={role} onClick={() => onSwitchWorkspace(role)}>{humaniseStatus(role)}</button>)}</div></SettingsPanel>}{actions && <CredentialChangePanel account={account} actions={actions} serviceMode={serviceMode} onChanged={onChanged} />}<button className="sign-out" type="button" onClick={onSignOut}>Sign out of Rhomberg Connect</button></div>;
 }
+
+const humaniseStatus = value => String(value || '').replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 
 function TutorialSettings({ account, serviceMode, onReplay }) {
   const customer = isCustomerAccount(account);

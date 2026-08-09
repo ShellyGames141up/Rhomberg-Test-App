@@ -1,5 +1,7 @@
 # Deployment Handover
 
+Before production account import, Rhomberg and IT must approve the private 25-person roster, identity-provider design, MFA, password and lockout policy, staff verification, branch/company scope, private profile-image storage, email invitations, session revocation and offboarding integration. The public demo must continue using fabricated `.invalid` identities. Never copy `private/internal-staff.local.json`, temporary credentials or real employee emails into a static build or public CI artifact.
+
 ## Handover Status
 
 The application and workflow implementation is functionally complete in mock mode. No production deployment, database connection or infrastructure configuration has been performed.

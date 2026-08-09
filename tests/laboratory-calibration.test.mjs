@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   LAB_METHOD_IDS,
+  PRESSURE_POINT_SEQUENCE,
   assertLabTransition,
   calculateCorrection,
   calculateIndicationError,
@@ -35,11 +36,11 @@ const worksheet = calculateLaboratoryWorksheet({
   methodId: LAB_METHOD_IDS.PRESSURE_MASTER_GAUGE,
   decimals: 5,
   rangeMaximum: 10,
-  testPoints: [{ applied: 5, standardCorrection: 0, direction: 'increasing', readings: [5.01, 5, 5.01] }],
+  testPoints: PRESSURE_POINT_SEQUENCE.map((point, index) => ({ ...point, applied: index === 0 ? 5 : index, standardCorrection: 0, readings: index === 0 ? [5.01, 5, 5.01] : [index] })),
   uncertaintyContributions: [{ source: 'Fabricated standard', uncertainty: 0.04, divisor: 2, sensitivity: 1, degreesOfFreedom: 200 }],
   coverageFactor: 2,
 });
-assert.equal(worksheet.points.length, 1);
+assert.equal(worksheet.points.length, 16);
 assert.equal(worksheet.points[0].mean, 5.00667);
 assert.ok(worksheet.warnings.length > 0, 'unapproved legacy dependencies must remain visible as warnings');
 

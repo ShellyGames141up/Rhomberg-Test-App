@@ -52,12 +52,12 @@ for (const definition of PREVIEW_DEFINITIONS) {
   const page = readFileSync(path.resolve(definition.sourcePath, 'index.html'), 'utf8');
   assert.match(page, new RegExp(`<meta name="rhomberg-preview" content="${definition.id}">`));
   assert.ok(page.includes('<base href="../../">'), `${definition.id} must preserve the GitHub Pages base path`);
-  assert.ok(page.includes('app.js?v=42'), `${definition.id} must request the current application bundle`);
+  assert.ok(page.includes('app.js?v=43'), `${definition.id} must request the current application bundle`);
 }
 const rootPage = readFileSync(path.resolve('index.html'), 'utf8');
 const serviceWorker = readFileSync(path.resolve('sw.js'), 'utf8');
-assert.ok(rootPage.includes('app.js?v=42'), 'Preview Centre must request the current application bundle');
-assert.ok(serviceWorker.includes("'./app.js?v=42'"), 'service worker must cache the same application bundle version');
+assert.ok(rootPage.includes('app.js?v=43'), 'Preview Centre must request the current application bundle');
+assert.ok(serviceWorker.includes("'./app.js?v=43'"), 'service worker must cache the same application bundle version');
 const readme = readFileSync(path.resolve('README.md'), 'utf8');
 for (const definition of PREVIEW_DEFINITIONS) {
   assert.ok(readme.includes(`https://shellygames141up.github.io/Rhomberg-Test-App${definition.route}`), `README must launch ${definition.id}`);

@@ -78,6 +78,8 @@ export function createApiServices(config = {}) {
       client.setCsrfToken('');
     },
 
+    switchWorkspace: role => client.post('/auth/workspace', { role }).then(result => result.user),
+
     async getDemoLogins() {
       return [];
     },
@@ -350,6 +352,19 @@ export function createApiServices(config = {}) {
 
   const administration = {
     getOverview: () => client.get('/administration/overview'),
+    createEmployee: input => client.post('/admin/users', input),
+    assignAccountRoles: (accountId, input) => client.post(`/admin/users/${encodeURIComponent(accountId)}/roles`, input),
+    assignAccountBranch: (accountId, input) => client.post(`/admin/users/${encodeURIComponent(accountId)}/branch`, input),
+    resetUserLogin: (accountId, input) => client.post(`/admin/users/${encodeURIComponent(accountId)}/temporary-password`, input),
+    archiveEmployee: (accountId, input) => client.post(`/admin/users/${encodeURIComponent(accountId)}/archive`, input),
+    uploadEmployeeProfileImage: (accountId, file, input = {}) => {
+      const body = new FormData();
+      body.append('file', file);
+      body.append('reason', input.reason || '');
+      return client.post(`/admin/users/${encodeURIComponent(accountId)}/profile-image`, body);
+    },
+    getUserAudit: accountId => client.get(`/admin/users/${encodeURIComponent(accountId)}/audit`),
+    getUserLoginHistory: accountId => client.get(`/admin/users/${encodeURIComponent(accountId)}/login-history`),
     setAccountStatus: (accountId, input) => client.put(
       `/administration/users/${encodeURIComponent(accountId)}/status`,
       input,
@@ -520,6 +535,27 @@ export function createApiServices(config = {}) {
     getMetrics: filters => client.get('/technical-support/metrics', { query: filters }),
   };
 
+  const clientVisits = {
+    listClients: filters => client.get('/representatives/clients', { query: filters }),
+    getOverview: filters => client.get('/representatives/client-activity', { query: filters }),
+    listAppointments: filters => client.get('/representatives/appointments', { query: filters }),
+    schedule: (clientId, input) => client.post(`/clients/${encodeURIComponent(clientId)}/appointments`, input),
+    start: appointmentId => client.post(`/appointments/${encodeURIComponent(appointmentId)}/start`, {}),
+    locationCheck: (appointmentId, input) => client.post(`/appointments/${encodeURIComponent(appointmentId)}/location-check`, input),
+    customerConfirm: appointmentId => client.post(`/appointments/${encodeURIComponent(appointmentId)}/customer-confirmation`, {}),
+    createQr: appointmentId => client.post(`/appointments/${encodeURIComponent(appointmentId)}/qr`, {}),
+    verifyQr: (appointmentId, token) => client.post(`/appointments/${encodeURIComponent(appointmentId)}/qr/verify`, { token }),
+    complete: (appointmentId, input) => client.post(`/appointments/${encodeURIComponent(appointmentId)}/complete`, input),
+    detectMissed: () => client.post('/sales-manager/missed-visits/detect', {}),
+    submitMissedReason: (appointmentId, input) => client.post(`/appointments/${encodeURIComponent(appointmentId)}/missed-reason`, input),
+    getCompliance: filters => client.get('/sales-manager/visit-compliance', { query: filters }),
+    getLocations: () => client.get('/admin/locations'),
+    saveLocation: input => input.id ? client.patch(`/admin/locations/${encodeURIComponent(input.id)}`, input) : client.post('/admin/locations', input),
+    getPolicy: () => client.get('/admin/visit-policy'),
+    savePolicy: input => client.put('/admin/visit-policy', input),
+    getOwnWorkSummary: filters => client.get('/representatives/work-location-summary', { query: filters }),
+  };
+
   const personalisation = {
     get: () => client.get('/users/me/personalisation'),
     save(candidate) {
@@ -588,6 +624,7 @@ export function createApiServices(config = {}) {
     qualityAssurance,
     dispatch,
     technicalSupport,
+    clientVisits,
     personalisation,
     userSettings,
     preferences,

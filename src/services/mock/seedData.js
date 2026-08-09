@@ -23,10 +23,17 @@ export const STORE_KEYS = Object.freeze({
   credentialChallenges: 'rhombergPreviewCredentialChallengesV1',
   customerRepresentativeAssignments: 'rhombergPreviewCustomerRepresentativeAssignmentsV1',
   administrationCatalogueOverrides: 'rhombergPreviewAdministrationCatalogueOverridesV1',
+  userLoginHistory: 'rhombergPreviewUserLoginHistoryV1',
+  userProfileImages: 'rhombergPreviewUserProfileImagesV1',
   executiveDemo: 'rhombergPreviewExecutiveDemoV1',
+  clientAppointments: 'rhombergPreviewClientAppointmentsV1',
+  clientVisits: 'rhombergPreviewClientVisitsV1',
+  visitQrTokens: 'rhombergPreviewVisitQrTokensV1',
+  visitPolicy: 'rhombergPreviewVisitPolicyV1',
+  officeLocations: 'rhombergPreviewOfficeLocationsV1',
   rfqSequence: 'rhombergPreviewRfqSequenceV1',
   theme: THEME_PREFERENCE_KEY,
-  seedVersion: 'rhombergPreviewSeedV18',
+  seedVersion: 'rhombergPreviewSeedV19',
 });
 
 export const LEGACY_STORE_KEYS = Object.freeze({

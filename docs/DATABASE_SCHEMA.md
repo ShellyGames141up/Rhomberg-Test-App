@@ -1,5 +1,7 @@
 # Phase 21 database schema guide
 
+The reusable employee model adds `internal_staff_profiles`, `departments`, `user_branch_assignments`, `user_department_assignments`, `authentication_methods`, `account_activation_tokens`, `password_reset_requests`, `user_preferences`, `user_profile_images`, `account_status_history` and immutable `user_audit_events`. Existing `users`, `branches`, `roles`, `permissions`, `user_roles` and `role_permissions` remain the identity and authorisation core. Email is nullable only when an approved username exists. Real staff seed records are private import data and do not belong in this tracked schema or a public static artifact.
+
 The secure Administrator extension adds usernames and branch assignments to identities, customer-company branch assignment, short-lived step-up verification sessions, generic administrative change evidence, explicit previous/new audit values and append-only approved RFQ/order correction rows. See [ADMINISTRATOR_MANAGEMENT.md](ADMINISTRATOR_MANAGEMENT.md).
 
 The executable design proposal is [database/postgresql-schema.sql](database/postgresql-schema.sql). It is not connected to the preview and must be reviewed/migrated by IT.
@@ -33,3 +35,6 @@ The Laboratory calibration extension adds versioned `lab_methods`, branch-contro
 ## Technical Support additions
 
 The proposal adds company-scoped requests, assignments, append-only messages, attachment links, immutable status events, customer information requests, quotation due-date adjustments, reasoned overrides and reporting snapshots. RFQ/company foreign keys are mandatory. `customer_visible` and `internal_only` are server-controlled. RLS combines company scope with Representative/Technical assignment and named wider permissions. Messages, statuses, adjustments, overrides and document access remain auditable and append-only.
+# Client visit and location extension
+
+The proposed backend adds `client_visit_requirements`, `client_appointments`, `client_visits`, `visit_verification_events`, `visit_geofence_checks`, `visit_customer_confirmations`, `visit_qr_tokens`, `representative_location_events`, `representative_workday_summaries`, `office_locations`, `customer_locations`, `working_hour_policies`, `visit_compliance_metrics` and `missed_visit_events`. Verification/audit rows are append-only. Location retention is configurable; routine location events outside approved working hours are rejected server-side.

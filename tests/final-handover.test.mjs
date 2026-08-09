@@ -26,7 +26,9 @@ const storage = new TestStorage();
 const services = createMockServices({ storage, now: () => new Date('2026-07-29T09:00:00.000Z') });
 await services.initialize();
 
-assert.equal(EXECUTIVE_DEMO_SCENARIOS.length, 9);
+assert.equal(EXECUTIVE_DEMO_SCENARIOS.length, 11);
+assert.ok(EXECUTIVE_DEMO_SCENARIOS.some(item => item.id === 'sales-representative-client-visit'));
+assert.ok(EXECUTIVE_DEMO_SCENARIOS.some(item => item.id === 'missed-client-visit'));
 for (const role of [
   USER_ROLES.CUSTOMER,
   USER_ROLES.SALES_REPRESENTATIVE,

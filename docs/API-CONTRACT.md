@@ -4,6 +4,10 @@ Status: proposed contract for IT implementation. No live endpoint or database is
 
 Base path: `/api/v1`
 
+## Client visits and location verification
+
+Proposed version `0.9.0` adds assigned Representative clients, activity summaries, appointments, consented one-off geofence checks, customer confirmation, short-lived one-time QR verification, completion scoring, missed-visit reasons, Sales Manager compliance, Administrator locations/policy and own approximate work-location summaries. Production scope is always enforced server-side. No contract provides uncontrolled continuous GPS breadcrumbs.
+
 ## Production reconciliation
 
 The canonical, machine-readable contract is `docs/api/openapi.yaml` at proposed version `0.6.0`. The companion entity, constraint, index, row-level-security and audit specification is `docs/PRODUCTION_API_DATABASE_SPECIFICATION.md`.
@@ -247,6 +251,8 @@ Manager/administrator only unless a narrower assigned-company route is implement
 #### `GET /representatives?area=Gauteng`
 
 Returns active representatives eligible for the selected area/branch. The server validates that the selected representative remains valid when the RFQ is submitted.
+
+After a customer's first authorised representative choice, the company assignment is stored server-side. Authenticated `GET /reference-data/registration` responses include that `preferredRepresentative`; later RFQ forms preselect it and do not ask the customer to choose again. The RFQ submit endpoint always reloads the authoritative company assignment and ignores a conflicting browser value. Reassignment remains an audited Manager/Administrator action.
 
 ### Products
 
@@ -1026,9 +1032,27 @@ Requires `export_operational_reports` and an idempotency key. Generates an inter
 
 The web HTTP client retries only safe `GET`/`HEAD` requests once after a transient network/502/503/504 failure. Mutation retry is a higher-level decision and requires an unchanged idempotency key. Public error envelopes never expose stack, database, provider or security-policy details.
 
-The earlier placeholder `/admin/users` route list is obsolete and has been replaced by the explicit v0.6 contracts for `/users`, `/users/{userId}/roles`, `/companies/{companyId}/users`, `/roles`, `/permissions`, and `/audit-events`. This removes route ambiguity without activating an administrator UI or a live backend.
+The generic `/users` proposal remains available for ordinary current-user and company membership operations. The explicit `/admin/users` namespace owns elevated internal employee lifecycle actions so production authorisation, step-up verification and audit policy remain unambiguous.
 
 All administrative mutations require elevated permission checks, MFA-backed staff sessions, company-scope validation, expected row versions where relevant, idempotency, and audit records. Defining `administer_users`, `archive_orders`, and `restore_archived_orders` does not grant them; effective authority is calculated server-side from active role assignments and approved overrides.
+
+### Internal employee administration
+
+The canonical reusable endpoints are:
+
+- `GET /admin/users` and `GET /admin/users/{userId}` — sanitised internal directory/detail; never returns password hashes, tokens or reset secrets.
+- `POST /admin/users` and `PATCH /admin/users/{userId}` — create/edit a reusable employee identity with either email or username.
+- `POST /admin/users/{userId}/activate|disable|enable|archive` — reasoned account lifecycle commands; archive preserves historical ownership.
+- `POST /admin/users/{userId}/roles` and `DELETE /admin/users/{userId}/roles/{roleId}` — audited multi-role assignments with active-work impact checks.
+- `POST /admin/users/{userId}/branch` and `/department` — effective-dated assignments that do not silently move open work.
+- `POST /admin/users/{userId}/temporary-password` and `/force-password-reset` — returns a one-time display payload only to the authorised step-up session; no credential enters audit evidence.
+- `POST /admin/users/{userId}/profile-image` — private JPG/PNG/WebP upload with size/dimension validation and malware scanning.
+- `GET /admin/users/{userId}/audit` and `/login-history` — permission-controlled immutable history.
+- `POST /auth/workspace` — selects one assigned role workspace for the current identity; it cannot grant a role.
+
+Production applies `administer_users` plus a narrower capability such as `manage_internal_accounts`, `manage_roles_permissions`, `reset_user_login`, `manage_user_profile_images`, `read_audit_history` or `view_login_history`. Step-up tokens—not passwords in business request bodies—protect reset, role, disable and archive commands. Every mutation writes the ordinary audit stream and user-specific immutable history in the same transaction.
+
+Real employee seed data is never served from public mock endpoints or included in static artifacts. The mock directory contains fabricated users only.
 
 ## Status codes
 

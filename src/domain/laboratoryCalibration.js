@@ -31,6 +31,21 @@ export const LAB_METHOD_IDS = Object.freeze({
 
 const validationWarning = 'Software implementation requires formal Laboratory Management and Technical Signatory validation.';
 
+export const PRESSURE_POINT_SEQUENCE = Object.freeze([
+  ...Array.from({ length: 6 }, (_, index) => Object.freeze({ id: `increasing-${index + 1}`, direction: 'increasing', sequence: index + 1 })),
+  ...Array.from({ length: 5 }, (_, index) => Object.freeze({ id: `repeatability-${index + 1}`, direction: 'repeatability', sequence: index + 1 })),
+  ...Array.from({ length: 5 }, (_, index) => Object.freeze({ id: `decreasing-${index + 1}`, direction: 'decreasing', sequence: index + 1 })),
+]);
+
+export const TEMPERATURE_PROCEDURE_LIMITS = Object.freeze({
+  ambientMinimumCelsius: 18,
+  ambientMaximumCelsius: 28,
+  maximumAmbientGradientCelsiusPerHour: 2,
+  minimumPairedReadings: 6,
+  targetReadingIntervalSeconds: 60,
+  shortIntervalReviewSeconds: 45,
+});
+
 export const LAB_METHODS = Object.freeze([
   Object.freeze({
     id: LAB_METHOD_IDS.PRESSURE_MASTER_GAUGE,
@@ -40,8 +55,8 @@ export const LAB_METHODS = Object.freeze([
     procedureNumber: 'Pending approved procedure mapping',
     version: 'software-reference-v1',
     effectiveDate: '',
-    increasingRuns: 2,
-    decreasingRuns: 2,
+    increasingRuns: 6,
+    decreasingRuns: 5,
     repeatabilityRuns: 5,
     approvalStatus: 'management_validation_required',
     warnings: Object.freeze([validationWarning, 'Legacy reliability calculations are externally linked and unresolved.']),
@@ -54,8 +69,8 @@ export const LAB_METHODS = Object.freeze([
     procedureNumber: 'Pending approved procedure mapping',
     version: 'software-reference-v1',
     effectiveDate: '',
-    increasingRuns: 2,
-    decreasingRuns: 2,
+    increasingRuns: 6,
+    decreasingRuns: 5,
     repeatabilityRuns: 5,
     approvalStatus: 'management_validation_required',
     warnings: Object.freeze([validationWarning, 'Legacy reliability calculations are externally linked and unresolved.']),
@@ -68,8 +83,8 @@ export const LAB_METHODS = Object.freeze([
     procedureNumber: 'Pending approved procedure mapping',
     version: 'software-reference-v1',
     effectiveDate: '',
-    increasingRuns: 2,
-    decreasingRuns: 2,
+    increasingRuns: 6,
+    decreasingRuns: 5,
     repeatabilityRuns: 5,
     approvalStatus: 'management_validation_required',
     warnings: Object.freeze([validationWarning, 'Legacy reliability calculations are externally linked and unresolved.']),
@@ -183,13 +198,22 @@ export const calculatePressurePoint = (point, decimals = 6) => {
 export const calculateTemperaturePoint = (point, decimals = 6) => {
   const applied = finiteNumber(point.applied, 'applied');
   const standardCorrection = finiteNumber(point.standardCorrection || 0, 'standardCorrection');
-  const correctedStandard = applied + standardCorrection;
+  const referenceReadings = (point.referenceReadings || []).map((value, index) => finiteNumber(value, `referenceReadings.${index}`));
   const readings = (point.readings || []).map((value, index) => finiteNumber(value, `readings.${index}`));
+  if (readings.length < TEMPERATURE_PROCEDURE_LIMITS.minimumPairedReadings || referenceReadings.length && referenceReadings.length !== readings.length) {
+    throw new ServiceError('Each Temperature point requires at least 6 paired Reference Standard and UUT readings.', { code: 'LAB_TEMPERATURE_READING_COUNT_INVALID', status: 422 });
+  }
+  const referenceMean = referenceReadings.length ? calculateMeanReading(referenceReadings) : applied;
+  const correctedStandard = referenceMean + standardCorrection;
   const mean = calculateMeanReading(readings);
+  const timestamps = (point.readingTimestamps || []).map(value => String(value || ''));
+  const intervalsSeconds = timestamps.slice(1).map((value, index) => (new Date(value).getTime() - new Date(timestamps[index]).getTime()) / 1000).filter(Number.isFinite);
   return {
     id: point.id || '',
     applied: roundTo(applied, decimals),
     standardCorrection: roundTo(standardCorrection, decimals),
+    referenceReadings: referenceReadings.map(value => roundTo(value, decimals)),
+    referenceMean: roundTo(referenceMean, decimals),
     correctedStandard: roundTo(correctedStandard, decimals),
     readings: readings.map(value => roundTo(value, decimals)),
     mean: roundTo(mean, decimals),
@@ -197,7 +221,33 @@ export const calculateTemperaturePoint = (point, decimals = 6) => {
     correction: roundTo(calculateCorrection({ measured: mean, applied: correctedStandard }), decimals),
     standardDeviation: readings.length > 1 ? roundTo(calculateRepeatabilityStandardDeviation(readings), decimals) : null,
     standardError: readings.length > 1 ? roundTo(calculateStandardError(readings), decimals) : null,
+    readingTimestamps: timestamps,
+    intervalReviewRequired: intervalsSeconds.some(seconds => seconds < TEMPERATURE_PROCEDURE_LIMITS.shortIntervalReviewSeconds),
+    ambientTemperature: point.ambientTemperature === '' || point.ambientTemperature == null ? null : finiteNumber(point.ambientTemperature, 'ambientTemperature'),
+    immersionDepth: String(point.immersionDepth || ''),
+    stabilisationConfirmed: point.stabilisationConfirmed === true,
+    resultStatus: point.resultStatus === 'review_required' ? 'review_required' : 'satisfactory',
+    technicianNotes: String(point.technicianNotes || ''),
   };
+};
+
+export const validateLaboratoryPointStructure = (method, points = []) => {
+  if (method?.discipline === 'pressure') {
+    const expected = { increasing: 6, repeatability: 5, decreasing: 5 };
+    const actual = points.reduce((counts, point) => ({ ...counts, [point.direction]: (counts[point.direction] || 0) + 1 }), {});
+    if (points.length !== 16 || Object.entries(expected).some(([direction, count]) => actual[direction] !== count)) {
+      throw new ServiceError('Pressure calibration requires 6 Increasing, 5 Repeatability and 5 Decreasing points.', { code: 'LAB_PRESSURE_POINT_STRUCTURE_INVALID', status: 422 });
+    }
+    return true;
+  }
+  for (const point of points) {
+    if ((point.readings || []).length < TEMPERATURE_PROCEDURE_LIMITS.minimumPairedReadings || (point.referenceReadings || []).length < TEMPERATURE_PROCEDURE_LIMITS.minimumPairedReadings) {
+      throw new ServiceError('Each Temperature point requires at least 6 paired readings.', { code: 'LAB_TEMPERATURE_READING_COUNT_INVALID', status: 422 });
+    }
+    if ((point.readingTimestamps || []).length !== point.readings.length) throw new ServiceError('Record a timestamp for every Temperature reading pair.', { code: 'LAB_TEMPERATURE_TIMESTAMPS_REQUIRED', status: 422 });
+    if (!point.stabilisationConfirmed || !String(point.immersionDepth || '').trim()) throw new ServiceError('Confirm stabilisation and record immersion depth for every Temperature point.', { code: 'LAB_TEMPERATURE_PROCEDURE_EVIDENCE_REQUIRED', status: 422 });
+  }
+  return true;
 };
 
 const defaultDivisor = distribution => {
@@ -261,6 +311,7 @@ export const calculateLaboratoryWorksheet = worksheet => {
       : calculatePressurePoint(point, decimals)
   ));
   if (!points.length) throw new ServiceError('Add at least one calibration test point.', { code: 'LAB_TEST_POINTS_REQUIRED', status: 422 });
+  validateLaboratoryPointStructure(method, worksheet.testPoints || []);
   const uncertainty = calculateUncertaintyBudget({ contributions: worksheet.uncertaintyContributions || [], coverageFactor: worksheet.coverageFactor || 2 });
   return {
     methodId: method.id,

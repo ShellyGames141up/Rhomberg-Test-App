@@ -1,5 +1,7 @@
 # Laboratory calibration workflow
 
+Only Cape Town and Johannesburg are valid Laboratory destinations. Pressure technicians can receive, inspect, stabilise, book in, capture raw readings, complete calibration and labelling, and transfer units, but cannot approve certificates. Temperature technicians receive the equivalent Temperature worksheet path. Pressure and Temperature Manager assignments are separate data roles; one account may hold both when authorised.
+
 This local mock implements one controlled, unit-level workflow for the Cape Town and Johannesburg laboratories. It supports Pressure and Temperature work without merging their methods, templates or uncertainty models. Every customer line quantity becomes that number of physical calibration units; each unit receives its own job number, immutable worksheet revisions, certificate number and certificate versions.
 
 ## Controlled journey

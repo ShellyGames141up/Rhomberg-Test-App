@@ -118,12 +118,18 @@ const requiredPaths = [
   '/admin/retention-policy:',
   '/workflow-overrides:',
   '/workflow-overrides/{overrideId}:',
+  '/representatives/clients:',
+  '/clients/{clientId}/appointments:',
+  '/appointments/{appointmentId}/location-check:',
+  '/appointments/{appointmentId}/qr/verify:',
+  '/sales-manager/visit-compliance:',
+  '/admin/locations:',
 ];
 for (const path of requiredPaths) {
   assert.ok(openapi.includes(`  ${path}`), `OpenAPI proposal must define ${path.slice(0, -1)}`);
 }
 
-assert.ok(openapi.includes('version: 0.8.0-proposed'));
+assert.ok(openapi.includes('version: 0.9.0-proposed'));
 assert.ok(openapi.includes('All examples are fabricated.'));
 assert.equal(openapi.includes('cookieSession'), false, 'OpenAPI must not reference the retired cookieSession security name');
 assert.equal(openapi.includes('csrfToken: []'), false, 'OpenAPI must not reference the retired csrfToken security name');

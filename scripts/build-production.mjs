@@ -61,7 +61,6 @@ const forbiddenMockMarkers = [
   'RQ-TEST',
   'company-demo-mining',
   'rhombergPreviewAccounts',
-  'Ericuv@Rhom.co.za',
   'Demo Preview',
   'DEMO PREVIEW',
   'View Demo Login',
@@ -100,6 +99,7 @@ const forbiddenMockMarkers = [
 ];
 const leakedMarker = forbiddenMockMarkers.find(marker => apiBundle.toLowerCase().includes(marker.toLowerCase()));
 if (leakedMarker) throw new Error(`Production build contains mock-only marker: ${leakedMarker}`);
+if (/@rhom\.co\.za/i.test(apiBundle)) throw new Error('Production build contains a real staff email domain.');
 if ((await fs.readdir(output)).some(file => file.endsWith('.map'))) throw new Error('Production source maps must not be placed in the public artifact.');
 
 for (const file of ['styles.css', 'runtime-config.js']) {

@@ -42,6 +42,7 @@ assert.deepEqual(Object.values(USER_ROLES), [
   'customer',
   'sales_representative',
   'technical_support',
+  'technical_manager',
   'technical_director',
   'planning',
   'expeditor',
@@ -49,6 +50,8 @@ assert.deepEqual(Object.values(USER_ROLES), [
   'laboratory_technician',
   'laboratory_temperature_technician',
   'laboratory_manager',
+  'laboratory_manager_pressure',
+  'laboratory_manager_temperature',
   'technical_signatory',
   'laboratory_administrator',
   'quality_assurance',
@@ -56,6 +59,7 @@ assert.deepEqual(Object.values(USER_ROLES), [
   'dispatch',
   'buyer',
   'sales_manager',
+  'branch_manager',
   'company_owner',
   'manager',
   'administrator',
@@ -90,9 +94,9 @@ assert.ok(catalogue.products.length > 50, 'catalogue products should load throug
 assert.deepEqual(
   Object.fromEntries(Object.entries(representativesByBranch).map(([branch, reps]) => [branch, reps.map(rep => rep.name)])),
   {
-    'cape-town': ['Alphonso Majiet', 'Andrew Japhtha', 'Quintin van Wyk', 'Arthur Daniels', 'Ericu Vercuiel'],
+    'cape-town': ['Alphonso Majiet', 'Andrew Japtha', 'Quintin van Wyk', 'Arthur Daniels', 'Ericu Vercuiel'],
     durban: ['Dawie', 'Nadia'],
-    johannesburg: ['Danny', 'Siya', 'Reneil'],
+    johannesburg: ['Daniel Golden', 'Siya'],
     'port-elizabeth': ['Carmen'],
   },
   'only the approved branch representatives should be available',
@@ -146,6 +150,7 @@ const reopenedServices = createMockServices({ storage, emailSender, now: () => n
 await reopenedServices.initialize();
 assert.equal((await reopenedServices.auth.getSession()).id, customer.id, 'session should survive a service reinitialisation');
 assert.deepEqual(await reopenedServices.enquiries.getDraft(), [draftLine], 'draft should survive a browser-style reopen');
+assert.equal((await reopenedServices.accounts.getRegistrationOptions()).preferredRepresentative.id, 'C-27', 'the RFQ form must reload the customer company\'s remembered representative');
 
 await assert.rejects(
   () => reopenedServices.enquiries.submit({ application: '', fulfilment: '' }, [draftLine]),

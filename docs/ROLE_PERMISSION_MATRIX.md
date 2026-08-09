@@ -1,5 +1,7 @@
 # Role and preview access matrix
 
+Accounts may hold multiple roles; effective permissions are data-driven and never depend on an employee name. New definitions include `branch_manager`, `technical_manager`, `laboratory_manager_pressure` and `laboratory_manager_temperature`. Branch Manager reads remain constrained by authorised company and branch scope. Technical Manager receives Technical Support queue, assignment, correspondence, escalation and reporting capabilities. Discipline-specific Laboratory Manager roles receive certificate review and release only within authorised Laboratory scope.
+
 Retention controls are internal-only. Managers and Administrators can search archive records, archive eligible completed orders, restore, export and manage legal holds. Only Administrators can alter demonstration retention settings. No browser role can permanently delete an order.
 
 The canonical permission catalogue remains `src/services/contracts.js`. This document summarises preview access; it does not replace the code or server policy.
@@ -94,3 +96,9 @@ The Executive Workflow Demo is a mock-only presentation layer. Its switchable ro
 | Override quotation block | No | No | Reason required | No | No | No | Reason required |
 
 The desktop Technical Support roles are `technical_support` (presented as **Technical Advisor**) and `technical_director`. Assignment, response, completion and reporting are consolidated into the Technical Advisor workspace; there is no separate Technical Manager login. Capability codes are defined centrally in `src/services/contracts.js`; customer direct URL access normalises back to the customer home view.
+# Client visit permissions
+
+- Sales Representative: assigned clients, own appointments/history, schedule and verify visits, own approximate work summary.
+- Sales Manager: representative compliance, missed/overdue customers, verification evidence and authorised aggregate working-location statistics.
+- Company Owner: approved aggregate operational statistics only.
+- Administrator: office/customer location metadata, visit-cycle, radius and working-hour policy; no editing immutable verification history.

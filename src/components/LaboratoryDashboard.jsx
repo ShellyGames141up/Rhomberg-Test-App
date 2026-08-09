@@ -14,6 +14,19 @@ const canOperateMethod = (account, methodId) => {
     : roles.has('laboratory_user') || roles.has('laboratory_technician');
 };
 const methodDiscipline = methodId => methodId === 'temperature_comparison' ? 'Temperature' : 'Pressure';
+const timestampSeries = (count, start = Date.now() - ((count - 1) * 60000)) => Array.from({ length: count }, (_, index) => new Date(start + index * 60000).toISOString().slice(0, 16));
+const temperaturePoint = (id, applied = '0') => ({
+  id, applied, standardCorrection: '0', direction: 'temperature',
+  referenceReadings: [applied, applied, applied, applied, applied, applied].join(', '),
+  readings: [applied, applied, applied, applied, applied, applied].join(', '),
+  readingTimestamps: timestampSeries(6).join(', '), ambientTemperature: '23', immersionDepth: '100 mm',
+  stabilisationConfirmed: true, resultStatus: 'satisfactory', technicianNotes: '', completed: false,
+});
+const pressurePoints = () => [
+  ...['0', '2', '4', '6', '8', '10'].map((applied, index) => ({ id: `increasing-${index + 1}`, applied, standardCorrection: '0', direction: 'increasing', readings: applied })),
+  ...Array.from({ length: 5 }, (_, index) => ({ id: `repeatability-${index + 1}`, applied: '5', standardCorrection: '0', direction: 'repeatability', readings: String(5 + ((index % 2) * 0.01)) })),
+  ...['8', '6', '4', '2', '0'].map((applied, index) => ({ id: `decreasing-${index + 1}`, applied, standardCorrection: '0', direction: 'decreasing', readings: applied })),
+];
 
 const WORKFLOW_STEPS = [
   { label: 'Receive', statuses: ['awaiting_lab_receipt', 'received_in_lab'] },
@@ -38,14 +51,7 @@ const defaultForm = (order, unit, item, options) => {
     assetNumber: '', rangeMinimum: temperature ? '-20' : '0', rangeMaximum: temperature ? '100' : '10', unit: temperature ? '°C' : 'bar', resolution: temperature ? '0.1' : '0.01', methodId,
     calibrationType: 'full', sanasOrTraceable: unit.certificationType, urgent: order.emergency === 'yes' || order.priority === 'urgent',
     standardIds: standard ? [standard.id] : [], coverageFactor: '2', decimals: '6', environmentalTemperature: '21', environmentalHumidity: '50', holdReason: '',
-    testPoints: temperature ? [
-      { id: 'point-1', applied: '-20', standardCorrection: '0.02', direction: 'temperature', readings: '-20.01, -20.02, -20.00, -20.01, -20.02, -20.01' },
-      { id: 'point-2', applied: '100', standardCorrection: '-0.03', direction: 'temperature', readings: '99.98, 99.99, 99.97, 99.98, 99.99, 99.98' },
-    ] : [
-      { id: 'point-1', applied: '0', standardCorrection: '0', direction: 'increasing', readings: '0, 0' },
-      { id: 'point-2', applied: '5', standardCorrection: '0', direction: 'increasing', readings: '5.01, 5.00, 5.01, 5.00, 5.01' },
-      { id: 'point-3', applied: '10', standardCorrection: '0', direction: 'decreasing', readings: '10.01, 10.00' },
-    ],
+    testPoints: temperature ? [temperaturePoint('temperature-1', '-20'), temperaturePoint('temperature-2', '100')] : pressurePoints(),
     uncertaintyContributions: [
       { source: 'Reference standard', type: 'B', uncertainty: temperature ? '0.10' : '0.04', distribution: 'normal', divisor: '2', sensitivity: '1', degreesOfFreedom: '200' },
       { source: 'Resolution of unit under test', type: 'B', uncertainty: temperature ? '0.10' : '0.01', distribution: 'rectangular', divisor: '1.7320508', sensitivity: '1', degreesOfFreedom: '12.5' },
@@ -60,12 +66,13 @@ const defaultForm = (order, unit, item, options) => {
 };
 
 const readingList = value => String(value || '').split(',').map(item => item.trim()).filter(Boolean).map(Number);
+const textList = value => String(value || '').split(',').map(item => item.trim()).filter(Boolean);
 const worksheetPayload = form => ({
   methodId: form.methodId,
   standardIds: form.standardIds,
   coverageFactor: Number(form.coverageFactor), decimals: Number(form.decimals),
   environmental: { temperature: form.environmentalTemperature, humidity: form.environmentalHumidity },
-  testPoints: form.testPoints.map(point => ({ ...point, applied: Number(point.applied), standardCorrection: Number(point.standardCorrection || 0), readings: readingList(point.readings) })),
+  testPoints: form.testPoints.map(point => ({ ...point, applied: Number(point.applied), standardCorrection: Number(point.standardCorrection || 0), readings: readingList(point.readings), referenceReadings: readingList(point.referenceReadings), readingTimestamps: textList(point.readingTimestamps), ambientTemperature: point.ambientTemperature === '' ? null : Number(point.ambientTemperature), stabilisationConfirmed: Boolean(point.stabilisationConfirmed) })),
   uncertaintyContributions: form.uncertaintyContributions.map(item => ({ ...item, uncertainty: Number(item.uncertainty), divisor: Number(item.divisor), sensitivity: Number(item.sensitivity), degreesOfFreedom: Number(item.degreesOfFreedom) })),
 });
 
@@ -230,11 +237,41 @@ function StagePanel({ order, unit, form, set, setPoint, options, allowedStandard
 
 function WorksheetCard({ form, set, setPoint, onMethodChange, standards, unit, order, actions, call, account, disabled }) {
   const saved = Boolean(unit.labWork.worksheet);
+  const temperature = form.methodId === 'temperature_comparison';
+  const locked = Boolean(unit.labWork.worksheet?.locked || unit.labWork.calculation);
   const technicianCanOperate = accountCan(account, PERMISSIONS.ENTER_RAW_CALIBRATION_DATA) && canOperateMethod(account, form.methodId);
+  const replacePoints = testPoints => set({ testPoints });
+  const addPoint = () => replacePoints([...form.testPoints, temperaturePoint(`temperature-${Date.now()}`, '')]);
+  const duplicatePoint = index => {
+    const source = form.testPoints[index];
+    replacePoints([...form.testPoints.slice(0, index + 1), { ...source, id: `temperature-${Date.now()}`, completed: false }, ...form.testPoints.slice(index + 1)]);
+  };
+  const removePoint = index => { if (!locked) replacePoints(form.testPoints.filter((_, pointIndex) => pointIndex !== index)); };
+  const movePoint = (index, offset) => {
+    const target = index + offset;
+    if (locked || target < 0 || target >= form.testPoints.length) return;
+    const testPoints = [...form.testPoints];
+    [testPoints[index], testPoints[target]] = [testPoints[target], testPoints[index]];
+    replacePoints(testPoints);
+  };
   return <ActionCard title={`${humanise(form.methodId)} worksheet`} description="Raw inputs remain distinct from calculated and management-only fields. Readings accept comma-separated numeric values.">
     <FormGrid><Select label="Method template" value={form.methodId} onChange={onMethodChange} options={['pressure_master_gauge_comparison', 'pressure_dwt_700_bar', 'pressure_dwt_250_mpa', 'temperature_comparison'].map(id => ({ id, label: humanise(id) }))} /><Select label="Reference standard" value={form.standardIds[0] || ''} onChange={value => set('standardIds', value ? [value] : [])} options={standards} /><Input label="Ambient temperature" type="number" value={form.environmentalTemperature} onChange={value => set('environmentalTemperature', value)} /><Input label="Relative humidity" type="number" value={form.environmentalHumidity} onChange={value => set('environmentalHumidity', value)} /></FormGrid>
     {!standards.length && <p className="lab-inline-warning" role="alert">No active reference standard matches this branch and method. Choose the correct method or ask Laboratory Management to review the reference-standard register.</p>}
-    <div className="lab-reading-table"><div className="lab-reading-head"><span>Direction</span><span>Applied value</span><span>Standard correction</span><span>Raw readings</span></div>{form.testPoints.map((point, index) => <div key={point.id} className="lab-reading-row"><select value={point.direction} onChange={event => setPoint(index, 'direction', event.target.value)}><option value="increasing">Increasing</option><option value="decreasing">Decreasing</option><option value="temperature">Temperature</option></select><input type="number" step="any" value={point.applied} onChange={event => setPoint(index, 'applied', event.target.value)} /><input type="number" step="any" value={point.standardCorrection} onChange={event => setPoint(index, 'standardCorrection', event.target.value)} /><input value={point.readings} onChange={event => setPoint(index, 'readings', event.target.value)} aria-label={`Readings for point ${index + 1}`} /></div>)}</div>
+    {temperature ? <div className="temperature-point-workspace">
+      <div className="temperature-procedure-note"><strong>Procedure controls</strong><span>23 °C ± 5 °C ambient · maximum 2 °C/hour gradient · matched immersion depth · stabilise before reading · minimum 6 paired readings.</span></div>
+      {form.testPoints.map((point, index) => <section key={point.id} className="temperature-point-card">
+        <header><div><span>Temperature point {index + 1}</span><strong>{point.applied || 'Draft'} °C nominal</strong></div><div className="temperature-point-actions"><button type="button" onClick={() => movePoint(index, -1)} disabled={locked || index === 0}>↑</button><button type="button" onClick={() => movePoint(index, 1)} disabled={locked || index === form.testPoints.length - 1}>↓</button><button type="button" onClick={() => duplicatePoint(index)} disabled={locked}>Duplicate</button><button type="button" onClick={() => removePoint(index)} disabled={locked || form.testPoints.length === 1}>Remove Draft</button></div></header>
+        <FormGrid><Input label="Requested / nominal temperature (°C)" type="number" value={point.applied} onChange={value => setPoint(index, 'applied', value)} /><Input label="Standard correction" type="number" value={point.standardCorrection} onChange={value => setPoint(index, 'standardCorrection', value)} /><Input label="Ambient temperature (°C)" type="number" value={point.ambientTemperature} onChange={value => setPoint(index, 'ambientTemperature', value)} /><Input label="Immersion depth" value={point.immersionDepth} onChange={value => setPoint(index, 'immersionDepth', value)} /></FormGrid>
+        <label className="wide"><span>Reference Standard readings (comma separated, minimum 6)</span><input value={point.referenceReadings || ''} onChange={event => setPoint(index, 'referenceReadings', event.target.value)} /></label>
+        <label className="wide"><span>UUT readings (comma separated, minimum 6)</span><input value={point.readings} onChange={event => setPoint(index, 'readings', event.target.value)} /></label>
+        <label className="wide"><span>Reading timestamps (comma separated)</span><input value={point.readingTimestamps || ''} onChange={event => setPoint(index, 'readingTimestamps', event.target.value)} /></label>
+        <FormGrid><Select label="Point result" value={point.resultStatus} onChange={value => setPoint(index, 'resultStatus', value)} options={[{ id: 'satisfactory', label: 'Satisfactory' }, { id: 'review_required', label: 'Review Required' }]} /><label className="lab-check"><input type="checkbox" checked={Boolean(point.stabilisationConfirmed)} onChange={event => setPoint(index, 'stabilisationConfirmed', event.target.checked)} /><span>Stabilisation confirmed</span></label></FormGrid>
+        <Textarea label="Technician notes" value={point.technicianNotes} onChange={value => setPoint(index, 'technicianNotes', value)} />
+        <small className="next-reading-indicator">Next reading due: approximately 1 minute after the latest timestamp. Shorter intervals are recorded and flagged, not blocked.</small>
+      </section>)}
+      <Secondary disabled={disabled || locked} onClick={addPoint}>+ Add Calibration Point</Secondary>
+      {locked && <p className="lab-inline-warning">Calculated points are immutable. A Management-authorised correction must create a new revision.</p>}
+    </div> : <div className="lab-reading-table pressure-cycle-table"><div className="lab-reading-head"><span>Cycle</span><span>Nominal pressure</span><span>Standard correction</span><span>UUT reading</span></div>{form.testPoints.map((point, index) => <div key={point.id} className="lab-reading-row"><strong>{humanise(point.direction)} {form.testPoints.slice(0, index + 1).filter(item => item.direction === point.direction).length}</strong><input type="number" step="any" value={point.applied} onChange={event => setPoint(index, 'applied', event.target.value)} /><input type="number" step="any" value={point.standardCorrection} onChange={event => setPoint(index, 'standardCorrection', event.target.value)} /><input value={point.readings} onChange={event => setPoint(index, 'readings', event.target.value)} aria-label={`Reading for ${point.direction} point ${index + 1}`} /></div>)}</div>}
     <div className="lab-uncertainty-summary"><strong>Versioned uncertainty budget</strong>{form.uncertaintyContributions.map(item => <span key={item.source}>{item.type} · {item.source}: {item.uncertainty} ({item.distribution})</span>)}</div>
     {technicianCanOperate ? <Secondary disabled={disabled || !standards.length} onClick={() => call('worksheet', () => actions.saveWorksheet(order.id, unit.id, worksheetPayload(form)), 'Structured worksheet saved and audited.')}>1. Save Worksheet</Secondary> : <RoleHandoff role={`${methodDiscipline(form.methodId)} Technician`} message={`This ${methodDiscipline(form.methodId).toLowerCase()} worksheet must be completed by an authorised technician.`} />}
     {saved && unit.labWork.status === 'worksheet_ready' && technicianCanOperate && <Primary disabled={disabled || !accountCan(account, PERMISSIONS.START_LAB_CALIBRATION)} onClick={() => call('start', () => actions.startCalibration(order.id, unit.id, {}), 'Calibration started.')}>2. Start Calibration</Primary>}

@@ -12,3 +12,4 @@ private/
 dist/
 dist-previews/
 dist-production/
+tmp/

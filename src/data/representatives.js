@@ -11,7 +11,7 @@ const makeRepresentative = (branchId, branchCode, code, name) => ({
 export const representativesByBranch = {
   'cape-town': [
     ['11', 'Alphonso Majiet'],
-    ['13', 'Andrew Japhtha'],
+    ['13', 'Andrew Japtha'],
     ['14', 'Quintin van Wyk'],
     ['17', 'Arthur Daniels'],
     ['27', 'Ericu Vercuiel'],
@@ -21,9 +21,8 @@ export const representativesByBranch = {
     ['32', 'Nadia'],
   ].map(([code, name]) => makeRepresentative('durban', 'D', code, name)),
   johannesburg: [
-    ['21', 'Danny'],
+    ['21', 'Daniel Golden'],
     ['23', 'Siya'],
-    ['25', 'Reneil'],
   ].map(([code, name]) => makeRepresentative('johannesburg', 'J', code, name)),
   'port-elizabeth': [
     ['16', 'Carmen'],

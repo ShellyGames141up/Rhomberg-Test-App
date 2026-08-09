@@ -1,9 +1,6 @@
-import { buildRfqPdf, rfqPdfFilename } from './rfqPdf.js';
-
-export const RFQ_EMAIL_RECIPIENT = 'Ericuv@Rhom.co.za';
+export const RFQ_DELIVERY_DESTINATION = 'Rhomberg RFQ routing service';
 export const MAX_EMAIL_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 
-const RFQ_ENDPOINT = `https://formsubmit.co/ajax/${RFQ_EMAIL_RECIPIENT}`;
 const PRIVATE_RFQ_ENDPOINT = '/api/submit-rfq';
 
 const humanise = key => key
@@ -45,9 +42,8 @@ const buildPlainTextSummary = enquiry => [
 ].join('\n');
 
 export function buildRfqMailto(enquiry) {
-  const subject = `[${enquiry.reference}] Rhomberg RFQ - ${enquiry.company}`;
-  const body = buildPlainTextSummary(enquiry).slice(0, 6500);
-  return `mailto:${RFQ_EMAIL_RECIPIENT}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  void enquiry;
+  return '';
 }
 
 const privateEndpointAvailableHere = () => {
@@ -75,7 +71,7 @@ async function tryPrivateDelivery(enquiry, poFile, signal) {
     return {
       available: true,
       ok: true,
-      recipient: payload.recipient || RFQ_EMAIL_RECIPIENT,
+      recipient: payload.recipient || RFQ_DELIVERY_DESTINATION,
       pricedPdfAttached: Boolean(payload.pricedPdfAttached),
       deliveryMode: 'protected',
       activationMayBeRequired: false,
@@ -87,55 +83,18 @@ async function tryPrivateDelivery(enquiry, poFile, signal) {
   }
 }
 
-async function sendPublicTestFallback(enquiry, poFile, signal) {
-  const form = new FormData();
-  const summary = buildPlainTextSummary(enquiry);
-  const sourceUrl = /^https?:$/.test(window.location.protocol) ? window.location.href : 'https://rhomberginstruments.co.za/';
-
-  form.append('_subject', `[${enquiry.reference}] Rhomberg RFQ - ${enquiry.company}`);
-  form.append('_template', 'table');
-  form.append('_captcha', 'false');
-  form.append('_url', sourceUrl);
-  form.append('_replyto', enquiry.email);
-  form.append('email', enquiry.email);
-  form.append('RFQ reference', enquiry.reference);
-  form.append('Company', enquiry.company);
-  form.append('Contact person', enquiry.contact);
-  form.append('Telephone', enquiry.phone);
-  form.append('Area', enquiry.area);
-  form.append('Selected representative', enquiry.selectedRep?.name ? `${enquiry.selectedRep.name} - code ${enquiry.selectedRep.code} - ${enquiry.selectedRep.branchName}` : 'Not selected');
-  form.append('Application', enquiry.application);
-  form.append('Process medium', enquiry.medium || 'Not supplied');
-  form.append('Delivery or collection', enquiry.fulfilment === 'collect' ? `Collect - ${enquiry.collectionBranch}` : `Deliver - ${enquiry.deliveryAddress}`);
-  form.append('Purchase Order', enquiry.poNumber || enquiry.poFileName || 'Not supplied');
-  form.append('Additional notes', enquiry.notes || 'None');
-  form.append('Configured units', formatItems(enquiry.items));
-  form.append('Complete RFQ summary', summary);
-
-  try {
-    const pdfBytes = await buildRfqPdf(enquiry);
-    form.append('RFQ PDF', new Blob([pdfBytes], { type: 'application/pdf' }), rfqPdfFilename(enquiry, false));
-  } catch {
-    // The complete text summary still reaches the rep if a browser cannot create the PDF.
-  }
-  if (poFile) form.append('Purchase Order attachment', poFile, poFile.name);
-
-  const response = await fetch(RFQ_ENDPOINT, {
-    method: 'POST',
-    headers: { Accept: 'application/json' },
-    body: form,
-    signal,
-  });
-  const payload = await response.json().catch(() => ({}));
-  const accepted = response.ok && payload.success !== false && payload.success !== 'false';
-  if (!accepted) throw new Error(payload.message || `The test email service returned status ${response.status}.`);
+async function simulatePublicDelivery(enquiry, poFile, signal) {
+  void enquiry;
+  void poFile;
+  if (signal?.aborted) throw new DOMException('The request was cancelled.', 'AbortError');
+  await Promise.resolve();
   return {
     ok: true,
-    recipient: RFQ_EMAIL_RECIPIENT,
+    recipient: RFQ_DELIVERY_DESTINATION,
     pricedPdfAttached: false,
-    deliveryMode: 'public-test-fallback',
-    activationMayBeRequired: true,
-    message: payload.message || 'RFQ accepted by the public test email service.',
+    deliveryMode: 'mock-simulated',
+    activationMayBeRequired: false,
+    message: 'RFQ delivery was simulated in public mock mode. No email was sent.',
   };
 }
 
@@ -154,7 +113,7 @@ export async function sendRfqEmail(enquiry, poFile) {
   try {
     const privateResult = await tryPrivateDelivery(enquiry, poFile, controller.signal);
     if (privateResult.available && privateResult.ok) return privateResult;
-    const fallback = await sendPublicTestFallback(enquiry, poFile, controller.signal);
+    const fallback = await simulatePublicDelivery(enquiry, poFile, controller.signal);
     return privateResult.available && !privateResult.ok
       ? { ...fallback, warning: `Protected pricing service unavailable: ${privateResult.message}` }
       : fallback;

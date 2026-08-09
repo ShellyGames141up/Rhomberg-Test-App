@@ -38,6 +38,7 @@ import {
   validStandardsForWorksheet,
   validateBooking,
   validateInspection,
+  validateLaboratoryPointStructure,
   validateReceipt,
   validateStabilisation,
 } from '../../domain/laboratoryCalibration.js';
@@ -112,6 +113,17 @@ import {
 import { resolveManagementPeriod } from '../../domain/salesAnalytics.js';
 import { PLANNING_PRIORITIES } from '../../domain/planningQueue.js';
 import {
+  clientVisitHealth,
+  DEFAULT_VISIT_POLICY,
+  distanceMetres,
+  FABRICATED_OFFICE_LOCATIONS,
+  FABRICATED_REP_CLIENTS,
+  isWithinWorkingHours,
+  validateAppointment,
+  verificationStatus,
+  visitComplianceMetrics,
+} from '../../domain/clientVisits.js';
+import {
   findRepresentativeOrderDuplicates,
   ORDER_ORIGINS,
   representativeOrderDocumentMetadata,
@@ -129,13 +141,24 @@ import {
   workflowStatusById,
 } from '../../domain/workflow.js';
 import { optionsForField, shouldShowField } from '../../domain/productConfiguration.js';
-import { RFQ_EMAIL_RECIPIENT, sendRfqEmail } from '../../lib/rfqEmail.js';
+import { RFQ_DELIVERY_DESTINATION, sendRfqEmail } from '../../lib/rfqEmail.js';
 import { buildRfqPdf, rfqPdfFilename } from '../../lib/rfqPdf.js';
 import {
   createDefaultUserSettings,
   normaliseUserSettings,
   validateUserSettings,
 } from '../../domain/userSettings.js';
+import {
+  ACCOUNT_STATUSES,
+  ACTIVATION_METHODS,
+  AUTHENTICATION_TYPES,
+  generateTemporaryPassword,
+  hashMockCredential,
+  INTERNAL_DEPARTMENTS,
+  normaliseEmployeeInput,
+  validateEmployeeInput,
+  validateEmployeeProfileImage,
+} from '../../domain/employeeAccounts.js';
 import {
   createDefaultCustomerPersonalisation,
   normaliseCustomerPersonalisation,
@@ -240,17 +263,34 @@ const hashFileSha256 = async file => {
   return `mock-fnv-${(fallback >>> 0).toString(16).padStart(8, '0')}`;
 };
 
+const departmentForRole = role => ({
+  [USER_ROLES.SALES_REPRESENTATIVE]: 'Sales', [USER_ROLES.SALES_MANAGER]: 'Sales', [USER_ROLES.BRANCH_MANAGER]: 'Sales',
+  [USER_ROLES.TECHNICAL_SUPPORT]: 'Technical Support', [USER_ROLES.TECHNICAL_MANAGER]: 'Technical Support', [USER_ROLES.TECHNICAL_DIRECTOR]: 'Technical Support',
+  [USER_ROLES.PLANNING]: 'Planning', [USER_ROLES.EXPEDITOR]: 'Expediting',
+  [USER_ROLES.LABORATORY_USER]: 'Pressure Laboratory', [USER_ROLES.LABORATORY_TECHNICIAN]: 'Pressure Laboratory', [USER_ROLES.LABORATORY_TEMPERATURE_TECHNICIAN]: 'Temperature Laboratory',
+  [USER_ROLES.LABORATORY_MANAGER]: 'Pressure Laboratory', [USER_ROLES.LABORATORY_MANAGER_PRESSURE]: 'Pressure Laboratory', [USER_ROLES.LABORATORY_MANAGER_TEMPERATURE]: 'Temperature Laboratory',
+  [USER_ROLES.TECHNICAL_SIGNATORY]: 'Pressure Laboratory', [USER_ROLES.LABORATORY_ADMINISTRATOR]: 'Pressure Laboratory',
+  [USER_ROLES.QUALITY_ASSURANCE]: 'Quality Assurance', [USER_ROLES.QUALITY_MANAGER]: 'Quality Assurance',
+  [USER_ROLES.DISPATCH]: 'Dispatch', [USER_ROLES.COMPANY_OWNER]: 'Executive', [USER_ROLES.ADMINISTRATOR]: 'Administration',
+}[role] || 'Administration');
+const inferredBranchId = account => account.branchId || String(account.labBranchId || '').replaceAll('_', '-') || ({ 'Cape Town': 'cape-town', Johannesburg: 'johannesburg', Durban: 'durban', 'Port Elizabeth': 'port-elizabeth' }[account.area] || '');
+
 const normaliseAccount = account => {
-  const role = account.role === 'technical_manager'
-    ? USER_ROLES.TECHNICAL_SUPPORT
-    : account.role || USER_ROLES.CUSTOMER;
+  const role = account.role || USER_ROLES.CUSTOMER;
   return {
     ...account,
     role,
+    roles: [...new Set([role, ...(Array.isArray(account.roles) ? account.roles : []), ...(Array.isArray(account.labRoles) ? account.labRoles : [])])],
     authRealm: account.authRealm || (role === USER_ROLES.CUSTOMER ? 'customer' : 'internal'),
     status: account.status || 'active',
     signInName: account.signInName || '',
     companyId: account.companyId || (roleCan(role, PERMISSIONS.ACCESS_CUSTOMER_WORKSPACE) ? account.id : 'company-rhomberg'),
+    branchId: inferredBranchId(account),
+    department: account.department || (role === USER_ROLES.CUSTOMER ? '' : departmentForRole(role)),
+    authenticationType: account.authenticationType || 'password',
+    activationMethod: account.activationMethod || 'administrator_temporary_password',
+    forcePasswordChange: Boolean(account.forcePasswordChange),
+    firstLoginCompleted: account.firstLoginCompleted !== false,
   };
 };
 
@@ -798,6 +838,25 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   const writeCustomerRepresentativeAssignments = records => store.set(STORE_KEYS.customerRepresentativeAssignments, records);
   const readAdministrationCatalogueOverrides = () => store.get(STORE_KEYS.administrationCatalogueOverrides, { categories: {}, products: {} });
   const writeAdministrationCatalogueOverrides = records => store.set(STORE_KEYS.administrationCatalogueOverrides, records);
+  const readUserLoginHistory = () => store.get(STORE_KEYS.userLoginHistory, []);
+  const writeUserLoginHistory = records => store.set(STORE_KEYS.userLoginHistory, records);
+  const appendUserLoginHistory = event => writeUserLoginHistory([...readUserLoginHistory(), event]);
+  const readUserProfileImages = () => store.get(STORE_KEYS.userProfileImages, {});
+  const writeUserProfileImages = records => store.set(STORE_KEYS.userProfileImages, records);
+  const fabricatedAppointments = () => ([
+    { id: 'appointment-demo-scheduled', clientId: 'client-demo-11', customer: 'Fabricated Water Utility', representativeId: 'J-14', branchId: 'johannesburg', address: 'Fabricated customer address 11', customerContact: 'Tumi Contact', scheduledAt: new Date(now().getTime() + 3 * 86400000).toISOString(), expectedDurationMinutes: 60, purpose: 'Fabricated scheduled monthly visit', status: 'scheduled', verificationStatus: 'unverified', fabricated: true, createdAt: now().toISOString(), immutableHistory: [{ action: 'appointment_created', at: now().toISOString(), actorId: 'mock-seed' }] },
+    { id: 'appointment-demo-missed', clientId: 'client-demo-10', customer: 'Fabricated Steel Services', representativeId: 'J-14', branchId: 'johannesburg', address: 'Fabricated customer address 10', customerContact: 'Robin Contact', scheduledAt: new Date(now().getTime() - 2 * 86400000).toISOString(), expectedDurationMinutes: 45, purpose: 'Fabricated missed monthly visit', status: 'missed_visit', verificationStatus: 'unverified', fabricated: true, createdAt: new Date(now().getTime() - 4 * 86400000).toISOString(), immutableHistory: [{ action: 'appointment_created', at: new Date(now().getTime() - 4 * 86400000).toISOString(), actorId: 'mock-seed' }, { action: 'visit_missed', at: new Date(now().getTime() - 86400000).toISOString(), actorId: 'mock-system' }] },
+  ]);
+  const readClientAppointments = () => clone(store.get(STORE_KEYS.clientAppointments, fabricatedAppointments()));
+  const writeClientAppointments = records => store.set(STORE_KEYS.clientAppointments, records);
+  const readClientVisits = () => store.get(STORE_KEYS.clientVisits, []);
+  const writeClientVisits = records => store.set(STORE_KEYS.clientVisits, records);
+  const readVisitQrTokens = () => store.get(STORE_KEYS.visitQrTokens, []);
+  const writeVisitQrTokens = records => store.set(STORE_KEYS.visitQrTokens, records);
+  const readVisitPolicy = () => ({ ...DEFAULT_VISIT_POLICY, ...store.get(STORE_KEYS.visitPolicy, {}) });
+  const writeVisitPolicy = policy => store.set(STORE_KEYS.visitPolicy, { ...DEFAULT_VISIT_POLICY, ...policy });
+  const readOfficeLocations = () => clone(store.get(STORE_KEYS.officeLocations, FABRICATED_OFFICE_LOCATIONS));
+  const writeOfficeLocations = records => store.set(STORE_KEYS.officeLocations, records);
   const effectiveCategories = () => {
     const overrides = readAdministrationCatalogueOverrides().categories || {};
     return categories.map(category => ({ ...category, ...(overrides[category.id] || {}) }));
@@ -835,7 +894,13 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
 
   const currentStoredAccount = () => {
     const session = store.get(STORE_KEYS.session, null);
-    return session ? readAccounts().find(account => account.id === session.accountId) || null : null;
+    if (!session) return null;
+    const stored = readAccounts().find(account => account.id === session.accountId) || null;
+    if (!stored) return null;
+    const allowedRoles = stored.roles || [stored.role];
+    return session.activeRole && allowedRoles.includes(session.activeRole)
+      ? { ...stored, role: session.activeRole }
+      : stored;
   };
 
   const requireAccount = () => {
@@ -1441,6 +1506,8 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     if (!store.has(STORE_KEYS.administrationCatalogueOverrides)) {
       writeAdministrationCatalogueOverrides({ categories: {}, products: {} });
     }
+    if (!store.has(STORE_KEYS.userLoginHistory)) writeUserLoginHistory([]);
+    if (!store.has(STORE_KEYS.userProfileImages)) writeUserProfileImages({});
 
     if (!store.has(STORE_KEYS.session)) {
       const legacySession = store.get(LEGACY_STORE_KEYS.session, null);
@@ -1459,15 +1526,33 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     async signIn(credentials) {
       validateSignIn(credentials);
       const identifier = credentials.email.trim().toLowerCase();
-      const matched = readAccounts().find(account => (
-        (account.email.toLowerCase() === identifier || account.signInName?.toLowerCase() === identifier)
-        && account.password === credentials.password
-        && account.status !== 'suspended'
+      const accounts = readAccounts();
+      const matched = accounts.find(account => (
+        (String(account.email || '').toLowerCase() === identifier || account.signInName?.toLowerCase() === identifier)
         && (!credentials.realm || account.authRealm === credentials.realm)
       ));
-      if (!matched) throw new ServiceError('The email address or password does not match a preview account.', { code: 'INVALID_CREDENTIALS', status: 401 });
-      store.set(STORE_KEYS.session, { accountId: matched.id, signedInAt: now().toISOString() });
-      return toPublicAccount(matched);
+      const suppliedHash = matched?.passwordHash ? await hashMockCredential(matched.id, credentials.password) : '';
+      const credentialMatches = Boolean(matched && (matched.password === credentials.password || matched.passwordHash === suppliedHash));
+      const occurredAt = now().toISOString();
+      if (!credentialMatches || !matched || ['temporarily_locked', 'disabled', 'suspended', 'archived'].includes(matched.status)) {
+        appendUserLoginHistory({ id: makeId('login'), userId: matched?.id || '', identifier, outcome: 'failure', reason: matched && !credentialMatches ? 'invalid_credential' : matched?.status || 'unknown_identity', occurredAt });
+        throw new ServiceError('The email address or password does not match an active preview account.', { code: 'INVALID_CREDENTIALS', status: 401 });
+      }
+      const index = accounts.findIndex(account => account.id === matched.id);
+      accounts[index] = { ...matched, lastLoginAt: occurredAt };
+      writeAccounts(accounts);
+      appendUserLoginHistory({ id: makeId('login'), userId: matched.id, identifier, outcome: 'success', reason: '', occurredAt });
+      store.set(STORE_KEYS.session, { accountId: matched.id, activeRole: matched.role, signedInAt: occurredAt });
+      return toPublicAccount(accounts[index]);
+    },
+
+    async switchWorkspace(role) {
+      const current = requireAccount();
+      const roles = current.roles || [current.role];
+      if (!roles.includes(role)) throw new ServiceError('That workspace is not assigned to your account.', { code: 'WORKSPACE_FORBIDDEN', status: 403 });
+      const session = store.get(STORE_KEYS.session, null);
+      store.set(STORE_KEYS.session, { ...session, activeRole: role });
+      return toPublicAccount({ ...readAccounts().find(item => item.id === current.id), role });
     },
 
     async register(data) {
@@ -1517,7 +1602,22 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         const { branch, representatives } = representativesForArea(area);
         return [area, { branch: clone(branch), representatives: clone(representatives) }];
       }));
-      return { areas: clone(areas), industries: clone(industries), branches: clone(branches), areaDirectory };
+      const sessionAccount = currentStoredAccount();
+      const assignment = sessionAccount?.companyId
+        ? readCustomerRepresentativeAssignments()[sessionAccount.companyId]
+        : null;
+      const preferredRepresentative = assignment ? representativeById(assignment.representativeId) : null;
+      return {
+        areas: clone(areas),
+        industries: clone(industries),
+        branches: clone(branches),
+        areaDirectory,
+        preferredRepresentative: preferredRepresentative ? clone({
+          ...preferredRepresentative,
+          branchName: branches.find(branch => branch.id === preferredRepresentative.branchId)?.name || '',
+          assignedAt: assignment.assignedAt || '',
+        }) : null,
+      };
     },
 
     async listCompanies() {
@@ -1586,8 +1686,8 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         immutable: true,
         createdAt: challenge.createdAt,
       });
-      const [localPart, domain] = account.email.split('@');
-      const maskedEmail = `${localPart.slice(0, 2)}***@${domain}`;
+      const [localPart, domain] = String(account.email || '').split('@');
+      const maskedEmail = domain ? `${localPart.slice(0, 2)}***@${domain}` : `administrator-assisted verification for ${account.signInName}`;
       return clone({
         challengeId: challenge.id,
         changeType,
@@ -1634,6 +1734,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const allAccounts = readAccounts();
       const accountIndex = allAccounts.findIndex(item => item.id === account.id);
       let updated;
+      let activatedOnChange = false;
       if (challenge.changeType === 'username') {
         const username = String(newUsername || '').trim();
         if (!/^[a-zA-Z][a-zA-Z0-9._-]{2,39}$/.test(username)) {
@@ -1665,14 +1766,26 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
             fieldErrors: { newPassword: 'Use a stronger password.' },
           });
         }
-        if (password === allAccounts[accountIndex].password) {
+        const existingHash = allAccounts[accountIndex].passwordHash;
+        if (password === allAccounts[accountIndex].password || existingHash && await hashMockCredential(account.id, password) === existingHash) {
           throw new ServiceError('Choose a password that is different from the current password.', {
             code: 'PASSWORD_REUSED',
             status: 422,
             fieldErrors: { newPassword: 'Choose a new password.' },
           });
         }
-        updated = { ...allAccounts[accountIndex], password, passwordChangedAt: occurredAt.toISOString() };
+        const wasFirstLogin = Boolean(allAccounts[accountIndex].forcePasswordChange || allAccounts[accountIndex].status === 'pending_activation');
+        activatedOnChange = wasFirstLogin;
+        updated = {
+          ...allAccounts[accountIndex],
+          password: undefined,
+          passwordHash: await hashMockCredential(account.id, password),
+          passwordChangedAt: occurredAt.toISOString(),
+          forcePasswordChange: false,
+          firstLoginCompleted: true,
+          status: wasFirstLogin ? 'active' : allAccounts[accountIndex].status,
+          activatedAt: wasFirstLogin ? occurredAt.toISOString() : allAccounts[accountIndex].activatedAt,
+        };
       }
       allAccounts[accountIndex] = updated;
       writeAccounts(allAccounts);
@@ -1689,6 +1802,21 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         actorRole: account.role,
         fieldsChanged: [challenge.changeType === 'username' ? 'signInName' : 'passwordHash'],
         details: { authRealm: account.authRealm, sessionsInvalidated: challenge.changeType === 'password' },
+        immutable: true,
+        createdAt: occurredAt.toISOString(),
+      });
+      if (challenge.changeType === 'password' && activatedOnChange) appendAuditEvent({
+        id: makeId('audit'),
+        action: 'authentication.account_activated',
+        outcome: 'success',
+        entityType: 'user',
+        entityId: account.id,
+        companyId: account.companyId,
+        actorId: account.id,
+        actorRole: account.role,
+        fieldsChanged: ['status', 'firstLoginCompleted'],
+        previousValue: { status: account.status, firstLoginCompleted: false },
+        newValue: { status: 'active', firstLoginCompleted: true },
         immutable: true,
         createdAt: occurredAt.toISOString(),
       });
@@ -3866,13 +3994,21 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       if (!['worksheet_ready', 'calibration_in_progress', 'calibration_on_hold', 'management_changes_required'].includes(unit.labWork.status)) throw new ServiceError('Complete booking-in before entering worksheet data.', { code: 'LAB_WORKSHEET_STAGE_INVALID', status: 409 });
       const testPoints = (input.testPoints || []).map((point, pointIndex) => ({
         id: point.id || `point-${pointIndex + 1}`,
-        direction: method.discipline === 'pressure' ? (point.direction === 'decreasing' ? 'decreasing' : 'increasing') : 'temperature',
+        direction: method.discipline === 'pressure' && ['increasing', 'repeatability', 'decreasing'].includes(point.direction) ? point.direction : 'temperature',
         applied: Number(point.applied),
         standardCorrection: Number(point.standardCorrection || 0),
         readings: (point.readings || []).filter(value => value !== '').map(Number),
+        referenceReadings: (point.referenceReadings || []).filter(value => value !== '').map(Number),
+        readingTimestamps: (point.readingTimestamps || []).map(value => String(value || '')),
+        ambientTemperature: point.ambientTemperature === '' ? null : Number(point.ambientTemperature),
+        immersionDepth: String(point.immersionDepth || '').trim().slice(0, 100),
+        stabilisationConfirmed: point.stabilisationConfirmed === true,
+        resultStatus: point.resultStatus === 'review_required' ? 'review_required' : 'satisfactory',
+        technicianNotes: String(point.technicianNotes || '').trim().slice(0, 1000),
         notes: String(point.notes || '').trim().slice(0, 500),
       }));
       if (!testPoints.length || testPoints.some(point => !Number.isFinite(point.applied) || !point.readings.length || point.readings.some(value => !Number.isFinite(value)))) throw new ServiceError('Enter valid calibration points and numeric readings.', { code: 'LAB_WORKSHEET_READINGS_INVALID', status: 422 });
+      validateLaboratoryPointStructure(method, testPoints);
       const validStandards = validStandardsForWorksheet({ branchId: unit.labWork.branchId, methodId: method.id, minimum: unit.labWork.booking?.rangeMinimum, maximum: unit.labWork.booking?.rangeMaximum, asOf: now().toISOString().slice(0, 10) });
       const standardIds = [...new Set(input.standardIds || [])];
       if (!standardIds.length || standardIds.some(id => !validStandards.some(standard => standard.id === id))) throw new ServiceError('Select an active, in-range reference standard approved for this method.', { code: 'LAB_REFERENCE_STANDARD_INVALID', status: 422, fieldErrors: { standardIds: 'Select a valid reference standard.' } });
@@ -4391,6 +4527,129 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     },
   };
 
+  const visitAudit = (account, action, entityId, details = {}) => appendAuditEvent({
+    id: makeId('audit'), action: `client_visit.${action}`, eventType: action, outcome: 'success', entityType: 'client_visit', entityId,
+    companyId: 'company-rhomberg', actorId: account.id, actorRole: account.role, actorDisplayName: account.contact,
+    details: { ...details, fabricated: true }, createdAt: now().toISOString(), immutable: true,
+  });
+  const requireVisitPermission = (account, permission) => {
+    if (!accountCan(account, permission)) throw new ServiceError('Your account cannot perform that client-visit action.', { code: 'VISIT_FORBIDDEN', status: 403 });
+  };
+  const clientForAccount = (account, clientId) => {
+    const client = FABRICATED_REP_CLIENTS.find(item => item.id === clientId);
+    if (!client) throw new ServiceError('The assigned customer was not found.', { code: 'VISIT_CLIENT_NOT_FOUND', status: 404 });
+    if (account.role === USER_ROLES.SALES_REPRESENTATIVE && client.representativeId !== account.representativeId) throw new ServiceError('This customer is assigned to another Representative.', { code: 'VISIT_CLIENT_FORBIDDEN', status: 403 });
+    return client;
+  };
+  const appointmentsForAccount = account => readClientAppointments().filter(item => account.role !== USER_ROLES.SALES_REPRESENTATIVE || item.representativeId === account.representativeId);
+  const effectiveVisitClients = account => FABRICATED_REP_CLIENTS
+    .filter(client => account.role !== USER_ROLES.SALES_REPRESENTATIVE || client.representativeId === account.representativeId)
+    .map(client => {
+      const latest = readClientVisits().filter(visit => visit.clientId === client.id && visit.verificationStatus === 'verified').sort((a, b) => b.completedAt.localeCompare(a.completedAt))[0];
+      const current = latest ? { ...client, lastVerifiedVisitAt: latest.completedAt } : client;
+      return { ...current, ...clientVisitHealth(current, readVisitPolicy(), now().getTime()) };
+    });
+
+  const clientVisits = {
+    async listClients() {
+      const account = requireAccount(); requireVisitPermission(account, account.role === USER_ROLES.SALES_REPRESENTATIVE ? PERMISSIONS.VIEW_ASSIGNED_CLIENTS : PERMISSIONS.VIEW_VISIT_COMPLIANCE);
+      return clone(effectiveVisitClients(account));
+    },
+    async getOverview() {
+      const account = requireAccount();
+      const clients = effectiveVisitClients(account); const appointments = appointmentsForAccount(account);
+      clients.filter(client => client.status === 'amber' || client.status === 'red').forEach(client => {
+        const eventType = client.status === 'red' ? 'client_visit_overdue' : 'client_visit_due_soon';
+        const exists = readNotifications().some(item => item.eventType === eventType && item.entityId === client.id && item.representativeId === client.representativeId);
+        if (!exists) appendNotification({ id: makeId('notification'), eventType, category: 'companyAnnouncements', title: client.status === 'red' ? 'Client visit overdue' : 'Client visit due soon', message: `${client.company}: ${client.daysRemaining < 0 ? Math.abs(client.daysRemaining) + ' days overdue' : client.daysRemaining + ' days remaining'}.`, entityType: 'client', entityId: client.id, reference: client.company, companyId: 'company-rhomberg', representativeId: client.representativeId, recipients: ['assigned_representative'], customerVisible: false, link: { entityType: 'client', entityId: client.id, reference: client.company, internalView: 'clients' }, createdAt: now().toISOString() });
+      });
+      return clone({ ...visitComplianceMetrics(clients, appointments, readVisitPolicy()), periodLabel: 'Current month', fabricated: true });
+    },
+    async listAppointments() { const account = requireAccount(); return clone(appointmentsForAccount(account)); },
+    async schedule(clientId, input) {
+      const account = requireAccount(); requireVisitPermission(account, PERMISSIONS.SCHEDULE_CLIENT_VISITS);
+      const client = clientForAccount(account, clientId); const value = validateAppointment(input);
+      const appointment = { id: makeId('appointment'), clientId, customer: client.company, representativeId: client.representativeId, branchId: client.branchId, address: value.address, customerContact: value.contact, scheduledAt: value.scheduledAt, expectedDurationMinutes: value.expectedDurationMinutes, purpose: String(value.purpose).trim(), notes: String(value.notes || '').trim(), agenda: String(value.agenda || '').trim(), reminder: Boolean(value.reminder), followUpRequired: Boolean(value.followUpRequired), status: 'scheduled', verificationStatus: 'unverified', createdAt: now().toISOString(), fabricated: true, immutableHistory: [{ action: 'appointment_created', at: now().toISOString(), actorId: account.id }] };
+      writeClientAppointments([...readClientAppointments(), appointment]); visitAudit(account, 'appointment_created', appointment.id, { clientId, scheduledAt: appointment.scheduledAt }); return clone(appointment);
+    },
+    async start(appointmentId) {
+      const account = requireAccount(); requireVisitPermission(account, PERMISSIONS.VERIFY_CLIENT_VISITS);
+      const records = readClientAppointments(); const index = records.findIndex(item => item.id === appointmentId && item.representativeId === account.representativeId);
+      if (index < 0) throw new ServiceError('The appointment was not found in your visit list.', { code: 'VISIT_APPOINTMENT_NOT_FOUND', status: 404 });
+      records[index] = { ...records[index], status: 'in_progress', startedAt: now().toISOString(), signals: { ...(records[index].signals || {}), appointmentExists: true, visitStarted: true }, immutableHistory: [...records[index].immutableHistory, { action: 'visit_started', at: now().toISOString(), actorId: account.id }] };
+      writeClientAppointments(records); visitAudit(account, 'visit_started', appointmentId); return clone(records[index]);
+    },
+    async locationCheck(appointmentId, input = {}) {
+      const account = requireAccount(); requireVisitPermission(account, PERMISSIONS.VERIFY_CLIENT_VISITS);
+      if (input.permissionStatus !== 'enabled') throw new ServiceError(input.permissionStatus === 'denied' ? 'Location permission was denied. Use customer QR confirmation as the privacy-safe fallback.' : 'Location is unavailable. Use customer QR confirmation as the fallback.', { code: input.permissionStatus === 'denied' ? 'LOCATION_PERMISSION_DENIED' : 'LOCATION_UNAVAILABLE', status: 422 });
+      const records = readClientAppointments(); const index = records.findIndex(item => item.id === appointmentId && item.representativeId === account.representativeId);
+      if (index < 0) throw new ServiceError('The appointment was not found.', { code: 'VISIT_APPOINTMENT_NOT_FOUND', status: 404 });
+      const client = clientForAccount(account, records[index].clientId); const measuredDistance = distanceMetres(input, client); const matched = measuredDistance <= client.verificationRadiusMetres;
+      records[index] = { ...records[index], signals: { ...(records[index].signals || {}), repGeofenceMatch: matched }, geofenceCheck: { measuredDistance: Math.round(measuredDistance), radiusMetres: client.verificationRadiusMetres, matched, permissionStatus: input.permissionStatus, checkedAt: now().toISOString(), fabricated: true }, immutableHistory: [...records[index].immutableHistory, { action: matched ? 'rep_location_confirmation' : 'verification_failed', at: now().toISOString(), actorId: account.id }] };
+      writeClientAppointments(records); visitAudit(account, matched ? 'rep_location_confirmation' : 'verification_failed', appointmentId, { measuredDistance: Math.round(measuredDistance), matched }); return clone(records[index].geofenceCheck);
+    },
+    async customerConfirm(appointmentId) {
+      const account = requireAccount(); const records = readClientAppointments(); const index = records.findIndex(item => item.id === appointmentId);
+      if (index < 0) throw new ServiceError('The visit appointment was not found.', { code: 'VISIT_APPOINTMENT_NOT_FOUND', status: 404 });
+      records[index] = { ...records[index], signals: { ...(records[index].signals || {}), customerConfirmation: true }, customerConfirmation: { confirmedAt: now().toISOString(), fabricated: true }, immutableHistory: [...records[index].immutableHistory, { action: 'customer_confirmation', at: now().toISOString(), actorId: account.id }] };
+      writeClientAppointments(records); visitAudit(account, 'customer_confirmation', appointmentId); return clone(records[index]);
+    },
+    async createQr(appointmentId) {
+      const account = requireAccount(); const appointment = readClientAppointments().find(item => item.id === appointmentId);
+      if (!appointment) throw new ServiceError('The visit appointment was not found.', { code: 'VISIT_APPOINTMENT_NOT_FOUND', status: 404 });
+      const token = { id: makeId('visit-qr'), token: `DEMO-${Math.random().toString(36).slice(2, 10).toUpperCase()}`, appointmentId, clientId: appointment.clientId, expiresAt: new Date(now().getTime() + readVisitPolicy().qrLifetimeMinutes * 60000).toISOString(), usedAt: '', fabricated: true };
+      writeVisitQrTokens([...readVisitQrTokens(), token]); visitAudit(account, 'qr_created', appointmentId, { tokenId: token.id, expiresAt: token.expiresAt }); return clone(token);
+    },
+    async verifyQr(appointmentId, tokenValue) {
+      const account = requireAccount(); requireVisitPermission(account, PERMISSIONS.VERIFY_CLIENT_VISITS); const tokens = readVisitQrTokens(); const tokenIndex = tokens.findIndex(item => item.appointmentId === appointmentId && item.token === tokenValue);
+      if (tokenIndex < 0) throw new ServiceError('The customer QR confirmation is invalid.', { code: 'VISIT_QR_INVALID', status: 422 });
+      if (tokens[tokenIndex].usedAt) throw new ServiceError('This customer QR confirmation has already been used.', { code: 'VISIT_QR_REUSED', status: 409 });
+      if (new Date(tokens[tokenIndex].expiresAt).getTime() < now().getTime()) throw new ServiceError('The customer QR confirmation has expired.', { code: 'VISIT_QR_EXPIRED', status: 410 });
+      tokens[tokenIndex] = { ...tokens[tokenIndex], usedAt: now().toISOString(), usedBy: account.id }; writeVisitQrTokens(tokens);
+      const records = readClientAppointments(); const index = records.findIndex(item => item.id === appointmentId);
+      records[index] = { ...records[index], signals: { ...(records[index].signals || {}), qrVerified: true }, immutableHistory: [...records[index].immutableHistory, { action: 'qr_verification', at: now().toISOString(), actorId: account.id }] }; writeClientAppointments(records); visitAudit(account, 'qr_verification', appointmentId, { tokenId: tokens[tokenIndex].id }); return clone(records[index]);
+    },
+    async complete(appointmentId, input = {}) {
+      const account = requireAccount(); requireVisitPermission(account, PERMISSIONS.VERIFY_CLIENT_VISITS); const records = readClientAppointments(); const index = records.findIndex(item => item.id === appointmentId && item.representativeId === account.representativeId);
+      if (index < 0) throw new ServiceError('The appointment was not found.', { code: 'VISIT_APPOINTMENT_NOT_FOUND', status: 404 });
+      const completedAt = now().toISOString(); const durationMinutes = Math.max(0, Math.round((new Date(completedAt) - new Date(records[index].startedAt)) / 60000));
+      const signals = { ...(records[index].signals || {}), visitEnded: true, validDuration: durationMinutes >= 5 }; const verification = verificationStatus(signals);
+      records[index] = { ...records[index], status: 'completed', completedAt, durationMinutes, signals, verificationStatus: verification.status, verificationScore: verification.score, completionNotes: String(input.notes || '').trim(), immutableHistory: [...records[index].immutableHistory, { action: 'visit_completed', at: completedAt, actorId: account.id }, ...(verification.status === 'verified' ? [{ action: 'visit_verified', at: completedAt, actorId: account.id }] : [])] };
+      writeClientAppointments(records); writeClientVisits([...readClientVisits(), { id: makeId('visit'), appointmentId, clientId: records[index].clientId, representativeId: records[index].representativeId, startedAt: records[index].startedAt, completedAt, durationMinutes, verificationStatus: verification.status, signals, fabricated: true }]); visitAudit(account, verification.status === 'verified' ? 'visit_verified' : 'visit_completed', appointmentId, { verification }); return clone(records[index]);
+    },
+    async detectMissed() {
+      const account = requireAccount(); requireVisitPermission(account, PERMISSIONS.VIEW_VISIT_COMPLIANCE); const records = readClientAppointments(); let changed = 0;
+      records.forEach((item, index) => { if (item.status === 'scheduled' && new Date(item.scheduledAt).getTime() + item.expectedDurationMinutes * 60000 < now().getTime()) { records[index] = { ...item, status: 'missed_visit', immutableHistory: [...item.immutableHistory, { action: 'visit_missed', at: now().toISOString(), actorId: account.id }] }; changed += 1; visitAudit(account, 'visit_missed', item.id); appendNotification({ id: makeId('notification'), eventType: 'client_visit_missed', category: 'companyAnnouncements', title: 'Missed client visit', message: `${item.customer}: the appointment passed without valid verification.`, entityType: 'client_visit', entityId: item.id, reference: item.customer, companyId: 'company-rhomberg', representativeId: item.representativeId, recipients: ['assigned_representative', USER_ROLES.SALES_MANAGER], customerVisible: false, link: { entityType: 'client_visit', entityId: item.id, reference: item.customer, internalView: 'clients' }, createdAt: now().toISOString() }); } });
+      writeClientAppointments(records); return { changed, appointments: clone(appointmentsForAccount(account)) };
+    },
+    async submitMissedReason(appointmentId, input = {}) {
+      const account = requireAccount(); const records = readClientAppointments(); const index = records.findIndex(item => item.id === appointmentId && (account.role !== USER_ROLES.SALES_REPRESENTATIVE || item.representativeId === account.representativeId));
+      if (index < 0 || records[index].status !== 'missed_visit') throw new ServiceError('The missed appointment was not found.', { code: 'MISSED_VISIT_NOT_FOUND', status: 404 });
+      if (String(input.reason || '').trim().length < 8) throw new ServiceError('Provide a clear reason for the missed visit.', { code: 'MISSED_VISIT_REASON_REQUIRED', status: 422 });
+      records[index] = { ...records[index], missedReason: String(input.reason).trim(), internalNote: String(input.internalNote || '').trim(), rescheduledAt: input.rescheduledAt || '', immutableHistory: [...records[index].immutableHistory, { action: input.rescheduledAt ? 'visit_rescheduled' : 'missed_reason_submitted', at: now().toISOString(), actorId: account.id }] }; writeClientAppointments(records); visitAudit(account, input.rescheduledAt ? 'visit_rescheduled' : 'missed_reason_submitted', appointmentId); return clone(records[index]);
+    },
+    async getCompliance() {
+      const account = requireAccount(); requireVisitPermission(account, PERMISSIONS.VIEW_VISIT_COMPLIANCE);
+      FABRICATED_REP_CLIENTS.filter(client => clientVisitHealth(client, readVisitPolicy(), now().getTime()).status === 'red').forEach(client => {
+        const exists = readNotifications().some(item => item.eventType === 'client_visit_overdue_manager' && item.entityId === client.id);
+        if (!exists) appendNotification({ id: makeId('notification'), eventType: 'client_visit_overdue_manager', category: 'companyAnnouncements', title: 'Overdue customer visit', message: `${client.company} is outside the configured visit cycle.`, entityType: 'client', entityId: client.id, reference: client.company, companyId: 'company-rhomberg', representativeId: client.representativeId, recipients: [USER_ROLES.SALES_MANAGER], customerVisible: false, link: { entityType: 'client', entityId: client.id, reference: client.company, internalView: 'clients' }, createdAt: now().toISOString() });
+      });
+      const representatives = [...new Set(FABRICATED_REP_CLIENTS.map(client => client.representativeId))];
+      return clone(representatives.map(representativeId => { const clients = FABRICATED_REP_CLIENTS.filter(client => client.representativeId === representativeId); const appointments = readClientAppointments().filter(item => item.representativeId === representativeId); return { representativeId, representativeName: representativeId === 'C-27' ? 'Fabricated Representative A' : 'Fabricated Representative B', branchId: clients[0]?.branchId || '', ...visitComplianceMetrics(clients, appointments, readVisitPolicy()), averageDaysBetweenVisits: 29, averageVisitDurationMinutes: 54, officeHours: 18, clientVisitHours: 12, fieldHours: 9, unclassifiedHours: 3, fabricated: true }; }));
+    },
+    async getLocations() { const account = requireAccount(); requireVisitPermission(account, PERMISSIONS.MANAGE_LOCATION_SETTINGS); return clone(readOfficeLocations()); },
+    async saveLocation(input) {
+      const account = requireAccount(); requireVisitPermission(account, PERMISSIONS.MANAGE_LOCATION_SETTINGS); const radiusMetres = Number(input.radiusMetres);
+      if (!input.branchId || !String(input.address || '').trim() || !Number.isFinite(Number(input.latitude)) || !Number.isFinite(Number(input.longitude)) || !Number.isFinite(radiusMetres) || radiusMetres < 25) throw new ServiceError('Branch, address, coordinates and a valid geofence radius are required.', { code: 'OFFICE_LOCATION_INVALID', status: 422 });
+      const records = readOfficeLocations(); const index = records.findIndex(item => item.id === input.id); const record = { ...input, id: input.id || makeId('office'), latitude: Number(input.latitude), longitude: Number(input.longitude), radiusMetres, fabricated: true, updatedAt: now().toISOString() };
+      if (index >= 0) records[index] = record; else records.push(record); writeOfficeLocations(records); visitAudit(account, index >= 0 ? 'office_location_changed' : 'office_location_created', record.id, { branchId: record.branchId }); return clone(record);
+    },
+    async getPolicy() { const account = requireAccount(); requireVisitPermission(account, account.role === USER_ROLES.ADMINISTRATOR ? PERMISSIONS.MANAGE_LOCATION_SETTINGS : PERMISSIONS.VIEW_VISIT_COMPLIANCE); return clone(readVisitPolicy()); },
+    async savePolicy(input) { const account = requireAccount(); requireVisitPermission(account, PERMISSIONS.MANAGE_LOCATION_SETTINGS); const policy = { ...readVisitPolicy(), ...input, defaultVisitCycleDays: Math.max(7, Number(input.defaultVisitCycleDays) || 30), advanceReminderDays: Math.max(1, Number(input.advanceReminderDays) || 7), routineLocationAnalyticsEnabled: false }; writeVisitPolicy(policy); visitAudit(account, 'visit_policy_changed', 'visit-policy', { policy }); return clone(policy); },
+    async getOwnWorkSummary() { const account = requireAccount(); requireVisitPermission(account, PERMISSIONS.VIEW_OWN_WORK_LOCATION_SUMMARY); const office = readOfficeLocations().find(item => item.branchId === inferredBranchId(account)); return clone({ period: new Date().toISOString().slice(0, 7), officeHours: 18, clientVisitHours: 12, fieldHours: 9, unclassifiedHours: 3, locationUnavailableHours: 2, routineCollectionEnabled: false, workingHoursOnly: true, officeLocation: office?.branch || '', fabricated: true, precisionNotice: 'Location-derived statistics are approximate and must not be used alone for employment decisions.' }); },
+    isWithinWorkingHours,
+  };
+
   const personalisation = {
     async get() {
       const account = requireAccount();
@@ -4655,7 +4914,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       summary: {
         users: accountRecords.length,
         customerCompanies: companyMap.size,
-        internalAccounts: accountRecords.filter(item => item.role !== USER_ROLES.CUSTOMER).length,
+        internalAccounts: accountRecords.filter(item => item.authRealm === 'internal').length,
         rfqs: workflowRecords.enquiries.length,
         orders: workflowRecords.orders.length,
         auditEvents: readAuditEvents().length,
@@ -4664,7 +4923,9 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       },
       users: accountRecords.map(item => ({
         ...toPublicAccount(item),
-        category: item.role === USER_ROLES.CUSTOMER ? 'customer' : 'internal',
+        category: item.authRealm === 'customer' ? 'customer' : 'internal',
+        profileImageUrl: readUserProfileImages()[item.id]?.dataUrl || '',
+        loginHistoryCount: readUserLoginHistory().filter(event => event.userId === item.id).length,
         notificationPreferences: notificationPreferencesForAccount(item),
       })),
       companies: [...companyMap.values()],
@@ -4676,6 +4937,10 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       })),
       branches: branches.map(item => ({ id: item.id, name: item.name, role: item.role })),
       areas: [...areas],
+      departments: [...INTERNAL_DEPARTMENTS],
+      accountStatuses: [...ACCOUNT_STATUSES],
+      authenticationTypes: [...AUTHENTICATION_TYPES],
+      activationMethods: [...ACTIVATION_METHODS],
       roles: Object.values(USER_ROLES).map(role => ({
         id: role,
         label: role.replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase()),
@@ -4731,18 +4996,169 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       return clone(buildAdministrationOverview(actor));
     },
 
+    async createEmployee(input = {}) {
+      const actor = requireAdministrator(PERMISSIONS.MANAGE_INTERNAL_ACCOUNTS);
+      const reason = administrativeReason(input.reason);
+      const { value, fieldErrors, valid } = validateEmployeeInput(input.values || {}, { branchIds: branches.map(branch => branch.id) });
+      if (!valid) throw new ServiceError(Object.values(fieldErrors)[0], { code: 'EMPLOYEE_INVALID', status: 422, fieldErrors });
+      const accountRecords = readAccounts();
+      if (accountRecords.some(item => value.email && String(item.email || '').toLowerCase() === value.email || value.username && String(item.signInName || '').toLowerCase() === value.username)) {
+        throw new ServiceError('That work email address or username is already in use.', { code: 'ACCOUNT_IDENTITY_CONFLICT', status: 409 });
+      }
+      const id = makeId('staff');
+      const temporaryPassword = value.activationMethod === 'administrator_temporary_password' ? generateTemporaryPassword() : '';
+      const createdAt = now().toISOString();
+      const account = normaliseAccount({
+        id,
+        companyId: 'company-rhomberg',
+        company: 'Rhomberg Instruments',
+        contact: value.displayName,
+        firstName: value.firstName,
+        surname: value.surname,
+        email: value.email,
+        signInName: value.username,
+        phone: '',
+        area: branches.find(branch => branch.id === value.branchId)?.name || '',
+        branchId: value.branchId,
+        department: value.department,
+        role: value.roles[0],
+        roles: value.roles,
+        authRealm: 'internal',
+        authenticationType: value.authenticationType,
+        activationMethod: value.activationMethod,
+        status: 'pending_activation',
+        forcePasswordChange: Boolean(temporaryPassword),
+        firstLoginCompleted: false,
+        passwordHash: temporaryPassword ? await hashMockCredential(id, temporaryPassword) : '',
+        createdAt,
+        createdBy: actor.id,
+      });
+      writeAccounts([...accountRecords, account]);
+      administrationAudit({
+        actor,
+        action: 'administration.user_created',
+        entityType: 'user',
+        entityId: id,
+        companyId: account.companyId,
+        previousValue: null,
+        newValue: { ...toPublicAccount(account), credentialPrepared: Boolean(temporaryPassword) },
+        fieldsChanged: ['identity', 'branchId', 'department', 'roles', 'status', 'authenticationType'],
+        reason,
+      });
+      return { account: toPublicAccount(account), temporaryPassword: temporaryPassword || undefined, displayOnce: Boolean(temporaryPassword) };
+    },
+
+    async assignAccountRoles(accountId, input = {}) {
+      const actor = requireAdministrator(PERMISSIONS.MANAGE_ROLES_PERMISSIONS);
+      const reason = administrativeReason(input.reason);
+      verifyHighRiskAdministration(actor, input.verification);
+      if (accountId === actor.id) throw new ServiceError('A second authorised administrator must change your roles.', { code: 'SELF_ROLE_CHANGE_BLOCKED', status: 409 });
+      const requested = [...new Set(Array.isArray(input.roles) ? input.roles : [])];
+      if (!requested.length || requested.some(role => !Object.values(USER_ROLES).includes(role) || role === USER_ROLES.CUSTOMER)) throw new ServiceError('Choose at least one valid internal role.', { code: 'ACCOUNT_ROLE_INVALID', status: 422 });
+      const accountRecords = readAccounts();
+      const index = accountRecords.findIndex(item => item.id === accountId && item.authRealm === 'internal');
+      if (index < 0) throw new ServiceError('The internal account was not found.', { code: 'ACCOUNT_NOT_FOUND', status: 404 });
+      const current = accountRecords[index];
+      const previousValue = { roles: current.roles || [current.role] };
+      accountRecords[index] = { ...current, role: requested[0], roles: requested, labRoles: requested.filter(role => role.startsWith('laboratory_')), permissions: undefined, updatedAt: now().toISOString() };
+      writeAccounts(accountRecords);
+      administrationAudit({ actor, action: 'administration.user_roles_changed', entityType: 'user', entityId: accountId, companyId: current.companyId, previousValue, newValue: { roles: requested }, fieldsChanged: ['roles'], reason });
+      return toPublicAccount(accountRecords[index]);
+    },
+
+    async assignAccountBranch(accountId, input = {}) {
+      const actor = requireAdministrator(PERMISSIONS.MANAGE_INTERNAL_ACCOUNTS);
+      const reason = administrativeReason(input.reason);
+      const branchId = String(input.branchId || '');
+      const effectiveDate = String(input.effectiveDate || '');
+      if (!branches.some(branch => branch.id === branchId)) throw new ServiceError('Choose a valid branch.', { code: 'ACCOUNT_BRANCH_INVALID', status: 422 });
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)) throw new ServiceError('Choose the branch-change effective date.', { code: 'EFFECTIVE_DATE_REQUIRED', status: 422 });
+      const accountRecords = readAccounts();
+      const index = accountRecords.findIndex(item => item.id === accountId && item.authRealm === 'internal');
+      if (index < 0) throw new ServiceError('The internal account was not found.', { code: 'ACCOUNT_NOT_FOUND', status: 404 });
+      const current = accountRecords[index];
+      const branch = branches.find(item => item.id === branchId);
+      const activeResponsibilities = current.representativeId ? readAllRecords().filter(record => record.representativeId === current.representativeId && !['completed', 'cancelled', 'archived'].includes(record.trackingStatus)).map(record => record.reference) : [];
+      accountRecords[index] = { ...current, branchId, area: branch.name, updatedAt: now().toISOString() };
+      writeAccounts(accountRecords);
+      administrationAudit({ actor, action: 'administration.user_branch_changed', entityType: 'user', entityId: accountId, companyId: current.companyId, previousValue: { branchId: current.branchId || '' }, newValue: { branchId, effectiveDate, activeResponsibilities }, fieldsChanged: ['branchId'], reason });
+      return { account: toPublicAccount(accountRecords[index]), activeResponsibilities };
+    },
+
+    async resetUserLogin(accountId, input = {}) {
+      const actor = requireAdministrator(PERMISSIONS.RESET_USER_LOGIN);
+      const reason = administrativeReason(input.reason);
+      verifyHighRiskAdministration(actor, input.verification);
+      const accountRecords = readAccounts();
+      const index = accountRecords.findIndex(item => item.id === accountId && item.authRealm === 'internal' && item.status !== 'archived');
+      if (index < 0) throw new ServiceError('The active internal account was not found.', { code: 'ACCOUNT_NOT_FOUND', status: 404 });
+      const temporaryPassword = generateTemporaryPassword();
+      const current = accountRecords[index];
+      accountRecords[index] = { ...current, password: undefined, passwordHash: await hashMockCredential(current.id, temporaryPassword), forcePasswordChange: true, status: 'pending_activation', updatedAt: now().toISOString() };
+      writeAccounts(accountRecords);
+      administrationAudit({ actor, action: 'administration.password_reset_requested', entityType: 'user', entityId: accountId, companyId: current.companyId, previousValue: { status: current.status, credentialVersion: current.credentialVersion || 0 }, newValue: { status: 'pending_activation', credentialVersion: (current.credentialVersion || 0) + 1 }, fieldsChanged: ['credential', 'status'], reason });
+      return { account: toPublicAccount(accountRecords[index]), temporaryPassword, displayOnce: true };
+    },
+
+    async archiveEmployee(accountId, input = {}) {
+      const actor = requireAdministrator(PERMISSIONS.MANAGE_INTERNAL_ACCOUNTS);
+      const reason = administrativeReason(input.reason);
+      verifyHighRiskAdministration(actor, input.verification);
+      if (accountId === actor.id) throw new ServiceError('You cannot archive the administrator account currently in use.', { code: 'ACTIVE_ADMIN_ARCHIVE_BLOCKED', status: 409 });
+      const lastWorkingDate = String(input.lastWorkingDate || '');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(lastWorkingDate)) throw new ServiceError('Choose the employee last working date.', { code: 'LAST_WORKING_DATE_REQUIRED', status: 422 });
+      const accountRecords = readAccounts();
+      const index = accountRecords.findIndex(item => item.id === accountId && item.authRealm === 'internal');
+      if (index < 0) throw new ServiceError('The internal account was not found.', { code: 'ACCOUNT_NOT_FOUND', status: 404 });
+      const current = accountRecords[index];
+      const responsibilities = current.representativeId ? readAllRecords().filter(record => record.representativeId === current.representativeId && !['completed', 'cancelled', 'archived'].includes(record.trackingStatus)).map(record => record.reference) : [];
+      if (responsibilities.length && !String(input.replacementEmployeeId || '').trim()) throw new ServiceError('Choose a replacement employee before archiving an account with active responsibilities.', { code: 'REPLACEMENT_REQUIRED', status: 422, details: { responsibilities } });
+      accountRecords[index] = { ...current, status: 'archived', archivedAt: now().toISOString(), lastWorkingDate, futureNotificationsDisabled: true, updatedAt: now().toISOString() };
+      writeAccounts(accountRecords);
+      administrationAudit({ actor, action: 'administration.user_archived', entityType: 'user', entityId: accountId, companyId: current.companyId, previousValue: { status: current.status }, newValue: { status: 'archived', lastWorkingDate, replacementEmployeeId: input.replacementEmployeeId || '', responsibilities }, fieldsChanged: ['status', 'archivedAt'], reason });
+      return toPublicAccount(accountRecords[index]);
+    },
+
+    async uploadEmployeeProfileImage(accountId, file, input = {}) {
+      const actor = requireAdministrator(PERMISSIONS.MANAGE_USER_PROFILE_IMAGES);
+      const reason = administrativeReason(input.reason);
+      const validation = validateEmployeeProfileImage(file);
+      if (!validation.valid) throw new ServiceError(validation.error, { code: 'PROFILE_IMAGE_INVALID', status: 422 });
+      const target = readAccounts().find(item => item.id === accountId && item.authRealm === 'internal');
+      if (!target) throw new ServiceError('The internal account was not found.', { code: 'ACCOUNT_NOT_FOUND', status: 404 });
+      const images = readUserProfileImages();
+      const previousValue = images[accountId] ? { name: images[accountId].name, type: images[accountId].type, size: images[accountId].size } : null;
+      const image = { id: makeId('profile'), name: file.name, type: file.type, size: file.size, dataUrl: await fileToDataUrl(file), uploadedAt: now().toISOString() };
+      images[accountId] = image;
+      writeUserProfileImages(images);
+      administrationAudit({ actor, action: 'administration.user_profile_image_changed', entityType: 'user_profile_image', entityId: accountId, companyId: target.companyId, previousValue, newValue: { id: image.id, name: image.name, type: image.type, size: image.size }, fieldsChanged: ['profileImage'], reason });
+      return { ...image, dataUrl: undefined, previewUrl: image.dataUrl };
+    },
+
+    async getUserAudit(accountId) {
+      const actor = requireAdministrator(PERMISSIONS.READ_AUDIT_HISTORY);
+      if (!readAccounts().some(item => item.id === accountId && canAdministerCompany(actor, item.companyId))) throw new ServiceError('The account was not found.', { code: 'ACCOUNT_NOT_FOUND', status: 404 });
+      return readAuditEvents().filter(event => event.entityId === accountId && (event.entityType === 'user' || event.entityType === 'user_profile_image')).map(presentAuditEvent);
+    },
+
+    async getUserLoginHistory(accountId) {
+      const actor = requireAdministrator(PERMISSIONS.VIEW_LOGIN_HISTORY);
+      if (!readAccounts().some(item => item.id === accountId && canAdministerCompany(actor, item.companyId))) throw new ServiceError('The account was not found.', { code: 'ACCOUNT_NOT_FOUND', status: 404 });
+      return clone(readUserLoginHistory().filter(event => event.userId === accountId).sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)));
+    },
+
     async setAccountStatus(accountId, input = {}) {
       const actor = requireAdministrator(PERMISSIONS.ADMINISTER_USERS);
       const status = String(input.status || '');
       const reason = administrativeReason(input.reason);
-      if (!['active', 'suspended'].includes(status)) {
-        throw new ServiceError('Choose active or suspended.', {
+      if (!ACCOUNT_STATUSES.includes(status)) {
+        throw new ServiceError('Choose a valid account status.', {
           code: 'ACCOUNT_STATUS_INVALID',
           status: 422,
-          fieldErrors: { status: 'Choose active or suspended.' },
+          fieldErrors: { status: 'Choose a valid account status.' },
         });
       }
-      if (accountId === actor.id && status === 'suspended') {
+      if (accountId === actor.id && ['suspended', 'disabled', 'archived'].includes(status)) {
         throw new ServiceError('You cannot suspend the administrator account currently in use.', {
           code: 'ACTIVE_ADMIN_SUSPENSION_BLOCKED',
           status: 409,
@@ -4754,7 +5170,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       if (!canAdministerCompany(actor, accountRecords[index].companyId)) throw new ServiceError('The account is outside your authorised company scope.', { code: 'FORBIDDEN', status: 403 });
       const permission = accountRecords[index].role === USER_ROLES.CUSTOMER ? PERMISSIONS.MANAGE_CUSTOMER_CONTACTS : PERMISSIONS.MANAGE_INTERNAL_ACCOUNTS;
       if (!accountCan(actor, permission)) throw new ServiceError('Your administrator account cannot change this account realm.', { code: 'FORBIDDEN', status: 403 });
-      if (status === 'suspended') verifyHighRiskAdministration(actor, input.verification);
+      if (['suspended', 'disabled', 'archived'].includes(status)) verifyHighRiskAdministration(actor, input.verification);
       const previousValue = { status: accountRecords[index].status };
       const occurredAt = now().toISOString();
       accountRecords[index] = { ...accountRecords[index], status, updatedAt: occurredAt };
@@ -4855,19 +5271,17 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         area: String(values.area ?? current.area ?? '').trim(),
         branchId: String(values.branchId ?? current.branchId ?? '').trim(),
       };
-      if (next.contact.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next.email)) throw new ServiceError('Enter a valid name and email address.', { code: 'ACCOUNT_UPDATE_INVALID', status: 422 });
+      if (next.contact.length < 2 || next.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next.email) || !next.email && !next.signInName) throw new ServiceError('Enter a valid name and either a work email or username.', { code: 'ACCOUNT_UPDATE_INVALID', status: 422 });
       if (next.branchId && !branches.some(branch => branch.id === next.branchId)) throw new ServiceError('Choose a valid branch.', { code: 'ACCOUNT_BRANCH_INVALID', status: 422 });
       if (accountRecords.some(item => item.id !== accountId && (item.email.toLowerCase() === next.email || next.signInName && item.signInName?.toLowerCase() === next.signInName.toLowerCase()))) {
         throw new ServiceError('That email address or username is already in use.', { code: 'ACCOUNT_IDENTITY_CONFLICT', status: 409 });
       }
-      if (!customerRealm && values.role && values.role !== current.role) {
-        requireAdministrator(PERMISSIONS.MANAGE_ROLES_PERMISSIONS);
-        verifyHighRiskAdministration(actor, input.verification);
-        if (!Object.values(USER_ROLES).includes(values.role) || values.role === USER_ROLES.CUSTOMER) throw new ServiceError('Choose a valid internal role.', { code: 'ACCOUNT_ROLE_INVALID', status: 422 });
-        next.role = values.role;
-        delete next.permissions;
+      if (!customerRealm && values.role && values.role !== current.role) throw new ServiceError('Use the audited role-assignment action to change employee roles.', { code: 'ROLE_CHANGE_ACTION_REQUIRED', status: 409 });
+      if (!customerRealm && values.department !== undefined) {
+        if (!INTERNAL_DEPARTMENTS.includes(values.department)) throw new ServiceError('Choose a valid department.', { code: 'ACCOUNT_DEPARTMENT_INVALID', status: 422 });
+        next.department = values.department;
       }
-      const editableFields = ['contact', 'email', 'signInName', 'phone', 'area', 'branchId', 'role'];
+      const editableFields = ['contact', 'email', 'signInName', 'phone', 'area', 'branchId', 'department'];
       const previousValue = Object.fromEntries(editableFields.map(key => [key, current[key] || '']));
       const newValue = Object.fromEntries(editableFields.map(key => [key, next[key] || '']));
       const fieldsChanged = editableFields.filter(key => previousValue[key] !== newValue[key]);
@@ -5477,6 +5891,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     qualityAssurance,
     dispatch,
     technicalSupport,
+    clientVisits,
     administration,
     executiveDemo,
     personalisation,
@@ -5484,7 +5899,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     products: productService,
     preferences,
     preview: {
-      emailRecipient: RFQ_EMAIL_RECIPIENT,
+      emailRecipient: RFQ_DELIVERY_DESTINATION,
       maxPoFileBytes: MAX_PO_FILE_BYTES,
       maxQuotationDocumentBytes: MAX_QUOTATION_DOCUMENT_BYTES,
       maxAcceptanceDocumentBytes: MAX_ACCEPTANCE_DOCUMENT_BYTES,
