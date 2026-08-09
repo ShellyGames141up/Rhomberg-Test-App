@@ -66,6 +66,7 @@ The executable design artefacts are:
 | `notifications` | `id` UUID | FK company, recipient and exactly one RFQ/order | direct | `read_at`; content is recipient-safe |
 | `notification_deliveries` | `id` UUID | unique `(notification_id, channel)` | derived from notification | retry state and delivery timestamps |
 | `notification_preferences` | `user_id` UUID | FK user/company | direct | versioned settings timestamps |
+| `user_settings` | `user_id` UUID | FK user | direct | versioned role-aware experience settings and onboarding progress |
 | `uploaded_documents` | `id` UUID | unique private `object_key`; exactly one product/RFQ/order parent | direct | scan state, visibility approval, `deleted_at` |
 | `audit_events` | identity `id` bigint | actor/company and logical entity references | direct when entity has a company | append-only |
 | `archive_records` | `id` UUID | FK order/company/policy; unique event instance | direct | append-only eligibility/archive/restore/hold history |

@@ -6,6 +6,7 @@ const formatDate = value => value ? new Date(value).toLocaleString('en-ZA', { da
 const label = value => String(value || '').replaceAll('_', ' ').replace(/\b\w/g, character => character.toUpperCase());
 const customerTechnicalLabel = status => TECHNICAL_SUPPORT_STATUSES[status]?.customerLabel || 'Technical review';
 const errorText = error => error?.message || 'The Technical Support action could not be completed.';
+const configurationText = configuration => Object.entries(configuration || {}).map(([key, value]) => `${label(key)}: ${Array.isArray(value) ? value.join(', ') : typeof value === 'boolean' ? value ? 'Yes' : 'No' : value}`).join(' · ');
 
 function MessageThread({ request, onPost, customer = false, allowPost = true }) {
   const [message, setMessage] = useState('');
@@ -100,8 +101,28 @@ export function TechnicalSupportWorkspace({ account, actions, onChanged, focusRe
 }
 
 function TechnicalQueueCard({ rfq, account, actions, options, expanded, onToggle, run }) {
+  const [downloadBusy, setDownloadBusy] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
   const request = rfq.technicalSupport; const line = rfq.items?.find(item => item.lineId === request.lineItemId);
+  const downloadRfq = async () => {
+    setDownloadBusy(true); setDownloadError('');
+    try {
+      const result = await actions.downloadRfq(request.id);
+      const blob = await (await fetch(result.dataUrl)).blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = result.fileName || `${rfq.reference}-RFQ.pdf`;
+      anchor.hidden = true;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (reason) { setDownloadError(errorText(reason)); }
+    finally { setDownloadBusy(false); }
+  };
   return <article className={`technical-queue-card ${expanded ? 'is-open' : ''}`}><button type="button" className="technical-queue-summary" onClick={onToggle}><span><small>{rfq.reference} · {request.reference}</small><strong>{rfq.company}</strong><em>{rfq.contact}</em></span><span><small>Technical category</small><strong>{label(request.category)}</strong><em>{line ? `${line.code} · ${line.name}` : 'RFQ line item'}</em></span><span><small>Status</small><strong>{technicalStatusLabel(request.status)}</strong><em>{label(request.priority)} priority</em></span><span><small>Revised quotation target</small><strong>{formatDate(request.revisedQuotationTargetAt)}</strong><em>Requested {formatDate(request.requestedAt)}</em></span><b>{expanded ? '−' : '+'}</b></button>{expanded && <div className="technical-queue-detail"><p className="technical-question"><strong>Representative question</strong>{request.question}</p><dl className="technical-due-grid"><div><dt>Representative</dt><dd>{rfq.selectedRep?.name}</dd></div><div><dt>Assigned technical person</dt><dd>{request.assignedTechnicalUser?.displayName || 'Unassigned'}</dd></div><div><dt>Original target</dt><dd>{formatDate(request.originalQuotationTargetAt)}</dd></div><div><dt>Time outstanding</dt><dd>{Math.max(0, Math.floor((Date.now() - new Date(request.requestedAt)) / 36e5))} hours</dd></div></dl>
+      <section className="technical-rfq-details"><header className="technical-rfq-details__header"><div><span className="eyebrow">Complete RFQ details</span><h3>{rfq.reference} · {rfq.company}</h3><p>Review the original application and every configured line before answering Sales.</p></div><button className="secondary-button" type="button" disabled={downloadBusy} onClick={downloadRfq}>{downloadBusy ? 'Preparing PDF…' : 'Download Complete RFQ PDF'}</button></header><dl><div><dt>Customer</dt><dd>{rfq.contact}<br />{rfq.email}<br />{rfq.phone}</dd></div><div><dt>Application</dt><dd>{rfq.application || 'Not recorded'}</dd></div><div><dt>Process medium</dt><dd>{rfq.medium || 'Not recorded'}</dd></div><div><dt>Delivery or collection</dt><dd>{rfq.fulfilment === 'collect' ? `Collection · ${rfq.collectionBranch || rfq.area}` : `Delivery · ${rfq.deliveryAddress || rfq.area}`}</dd></div></dl>{(rfq.customerNotes || rfq.notes) && <p className="technical-rfq-note"><strong>Customer note</strong>{rfq.customerNotes || rfq.notes}</p>}<div className="technical-rfq-lines">{(rfq.items || []).map(item => <article className="technical-rfq-line" key={item.lineId}><span>{item.quantity} ×</span><div><strong>{item.code} · {item.name}</strong><p>{configurationText(item.configuration) || 'No additional configuration recorded'}</p></div></article>)}</div>{downloadError && <p className="form-error" role="alert">{downloadError}</p>}</section>
       {!request.assignedTechnicalUser && accountCan(account, PERMISSIONS.ASSIGN_TECHNICAL_SUPPORT) && <form className="technical-inline-form" onSubmit={event => { event.preventDefault(); run(() => actions.assign(request.id, { technicalUserId: new FormData(event.currentTarget).get('technicalUserId') })); }}><label><span>Assign technical person</span><select name="technicalUserId" required><option value="">Select person</option>{options.technicalUsers.map(user => <option value={user.id} key={user.id}>{user.name} · {label(user.role)}</option>)}</select></label><button className="primary-button">Assign</button></form>}
       {request.status === 'technical_support_assigned' && accountCan(account, PERMISSIONS.RESPOND_TECHNICAL_SUPPORT) && <button className="primary-button" onClick={() => run(() => actions.startReview(request.id))}>Start Technical Review</button>}
       {['technical_support_assigned', 'technical_review_in_progress'].includes(request.status) && accountCan(account, PERMISSIONS.RESPOND_TECHNICAL_SUPPORT) && accountCan(account, PERMISSIONS.COMPLETE_TECHNICAL_SUPPORT) && <TechnicalAnswerForm request={request} actions={actions} run={run} />}

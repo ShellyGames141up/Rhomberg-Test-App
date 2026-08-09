@@ -12,8 +12,7 @@ export function AppHeader({ account, onNavigate, onBack, backLabel, theme, onTog
         <button className="header-back" type="button" onClick={onBack} aria-label={backLabel || 'Go back'}><span>←</span></button>
       ) : (
         <button className="mini-brand" type="button" onClick={() => onNavigate(defaultViewForRole(account.role))} aria-label="Rhomberg home">
-          <img src={personalisation?.companyLogo?.previewUrl || 'assets/images/rhomberg-gauge-mark.svg'} alt="" className={personalisation?.companyLogo?.previewUrl ? 'customer-company-logo' : ''} />
-          <span><strong>RHOMBERG</strong><small>INSTRUMENTS</small></span>
+          <img src="assets/images/rhomberg-connect-logo-full-dark.png" alt="Rhomberg Connect" className="rhomberg-connect-brand" />
         </button>
       )}
       {onBack && <span className="header-context">{backLabel || 'Catalogue'}</span>}

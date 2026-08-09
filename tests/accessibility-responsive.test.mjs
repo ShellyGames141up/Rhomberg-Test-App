@@ -50,7 +50,7 @@ assert.equal(
     customColours: { ...DEFAULT_CUSTOM_COLOURS, accent: '#ffffff' },
   }).accent,
   DEFAULT_CUSTOM_COLOURS.accent,
-  'unsafe persisted custom colours must fall back to a protected colour',
+  'unsupported legacy colour input must resolve to the protected official palette',
 );
 
 assert.ok(CUSTOMER_FONT_SIZES.find(item => item.id === 'small').scale >= 0.95);
@@ -90,6 +90,10 @@ for (const marker of [
   '.config-stage',
   '.credential-change-actions>*',
   '.preview-internal-desktop .app-shell',
+  '.technical-message{background:var(--surface-muted);color:var(--ink)',
+  '.technical-message.is-customer-safe{background:var(--status-information-background);color:var(--status-information-foreground)',
+  '.technical-rfq-details',
+  'max-height:calc(100dvh - 36px)',
   '.executive-layout-full',
   '.executive-layout-device',
   '@media(min-width:1024px)',

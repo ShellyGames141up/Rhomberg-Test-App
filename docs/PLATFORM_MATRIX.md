@@ -3,7 +3,8 @@
 | Capability | Connect desktop | Connect mobile | Operations mobile | Operations desktop |
 | --- | :---: | :---: | :---: | :---: |
 | Customer registration/login | Yes | Yes | No | No |
-| Customer personalisation/settings | Yes | Yes | No | No |
+| Role-aware settings | Yes | Yes | Yes | Yes |
+| Customer profile image | Yes | Yes | No | No |
 | Catalogue/configuration/RFQ | Yes | Yes | No | No |
 | Customer-safe quotation/tracking | Yes | Yes | No | No |
 | Sales representative inbox | No | No | Yes | Yes |

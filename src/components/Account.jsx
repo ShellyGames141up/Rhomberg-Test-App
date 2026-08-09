@@ -46,9 +46,9 @@ export function Account({
           ? <div className="history-list">{enquiries.slice(0, 10).map(enquiry => <HistoryRow key={enquiry.id} enquiry={enquiry} showCompany={isStaff} />)}</div>
           : <p className="empty-history">No quote requests saved yet.</p>}
       </section>
-      {!isStaff && onOpenSettings && (
+      {onOpenSettings && (
         <button className="account-settings-card" type="button" onClick={onOpenSettings}>
-          <span>AA</span><div><strong>Rhomberg Connect settings</strong><small>Theme, text size, spacing, images and notification preferences</small></div><i>›</i>
+          <span>⚙</span><div><strong>Settings</strong><small>App, sounds, notifications, appearance, accessibility, security and help</small></div><i>›</i>
         </button>
       )}
       {credentialActions && (
@@ -75,7 +75,7 @@ export function Account({
   );
 }
 
-function CredentialChangePanel({ account, actions, serviceMode, onChanged }) {
+export function CredentialChangePanel({ account, actions, serviceMode, onChanged }) {
   const [changeType, setChangeType] = useState('');
   const [challenge, setChallenge] = useState(null);
   const [code, setCode] = useState('');

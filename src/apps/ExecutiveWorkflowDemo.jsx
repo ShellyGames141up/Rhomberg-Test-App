@@ -7,8 +7,8 @@ export function ExecutiveDemoLauncher({ catalogue, state, onScenario, onStart, b
     <main className="executive-demo-launcher">
       <div className="executive-demo-fabricated-banner">Executive Demo Mode - Fabricated Data Only</div>
       <header>
-        <img src="assets/images/rhomberg-gauge-mark.svg" alt="" />
-        <span className="eyebrow">Rhomberg Platform · Guided presentation</span>
+        <img src="assets/images/rhomberg-connect-logo-full-dark.png" alt="Rhomberg Connect" />
+        <span className="eyebrow">Rhomberg Connect · Guided presentation</span>
         <h1>One workflow.<br /><em>Every accountable handover.</em></h1>
         <p>Select a scenario and begin from any authorised role. Progress, fabricated records, notifications and audit history remain available after refresh in this browser.</p>
       </header>

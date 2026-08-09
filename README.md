@@ -1,8 +1,10 @@
-# Rhomberg Platform - IT Handover Repository
+# Rhomberg Connect - IT Handover Repository
 
 Functional application and workflow implementation is complete in mock mode. Production infrastructure and backend integration remain subject to IT review and staging deployment.
 
-This repository contains the shared React implementation for Rhomberg Connect and Rhomberg Operations. The GitHub Pages site is a demonstration environment that uses fabricated browser-local records. It is not a production system and must not receive real customer, employee, pricing, credential or infrastructure data.
+This repository contains the shared React implementation for **Rhomberg Connect**, including its customer and internal role-specific workspaces. The GitHub Pages site is a demonstration environment that uses fabricated browser-local records. It is not a production system and must not receive real customer, employee, pricing, credential or infrastructure data.
+
+The official experience now includes refined responsive Rhomberg Connect logo assets, a professional startup splash, one-time customer welcome, isolated guided customer tutorial, optional UI sounds/mobile haptics, restrained micro-interactions and a dedicated service-backed Settings area for every user role. Customer-defined application colours and company-logo branding have been removed; Light, Dark, System and approved accessibility options use the protected official design system.
 
 ## Application Previews
 
@@ -12,10 +14,10 @@ This repository contains the shared React implementation for Rhomberg Connect an
 2. [Rhomberg Connect - Customer Mobile](https://shellygames141up.github.io/Rhomberg-Test-App/preview/customer-mobile/)
    Touch-first customer interface using the same company-isolated workflows and service contracts.
 
-3. [Rhomberg Operations - Rep & Expeditor Mobile](https://shellygames141up.github.io/Rhomberg-Test-App/preview/internal-mobile/)
+3. [Rhomberg Connect - Rep & Expeditor Mobile](https://shellygames141up.github.io/Rhomberg-Test-App/preview/internal-mobile/)
    Mobile access for Sales Representatives, including safe document upload for **Load Customer Order**, authorised managers and Expeditors. Planning, Laboratory, QA, Dispatch and Administration are desktop-only.
 
-4. [Rhomberg Operations - Internal Desktop](https://shellygames141up.github.io/Rhomberg-Test-App/preview/internal-desktop/)
+4. [Rhomberg Connect - Internal Desktop](https://shellygames141up.github.io/Rhomberg-Test-App/preview/internal-desktop/)
    Internal workspace for Sales Representatives, the combined Technical Advisor workspace, Sales Managers, Company Owner or authorised management, Planning, Laboratory, Expediting, Quality Assurance, Dispatch, Buyer and Administrator roles.
 
 5. [Executive Workflow Demo](https://shellygames141up.github.io/Rhomberg-Test-App/demo/executive-workflow/)
@@ -81,7 +83,7 @@ GitHub Pages is demonstration-only. Browser storage, browser-side permissions an
 
 Customer-facing desktop, mobile and future PWA interfaces. A customer account is limited to records associated with its authorised company. Customer projections exclude internal notes, protected document data, workflow overrides and operational-only details.
 
-### Rhomberg Operations
+### Rhomberg Connect internal operations
 
 Role-aware internal interfaces for Sales, Planning, Laboratory, Expediting, Quality Assurance, Dispatch, management and Administration. Navigation and record queues are driven by the central permission model and controlled workflow state machine.
 
@@ -172,7 +174,7 @@ npm run dev:executive-demo
 
 ## Accessibility and responsive UI
 
-The shared UI now uses protected light/dark foreground tokens, contrast-checked status pairs, a central rem-based typography scale and shared breakpoint definitions. Customer theme colours are validated and unsafe persisted custom colours fall back to protected defaults. Customer Desktop, Internal Desktop and Executive Full Application mode use real wide workspaces with a navigation rail from 1024 px; mobile and tablet views reflow controls and reserve space for bottom navigation.
+The shared UI now uses protected light/dark foreground tokens, contrast-checked status pairs, a central rem-based typography scale and shared breakpoint definitions. All roles use the official Rhomberg Connect brand; customers can select Light, Dark or System appearance but cannot replace company colours or logos. Customer Desktop, Internal Desktop and Executive Full Application mode use real wide workspaces with a navigation rail from 1024 px; mobile and tablet views reflow controls and reserve space for bottom navigation.
 
 Run `npm test` for automated contrast/theme/status/responsive contracts and follow [the visual test checklist](docs/VISUAL_TEST_CHECKLIST.md) for rendered viewport, theme, text-size and zoom checks.
 

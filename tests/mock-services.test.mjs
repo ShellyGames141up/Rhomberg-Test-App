@@ -9,6 +9,7 @@ import { optionsForField, shouldShowField } from '../src/domain/productConfigura
 import { representativesByBranch } from '../src/data/representatives.js';
 import { createDefaultCustomerPersonalisation } from '../src/shared/personalisation/personalisation.js';
 import { createDefaultNotificationPreferences } from '../src/domain/notifications.js';
+import { createDefaultUserSettings } from '../src/domain/userSettings.js';
 
 class TestStorage {
   constructor() {
@@ -990,9 +991,14 @@ const apiSignedCertificate = new File(['%PDF-1.4 fabricated signed API certifica
 await apiServices.laboratory.uploadSignedCertificate('order-lab-api', 'unit-lab-api', { certificateNumber: 'CAL-API-001', issueDate: '2026-08-04', file: apiSignedCertificate });
 await apiServices.personalisation.get();
 await apiServices.personalisation.complete({ ...createDefaultCustomerPersonalisation(), setupCompleted: true });
-const apiIdentityImage = new File([new Uint8Array([1, 2, 3])], 'api-logo.png', { type: 'image/png' });
-await apiServices.personalisation.uploadImage(apiIdentityImage, 'companyLogo', { x: 45, y: 55 });
+const apiIdentityImage = new File([new Uint8Array([1, 2, 3])], 'api-profile.png', { type: 'image/png' });
+await apiServices.personalisation.uploadImage(apiIdentityImage, 'profileImage', { x: 45, y: 55 });
 await apiServices.personalisation.removeImage('00000000-0000-4000-8000-000000000099');
+await apiServices.userSettings.get();
+await apiServices.userSettings.save(createDefaultUserSettings());
+await apiServices.userSettings.completeWelcome();
+await apiServices.userSettings.saveTutorialProgress({ step: 2, tutorialKind: 'catalogue', completed: false });
+await apiServices.userSettings.resetTutorial();
 await apiServices.notifications.list({ unreadOnly: true });
 await apiServices.notifications.markRead('00000000-0000-4000-8000-000000000101');
 await apiServices.notifications.markAllRead();
@@ -1015,6 +1021,8 @@ assert.ok(apiRequests.some(request => request.path.endsWith('/audit-events') && 
 assert.ok(apiRequests.some(request => request.path.endsWith('/users/me/personalisation') && request.options.method === 'PUT'), 'API personalisation saves must use the current-user endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/users/me/personalisation/images') && request.options.method === 'POST' && request.options.body instanceof FormData), 'API identity image uploads must use multipart current-user storage');
 assert.ok(apiRequests.some(request => request.path.endsWith('/users/me/personalisation/images/00000000-0000-4000-8000-000000000099') && request.options.method === 'DELETE'), 'API image deletion must be current-user scoped');
+assert.ok(apiRequests.some(request => request.path.endsWith('/users/me/settings') && request.options.method === 'PUT'), 'API settings saves must use the current-user endpoint');
+assert.ok(apiRequests.some(request => request.path.endsWith('/users/me/settings/onboarding/tutorial') && request.options.method === 'PUT'), 'API tutorial progress must use the current-user endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/notifications') && request.options.method === 'GET'), 'API notifications must use the current-user scoped collection endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/notifications/read-all') && request.options.method === 'POST'), 'API notification mark-all must use its controlled endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/users/me/notification-preferences') && request.options.method === 'PUT'), 'API notification preferences must use the current-user endpoint');

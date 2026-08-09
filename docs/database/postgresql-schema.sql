@@ -852,6 +852,29 @@ ALTER TABLE app.customer_personalisations
   ADD CONSTRAINT customer_personalisation_company_logo_fk
   FOREIGN KEY (company_logo_id) REFERENCES app.customer_identity_images(id);
 
+-- Shared account-scoped experience settings. In production, migrate legacy
+-- personalisation display values here and force the official Rhomberg brand.
+CREATE TABLE app.user_settings (
+  user_id uuid PRIMARY KEY REFERENCES app.users(id) ON DELETE CASCADE,
+  schema_version integer NOT NULL DEFAULT 1 CHECK (schema_version >= 1),
+  app_preferences jsonb NOT NULL DEFAULT '{}'::jsonb,
+  sound_preferences jsonb NOT NULL DEFAULT '{}'::jsonb,
+  haptic_preferences jsonb NOT NULL DEFAULT '{}'::jsonb,
+  appearance_preferences jsonb NOT NULL DEFAULT '{}'::jsonb,
+  accessibility_preferences jsonb NOT NULL DEFAULT '{}'::jsonb,
+  onboarding_progress jsonb NOT NULL DEFAULT '{}'::jsonb,
+  role_notification_preferences jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (jsonb_typeof(app_preferences) = 'object'),
+  CHECK (jsonb_typeof(sound_preferences) = 'object'),
+  CHECK (jsonb_typeof(haptic_preferences) = 'object'),
+  CHECK (jsonb_typeof(appearance_preferences) = 'object'),
+  CHECK (jsonb_typeof(accessibility_preferences) = 'object'),
+  CHECK (jsonb_typeof(onboarding_progress) = 'object'),
+  CHECK (jsonb_typeof(role_notification_preferences) = 'object')
+);
+
 CREATE TABLE app.enquiry_drafts (
   user_id uuid PRIMARY KEY REFERENCES app.users(id) ON DELETE CASCADE,
   company_id uuid NOT NULL REFERENCES app.companies(id) ON DELETE CASCADE,
@@ -1338,6 +1361,7 @@ ALTER TABLE app.uploaded_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.representative_loaded_orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.customer_personalisations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.customer_identity_images ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.user_settings ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY companies_authorised_scope ON app.companies
   USING (app.can_access_company(id));
@@ -1572,6 +1596,10 @@ CREATE POLICY customer_identity_images_own_scope ON app.customer_identity_images
     AND app.current_user_role() = 'customer'
     AND app.can_access_company(company_id)
   );
+
+CREATE POLICY user_settings_own_scope ON app.user_settings
+  USING (user_id = app.current_user_id())
+  WITH CHECK (user_id = app.current_user_id());
 
 -- RLS limits row scope; database grants must separately limit operations by the API role.
 -- In particular, customers must not receive UPDATE/DELETE rights on workflow events,

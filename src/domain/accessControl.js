@@ -34,11 +34,11 @@ const technicalNavigation = () => Object.freeze([
 ]);
 
 const CUSTOMER_VIEWS = Object.freeze(['home', 'catalogue', 'product', 'configurator', 'enquiry', 'tracking', 'notifications', 'account', 'settings']);
-const INTERNAL_VIEWS = Object.freeze(['expeditor', 'notifications', 'account']);
+const INTERNAL_VIEWS = Object.freeze(['expeditor', 'notifications', 'account', 'settings']);
 const REPRESENTATIVE_ORDER_VIEWS = Object.freeze([...INTERNAL_VIEWS, 'load-order']);
-const TECHNICAL_VIEWS = Object.freeze(['technical', 'notifications', 'account']);
+const TECHNICAL_VIEWS = Object.freeze(['technical', 'notifications', 'account', 'settings']);
 const OVERSIGHT_VIEWS = Object.freeze([...INTERNAL_VIEWS, 'archive', 'audit']);
-const ADMIN_VIEWS = Object.freeze(['administration', 'load-order', 'technical', ...OVERSIGHT_VIEWS]);
+const ADMIN_VIEWS = Object.freeze(['administration', 'load-order', 'technical', 'settings', ...OVERSIGHT_VIEWS]);
 const ADMIN_NAVIGATION = Object.freeze([
   navItem('administration', 'A', 'Admin'),
   navItem('expeditor', '\u25C7', 'Overview'),

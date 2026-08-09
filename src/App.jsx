@@ -23,15 +23,14 @@ import { ProductDetail } from './components/ProductDetail.jsx';
 import { RepresentativeOrderLoader } from './components/RepresentativeOrderLoader.jsx';
 import { SalesRepresentativeDashboard } from './components/SalesRepresentativeDashboard.jsx';
 import { TechnicalSupportWorkspace } from './components/TechnicalSupport.jsx';
-import { CustomerPersonalisation } from './apps/customer/CustomerPersonalisation.jsx';
+import { Settings } from './components/Settings.jsx';
+import { CustomerTutorial, FirstCustomerWelcome } from './components/CustomerOnboarding.jsx';
 import { PreviewLanding } from './apps/PreviewLanding.jsx';
 import { ExecutiveDemoControls, ExecutiveDemoLauncher } from './apps/ExecutiveWorkflowDemo.jsx';
 import { createDefaultNotificationPreferences } from './domain/notifications.js';
-import {
-  createDefaultCustomerPersonalisation,
-  customerPersonalisationCss,
-  normaliseCustomerPersonalisation,
-} from './shared/personalisation/personalisation.js';
+import { createDefaultCustomerPersonalisation, normaliseCustomerPersonalisation } from './shared/personalisation/personalisation.js';
+import { createDefaultUserSettings, normaliseUserSettings } from './domain/userSettings.js';
+import { playUiSound, provideFeedback, triggerHaptic } from './shared/experience/feedback.js';
 import {
   filterDemoLoginsForPreview,
   PREVIEW_BY_ID,
@@ -95,7 +94,9 @@ export default function App() {
   const [view, setView] = useState('home');
   const [theme, setTheme] = useState('light');
   const [customerPersonalisation, setCustomerPersonalisation] = useState(createDefaultCustomerPersonalisation);
-  const [personalisationDeferred, setPersonalisationDeferred] = useState(false);
+  const [userSettings, setUserSettings] = useState(createDefaultUserSettings);
+  const [welcomeVisible, setWelcomeVisible] = useState(false);
+  const [tutorialSession, setTutorialSession] = useState(null);
   const [accessError, setAccessError] = useState('');
   const [catalogue, setCatalogue] = useState(EMPTY_CATALOGUE);
   const [registrationOptions, setRegistrationOptions] = useState(EMPTY_REGISTRATION);
@@ -163,8 +164,9 @@ export default function App() {
         let loadedLaboratoryOptions = EMPTY_LAB_OPTIONS;
         let loadedQualityOptions = EMPTY_QA_OPTIONS;
         let loadedPersonalisation = createDefaultCustomerPersonalisation();
+        let loadedUserSettings = createDefaultUserSettings();
         if (session) {
-          [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedAuditEvents, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedLaboratoryOptions, loadedQualityOptions, loadedPersonalisation] = await Promise.all([
+          [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedAuditEvents, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedLaboratoryOptions, loadedQualityOptions, loadedPersonalisation, loadedUserSettings] = await Promise.all([
             accountCan(session, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
             listEnquiriesForAccount(session),
             services.orders.list(),
@@ -191,6 +193,7 @@ export default function App() {
             isCustomerAccount(session)
               ? services.personalisation.get()
               : Promise.resolve(createDefaultCustomerPersonalisation()),
+            services.userSettings.get(),
           ]);
         }
         if (!active) return;
@@ -202,6 +205,8 @@ export default function App() {
         setAccessError(previewAccessError);
         setAccount(session);
         setCustomerPersonalisation(normaliseCustomerPersonalisation(loadedPersonalisation));
+        setUserSettings(normaliseUserSettings(loadedUserSettings));
+        setWelcomeVisible(Boolean(session && isCustomerAccount(session) && !loadedUserSettings.onboarding?.welcomeCompleted));
         setDraft(loadedDraft);
         setEnquiries(loadedEnquiries);
         setOrders(loadedOrders);
@@ -230,9 +235,7 @@ export default function App() {
   useEffect(() => {
     const systemTheme = globalThis.matchMedia?.('(prefers-color-scheme: dark)');
     const applyTheme = () => {
-      const preference = isCustomerAccount(account)
-        ? customerPersonalisation.appearanceMode
-        : theme;
+      const preference = account ? userSettings.appearance.mode : theme;
       document.documentElement.dataset.theme = preference === 'system'
         ? (systemTheme?.matches ? 'dark' : 'light')
         : preference;
@@ -240,7 +243,20 @@ export default function App() {
     applyTheme();
     systemTheme?.addEventListener?.('change', applyTheme);
     return () => systemTheme?.removeEventListener?.('change', applyTheme);
-  }, [account, customerPersonalisation.appearanceMode, theme]);
+  }, [account, userSettings.appearance.mode, theme]);
+
+  useEffect(() => {
+    if (!account) return undefined;
+    const handleInteraction = event => {
+      const control = event.target.closest?.('button, input[type="checkbox"], input[type="radio"]');
+      if (!control || control.disabled || control.dataset.noFeedback === 'true') return;
+      const type = control.closest('.bottom-nav') ? 'navigation' : control.matches('input') ? 'toggle' : control.classList.contains('primary-button') ? 'buttons' : 'buttons';
+      playUiSound(userSettings, type);
+      if (PREVIEW_CONTEXT.platform?.toLowerCase().includes('mobile')) triggerHaptic(userSettings, 'buttons');
+    };
+    document.addEventListener('click', handleInteraction, true);
+    return () => document.removeEventListener('click', handleInteraction, true);
+  }, [account, userSettings]);
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
 
@@ -251,9 +267,16 @@ export default function App() {
   };
 
   const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    services.preferences.setTheme(next).catch(error => notify(friendlyServiceError(error, 'The theme changed, but the preference could not be saved.')));
+    const current = account ? userSettings.appearance.mode : theme;
+    const next = current === 'dark' ? 'light' : 'dark';
+    if (!account) {
+      setTheme(next);
+      services.preferences.setTheme(next).catch(error => notify(friendlyServiceError(error, 'The theme changed, but the preference could not be saved.')));
+      return;
+    }
+    const candidate = { ...userSettings, appearance: { ...userSettings.appearance, mode: next } };
+    setUserSettings(candidate);
+    services.userSettings.save(candidate).catch(error => notify(friendlyServiceError(error, 'The theme changed, but the preference could not be saved.')));
   };
 
   const isStaff = isInternalAccount(account);
@@ -265,10 +288,6 @@ export default function App() {
   const isQualityWorkspace = usesQualityWorkspace(account);
   const isManagementWorkspace = accountCan(account, PERMISSIONS.VIEW_REPORTS);
   const canPerformWorkflow = accountCanPerformWorkflow(account);
-  const personalisationStyle = useMemo(
-    () => isCustomerExperience ? customerPersonalisationCss(customerPersonalisation) : undefined,
-    [customerPersonalisation, isCustomerExperience],
-  );
   const selectedProduct = catalogue.products.find(product => product.id === productId) || null;
   const selectedCategory = selectedProduct ? catalogue.categories.find(category => category.id === selectedProduct.category) || null : null;
   const accountRecords = useMemo(() => {
@@ -278,13 +297,13 @@ export default function App() {
   const staffRecords = useMemo(() => [...enquiries, ...orders], [enquiries, orders]);
   const unreadNotifications = notifications.filter(notification => !notification.readAt).length;
   const totalQuantity = draft.reduce((sum, line) => sum + line.quantity, 0);
-  const detailView = !isStaff && (view === 'product' || view === 'configurator' || view === 'settings');
+  const detailView = view === 'settings' || (!isStaff && (view === 'product' || view === 'configurator'));
 
   const loadAccountWorkspace = async signedInAccount => {
     if (!previewAllowsRole(PREVIEW_CONTEXT, signedInAccount.role)) {
       throw new Error(`This ${signedInAccount.role.replaceAll('_', ' ')} account is not supported in ${PREVIEW_CONTEXT.displayName}.`);
     }
-    const [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedAuditEvents, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedLaboratoryOptions, loadedQualityOptions, loadedPersonalisation] = await Promise.all([
+    const [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedAuditEvents, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedLaboratoryOptions, loadedQualityOptions, loadedPersonalisation, loadedUserSettings] = await Promise.all([
       accountCan(signedInAccount, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
       listEnquiriesForAccount(signedInAccount),
       services.orders.list(),
@@ -311,6 +330,7 @@ export default function App() {
       isCustomerAccount(signedInAccount)
         ? services.personalisation.get()
         : Promise.resolve(createDefaultCustomerPersonalisation()),
+      services.userSettings.get(),
     ]);
     setAccount(signedInAccount);
     setDraft(loadedDraft);
@@ -325,8 +345,12 @@ export default function App() {
     setLaboratoryOptions(loadedLaboratoryOptions);
     setQualityOptions(loadedQualityOptions);
     setCustomerPersonalisation(normaliseCustomerPersonalisation(loadedPersonalisation));
-    setPersonalisationDeferred(false);
+    const normalisedSettings = normaliseUserSettings(loadedUserSettings);
+    setUserSettings(normalisedSettings);
+    setWelcomeVisible(Boolean(isCustomerAccount(signedInAccount) && !loadedUserSettings.onboarding?.welcomeCompleted));
+    setTutorialSession(null);
     setView(defaultViewForRole(signedInAccount.role));
+    return normalisedSettings;
   };
 
   const login = async (email, password) => {
@@ -344,7 +368,8 @@ export default function App() {
           fieldErrors: {},
         };
       }
-      await loadAccountWorkspace(signedInAccount);
+      const signedInSettings = await loadAccountWorkspace(signedInAccount);
+      provideFeedback(signedInSettings, 'startup', 'success');
       setAccessError('');
       return { ok: true };
     } catch (error) {
@@ -416,6 +441,7 @@ export default function App() {
   const removeLine = lineId => persistDraft(draft.filter(line => line.lineId !== lineId));
 
   const submitEnquiry = async details => {
+    provideFeedback(userSettings, 'rfqSubmission', 'importantWorkflow');
     try {
       const result = await services.enquiries.submit(details, draft);
       const updatedEnquiries = await listEnquiriesForAccount(account);
@@ -436,8 +462,10 @@ export default function App() {
         fallbackUrl: delivery.fallbackUrl,
         warning: delivery.warning || (delivery.ok === false ? delivery.message : ''),
       });
+      provideFeedback(userSettings, 'success', 'success');
       return { ok: true, enquiry: result.enquiry };
     } catch (error) {
+      provideFeedback(userSettings, 'error', 'error');
       return {
         ok: false,
         message: friendlyServiceError(error, 'The RFQ could not be submitted. Your configured units are still here, so please try again.'),
@@ -576,35 +604,67 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const saveCustomerPersonalisation = async candidate => {
+  const saveUserSettings = async candidate => {
     try {
-      const saved = candidate.setupCompleted
-        ? await services.personalisation.complete(candidate)
-        : await services.personalisation.save(candidate);
-      setCustomerPersonalisation(normaliseCustomerPersonalisation(saved));
-      setNotificationPreferences(await services.notifications.getPreferences());
-      setView('home');
+      const saved = await services.userSettings.save(candidate);
+      setUserSettings(normaliseUserSettings(saved));
       notify('Rhomberg Connect settings saved');
       return saved;
     } catch (error) {
-      throw new Error(friendlyServiceError(error, 'Your customer settings could not be saved. Please check the highlighted choices and try again.'));
+      throw new Error(friendlyServiceError(error, 'Your settings could not be saved. Please review the choices and try again.'));
     }
   };
 
-  const uploadCustomerImage = async (file, kind, position) => {
-    try {
-      return await services.personalisation.uploadImage(file, kind, position);
-    } catch (error) {
-      throw new Error(friendlyServiceError(error, 'The image could not be added. Please choose a supported image under 1 MB.'));
-    }
+  const resetUserSettings = async () => {
+    const saved = await services.userSettings.reset();
+    setUserSettings(normaliseUserSettings(saved));
+    return saved;
   };
 
-  const removeCustomerImage = async imageId => {
-    try {
-      return await services.personalisation.removeImage(imageId);
-    } catch (error) {
-      throw new Error(friendlyServiceError(error, 'The image could not be removed.'));
+  const replayTutorial = async kind => {
+    if (!isCustomerAccount(account)) return;
+    if (kind === 'reset') {
+      const saved = await services.userSettings.resetTutorial();
+      setUserSettings(normaliseUserSettings(saved));
+      notify('Tutorial progress reset');
+      return;
     }
+    const saved = await services.userSettings.saveTutorialProgress({ step: 0, tutorialKind: kind, completed: false });
+    setUserSettings(normaliseUserSettings(saved));
+    setTutorialSession({ kind, step: saved.onboarding.tutorialProgress || 0 });
+    setView('home');
+  };
+
+  const completeWelcome = async () => {
+    const saved = await services.userSettings.completeWelcome();
+    setUserSettings(normaliseUserSettings(saved));
+    setWelcomeVisible(false);
+    provideFeedback(saved, 'startup', 'success');
+    if (!saved.onboarding.tutorialCompleted) setTutorialSession({ kind: 'full', step: saved.onboarding.tutorialProgress || 0 });
+  };
+
+  const saveTutorialProgress = async (step, kind) => {
+    const saved = await services.userSettings.saveTutorialProgress({ step, tutorialKind: kind, completed: false });
+    setUserSettings(normaliseUserSettings(saved));
+  };
+
+  const finishTutorial = async () => {
+    const saved = await services.userSettings.saveTutorialProgress({ step: 0, tutorialKind: tutorialSession?.kind || 'full', completed: true });
+    setUserSettings(normaliseUserSettings(saved));
+    setTutorialSession(null);
+    provideFeedback(saved, 'success', 'success');
+    notify('Tutorial completed');
+  };
+
+  const skipTutorial = async () => {
+    const saved = await services.userSettings.saveTutorialProgress({
+      step: tutorialSession?.step || 0,
+      tutorialKind: tutorialSession?.kind || 'full',
+      completed: true,
+    });
+    setUserSettings(normaliseUserSettings(saved));
+    setTutorialSession(null);
+    notify('Tutorial skipped. You can replay it from Settings.');
   };
 
   const runExecutiveDemoAction = async (key, operation) => {
@@ -676,7 +736,9 @@ export default function App() {
       setNotificationPreferences(createDefaultNotificationPreferences());
       setNotificationTarget(null);
       setCustomerPersonalisation(createDefaultCustomerPersonalisation());
-      setPersonalisationDeferred(false);
+      setUserSettings(createDefaultUserSettings());
+      setWelcomeVisible(false);
+      setTutorialSession(null);
       setPlanningOptions(EMPTY_PLANNING_OPTIONS);
       setExpeditingOptions(EMPTY_EXPEDITING_OPTIONS);
       setDispatchOptions(EMPTY_DISPATCH_OPTIONS);
@@ -708,9 +770,7 @@ export default function App() {
   }
   if (!PREVIEW_CONTEXT.executiveDemo && !introComplete) return <Intro onComplete={() => setIntroComplete(true)} />;
   if (!account) return <Auth onSignIn={login} onCreateAccount={register} theme={theme} onToggleTheme={toggleTheme} registrationOptions={registrationOptions} demoLogins={demoLogins} serviceMode={services.mode} preview={PREVIEW_CONTEXT} allowRegistration={Boolean(PREVIEW_CONTEXT.customer)} accessError={accessError} />;
-  if (isCustomerExperience && !PREVIEW_CONTEXT.executiveDemo && !customerPersonalisation.setupCompleted && !personalisationDeferred) {
-    return <CustomerPersonalisation account={account} initialValue={customerPersonalisation} onSave={saveCustomerPersonalisation} onDefer={() => { setPersonalisationDeferred(true); notify('Setup saved for later'); }} onUploadImage={uploadCustomerImage} onRemoveImage={removeCustomerImage} />;
-  }
+  if (isCustomerExperience && !PREVIEW_CONTEXT.executiveDemo && welcomeVisible) return <FirstCustomerWelcome account={account} reduceMotion={userSettings.accessibility.reduceMotion} onComplete={completeWelcome} />;
 
   const backFromDetail = () => {
     if (view === 'settings') {
@@ -728,10 +788,12 @@ export default function App() {
   return (
     <div
       className={`app-canvas platform-preview preview-${PREVIEW_CONTEXT.id} ${isCustomerExperience ? 'preview-connect' : 'preview-operations'} ${executiveDemoState?.presentationMode ? 'executive-presentation-mode' : ''} ${PREVIEW_CONTEXT.executiveDemo ? `executive-layout-${executiveDemoState?.layoutMode || 'full'} executive-device-${executiveDemoState?.devicePreview || 'desktop'}` : ''}`}
-      style={personalisationStyle}
-      data-font-size={isCustomerExperience ? customerPersonalisation.fontSize : undefined}
-      data-density={isCustomerExperience ? customerPersonalisation.density : undefined}
-      data-theme-preset={isCustomerExperience ? customerPersonalisation.themePreset : undefined}
+      data-font-size={userSettings.appearance.increasedText ? 'large' : 'medium'}
+      data-reduce-motion={userSettings.accessibility.reduceMotion ? 'true' : 'false'}
+      data-decorative-animations={userSettings.accessibility.decorativeAnimations ? 'true' : 'false'}
+      data-high-contrast={userSettings.appearance.highContrast ? 'true' : 'false'}
+      data-reduced-transparency={userSettings.appearance.reducedTransparency ? 'true' : 'false'}
+      data-screen-reader={userSettings.accessibility.screenReaderOptimisation ? 'optimised' : undefined}
       data-executive-layout={PREVIEW_CONTEXT.executiveDemo ? executiveDemoState?.layoutMode || 'full' : undefined}
       data-executive-device={PREVIEW_CONTEXT.executiveDemo ? executiveDemoState?.devicePreview || 'desktop' : undefined}
     >
@@ -758,7 +820,7 @@ export default function App() {
       <span className="desktop-caption">{PREVIEW_CONTEXT.product.toUpperCase()} · {PREVIEW_CONTEXT.platform.toUpperCase()} · {__PUBLIC_PREVIEW__ ? 'DEMO PREVIEW' : 'PRIVATE CLOUD'}</span>
       <div className={`app-shell ${isStaff ? 'expeditor-shell' : ''} ${isPlanningWorkspace ? 'planning-shell' : ''} ${isExpeditorWorkspace ? 'expediting-workspace-shell' : ''} ${isLaboratoryWorkspace ? 'laboratory-workspace-shell' : ''} ${isQualityWorkspace ? 'quality-workspace-shell' : ''} ${isDispatchWorkspace ? 'dispatch-workspace-shell' : ''}`}>
         {__PUBLIC_PREVIEW__ && <div className="platform-preview-banner"><span><strong>{PREVIEW_CONTEXT.product}</strong> {PREVIEW_CONTEXT.platform}</span><a href={PREVIEW_CONTEXT.executiveDemo ? '../../' : './'}>All previews</a></div>}
-        <AppHeader account={account} onNavigate={navigate} onBack={detailView ? backFromDetail : null} backLabel={view === 'settings' ? 'Customer settings' : view === 'configurator' ? 'Product configuration' : selectedProduct?.code || 'Catalogue'} theme={theme} onToggleTheme={toggleTheme} serviceMode={services.mode} preview={PREVIEW_CONTEXT} showThemeToggle={!isCustomerExperience} personalisation={isCustomerExperience ? customerPersonalisation : null} />
+        <AppHeader account={account} onNavigate={navigate} onBack={detailView ? backFromDetail : null} backLabel={view === 'settings' ? 'Settings' : view === 'configurator' ? 'Product configuration' : selectedProduct?.code || 'Catalogue'} theme={document.documentElement.dataset.theme || theme} onToggleTheme={toggleTheme} serviceMode={services.mode} preview={PREVIEW_CONTEXT} showThemeToggle={!isCustomerExperience} personalisation={isCustomerExperience ? customerPersonalisation : null} />
         <main className="app-main">
           {isStaff ? (
             <>
@@ -784,7 +846,8 @@ export default function App() {
               {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
               {view === 'archive' && <ArchivedOrders account={account} archiveActions={services.archive} serviceMode={services.mode} onRecordsChanged={refreshAfterRetentionAction} />}
               {view === 'audit' && <AuditTrail events={auditEvents} serviceMode={services.mode} />}
-              {view === 'account' && <Account account={account} enquiries={staffRecords} onSignOut={signOut} serviceMode={services.mode} credentialActions={services.credentials} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} />}
+              {view === 'account' && <Account account={account} enquiries={staffRecords} onSignOut={signOut} serviceMode={services.mode} onOpenSettings={() => navigate('settings')} credentialActions={services.credentials} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} />}
+              {view === 'settings' && <Settings account={account} initialValue={userSettings} notificationPreferences={notificationPreferences} serviceMode={services.mode} credentialActions={services.credentials} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} onSignOut={signOut} onSave={saveUserSettings} onSaveNotifications={saveNotificationPreferences} onReset={resetUserSettings} onReplayTutorial={replayTutorial} onTestSound={value => provideFeedback(value, 'success', 'success')} onTestHaptic={value => triggerHaptic(value, 'success')} onClose={() => navigate('account')} />}
             </>
           ) : (
             <>
@@ -796,12 +859,13 @@ export default function App() {
               {view === 'tracking' && <OrderTracking account={account} enquiries={accountRecords} onStartEnquiry={() => navigate('enquiry')} onAction={performWorkflowAction} serviceMode={services.mode} certificateActions={services.laboratory} sourceDocumentActions={services.representativeOrders} technicalSupportActions={services.technicalSupport} onRecordsChanged={refreshTechnicalRecords} focusRecordId={notificationTarget?.entityId} />}
               {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
               {view === 'account' && <Account account={account} enquiries={accountRecords} onSignOut={signOut} serviceMode={services.mode} onOpenSettings={() => navigate('settings')} personalisation={customerPersonalisation} credentialActions={services.credentials} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} />}
-              {view === 'settings' && <CustomerPersonalisation account={account} initialValue={customerPersonalisation} mode="settings" onSave={saveCustomerPersonalisation} onCancel={() => navigate('account')} onUploadImage={uploadCustomerImage} onRemoveImage={removeCustomerImage} />}
+              {view === 'settings' && <Settings account={account} initialValue={userSettings} notificationPreferences={notificationPreferences} serviceMode={services.mode} credentialActions={services.credentials} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} onSignOut={signOut} onSave={saveUserSettings} onSaveNotifications={saveNotificationPreferences} onReset={resetUserSettings} onReplayTutorial={replayTutorial} onTestSound={value => provideFeedback(value, 'success', 'success')} onTestHaptic={value => triggerHaptic(value, 'success')} onClose={() => navigate('account')} />}
             </>
           )}
         </main>
         {!detailView && <BottomNav active={view} quantity={totalQuantity} role={account.role} unreadCount={unreadNotifications} onNavigate={navigate} />}
       </div>
+      {tutorialSession && isCustomerExperience && <CustomerTutorial kind={tutorialSession.kind} startAt={tutorialSession.step} onProgress={saveTutorialProgress} onFinish={finishTutorial} onSkip={skipTutorial} />}
       <Toast message={toast} />
     </div>
   );
@@ -811,7 +875,7 @@ function AppLoading({ theme, onToggleTheme }) {
   return (
     <main className="app-state-view" aria-busy="true">
       <button className="auth-theme-toggle" type="button" onClick={onToggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}>{theme === 'dark' ? 'Light' : 'Dark'}</button>
-      <section className="app-state-card"><img src="assets/images/rhomberg-gauge-mark.svg" alt="" /><span className="state-spinner" /><h1>Preparing your workspace</h1><p>Loading the catalogue and secure service boundary…</p></section>
+      <section className="app-state-card"><img src="assets/images/rhomberg-connect-logo-loading.png" alt="Rhomberg Connect" /><span className="state-spinner" /><h1>Preparing Rhomberg Connect</h1><p>Loading the catalogue and secure service boundary…</p></section>
     </main>
   );
 }

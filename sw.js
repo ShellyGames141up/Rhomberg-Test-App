@@ -1,17 +1,24 @@
-const CACHE_NAME = 'rhomberg-app-preview-v42';
+const CACHE_NAME = 'rhomberg-connect-preview-v44';
 
 const APP_FILES = [
   './',
   './index.html',
-  './styles.css?v=38',
+  './styles.css?v=40',
   './runtime-config.js?v=11',
-  './app.js?v=40',
+  './app.js?v=42',
   './preview/customer-desktop/',
   './preview/customer-mobile/',
   './preview/internal-mobile/',
   './preview/internal-desktop/',
   './demo/executive-workflow/',
   './manifest.webmanifest',
+  './assets/images/rhomberg-connect-logo-full-dark.png',
+  './assets/images/rhomberg-connect-logo-compact.png',
+  './assets/images/rhomberg-connect-logo-splash.png',
+  './assets/images/rhomberg-connect-logo-loading.png',
+  './assets/images/rhomberg-connect-symbol.png',
+  './assets/images/rhomberg-connect-icon-192.png',
+  './assets/images/rhomberg-connect-icon-512.png',
   './assets/images/rhomberg-gauge-mark.svg',
   './assets/images/rhomberg-wordmark-transparent.png',
   './assets/images/process-gauge.png',

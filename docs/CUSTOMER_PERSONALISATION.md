@@ -1,52 +1,20 @@
-# Rhomberg Connect customer personalisation
+# Rhomberg Connect customer profile preferences
 
-## Experience
+Rhomberg Connect now uses one protected company identity. Customers cannot replace the application logo, colours or typography with company-specific themes. Light, Dark and System modes remain available through the shared Settings service and always use the approved Rhomberg Connect design tokens.
 
-Customers with incomplete setup see a ten-step wizard after sign-in. It covers welcome, theme, protected custom colours, profile/company images, font size, density, appearance, in-app notification preferences, live review and completion. Internal roles never receive this wizard.
+Customer-specific personalisation is intentionally limited to an optional profile photograph. The application shell, splash screen, PWA icons, PDFs and email branding remain official Rhomberg Connect assets.
 
-Settings are available later from the customer Account screen. Changes remain local until one complete valid preference object is saved. Customers can preview, cancel, reset one section or restore all Rhomberg defaults.
-
-## Shared preference model
-
-```json
-{
-  "schemaVersion": 1,
-  "setupCompleted": true,
-  "themePreset": "rhomberg-default",
-  "customColours": {
-    "primary": "#073b53",
-    "secondary": "#075e7b",
-    "accent": "#08788d",
-    "success": "#217a55",
-    "warning": "#b77812"
-  },
-  "fontSize": "medium",
-  "density": "standard",
-  "appearanceMode": "system",
-  "notificationPreferences": {
-    "rfqUpdates": true,
-    "accountSecurity": true
-  },
-  "profileImage": null,
-  "companyLogo": null
-}
-```
-
-Critical account/security and maintenance categories remain enabled. Error styling is protected and not replaced by customer colours. Foreground text is calculated from contrast; invalid custom values are rejected at the shared validation and service boundaries.
-
-## Images
-
-Mock mode accepts JPG, PNG or WebP files up to 1 MB, stores bytes behind a mock image service and keeps only metadata in the preference record. Image removal is staged with the settings draft: **Cancel changes** preserves the previously saved image, while Save removes superseded account-owned mock bytes and records an audit event. Unsaved uploads are cleaned when the customer cancels or defers setup. React components never access browser storage. Production must use private object storage, malware scanning, image re-encoding, authorised download URLs, retention and deletion controls.
-
-## Service contract
+## Profile image service
 
 ```text
 personalisation.get()
-personalisation.save(completePreferenceSet)
-personalisation.complete(completePreferenceSet)
-personalisation.reset({ reopenSetup })
-personalisation.uploadImage(file, kind, position)
+personalisation.save(profilePreference)
+personalisation.uploadImage(file, "profileImage", position)
 personalisation.removeImage(imageId)
 ```
 
-Every saved preference or image mutation records an audit event in mock mode. Production must derive user/company ownership from the server session and reject cross-company access.
+Mock mode accepts JPG, PNG or WebP files up to 1 MB and stores them behind the mock image service. Components never access browser storage directly. Production must use private object storage, malware scanning, re-encoding, authorised short-lived download URLs, retention controls and company/user ownership checks.
+
+Legacy `companyLogo`, custom-colour and theme-preset values are ignored during normalisation and must be rejected by the production API. Existing customer records should be migrated to the official `rhomberg-default` theme before release.
+
+All profile image mutations create an immutable account-scoped audit event.

@@ -91,5 +91,5 @@ CSS cannot currently consume JavaScript constants directly, so matching document
 
 ## Customer theme safety
 
-Customer colour presets may change brand accents, but they do not replace semantic text or status colours. `validateThemeColour()` rejects colours that cannot support readable foregrounds or essential-control contrast. `themeColoursFor()` also sanitises unsafe persisted custom colours back to protected defaults.
+The application uses one approved Rhomberg Connect colour system. Light, Dark and System appearance modes change semantic surfaces and foregrounds without replacing brand colours. Legacy custom-theme records are normalised back to protected defaults, and customers cannot upload an application logo.
 

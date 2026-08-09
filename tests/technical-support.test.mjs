@@ -35,6 +35,7 @@ assert.equal(readFileSync('src/components/Enquiry.jsx', 'utf8').includes('emerge
 assert.ok(readFileSync('src/components/TechnicalSupport.jsx', 'utf8').includes('Send to Technical for Assistance'));
 assert.ok(readFileSync('src/components/TechnicalSupport.jsx', 'utf8').includes('Quote the client or ask Technical'));
 assert.ok(readFileSync('src/components/TechnicalSupport.jsx', 'utf8').includes('Send Answer Back to Sales'));
+assert.ok(readFileSync('src/components/TechnicalSupport.jsx', 'utf8').includes('Download Complete RFQ PDF'));
 
 let clock = new Date('2026-08-05T08:00:00.000Z');
 const services = createMockServices({ storage: new TestStorage(), now: () => new Date(clock), emailSender: async () => ({ ok: true }) });
@@ -79,6 +80,9 @@ let queue = await services.technicalSupport.listQueue();
 assert.ok(queue.some(item => item.id === rfqId));
 await services.technicalSupport.assign(requestId, { technicalUserId: 'staff-technical-support-demo' });
 await services.technicalSupport.startReview(requestId);
+const completeRfqPdf = await services.technicalSupport.downloadRfq(requestId);
+assert.match(completeRfqPdf.fileName, /RFQ.*\.pdf$/i);
+assert.match(completeRfqPdf.dataUrl, /^data:application\/pdf;base64,/);
 await services.technicalSupport.requestInformation(requestId, { target: 'customer', message: 'Please ask the customer to confirm the fabricated process connection orientation.' });
 
 await services.auth.signOut();
@@ -91,6 +95,7 @@ const customerRfq = await services.enquiries.getById(rfqId);
 assert.equal(customerRfq.technicalSupport.question, undefined, 'internal representative question must not leak to the customer');
 assert.ok(customerRfq.technicalSupport.messages.every(message => message.classification === undefined));
 assert.ok(customerRfq.technicalSupport.customerInformationRequest.message.includes('connection orientation'));
+await assert.rejects(() => services.technicalSupport.downloadRfq(requestId), error => error instanceof ServiceError && error.status === 403);
 await services.technicalSupport.postMessage(requestId, { message: 'The fabricated requirement is bottom entry.' });
 
 await services.auth.signOut();
@@ -127,6 +132,7 @@ const audits = await services.audit.list();
 assert.ok(audits.some(event => event.action === 'technical_support.requested'));
 assert.ok(audits.some(event => event.action === 'technical_support.customer_response_received'));
 assert.ok(audits.some(event => event.action === 'technical_support.completed'));
+assert.ok(audits.some(event => event.action === 'technical_support.rfq_pdf_downloaded'));
 
 await services.auth.signOut();
 await services.auth.signIn({ email: 'cape.demo@client.test', password: 'Demo123!' });

@@ -37,7 +37,8 @@ This boundary lets the company replace the demo implementation without redesigni
 | `tracking` | Compatibility alias for `workflow` while existing tracking views are retained |
 | `audit` | Append-only workflow/security history within an authorised internal scope |
 | `notifications` | Recipient-scoped event inbox, read state, preferences and retry-ready delivery metadata; mock mode simulates email/push |
-| `personalisation` | Customer-only onboarding, theme, typography/density, mirrored notification-category choices and image metadata |
+| `personalisation` | Customer profile-image metadata only; custom application branding is not supported |
+| `userSettings` | Account-scoped app behaviour, sounds, haptics, notifications, appearance, accessibility and onboarding progress for every role |
 | `preferences` | Internal/non-sensitive light and dark display preference |
 
 Every method is asynchronous, including the browser mock. This is intentional: moving to the API implementation will not require UI event handlers to change from synchronous to asynchronous later.
@@ -57,7 +58,8 @@ dispatch.getWorkspaceOptions()
 workflow.list(filters) | getAllowedActions(recordId) | performAction(recordId, actionRequest)
 audit.list(filters)
 notifications.list(filters) | markRead(notificationId) | markAllRead() | getPreferences() | savePreferences(settings) | retryDelivery(notificationId, deliveryId)
-personalisation.get() | save(settings) | complete(settings) | reset(options) | uploadImage(file, kind, position) | removeImage(imageId)
+personalisation.get() | save(profile) | uploadImage(file, "profileImage", position) | removeImage(imageId)
+userSettings.get() | save(settings) | reset() | completeWelcome() | saveTutorialProgress(progress) | resetTutorial()
 preferences.getTheme() | setTheme(theme)
 ```
 

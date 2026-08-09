@@ -24,10 +24,11 @@ Information branches use `awaiting_representative_information` and `awaiting_cus
 - Customers see only safe status wording, the revised target, customer-safe messages, explicit information requests and customer-visible attachments.
 - Representatives see requests assigned to their RFQs.
 - Technical users see requests in their authorised queue; assignment is enforced for response actions.
+- Technical users can review the complete RFQ details and download an unpriced RFQ PDF from the request. The service checks role and record scope, and records every download in the immutable audit log.
 - Management reporting is permissions-backed and pricing-free.
 - Mock attachments retain metadata only. Production must validate type, size and content, scan for malware, use private object storage and authorise every upload/download server-side.
 - Messages are append-only. Corrections are new messages; ordinary users cannot edit or delete history.
 
 ## Production requirements
 
-The API must use authenticated sessions, CSRF protection, company scoping, representative assignment checks, transactional status changes, immutable audit/outbox writes, private document storage, server timestamps and idempotency. Scheduled workers should create approaching-due and overdue notifications. The browser preview is not a production security boundary.
+The API must use authenticated sessions, CSRF protection, company scoping, representative assignment checks, transactional status changes, immutable audit/outbox writes, private document storage, server-side PDF generation, server timestamps and idempotency. Scheduled workers should create approaching-due and overdue notifications. The browser preview is not a production security boundary.

@@ -130,6 +130,12 @@ import {
 } from '../../domain/workflow.js';
 import { optionsForField, shouldShowField } from '../../domain/productConfiguration.js';
 import { RFQ_EMAIL_RECIPIENT, sendRfqEmail } from '../../lib/rfqEmail.js';
+import { buildRfqPdf, rfqPdfFilename } from '../../lib/rfqPdf.js';
+import {
+  createDefaultUserSettings,
+  normaliseUserSettings,
+  validateUserSettings,
+} from '../../domain/userSettings.js';
 import {
   createDefaultCustomerPersonalisation,
   normaliseCustomerPersonalisation,
@@ -216,6 +222,12 @@ const fileToDataUrl = file => new Promise((resolve, reject) => {
     })
     .catch(() => reject(new ServiceError('The image could not be read. Please choose it again.', { code: 'IMAGE_READ_FAILED', status: 422 })));
 });
+
+const bytesToDataUrl = (bytes, mediaType = 'application/octet-stream') => {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return `data:${mediaType};base64,${globalThis.btoa(binary)}`;
+};
 
 const hashFileSha256 = async file => {
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -774,6 +786,8 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   const writeNotificationPreferenceRecords = records => store.set(STORE_KEYS.notificationPreferences, records);
   const readPersonalisation = () => store.get(STORE_KEYS.personalisation, {});
   const writePersonalisation = records => store.set(STORE_KEYS.personalisation, records);
+  const readUserSettings = () => store.get(STORE_KEYS.userSettings, {});
+  const writeUserSettings = records => store.set(STORE_KEYS.userSettings, records);
   const readMockImages = () => store.get(STORE_KEYS.mockImages, {});
   const writeMockImages = records => store.set(STORE_KEYS.mockImages, records);
   const readCertificateFiles = () => store.get(STORE_KEYS.certificateFiles, {});
@@ -1406,6 +1420,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     if (!store.has(STORE_KEYS.notifications)) store.set(STORE_KEYS.notifications, []);
     if (!store.has(STORE_KEYS.notificationPreferences)) store.set(STORE_KEYS.notificationPreferences, {});
     if (!store.has(STORE_KEYS.personalisation)) store.set(STORE_KEYS.personalisation, {});
+    if (!store.has(STORE_KEYS.userSettings)) store.set(STORE_KEYS.userSettings, {});
     if (!store.has(STORE_KEYS.mockImages)) store.set(STORE_KEYS.mockImages, {});
     if (!store.has(STORE_KEYS.certificateFiles)) store.set(STORE_KEYS.certificateFiles, {});
     if (!store.has(STORE_KEYS.credentialChallenges)) store.set(STORE_KEYS.credentialChallenges, []);
@@ -4479,8 +4494,8 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       if (!accountCan(account, PERMISSIONS.ACCESS_CUSTOMER_WORKSPACE)) {
         throw new ServiceError('Customer image upload is available only in Rhomberg Connect.', { code: 'FORBIDDEN', status: 403 });
       }
-      if (!['profileImage', 'companyLogo'].includes(kind)) {
-        throw new ServiceError('Choose a profile image or company logo.', { code: 'INVALID_IMAGE_KIND', status: 422, fieldErrors: { image: 'Choose a supported image type.' } });
+      if (kind !== 'profileImage') {
+        throw new ServiceError('Customer-controlled application branding is disabled. Only a profile image may be uploaded.', { code: 'INVALID_IMAGE_KIND', status: 422, fieldErrors: { image: 'Choose a personal profile image.' } });
       }
       validatePersonalisationImage(file);
       const id = makeId('customer-image');
@@ -5354,6 +5369,20 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       return clone({ ...document, downloadUrl: '', mockMessage: 'The GitHub Pages preview stores document metadata only.' });
     },
 
+    async downloadRfq(requestId) {
+      const account = requireAccount();
+      const rfq = locateTechnicalRfq(requestId);
+      assertTechnicalRecordAccess(account, rfq);
+      if (account.role === USER_ROLES.CUSTOMER || !accountCan(account, PERMISSIONS.DOWNLOAD_TECHNICAL_DOCUMENTS)) throw new ServiceError('The complete Technical Support RFQ is available to authorised internal users only.', { code: 'FORBIDDEN', status: 403 });
+      const bytes = await buildRfqPdf(rfq);
+      addTechnicalAudit({ rfq, action: 'rfq_pdf_downloaded', actor: createWorkflowActor(account), messageType: 'rfq_pdf_download' });
+      return clone({
+        fileName: rfqPdfFilename(rfq),
+        mediaType: 'application/pdf',
+        dataUrl: bytesToDataUrl(bytes, 'application/pdf'),
+      });
+    },
+
     async getMetrics() {
       const account = requireAccount();
       if (!accountCan(account, PERMISSIONS.VIEW_TECHNICAL_METRICS)) throw new ServiceError('Your role cannot view Technical Support reporting.', { code: 'FORBIDDEN', status: 403 });
@@ -5371,6 +5400,58 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const safeTheme = theme === 'dark' ? 'dark' : 'light';
       store.set(STORE_KEYS.theme, safeTheme);
       return safeTheme;
+    },
+  };
+
+  const userSettings = {
+    async get() {
+      const account = requireAccount();
+      return clone(normaliseUserSettings(readUserSettings()[account.id] || createDefaultUserSettings()));
+    },
+
+    async save(candidate) {
+      const account = requireAccount();
+      const next = normaliseUserSettings(candidate);
+      const errors = validateUserSettings(next);
+      if (Object.keys(errors).length) throw new ServiceError('Check the application settings.', { code: 'VALIDATION_ERROR', status: 422, fieldErrors: errors });
+      const records = readUserSettings();
+      const previous = normaliseUserSettings(records[account.id]);
+      const saved = { ...next, updatedAt: now().toISOString() };
+      records[account.id] = saved;
+      writeUserSettings(records);
+      appendAuditEvent({
+        id: makeId('audit'),
+        action: 'user.settings_saved',
+        outcome: 'success',
+        entityType: 'user_setting',
+        entityId: account.id,
+        companyId: account.companyId,
+        actorId: account.id,
+        actorRole: account.role,
+        details: { previous, next: saved },
+        createdAt: saved.updatedAt,
+      });
+      return clone(saved);
+    },
+
+    async completeWelcome() {
+      const current = await this.get();
+      return this.save({ ...current, onboarding: { ...current.onboarding, welcomeCompleted: true } });
+    },
+
+    async saveTutorialProgress({ step = 0, tutorialKind = 'full', completed = false } = {}) {
+      const current = await this.get();
+      return this.save({ ...current, onboarding: { ...current.onboarding, tutorialProgress: Math.max(0, Math.trunc(Number(step) || 0)), tutorialKind, tutorialCompleted: Boolean(completed) } });
+    },
+
+    async resetTutorial() {
+      const current = await this.get();
+      return this.save({ ...current, onboarding: { ...current.onboarding, tutorialProgress: 0, tutorialKind: 'full', tutorialCompleted: false } });
+    },
+
+    async reset() {
+      const current = await this.get();
+      return this.save({ ...createDefaultUserSettings(), onboarding: { ...current.onboarding } });
     },
   };
 
@@ -5399,6 +5480,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     administration,
     executiveDemo,
     personalisation,
+    userSettings,
     products: productService,
     preferences,
     preview: {

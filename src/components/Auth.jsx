@@ -64,8 +64,7 @@ export function Auth({
       <button className="auth-theme-toggle" type="button" onClick={onToggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}><span>{theme === 'dark' ? '☀' : '☾'}</span>{theme === 'dark' ? 'Light' : 'Dark'}</button>
       <section className="auth-card" aria-labelledby="auth-title">
         <div className="auth-brand">
-          <img src="assets/images/rhomberg-gauge-mark.svg" alt="" />
-          <img src="assets/images/rhomberg-wordmark-transparent.png" alt="Rhomberg Instruments" />
+          <img src="assets/images/rhomberg-connect-logo-full-dark.png" alt="Rhomberg Connect" />
         </div>
         <span className="preview-chip">{__PUBLIC_PREVIEW__ && serviceMode === 'mock' ? 'Demo Preview' : 'Private company service'}{preview?.platform ? ` · ${preview.platform}` : ''}</span>
         <h1 id="auth-title">{tab === 'signin' ? <>Welcome to {preview?.product || 'Rhomberg'}<br /><em>{preview?.platform || 'Instruments'}.</em></> : <>Create your company<br /><em>workspace.</em></>}</h1>

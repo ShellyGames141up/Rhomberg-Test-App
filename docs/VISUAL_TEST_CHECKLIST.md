@@ -85,7 +85,7 @@ The Codex in-app Chromium browser rendered the complete 11-size matrix against t
 
 The PBG product configuration and Account Security screens were separately rendered at all 11 sizes. The 1024x768 pass exposed two contained-overflow defects in credential actions and presenter controls; both were corrected and the matrix was rerun with zero failures.
 
-All seven theme presets were selected and rendered at 390x844. Light and dark isolated previews rendered with explicit foreground/background values. Small, Medium, Large and Extra Large previews measured 15.2 px, 16 px, 17.92 px and 20 px respectively for preview buttons and inputs, with no horizontal overflow.
+Official Rhomberg Connect Light and Dark modes were rendered at 390x844 with explicit foreground/background values. Increased-text and default-text previews were checked for readable controls and no horizontal overflow. Customer-specific application themes and logos are no longer supported.
 
 Executive Full Application mode and intentional 390 px phone, 768 px tablet and wide desktop device frames were checked. Presenter controls collapsed from 323 px to 96 px without overlap. The browser console reported no warnings or errors during the final Executive check.
 

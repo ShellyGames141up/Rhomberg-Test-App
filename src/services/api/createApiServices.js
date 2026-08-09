@@ -515,6 +515,7 @@ export function createApiServices(config = {}) {
     },
     complete: (requestId, input) => client.post(`/technical-support/${encodeURIComponent(requestId)}/complete`, input),
     override: (requestId, input) => client.post(`/technical-support/${encodeURIComponent(requestId)}/override`, input),
+    downloadRfq: requestId => client.get(`/technical-support/${encodeURIComponent(requestId)}/rfq/download`),
     downloadAttachment: (requestId, attachmentId) => client.get(`/technical-support/${encodeURIComponent(requestId)}/attachments/${encodeURIComponent(attachmentId)}/download`),
     getMetrics: filters => client.get('/technical-support/metrics', { query: filters }),
   };
@@ -531,6 +532,7 @@ export function createApiServices(config = {}) {
     },
     reset: options => client.post('/users/me/personalisation/reset', options || {}),
     uploadImage(file, kind, position = { x: 50, y: 50 }) {
+      if (kind !== 'profileImage') throw new ServiceError('Customer-controlled application branding is disabled.', { code: 'INVALID_IMAGE_KIND', status: 422 });
       validatePersonalisationImage(file);
       const form = new FormData();
       form.append('kind', kind);
@@ -550,6 +552,15 @@ export function createApiServices(config = {}) {
       preferenceStore.set(THEME_PREFERENCE_KEY, safeTheme);
       return safeTheme;
     },
+  };
+
+  const userSettings = {
+    get: () => client.get('/users/me/settings'),
+    save: candidate => client.put('/users/me/settings', candidate),
+    completeWelcome: () => client.post('/users/me/settings/onboarding/welcome', {}),
+    saveTutorialProgress: input => client.put('/users/me/settings/onboarding/tutorial', input),
+    resetTutorial: () => client.post('/users/me/settings/onboarding/tutorial/reset', {}),
+    reset: () => client.post('/users/me/settings/reset', {}),
   };
 
   return {
@@ -578,6 +589,7 @@ export function createApiServices(config = {}) {
     dispatch,
     technicalSupport,
     personalisation,
+    userSettings,
     preferences,
     preview: {
       emailRecipient: '',

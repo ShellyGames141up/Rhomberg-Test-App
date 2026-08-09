@@ -891,7 +891,7 @@ paths:
               type: object
               required: [kind, image]
               properties:
-                kind: { type: string, enum: [profileImage, companyLogo] }
+                kind: { type: string, enum: [profileImage] }
                 position: { type: string, description: JSON object containing integer x/y percentages from 0 to 100. }
                 image: { type: string, format: binary }
       responses:
@@ -925,6 +925,92 @@ paths:
           description: Image removed from the signed-in customer account
         '404':
           $ref: '#/components/responses/ApiError'
+  /users/me/settings:
+    get:
+      operationId: getCurrentUserSettings
+      responses:
+        '200':
+          description: Role-safe settings for the signed-in user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserSettingsResponse' }
+    put:
+      operationId: saveCurrentUserSettings
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserSettings' }
+      responses:
+        '200':
+          description: Validated account-scoped settings saved and audited
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserSettingsResponse' }
+        '422':
+          $ref: '#/components/responses/ApiError'
+  /users/me/settings/reset:
+    post:
+      operationId: resetCurrentUserSettings
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      responses:
+        '200':
+          description: Official Rhomberg Connect defaults restored without changing onboarding history
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserSettingsResponse' }
+  /users/me/settings/onboarding/welcome:
+    post:
+      operationId: completeCurrentUserWelcome
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      responses:
+        '200':
+          description: One-time customer welcome recorded as complete
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserSettingsResponse' }
+  /users/me/settings/onboarding/tutorial:
+    put:
+      operationId: saveCurrentUserTutorialProgress
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [step, tutorialKind, completed]
+              properties:
+                step: { type: integer, minimum: 0, maximum: 12 }
+                tutorialKind: { type: string, enum: [full, submit-rfq, track-rfq, notifications, profile-settings] }
+                completed: { type: boolean }
+      responses:
+        '200':
+          description: Isolated tutorial progress saved; no operational RFQ is created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserSettingsResponse' }
+  /users/me/settings/onboarding/tutorial/reset:
+    post:
+      operationId: resetCurrentUserTutorialProgress
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      responses:
+        '200':
+          description: Tutorial can be replayed from the beginning
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserSettingsResponse' }
   /orders/{orderId}/summary-sharing-options:
     get:
       operationId: getOrderSummarySharingOptions
@@ -3004,6 +3090,15 @@ paths:
       responses:
         '200': { description: Authorised short-lived private download }
         '404': { $ref: '#/components/responses/ApiError' }
+  /technical-support/{requestId}/rfq/download:
+    get:
+      operationId: downloadTechnicalSupportRfq
+      summary: Download the complete RFQ PDF for an authorised Technical Support request
+      parameters: [{ $ref: '#/components/parameters/TechnicalRequestId' }]
+      responses:
+        '200': { description: Audited RFQ PDF stream or short-lived private download }
+        '403': { $ref: '#/components/responses/ApiError' }
+        '404': { $ref: '#/components/responses/ApiError' }
   /technical-support/metrics:
     get:
       operationId: getTechnicalSupportMetrics
@@ -4602,22 +4697,13 @@ components:
         malwareScanStatus: { type: string, enum: [pending, clean, rejected, failed] }
     CustomerPersonalisation:
       type: object
-      required: [schemaVersion, setupCompleted, themePreset, customColours, fontSize, density, appearanceMode, notificationPreferences]
+      required: [schemaVersion, setupCompleted, themePreset, fontSize, density, appearanceMode, notificationPreferences]
       properties:
         schemaVersion: { type: integer, minimum: 1 }
         setupCompleted: { type: boolean }
         themePreset:
           type: string
-          enum: [rhomberg-default, industrial-professional, modern, funky, dark, high-contrast, custom]
-        customColours:
-          type: object
-          required: [primary, secondary, accent, success, warning]
-          properties:
-            primary: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
-            secondary: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
-            accent: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
-            success: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
-            warning: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
+          enum: [rhomberg-default]
         fontSize: { type: string, enum: [small, medium, large, extra-large] }
         density: { type: string, enum: [comfortable, standard, compact] }
         appearanceMode: { type: string, enum: [light, dark, system] }
@@ -4628,17 +4714,13 @@ components:
           oneOf:
             - $ref: '#/components/schemas/CustomerIdentityImage'
             - type: 'null'
-        companyLogo:
-          oneOf:
-            - $ref: '#/components/schemas/CustomerIdentityImage'
-            - type: 'null'
         updatedAt: { type: string, format: date-time }
     CustomerIdentityImage:
       type: object
       required: [id, kind, fileName, mimeType, sizeBytes, position]
       properties:
         id: { type: string, format: uuid }
-        kind: { type: string, enum: [profileImage, companyLogo] }
+        kind: { type: string, enum: [profileImage] }
         fileName: { type: string }
         mimeType: { type: string, enum: [image/jpeg, image/png, image/webp] }
         sizeBytes: { type: integer, minimum: 1, maximum: 1048576 }
@@ -4656,6 +4738,60 @@ components:
       required: [data]
       properties:
         data: { $ref: '#/components/schemas/CustomerPersonalisation' }
+    UserSettings:
+      type: object
+      required: [schemaVersion, app, sounds, haptics, appearance, accessibility, onboarding, roleNotifications]
+      properties:
+        schemaVersion: { type: integer, minimum: 1 }
+        app:
+          type: object
+          additionalProperties: false
+          properties:
+            defaultLandingPage: { type: string, enum: [role_default, notifications, account] }
+            rememberLastSection: { type: boolean }
+            confirmImportantSubmissions: { type: boolean }
+            automaticDocumentOpening: { type: boolean }
+            language: { type: string, enum: [en-ZA] }
+        sounds:
+          type: object
+          properties:
+            enabled: { type: boolean }
+            volume: { type: number, minimum: 0, maximum: 1 }
+            categories: { type: object, additionalProperties: { type: boolean } }
+        haptics:
+          type: object
+          properties:
+            enabled: { type: boolean }
+            strength: { type: string, enum: [light, medium] }
+            categories: { type: object, additionalProperties: { type: boolean } }
+        appearance:
+          type: object
+          properties:
+            mode: { type: string, enum: [light, dark, system] }
+            highContrast: { type: boolean }
+            increasedText: { type: boolean }
+            reducedTransparency: { type: boolean }
+        accessibility:
+          type: object
+          properties:
+            reduceMotion: { type: boolean }
+            decorativeAnimations: { type: boolean }
+            screenReaderOptimisation: { type: boolean }
+        onboarding:
+          type: object
+          properties:
+            welcomeCompleted: { type: boolean }
+            tutorialCompleted: { type: boolean }
+            tutorialProgress: { type: integer, minimum: 0, maximum: 12 }
+            tutorialKind: { type: string }
+        roleNotifications:
+          type: object
+          additionalProperties: { type: boolean }
+    UserSettingsResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/UserSettings' }
     Notification:
       type: object
       required: [id, eventType, category, title, entityType, entityId, reference, message, priority, link, deliveries, audit, createdAt]

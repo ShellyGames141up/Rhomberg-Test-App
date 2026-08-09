@@ -2,6 +2,8 @@
 
 The canonical machine-readable proposal is [api/openapi.yaml](api/openapi.yaml). The historical detailed narrative remains in [API-CONTRACT.md](API-CONTRACT.md).
 
+Role-aware experience settings use `/users/me/settings` plus reset and onboarding subresources. These endpoints are account-scoped, audited and available to every authenticated role; customer tutorial data remains isolated from operational RFQs. Customer identity uploads now accept profile images only—application logos and colour themes are fixed to official Rhomberg Connect branding.
+
 Phase 21 adds contracts for Laboratory queues/receipt/unit updates/release, receipt from Laboratory, one-PDF-per-unit certificate upload and audited download, Laboratory archive, QA queue/actions/rework, Dispatch receipt, credential-change challenge/confirmation, dedicated representative assignment, and pricing-safe operational analytics.
 
 The IT handover adds Administrator contracts for a sanitised system overview, audited account activation/suspension and audited customer-company representative assignment:
@@ -51,4 +53,4 @@ Signed upload uses multipart PDF plus certificate number, issue date and replace
 
 ## Technical Support additions
 
-The proposed API adds `POST/GET /rfqs/{rfqId}/technical-support`, plus assignment, start-review, messages, request-information, response, completion, override, attachment download, queue and metrics operations under `/technical-support`. Multipart request bodies separate JSON payloads from optional files. The backend must enforce session, CSRF, company and assignment scope, controlled transitions, the one-time deadline adjustment, document access, idempotency and transactional audit/outbox writes.
+The proposed API adds `POST/GET /rfqs/{rfqId}/technical-support`, plus assignment, start-review, messages, request-information, response, completion, override, complete RFQ PDF download, attachment download, queue and metrics operations under `/technical-support`. Multipart request bodies separate JSON payloads from optional files. The backend must enforce session, CSRF, company and assignment scope, controlled transitions, the one-time deadline adjustment, document access, idempotency and transactional audit/outbox writes.

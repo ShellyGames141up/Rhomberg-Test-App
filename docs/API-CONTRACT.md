@@ -763,17 +763,17 @@ Customer projections omit `dispatch.internalNotes`, `dispatch.currentProblemReas
 
 An arbitrary `{ "status": "..." }` update is not supported. See `WORKFLOW_STATE_MACHINE.md` for the authoritative transition list.
 
-### Customer personalisation
+### Profile image and user settings
 
-These routes are customer-only and always derive the user and authorised company from the secure session.
+Profile-image routes are customer-only and always derive the user and authorised company from the secure session. Application branding is fixed to the approved Rhomberg Connect identity.
 
 #### `GET /users/me/personalisation`
 
-Returns one complete preference document with `setupCompleted`, theme/custom colours, font size, density, appearance mode, notification categories and authorised image metadata. Image download URLs, when present, must be short-lived and scoped.
+Returns the optional profile image and legacy-safe official-brand preference metadata. Image download URLs, when present, must be short-lived and scoped.
 
 #### `PUT /users/me/personalisation`
 
-Accepts one complete preference document. Partial invalid settings are not applied. The service validates preset IDs, all five custom colours, contrast, font/density/appearance values and mandatory notification categories, then records an audit event.
+Accepts profile-image preference metadata only. Custom application colours, customer logos and non-official theme identifiers are rejected. Each accepted change records an audit event.
 
 #### `POST /users/me/personalisation/reset`
 
@@ -785,11 +785,17 @@ Restores approved Rhomberg defaults. An administrator-triggered reset requires a
 
 #### `POST /users/me/personalisation/images`
 
-Multipart fields: `kind` (`profileImage` or `companyLogo`), `position` (`{"x":50,"y":50}`) and `image`. Production validates file signature, MIME type and size; scans/re-encodes the file; stores it privately; and returns metadata only.
+Multipart fields: `kind` (only `profileImage`), `position` (`{"x":50,"y":50}`) and `image`. Production validates file signature, MIME type and size; scans/re-encodes the file; stores it privately; and returns metadata only.
 
 #### `DELETE /users/me/personalisation/images/{imageId}`
 
 Deletes or schedules deletion only when the image belongs to the signed-in user and authorised company. The response does not reveal whether an out-of-scope image exists.
+
+#### Role-aware settings
+
+`GET /users/me/settings` and `PUT /users/me/settings` read and save the signed-in user's app behaviour, restrained sound/haptic choices, role notification topics, official Light/Dark/System appearance, accessibility options and onboarding progress. `POST /users/me/settings/reset` restores official defaults without granting permissions or changing operational records.
+
+Customer onboarding uses `POST /users/me/settings/onboarding/welcome`, `PUT /users/me/settings/onboarding/tutorial` and `POST /users/me/settings/onboarding/tutorial/reset`. Tutorial RFQ data is fabricated, labelled and never passed to the operational RFQ endpoint. Every settings mutation is account-scoped and appended to immutable audit history.
 
 ### Order-summary PDF generation and secure email sharing
 

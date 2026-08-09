@@ -12,13 +12,7 @@ import {
 export { contrastRatio, foregroundForColour, isValidHexColour };
 
 export const CUSTOMER_THEME_PRESETS = Object.freeze([
-  { id: 'rhomberg-default', label: 'Rhomberg Default', description: 'Trusted Rhomberg navy and cyan.', colours: { primary: '#073b53', secondary: '#075e7b', accent: '#08788d', success: '#217a55', warning: '#98630f' } },
-  { id: 'industrial-professional', label: 'Industrial Professional', description: 'Steel, graphite and safety blue.', colours: { primary: '#263943', secondary: '#3c5966', accent: '#147896', success: '#28775a', warning: '#945e0f' } },
-  { id: 'modern', label: 'Modern', description: 'Clean indigo with a bright teal accent.', colours: { primary: '#28355f', secondary: '#43558f', accent: '#00767b', success: '#25785a', warning: '#8e590d' } },
-  { id: 'funky', label: 'Funky', description: 'Energetic purple and turquoise with safe contrast.', colours: { primary: '#51306f', secondary: '#77479a', accent: '#007f86', success: '#287653', warning: '#a8680f' } },
-  { id: 'dark', label: 'Dark', description: 'Deep technical surfaces and cool cyan.', colours: { primary: '#102d3a', secondary: '#164c5d', accent: '#087587', success: '#2c805e', warning: '#946014' } },
-  { id: 'high-contrast', label: 'High Contrast', description: 'Strong navy, white and accessible yellow.', colours: { primary: '#001f2d', secondary: '#004a66', accent: '#006d7f', success: '#176b45', warning: '#9b6100' } },
-  { id: 'custom', label: 'Custom', description: 'Choose up to five protected brand colours.', colours: null },
+  { id: 'rhomberg-default', label: 'Rhomberg Connect Official', description: 'Protected deep navy, technical blue and electric cyan.', colours: { primary: '#053f58', secondary: '#087aa0', accent: '#08788d', success: '#217a55', warning: '#98630f' } },
 ]);
 
 export const CUSTOMER_FONT_SIZES = Object.freeze([
@@ -56,13 +50,11 @@ export const createDefaultCustomerPersonalisation = () => ({
   schemaVersion: 1,
   setupCompleted: false,
   themePreset: 'rhomberg-default',
-  customColours: { ...DEFAULT_CUSTOM_COLOURS },
   fontSize: 'medium',
   density: 'standard',
   appearanceMode: 'system',
   notificationPreferences: { ...DEFAULT_NOTIFICATION_PREFERENCES },
   profileImage: null,
-  companyLogo: null,
   updatedAt: '',
 });
 
@@ -75,12 +67,7 @@ const appearanceIds = validIds(APPEARANCE_MODES);
 export const themeColoursFor = personalisation => {
   const current = personalisation || createDefaultCustomerPersonalisation();
   const preset = CUSTOMER_THEME_PRESETS.find(item => item.id === current.themePreset) || CUSTOMER_THEME_PRESETS[0];
-  if (preset.id !== 'custom') return { ...preset.colours };
-  const customColours = { ...DEFAULT_CUSTOM_COLOURS, ...(current.customColours || {}) };
-  return Object.fromEntries(Object.entries(customColours).map(([name, colour]) => [
-    name,
-    validateThemeColour(name, colour) ? DEFAULT_CUSTOM_COLOURS[name] : colour,
-  ]));
+  return { ...preset.colours };
 };
 
 export const validateCustomerPersonalisation = candidate => {
@@ -90,13 +77,6 @@ export const validateCustomerPersonalisation = candidate => {
   if (!fontSizeIds.has(value.fontSize)) errors.fontSize = 'Choose a recognised font size.';
   if (!densityIds.has(value.density)) errors.density = 'Choose a recognised display density.';
   if (!appearanceIds.has(value.appearanceMode)) errors.appearanceMode = 'Choose Light, Dark or System Default.';
-
-  if (value.themePreset === 'custom') {
-    for (const [name, colour] of Object.entries({ ...DEFAULT_CUSTOM_COLOURS, ...(value.customColours || {}) })) {
-      const contrastError = validateThemeColour(name, colour);
-      if (contrastError) errors[`customColours.${name}`] = contrastError;
-    }
-  }
 
   for (const category of NOTIFICATION_PREFERENCE_CATEGORIES) {
     if (typeof value.notificationPreferences?.[category.id] !== 'boolean') {
@@ -117,13 +97,12 @@ export const normaliseCustomerPersonalisation = candidate => {
     ...value,
     setupCompleted: Boolean(value.setupCompleted),
     themePreset: themeIds.has(value.themePreset) ? value.themePreset : defaults.themePreset,
-    customColours: { ...defaults.customColours, ...(value.customColours || {}) },
     fontSize: fontSizeIds.has(value.fontSize) ? value.fontSize : defaults.fontSize,
     density: densityIds.has(value.density) ? value.density : defaults.density,
     appearanceMode: appearanceIds.has(value.appearanceMode) ? value.appearanceMode : defaults.appearanceMode,
     notificationPreferences: { ...defaults.notificationPreferences, ...(value.notificationPreferences || {}) },
     profileImage: value.profileImage || null,
-    companyLogo: value.companyLogo || null,
+    companyLogo: null,
   };
 };
 

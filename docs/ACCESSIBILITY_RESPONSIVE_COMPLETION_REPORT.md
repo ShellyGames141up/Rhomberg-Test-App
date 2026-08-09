@@ -14,7 +14,7 @@ The platform now has a shared semantic design foundation, contrast-protected the
 - `src/shared/design/tokens.js` provides shared breakpoints, typography, semantic colours and status tones.
 - `src/components/StatusBadge.jsx` centralises status presentation.
 - Customer, Account, Sales, Planning, Laboratory, Expediting, QA, Dispatch, Administration and tracking components now use the shared status badge.
-- `src/shared/personalisation/personalisation.js` validates presets and custom colours and supplies protected foregrounds.
+- `src/shared/personalisation/personalisation.js` normalises legacy records to the official brand and preserves protected foregrounds.
 - Executive Demo domain, mock service, API contract placeholder, application state and controls now support Full Application and intentional phone/tablet/desktop device modes.
 - `styles.css` contains the semantic light/dark tokens, protected surface rules, responsive layouts, scalable controls, wide desktop workspaces and focused breakpoint repairs.
 - Automated accessibility/responsive contracts were added to `tests/accessibility-responsive.test.mjs`.
@@ -81,7 +81,7 @@ Additional rendered checks covered:
 - Customer catalogue → Pressure → PBG product → configuration path
 - White configuration-card foregrounds
 - Account Security action containment and challenge form
-- All seven customer theme presets
+- Official Rhomberg Connect Light, Dark and System appearance modes
 - Light and dark isolated previews
 - Small, Medium, Large and Extra Large text previews
 - Executive Full Application

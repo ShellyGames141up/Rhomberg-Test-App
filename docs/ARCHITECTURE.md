@@ -36,7 +36,7 @@ The API and PostgreSQL database in the lower two layers are future production co
 | `src/apps/` | Preview landing, Executive Demo and platform-specific customer setup/settings presentation |
 | `src/components/` | Existing reusable catalogue, RFQ, Planning, Expediting, Dispatch, workflow and account screens |
 | `src/shared/platform/` | Five preview definitions, route resolution and preview-role gates |
-| `src/shared/personalisation/` | Themes, scalable typography/density values, colour protection and image rules |
+| `src/shared/personalisation/` | Legacy-safe normalisation and customer profile-image rules; application branding remains official |
 | `src/domain/` | Central workflow, access policy, queue and configuration business rules |
 | `src/services/` | Shared contracts plus interchangeable mock and HTTP implementations |
 | `preview/` and `demo/` | Stable GitHub Pages entry documents; no duplicated application bundles |

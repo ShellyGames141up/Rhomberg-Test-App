@@ -1,5 +1,7 @@
 # Accessibility
 
+The shared Settings page adds Reduce Motion, decorative-animation control, increased text, high contrast, reduced transparency, UI-sound control, haptic control and screen-reader optimisation. These preferences apply to every role through service-backed account settings. System `prefers-reduced-motion` is respected before sign-in and whenever account settings are unavailable.
+
 ## Current target
 
 The mock platform targets WCAG 2.1/2.2 AA contrast and interaction guidance where it can be validated in this front-end preview:

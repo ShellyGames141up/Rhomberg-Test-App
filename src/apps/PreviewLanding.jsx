@@ -10,8 +10,7 @@ export function PreviewLanding({ demoLogins = [], serviceMode = 'mock' }) {
     <main className="preview-landing">
       <header className="preview-landing-hero">
         <div className="preview-landing-brand">
-          <img src={`${landing}assets/images/rhomberg-gauge-mark.svg`} alt="" />
-          <span><strong>RHOMBERG</strong><small>PLATFORM PREVIEW CENTRE</small></span>
+          <img src={`${landing}assets/images/rhomberg-connect-logo-full-dark.png`} alt="Rhomberg Connect" />
         </div>
         <span className="preview-landing-chip">Demo Preview · {serviceMode === 'mock' ? 'Mock data' : 'Private service'}</span>
         <h1>One shared platform.<br /><em>Five focused experiences.</em></h1>

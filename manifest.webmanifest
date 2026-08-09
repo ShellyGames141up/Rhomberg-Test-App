@@ -1,7 +1,7 @@
 {
-  "name": "Rhomberg Platform Preview Centre",
-  "short_name": "Rhomberg Preview",
-  "description": "Five controlled mock Rhomberg Connect, Operations and executive demonstration experiences.",
+  "name": "Rhomberg Connect",
+  "short_name": "Rhomberg Connect",
+  "description": "Rhomberg Connect customer, operational and executive demonstration experiences.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
@@ -16,36 +16,37 @@
   },
   "icons": [
     {
-      "src": "assets/images/rhomberg-gauge-mark.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "assets/images/rhomberg-connect-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
-    }
+    },
+    { "src": "assets/images/rhomberg-connect-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" }
   ],
   "shortcuts": [
     {
       "name": "Customer mobile",
       "short_name": "Connect",
       "url": "./preview/customer-mobile/",
-      "icons": [{ "src": "assets/images/rhomberg-gauge-mark.svg", "sizes": "any", "type": "image/svg+xml" }]
+      "icons": [{ "src": "assets/images/rhomberg-connect-icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
-      "name": "Operations mobile",
-      "short_name": "Operations",
+      "name": "Rhomberg Connect mobile operations",
+      "short_name": "Connect",
       "url": "./preview/internal-mobile/",
-      "icons": [{ "src": "assets/images/rhomberg-gauge-mark.svg", "sizes": "any", "type": "image/svg+xml" }]
+      "icons": [{ "src": "assets/images/rhomberg-connect-icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Internal desktop",
       "short_name": "Desktop",
       "url": "./preview/internal-desktop/",
-      "icons": [{ "src": "assets/images/rhomberg-gauge-mark.svg", "sizes": "any", "type": "image/svg+xml" }]
+      "icons": [{ "src": "assets/images/rhomberg-connect-icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Executive workflow demo",
       "short_name": "Executive",
       "url": "./demo/executive-workflow/",
-      "icons": [{ "src": "assets/images/rhomberg-gauge-mark.svg", "sizes": "any", "type": "image/svg+xml" }]
+      "icons": [{ "src": "assets/images/rhomberg-connect-icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]
 }

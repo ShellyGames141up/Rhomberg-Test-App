@@ -2,45 +2,24 @@ import { useEffect, useState } from 'react';
 
 export function Intro({ onComplete }) {
   const [leaving, setLeaving] = useState(false);
-
   useEffect(() => {
-    const timer = window.setTimeout(() => finish(), 6800);
+    const timer = window.setTimeout(() => finish(), 2850);
     return () => window.clearTimeout(timer);
   }, []);
-
   const finish = () => {
     if (leaving) return;
     setLeaving(true);
-    window.setTimeout(onComplete, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 650);
+    window.setTimeout(onComplete, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 260);
   };
-
-  return (
-    <section className={`intro ${leaving ? 'is-leaving' : ''}`} aria-label="Rhomberg Instruments introduction">
-      <button className="intro-skip" type="button" onClick={finish}>Skip introduction</button>
-      <div className="intro-grid" aria-hidden="true" />
-      <div className="intro-orbit orbit-a" aria-hidden="true" />
-      <div className="intro-orbit orbit-b" aria-hidden="true" />
-      <div className="intro-content">
-        <div className="intro-brand">
-          <img src="assets/images/rhomberg-gauge-mark.svg" alt="" />
-          <img src="assets/images/rhomberg-wordmark-transparent.png" alt="Rhomberg Instruments" />
-        </div>
-        <IntroMessage number="01" title="Precision engineered" copy="for every application" className="message-one" />
-        <IntroMessage number="02" title="Configure with confidence" copy="guided instrument selection" className="message-two" />
-        <IntroMessage number="03" title="Stay informed." copy="RFQs and order progress in one place" className="message-three" />
-        <p className="intro-welcome">Welcome to Rhomberg Instruments</p>
-      </div>
-      <div className="intro-progress" aria-hidden="true"><span /></div>
-    </section>
-  );
-}
-
-function IntroMessage({ number, title, copy, className }) {
-  return (
-    <div className={`intro-message ${className}`}>
-      <span>{number}</span>
-      <strong>{title}</strong>
-      <small>{copy}</small>
+  return <section className={`intro brand-splash ${leaving ? 'is-leaving' : ''}`} aria-label="Rhomberg Connect introduction">
+    <button className="intro-skip" type="button" onClick={finish}>Skip</button>
+    <div className="intro-grid" aria-hidden="true" />
+    <div className="splash-glow" aria-hidden="true" />
+    <div className="splash-lockup">
+      <div className="animated-gauge" aria-hidden="true"><img src="assets/images/rhomberg-connect-symbol.png" alt="" /><i /></div>
+      <picture><source media="(max-width: 600px)" srcSet="assets/images/rhomberg-connect-logo-compact.png" /><img src="assets/images/rhomberg-connect-logo-splash.png" alt="Rhomberg Connect" /></picture>
+      <p>Connecting customers, Sales and Operations</p>
+      <span className="splash-loader"><i /></span>
     </div>
-  );
+  </section>;
 }

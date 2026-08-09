@@ -41,9 +41,9 @@ assert.equal(PREVIEW_DEFINITIONS.length, 5);
 assert.deepEqual(PREVIEW_DEFINITIONS.map(item => item.displayName), [
   'Rhomberg Connect — Customer Desktop',
   'Rhomberg Connect — Customer Mobile',
-  'Rhomberg Operations — Rep & Expeditor Mobile',
-  'Rhomberg Operations — Internal Desktop',
-  'Rhomberg Platform — Executive Workflow Demo',
+  'Rhomberg Connect — Rep & Expeditor Mobile',
+  'Rhomberg Connect — Internal Desktop',
+  'Rhomberg Connect — Executive Workflow Demo',
 ]);
 for (const definition of PREVIEW_DEFINITIONS) {
   assert.equal(previewIdFromPath(`/Rhomberg-Test-App${definition.route}`), definition.id);
@@ -52,12 +52,12 @@ for (const definition of PREVIEW_DEFINITIONS) {
   const page = readFileSync(path.resolve(definition.sourcePath, 'index.html'), 'utf8');
   assert.match(page, new RegExp(`<meta name="rhomberg-preview" content="${definition.id}">`));
   assert.ok(page.includes('<base href="../../">'), `${definition.id} must preserve the GitHub Pages base path`);
-  assert.ok(page.includes('app.js?v=40'), `${definition.id} must request the current application bundle`);
+  assert.ok(page.includes('app.js?v=42'), `${definition.id} must request the current application bundle`);
 }
 const rootPage = readFileSync(path.resolve('index.html'), 'utf8');
 const serviceWorker = readFileSync(path.resolve('sw.js'), 'utf8');
-assert.ok(rootPage.includes('app.js?v=40'), 'Preview Centre must request the current application bundle');
-assert.ok(serviceWorker.includes("'./app.js?v=40'"), 'service worker must cache the same application bundle version');
+assert.ok(rootPage.includes('app.js?v=42'), 'Preview Centre must request the current application bundle');
+assert.ok(serviceWorker.includes("'./app.js?v=42'"), 'service worker must cache the same application bundle version');
 const readme = readFileSync(path.resolve('README.md'), 'utf8');
 for (const definition of PREVIEW_DEFINITIONS) {
   assert.ok(readme.includes(`https://shellygames141up.github.io/Rhomberg-Test-App${definition.route}`), `README must launch ${definition.id}`);
@@ -126,7 +126,7 @@ assert.equal(initial.setupCompleted, false, 'customer-only onboarding must open 
 const completeSettings = {
   ...createDefaultCustomerPersonalisation(),
   setupCompleted: true,
-  themePreset: 'modern',
+  themePreset: 'rhomberg-default',
   fontSize: 'extra-large',
   density: 'comfortable',
   appearanceMode: 'dark',
@@ -137,7 +137,7 @@ const completeSettings = {
 };
 const saved = await services.personalisation.complete(completeSettings);
 assert.equal(saved.setupCompleted, true);
-assert.equal(saved.themePreset, 'modern');
+assert.equal(saved.themePreset, 'rhomberg-default');
 assert.equal(saved.fontSize, 'extra-large');
 assert.equal(saved.density, 'comfortable');
 assert.equal(saved.appearanceMode, 'dark');
@@ -145,7 +145,7 @@ assert.equal(saved.notificationPreferences.companyAnnouncements, false);
 
 const reopened = createMockServices({ storage, now: () => new Date('2026-07-27T09:05:00.000Z') });
 await reopened.initialize();
-assert.equal((await reopened.personalisation.get()).themePreset, 'modern', 'theme must survive mock-service reinitialisation');
+assert.equal((await reopened.personalisation.get()).themePreset, 'rhomberg-default', 'only the official theme may persist');
 assert.equal((await reopened.personalisation.get()).fontSize, 'extra-large', 'font size must persist');
 assert.equal((await reopened.personalisation.get()).density, 'comfortable', 'display density must persist');
 assert.equal((await reopened.personalisation.get()).appearanceMode, 'dark', 'appearance mode must persist');
@@ -157,18 +157,7 @@ assert.equal(css['--customer-density-scale'], '1.14');
 assert.match(css['--customer-primary'], /^#[0-9a-f]{6}$/i);
 assert.ok(['#ffffff', '#10252f'].includes(foregroundForColour('#777777')));
 
-const invalidContrast = normaliseCustomerPersonalisation({
-  ...completeSettings,
-  themePreset: 'custom',
-  customColours: {
-    primary: '#777777',
-    secondary: '#777777',
-    accent: '#777777',
-    success: '#777777',
-    warning: '#777777',
-  },
-});
-assert.ok(Object.keys(validateCustomerPersonalisation(invalidContrast)).some(key => key.startsWith('customColours.')), 'unsafe custom colours must be rejected');
+assert.ok(validateCustomerPersonalisation({ ...completeSettings, themePreset: 'custom' }).themePreset, 'custom themes must be rejected');
 const invalidCriticalPreference = normaliseCustomerPersonalisation({
   ...completeSettings,
   notificationPreferences: { ...completeSettings.notificationPreferences, accountSecurity: false },
@@ -177,12 +166,13 @@ assert.ok(validateCustomerPersonalisation(invalidCriticalPreference)['notificati
 
 assert.equal(validateCustomerImage({ type: 'image/svg+xml', size: 200 }), 'Choose a JPG, PNG or WebP image.');
 assert.equal(validateCustomerImage({ type: 'image/png', size: 2 * 1024 * 1024 }), 'The image must be 1 MB or smaller.');
-const testImage = new File([new Uint8Array([1, 2, 3, 4])], 'company-logo.png', { type: 'image/png' });
-const uploaded = await reopened.personalisation.uploadImage(testImage, 'companyLogo', { x: 42, y: 58 });
+const testImage = new File([new Uint8Array([1, 2, 3, 4])], 'profile-image.png', { type: 'image/png' });
+await assert.rejects(() => reopened.personalisation.uploadImage(testImage, 'companyLogo', { x: 42, y: 58 }), error => error instanceof ServiceError && error.status === 422, 'customer-controlled company branding must remain disabled');
+const uploaded = await reopened.personalisation.uploadImage(testImage, 'profileImage', { x: 42, y: 58 });
 assert.match(uploaded.previewUrl, /^data:image\/png;base64,/);
-await reopened.personalisation.save({ ...(await reopened.personalisation.get()), companyLogo: uploaded });
-assert.equal((await reopened.personalisation.get()).companyLogo.position.x, 42);
-await reopened.personalisation.save({ ...(await reopened.personalisation.get()), companyLogo: null });
+await reopened.personalisation.save({ ...(await reopened.personalisation.get()), profileImage: uploaded });
+assert.equal((await reopened.personalisation.get()).profileImage.position.x, 42);
+await reopened.personalisation.save({ ...(await reopened.personalisation.get()), profileImage: null });
 await assert.rejects(
   () => reopened.personalisation.removeImage(uploaded.id),
   error => error instanceof ServiceError && error.status === 404,

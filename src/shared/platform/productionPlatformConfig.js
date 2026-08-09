@@ -2,9 +2,9 @@ import { USER_ROLES } from '../../services/contracts.js';
 
 const PRODUCTION_CONTEXT = Object.freeze({
   id: 'private-cloud',
-  product: 'Rhomberg Operations',
+  product: 'Rhomberg Connect',
   platform: 'Internal Desktop',
-  displayName: 'Rhomberg Operations',
+  displayName: 'Rhomberg Connect',
   allowedRoles: Object.freeze([
     USER_ROLES.SALES_REPRESENTATIVE,
     USER_ROLES.PLANNING,
