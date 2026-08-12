@@ -23,10 +23,13 @@ class TestStorage {
 
 const appSource = readFileSync('src/App.jsx', 'utf8');
 const settingsSource = readFileSync('src/components/Settings.jsx', 'utf8');
+const stylesheet = readFileSync('styles.css', 'utf8');
 const introSource = readFileSync('src/components/Intro.jsx', 'utf8');
 const onboardingSource = readFileSync('src/components/CustomerOnboarding.jsx', 'utf8');
 assert.equal(appSource.includes("from './apps/customer/CustomerPersonalisation"), false, 'the custom-theme wizard must not be mounted');
 assert.equal(settingsSource.includes('type="color"'), false, 'official settings must not expose colour pickers');
+assert.ok(stylesheet.includes('/* Settings content always clears the save controls */'));
+assert.ok(stylesheet.includes('.settings-save-bar{position:static;bottom:auto'), 'mobile settings actions must follow content instead of covering it');
 assert.equal(settingsSource.includes('companyLogo'), false, 'customers must not replace official application branding');
 assert.ok(settingsSource.includes('Sounds & Vibration'));
 assert.ok(settingsSource.includes('Security & Sign-In'));

@@ -2001,6 +2001,15 @@ html,body,#root{max-width:100%;overflow-x:clip}
   .app-screen :where(input,select,textarea,button,[type="file"]){scroll-margin-bottom:calc(var(--mobile-nav-height) + 32px + env(safe-area-inset-bottom))}
 }
 
+/* Settings content always clears the save controls */
+.settings-content{padding-bottom:max(34px,env(safe-area-inset-bottom))}
+.settings-stack>.settings-panel:last-child{scroll-margin-bottom:140px}
+@media(max-width:760px){
+  .settings-save-bar{position:static;bottom:auto;z-index:auto;margin-top:4px;padding-bottom:max(12px,env(safe-area-inset-bottom))}
+  .settings-save-bar>div{min-width:0}
+  .settings-save-bar :where(.text-button,.primary-button){width:100%;min-width:0}
+}
+
 @media(forced-colors:active){
   *{forced-color-adjust:auto}
   .status-badge,.primary-button,.secondary-button{border:2px solid currentColor}
