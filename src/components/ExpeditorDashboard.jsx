@@ -264,8 +264,8 @@ function ExpeditingOrder({ order, expanded, onToggle, onAction, account, options
             </div>
           )}
 
-          {!startAction && !laboratoryReceiptAction && !startReworkAction && !resubmitAction && !resumeAction && !updateAction && !dispatchAction && !holdAction && (
-            <p className="tracking-storage-note expeditor-readonly-note"><span>i</span><span><strong>{order.trackingStatus === 'awaiting_qa' ? 'Handed to Quality Assurance.' : order.trackingStatus === 'awaiting_dispatch' ? 'Handed to Dispatch.' : 'No Expediting action is available.'}</strong> {['awaiting_qa', 'awaiting_dispatch'].includes(order.trackingStatus) ? 'The order remains visible for shared operational awareness while the next team completes its work.' : 'Refresh the record or ask an authorised manager to review its workflow stage.'}</span></p>
+          {!startAction && !laboratoryReceiptAction && !startReworkAction && !resubmitAction && !resumeAction && !updateAction && !dispatchAction && !holdAction && order.trackingStatus !== 'awaiting_dispatch' && (
+            <p className="tracking-storage-note expeditor-readonly-note"><span>i</span><span><strong>{order.trackingStatus === 'awaiting_qa' ? 'Handed to Quality Assurance.' : 'No Expediting action is available.'}</strong> {order.trackingStatus === 'awaiting_qa' ? 'The order remains visible for shared operational awareness while Quality Assurance completes its work.' : 'Refresh the record or ask an authorised manager to review its workflow stage.'}</span></p>
           )}
 
           <section className="expediting-update-history">
