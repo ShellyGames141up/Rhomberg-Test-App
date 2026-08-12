@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { qaSearchText, qualityMetrics, qualityMonthlyMetrics } from '../domain/qualityAssurance.js';
 import { friendlyServiceError } from '../services/contracts.js';
+import { ConfiguredUnitDetails } from './ConfiguredUnitDetails.jsx';
 import { StatusBadge } from './StatusBadge.jsx';
 
 const humanise = value => String(value || '').replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase());
@@ -134,6 +135,7 @@ function QualityOrder({ order, expanded, values, options, onToggle, onValue, onA
             <div><dt>Inspection attempt</dt><dd>{order.qualityAssurance?.attempt || 0}</dd></div>
             <div><dt>Rework cycle</dt><dd>{order.qualityAssurance?.reworkCycle || 0}</dd></div>
           </dl>
+          <div className="configured-unit-list"><h3>Immutable ordered-unit details</h3>{(order.items || []).map(item => <ConfiguredUnitDetails key={item.lineId || item.id || `${item.productId}-${item.code}`} unit={item} context="Quality Assurance" extra={{ inspectionAttempt: order.qualityAssurance?.attempt || 0, reworkCycle: order.qualityAssurance?.reworkCycle || 0 }} />)}</div>
           <div className="quality-action-form">
             {(actions.has('start_qa') || actions.has('start_qa_reinspection')) && <label><span>Checklist reference</span><input value={values.checklistReference || ''} onChange={event => onValue('checklistReference', event.target.value)} placeholder="Optional controlled checklist" /></label>}
             {actions.has('fail_qa') && <>

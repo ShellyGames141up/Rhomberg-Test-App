@@ -5034,6 +5034,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
           contact: item.contact, internalJobNumber: item.internalJobNumber || item.planning?.internalJobNumber || '',
           salesOrderNumber: item.salesOrderNumber || item.planning?.salesOrderNumber || '',
           customerPoNumber: item.customerPoNumber || item.poNumber || item.planning?.customerPoNumber || '',
+          items: clone(item.items || []),
           trackingStatus: item.trackingStatus, version: item.version,
         })),
       notificationDeliveryStatus,

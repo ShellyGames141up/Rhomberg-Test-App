@@ -2,10 +2,11 @@ import { useState } from 'react';
 
 const label = value => String(value || '').replaceAll('_', ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\b\w/g, character => character.toUpperCase());
 const display = value => Array.isArray(value) ? value.join(', ') : typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value ?? 'Not specified');
+const protectedConfigurationFields = new Set(['privatePriceEngine', 'internalSupplierCost', 'protectedPricing', 'auditMetadata', 'internalNotes', 'staffComments']);
 
 export function ConfiguredUnitDetails({ unit, context = 'RFQ', extra = null }) {
   const [open, setOpen] = useState(false);
-  const configuration = Object.entries(unit.configuration || {}).filter(([, value]) => value !== '' && value !== null && value !== undefined);
+  const configuration = Object.entries(unit.configuration || {}).filter(([key, value]) => !protectedConfigurationFields.has(key) && value !== '' && value !== null && value !== undefined);
   return <article className="configured-unit-details">
     <button className="configured-unit-summary" type="button" onClick={() => setOpen(value => !value)} aria-expanded={open}>
       <span className="configured-unit-image">{unit.image ? <img src={unit.image} alt="" /> : unit.code?.slice(0, 2)}</span>

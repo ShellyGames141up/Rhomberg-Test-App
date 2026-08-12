@@ -148,6 +148,15 @@ assert.ok(dispatchSource.includes('<ConfiguredUnitDetails'), 'Dispatch must expo
 for (const detail of ['certificateRequirement', 'handoverType', 'packages', 'deliveryNoteNumber', 'trackingReference', 'documentReferences']) {
   assert.ok(dispatchSource.includes(detail), `Dispatch configured-unit details must include ${detail}`);
 }
+for (const component of ['SalesRepresentativeDashboard.jsx', 'PlanningDashboard.jsx', 'ExpeditorDashboard.jsx', 'LaboratoryDashboard.jsx', 'QualityDashboard.jsx', 'DispatchDashboard.jsx', 'ManagementDashboard.jsx', 'AdministratorDashboard.jsx']) {
+  const source = readFileSync(`src/components/${component}`, 'utf8');
+  assert.ok(source.includes("from './ConfiguredUnitDetails.jsx'"), `${component} must import the shared immutable unit detail component`);
+  assert.ok(source.includes('<ConfiguredUnitDetails'), `${component} must render the shared immutable unit detail component`);
+}
+const configuredUnitSource = readFileSync('src/components/ConfiguredUnitDetails.jsx', 'utf8');
+for (const protectedField of ['privatePriceEngine', 'internalSupplierCost', 'protectedPricing', 'auditMetadata', 'internalNotes', 'staffComments']) {
+  assert.ok(configuredUnitSource.includes(protectedField), `shared unit details must exclude ${protectedField}`);
+}
 const expeditingFieldsSource = readFileSync('src/components/ExpeditingFields.jsx', 'utf8');
 for (const fieldGroup of ['expediting-communication-grid', 'expediting-schedule-grid', 'expediting-reference-grid']) assert.ok(expeditingFieldsSource.includes(fieldGroup));
 assert.ok(css.includes('.expediting-communication-grid,.expediting-schedule-grid,.expediting-reference-grid{grid-template-columns:1fr}'), 'Expeditor progress fields must stack cleanly on mobile');

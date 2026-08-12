@@ -64,6 +64,7 @@ await services.administration.setAccountPermissions(internalUser.id, {
 });
 
 const correction = overview.correctionRecords.find(record => record.workflowType === 'order');
+assert.ok(correction.items?.length, 'authorised administrators must receive immutable configured-unit snapshots through the service layer');
 await services.administration.correctRecord(correction.id, {
   values: { contact: 'Approved Contact Correction' },
   expectedVersion: correction.version,

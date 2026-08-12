@@ -4,6 +4,7 @@ import { MANAGEMENT_REPORT_SECTIONS } from '../domain/managementReports.js';
 import { formatDurationDaysHours } from '../domain/salesAnalytics.js';
 import { roleProfileFor } from '../domain/accessControl.js';
 import { accountCan, friendlyServiceError, PERMISSIONS } from '../services/contracts.js';
+import { ConfiguredUnitDetails } from './ConfiguredUnitDetails.jsx';
 
 const EMPTY_DASHBOARD = {
   metrics: {},
@@ -466,6 +467,7 @@ function ManagementRecord({
             <div><dt>Original RFQ</dt><dd>{record.sourceRfqReference || (record.workflowType === 'rfq' ? record.reference : 'Not recorded')}</dd></div>
             <div><dt>Priority</dt><dd>{record.priority === 'urgent' ? 'Urgent' : humanise(record.priority || 'standard')}</dd></div>
           </dl>
+          {!!record.items?.length && <div className="configured-unit-list"><h3>Authorised immutable unit details</h3>{record.items.map(item => <ConfiguredUnitDetails key={item.lineId || item.id || `${item.productId}-${item.code}`} unit={item} context="Management" />)}</div>}
           {(canReassign || canOverride) && <div className="management-actions">
             {canReassign && <section>
               <h3>Reassign representative</h3>

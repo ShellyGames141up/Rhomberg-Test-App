@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { certificateQueueForOrders, laboratoryMonthlyTracker } from '../domain/certification.js';
 import { accountCan, friendlyServiceError, PERMISSIONS } from '../services/contracts.js';
+import { ConfiguredUnitDetails } from './ConfiguredUnitDetails.jsx';
 import { StatusBadge } from './StatusBadge.jsx';
 
 const humanise = value => String(value || '').replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase());
@@ -196,6 +197,7 @@ function UnitWorkspace({ order, unit, item, open, onOpen, options, actions }) {
     </button>
     {open && <div className="lab-unit-workspace">
       <dl className="operations-facts"><div><dt>Customer contact</dt><dd>{order.contact}</dd></div><div><dt>Representative</dt><dd>{order.selectedRep?.name || 'Unassigned'}</dd></div><div><dt>PO number</dt><dd>{order.customerPoNumber || order.planning?.customerPoNumber || 'Not recorded'}</dd></div><div><dt>Sales Order Number</dt><dd>{order.salesOrderNumber || order.planning?.salesOrderNumber || 'Not recorded'}</dd></div><div><dt>Priority</dt><dd>{form.urgent ? 'Urgent' : 'Standard'}</dd></div></dl>
+      <div className="configured-unit-list"><h3>Immutable ordered-unit details</h3><ConfiguredUnitDetails unit={item || { code: unit.productCode, name: unit.productName, quantity: 1 }} context="Laboratory" extra={{ physicalUnit: `Unit ${unit.unitNumber}`, certificationType: unit.certificationType, serialNumber: unit.serialNumber || 'Pending', jobNumber: unit.jobNumber || 'Pending', certificateNumber: unit.certificateNumber || 'Pending' }} /></div>
       <LaboratoryProgress status={workflow.status || 'awaiting_lab_receipt'} />
       <StagePanel order={order} unit={unit} item={item} form={form} set={set} setPoint={(index, key, value) => actions.setPoint(order, unit, item, index, key, value)} options={options} allowedStandards={allowedStandards} actions={actions.laboratoryActions} call={call} account={actions.account} disabled={disabled} />
       <DocumentCentre documents={workflow.documents || []} onDownload={document => call(`download-${document.id}`, () => actions.laboratoryActions.downloadLabDocument(document.id), 'Laboratory document download prepared and audited.', true)} disabled={disabled} />
