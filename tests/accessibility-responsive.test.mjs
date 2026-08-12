@@ -107,6 +107,8 @@ for (const marker of [
   '/* Mobile navigation safe-area contract */',
   '--mobile-nav-height:76px',
   'env(safe-area-inset-bottom)',
+  '/* Product details use surface-safe text colours */',
+  ':root:not([data-theme="dark"]) .product-detail',
 ]) assert.ok(css.includes(marker), `responsive/accessibility CSS must include ${marker}`);
 
 for (const component of [
