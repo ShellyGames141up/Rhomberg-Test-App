@@ -295,7 +295,7 @@ export function RepresentativeOrderLoader({ actions, maxDocumentBytes, onCreated
         </OrderSection>
 
         {error && <p className="form-error submit-error" role="alert">{error}</p>}
-        <div className="representative-order-submit"><button className="secondary-button" type="button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit" disabled={submitting}>{submitting ? 'Creating order…' : duplicateCheck ? 'Confirm and create order' : 'Create order and send to Planning'} <span>→</span></button></div>
+        <div className="representative-order-submit sticky-action-bar"><button className="secondary-button" type="button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit" disabled={submitting}>{submitting ? 'Creating order…' : duplicateCheck ? 'Confirm and create order' : 'Create order and send to Planning'} <span>→</span></button></div>
       </form>
     </section>
   );

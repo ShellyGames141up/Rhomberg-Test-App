@@ -30,7 +30,7 @@ export function ProductDetail({ product, category, onConfigure }) {
       </div>
 
       <div className="product-detail-lead"><LeadTimeNotice compact /></div>
-      <div className="product-sticky-cta">
+      <div className="product-sticky-cta sticky-action-bar">
         <div><small>{product.consultationOnly ? 'Application review' : 'Ready to continue?'}</small><strong>{product.consultationOnly ? 'Let Rhomberg select the correct seal' : 'Configure this unit'}</strong></div>
         <button type="button" onClick={onConfigure}>{product.consultationOnly ? 'Request consultation' : 'Configure'} <span>→</span></button>
       </div>

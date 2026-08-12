@@ -100,7 +100,7 @@ export function Configurator({ product, existingLine, onSave, onCancel }) {
         {error && <p className="config-error" role="alert">{error}</p>}
       </div>
 
-      <div className="config-actions">
+      <div className="config-actions sticky-action-bar">
         <button type="button" className="secondary-button" onClick={stepIndex === 0 ? onCancel : () => { setError(''); setStepIndex(index => Math.max(0, index - 1)); }}>{stepIndex === 0 ? 'Cancel' : '← Back'}</button>
         {field.type === 'review' ? <button type="button" className="primary-button" onClick={save}>{existingLine ? 'Update unit' : product.consultationOnly ? 'Add consultation' : 'Add to enquiry'} <span>→</span></button> : <button type="button" className="primary-button" onClick={next}>Continue <span>→</span></button>}
       </div>

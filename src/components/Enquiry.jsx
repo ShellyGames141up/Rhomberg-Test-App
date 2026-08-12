@@ -193,9 +193,11 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
         <section className="enquiry-section submit-panel">
           <div className="client-summary"><span className="client-avatar">{account.company.slice(0, 1)}</span><div><strong>{account.company}</strong><small>{account.contact} · {account.email} · {account.phone}</small></div></div>
           <label className="consent-row"><input type="checkbox" required /><span>I confirm that this is an RFQ and that I am authorised to submit these details and any Purchase Order attachment to Rhomberg.</span></label>
-          {error && <p className="form-error submit-error" role="alert">{error}</p>}
-          {fallbackUrl && <a className="email-fallback" href={fallbackUrl}>Open my email app with this RFQ summary <span>→</span></a>}
-          <button className="primary-button full submit-enquiry" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Submitting RFQ…' : 'Submit RFQ'} <span>{isSubmitting ? '•••' : '→'}</span></button>
+          <div className="submit-action-bar sticky-action-bar">
+            {error && <p className="form-error submit-error" role="alert">{error}</p>}
+            {fallbackUrl && <a className="email-fallback" href={fallbackUrl}>Open my email app with this RFQ summary <span>→</span></a>}
+            <button className="primary-button full submit-enquiry" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Submitting RFQ…' : 'Submit RFQ'} <span>{isSubmitting ? '•••' : '→'}</span></button>
+          </div>
         </section>
       </form>
 

@@ -19,3 +19,9 @@ Actions must remain keyboard accessible, touch targets should be at least 44 px,
 - Mobile forms always use one column. Full-width fields and actions return to normal flow rather than retaining desktop grid spans.
 
 Never keep paired fields side by side when either label, input value, help text or validation message becomes cramped. Text areas, document inputs, confirmation statements and important actions should span the available width.
+
+## Sticky actions
+
+Primary actions for RFQ submission, product configuration, order creation, Planning, Expediting, Dispatch and settings use the shared `sticky-action-bar` contract. On tablet and mobile, the action surface clears the role navigation and the device safe area. Button text may wrap and controls retain a 44 px minimum target. Settings actions return to normal document flow on compact phones so they never conceal the final fields.
+
+Do not add a fixed bottom action without applying the shared clearance variable. If a screen contains several record-level action groups, keep those groups in normal flow; only the currently active workflow action may become sticky.

@@ -125,6 +125,7 @@ for (const marker of [
   '.management-commercial-block,.management-performance-table,.notification-settings',
   '/* Reusable responsive data display: desktop table, tablet compression, mobile cards. */',
   '/* Reusable responsive form grid: two columns, adaptive tablet, one-column mobile. */',
+  '/* Sticky action bar safe-area and reachability contract */',
   ':root:not([data-theme="dark"]) .product-detail',
 ]) assert.ok(css.includes(marker), `responsive/accessibility CSS must include ${marker}`);
 
@@ -143,6 +144,14 @@ for (const formGrid of ['.form-grid', '.administrator-form-grid', '.planning-for
   assert.ok(css.includes(formGrid), `responsive form contract must cover ${formGrid}`);
 }
 assert.ok(css.includes('grid-template-columns:minmax(0,1fr)!important'), 'mobile forms must enforce one unsqueezed column');
+
+for (const component of ['Configurator.jsx', 'ProductDetail.jsx', 'Settings.jsx', 'RepresentativeOrderLoader.jsx', 'WorkflowActionPanel.jsx', 'Enquiry.jsx']) {
+  const source = readFileSync(`src/components/${component}`, 'utf8');
+  assert.ok(source.includes('sticky-action-bar'), `${component} must opt into the shared sticky-action contract`);
+}
+assert.ok(css.includes('--sticky-action-bottom:calc(var(--mobile-nav-height) + env(safe-area-inset-bottom,0px) + 8px)'), 'sticky controls must clear app and device navigation');
+assert.ok(css.includes('white-space:normal'), 'sticky controls must allow complete button labels to wrap');
+assert.ok(css.includes('.settings-save-bar{position:static;bottom:auto'), 'compact settings actions must remain in normal flow');
 
 for (const component of [
   'Account.jsx',

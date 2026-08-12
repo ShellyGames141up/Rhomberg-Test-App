@@ -134,7 +134,7 @@ export function WorkflowActionPanel({
       <WorkflowActionFields action={action} data={actionData} onChange={setActionData} errors={fieldErrors} record={record} account={account} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} />
       {!['mark_quoted', 'accept_order', 'complete_planning'].includes(action.action) && !usesExpeditingFields(record, action.action) && !usesDispatchFields(record, action.action) && !QA_REWORK_ACTIONS.has(action.action) && !DISPATCH_RECEIPT_ACTIONS.has(action.action) && <label className="form-field"><span>Workflow comment {action.requiresComment ? <b>Required</b> : <i>Optional</i>}</span><textarea rows="3" value={note} onChange={event => setNote(event.target.value)} placeholder="Add a clear update for the audit history and customer timeline." />{fieldErrors.comment && <small className="field-error">{fieldErrors.comment}</small>}</label>}
       {error && <p className="form-error" role="alert">{error}</p>}
-      <div className="expeditor-update-actions"><button className="primary-button" type="button" onClick={save} disabled={isSaving || !actionId}>{isSaving ? 'Saving…' : action.label} <span>{isSaving ? '•••' : '→'}</span></button></div>
+      <div className="expeditor-update-actions sticky-action-bar"><button className="primary-button" type="button" onClick={save} disabled={isSaving || !actionId}>{isSaving ? 'Saving…' : action.label} <span>{isSaving ? '•••' : '→'}</span></button></div>
     </div>
   );
 }
