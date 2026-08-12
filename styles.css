@@ -638,6 +638,29 @@ body,.app-shell,.app-header,.bottom-nav,.auth-card,
   .planning-order-detail{animation:none}.planning-open-cell button,.planning-order{transition:none}
 }
 
+/* Reusable responsive data display: desktop table, tablet compression, mobile cards. */
+:where(
+  .responsive-data-display,.planning-table,.dispatch-table,.management-table-scroll,
+  .sales-rfq-list,.technical-queue,.administrator-table-wrap,.lab-job-list,
+  .lab-register-table,.operations-queue,.audit-list,.archive-list
+){min-width:0;max-width:100%}
+:where(.management-table-scroll,.administrator-table-wrap){overflow-x:auto;scrollbar-gutter:stable}
+:where(.planning-table,.dispatch-table,.management-performance-table table,.administrator-table){font-size:var(--type-table)}
+@media(max-width:1024px){
+  :where(.planning-table,.dispatch-table,.sales-rfq-list,.technical-queue,.operations-queue,.audit-list,.archive-list){gap:10px}
+  :where(.management-performance-table th,.management-performance-table td,.administrator-table th,.administrator-table td){padding:8px 7px}
+}
+@media(max-width:767px){
+  :where(.management-performance-table,.administrator-table-wrap){overflow:visible}
+  :where(.management-performance-table table,.management-performance-table tbody,.management-performance-table tr,.management-performance-table td){display:block;width:100%;min-width:0}
+  :where(.management-performance-table thead){display:none}
+  :where(.management-performance-table tr){margin-bottom:10px;padding:10px 12px;border:1px solid var(--border-default);border-radius:12px;background:var(--background-surface)}
+  :where(.management-performance-table td){display:grid;grid-template-columns:minmax(105px,.8fr) minmax(0,1.2fr);gap:10px;border:0;text-align:right}
+  :where(.management-performance-table td)::before{content:attr(data-label);color:var(--text-muted);font-weight:800;text-align:left}
+  .administrator-table{display:block;min-width:0}.administrator-table thead{display:none}.administrator-table tbody{display:grid;gap:10px}.administrator-table tr{display:block;padding:11px 12px;border:1px solid var(--border-default);border-radius:12px;background:var(--background-surface)}.administrator-table td{display:grid;grid-template-columns:minmax(105px,.7fr) minmax(0,1.3fr);gap:10px;padding:7px 0;border:0}.administrator-table td::before{color:var(--text-muted);font-weight:800}.administrator-table td:nth-child(1)::before{content:"User"}.administrator-table td:nth-child(2)::before{content:"Branch / department"}.administrator-table td:nth-child(3)::before{content:"Role(s)"}.administrator-table td:nth-child(4)::before{content:"Last login"}.administrator-table td:nth-child(5)::before{content:"Status"}.administrator-table td:nth-child(6)::before{content:"Actions"}
+  :where(.audit-list,.archive-list,.sales-rfq-list,.technical-queue,.operations-queue){grid-template-columns:1fr}
+}
+
 /* Version 3.2 - shared mobile and desktop Expediting workspace */
 .expediting-screen{min-height:calc(100dvh - 62px);padding-bottom:28px;background:var(--paper)}
 .expediting-hero{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(560px,.82fr);gap:30px;overflow:hidden;padding:38px 34px 30px;color:#fff;background:linear-gradient(132deg,#032b3f 0,#07556d 54%,#1190a0 100%)}

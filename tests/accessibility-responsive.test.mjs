@@ -123,8 +123,21 @@ for (const marker of [
   'env(safe-area-inset-bottom)',
   '/* Product details use surface-safe text colours */',
   '.management-commercial-block,.management-performance-table,.notification-settings',
+  '/* Reusable responsive data display: desktop table, tablet compression, mobile cards. */',
   ':root:not([data-theme="dark"]) .product-detail',
 ]) assert.ok(css.includes(marker), `responsive/accessibility CSS must include ${marker}`);
+
+for (const dataDisplay of [
+  '.planning-table', '.dispatch-table', '.management-table-scroll', '.sales-rfq-list',
+  '.technical-queue', '.administrator-table-wrap', '.lab-job-list', '.lab-register-table',
+  '.operations-queue', '.audit-list', '.archive-list',
+]) assert.ok(css.includes(dataDisplay), `responsive data contract must cover ${dataDisplay}`);
+for (const breakpoint of ['@media(max-width:1024px)', '@media(max-width:767px)']) {
+  assert.ok(css.includes(breakpoint), `responsive data contract must include ${breakpoint}`);
+}
+for (const administratorCardLabel of ['content:"User"', 'content:"Branch / department"', 'content:"Role(s)"', 'content:"Actions"']) {
+  assert.ok(css.includes(administratorCardLabel), `mobile Administrator cards must include ${administratorCardLabel}`);
+}
 
 for (const component of [
   'Account.jsx',
