@@ -13,8 +13,12 @@ export function PreviewLanding({ demoLogins = [], serviceMode = 'mock' }) {
           <img src={`${landing}assets/images/rhomberg-connect-logo-full-dark.png`} alt="Rhomberg Connect" />
         </div>
         <span className="preview-landing-chip">Demo Preview · {serviceMode === 'mock' ? 'Mock data' : 'Private service'}</span>
-        <h1>One shared platform.<br /><em>Five focused experiences.</em></h1>
-        <p>Choose the customer or internal Rhomberg interface and the device format you want to review. Every preview uses the same shared workflow, permissions, services and fabricated test records.</p>
+        <h1>Preview Centre.<br /><em>Five focused experiences.</em></h1>
+        <p>This separate presentation and testing environment lets authorised reviewers choose a customer or internal interface and device format. Every preview uses the same shared workflow, permissions, services and fabricated test records.</p>
+        <aside className="preview-purpose" aria-label="Preview Centre purpose">
+          <strong>Not the normal application entry point</strong>
+          <span>For presentations · development review · showcase events · management demonstrations · IT testing</span>
+        </aside>
       </header>
 
       <section className="preview-launch-grid" aria-label="Available Rhomberg previews">

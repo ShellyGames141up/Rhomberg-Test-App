@@ -56,7 +56,11 @@ for (const definition of PREVIEW_DEFINITIONS) {
 }
 const rootPage = readFileSync(path.resolve('index.html'), 'utf8');
 const serviceWorker = readFileSync(path.resolve('sw.js'), 'utf8');
+const previewLandingSource = readFileSync(path.resolve('src', 'apps', 'PreviewLanding.jsx'), 'utf8');
 assert.ok(rootPage.includes('app.js?v=43'), 'Preview Centre must request the current application bundle');
+for (const purpose of ['Not the normal application entry point', 'presentations', 'development review', 'showcase events', 'management demonstrations', 'IT testing']) {
+  assert.ok(previewLandingSource.toLowerCase().includes(purpose.toLowerCase()), `Preview Centre must identify its ${purpose} purpose`);
+}
 assert.ok(serviceWorker.includes("'./app.js?v=43'"), 'service worker must cache the same application bundle version');
 const readme = readFileSync(path.resolve('README.md'), 'utf8');
 for (const url of [

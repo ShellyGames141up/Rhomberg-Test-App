@@ -723,6 +723,7 @@ body,.app-shell,.app-header,.bottom-nav,.auth-card,
 .preview-landing-chip{display:inline-flex;margin-top:34px;padding:7px 10px;border:1px solid rgba(132,223,230,.28);border-radius:999px;background:rgba(255,255,255,.06);color:#9fe9ee;font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
 .preview-landing-hero h1{max-width:880px;margin:15px 0 14px;font-size:clamp(42px,7vw,82px);line-height:.91;letter-spacing:-.065em}.preview-landing-hero h1 em{color:#72dce5}
 .preview-landing-hero>p{max-width:760px;margin:0;color:#c1dfe3;font-size:clamp(15px,1.6vw,18px);line-height:1.7}
+.preview-purpose{display:flex;align-items:center;justify-content:space-between;gap:18px;max-width:980px;margin-top:20px;padding:13px 15px;border:1px solid rgba(132,223,230,.24);border-radius:13px;background:rgba(0,0,0,.18)}.preview-purpose strong{color:#fff;font-size:13px}.preview-purpose span{color:#aedadf;font-size:12px;line-height:1.45;text-align:right}
 .preview-launch-grid{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
 .preview-launch-card{position:relative;overflow:hidden;display:grid;gap:18px;padding:25px;border:1px solid rgba(255,255,255,.13);border-radius:22px;background:rgba(255,255,255,.075);box-shadow:0 24px 60px rgba(0,0,0,.15);backdrop-filter:blur(14px);transition:transform .25s,border-color .25s}
 .preview-launch-card:hover{transform:translateY(-4px);border-color:rgba(114,220,229,.5)}.preview-launch-card.is-operations{background:linear-gradient(145deg,rgba(35,56,65,.84),rgba(19,69,82,.78))}
@@ -776,7 +777,7 @@ body,.app-shell,.app-header,.bottom-nav,.auth-card,
 @media(max-width:520px){
   .mini-brand{min-height:44px}.header-avatar,.theme-toggle{width:44px;height:44px}.header-tools{gap:6px}
   .platform-preview-banner{font-size:10px}.platform-preview-banner strong{display:block}.preview-status{max-width:72px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.preview-status i{flex:0 0 auto}
-  .preview-landing{padding:18px 13px}.preview-landing-chip{margin-top:26px}.preview-landing-hero h1{font-size:43px}.preview-card-actions{grid-template-columns:1fr}.preview-launch-card h2{font-size:24px}
+  .preview-landing{padding:18px 13px}.preview-landing-chip{margin-top:26px}.preview-landing-hero h1{font-size:43px}.preview-purpose{align-items:flex-start;flex-direction:column}.preview-purpose span{text-align:left}.preview-card-actions{grid-template-columns:1fr}.preview-launch-card h2{font-size:24px}
   .personalisation-header{grid-template-columns:1fr auto}.personalisation-header h1{font-size:31px}.personalisation-steps{margin-inline:-6px}
   .theme-preset-grid,.image-upload-grid,.personalisation-choice-grid{grid-template-columns:1fr}.type-preview{grid-template-columns:1fr}.sample-card-grid{grid-template-columns:1fr}.personalisation-actions{align-items:stretch;flex-direction:column}.personalisation-actions>div{justify-content:space-between}.personalisation-actions .primary-button{flex:1}
   .personalisation-card button,.personalisation-card summary,.preview-card-actions>a,.preview-card-actions summary{min-height:44px}
