@@ -124,7 +124,17 @@ The current `main` branch includes the complete fabricated unit-level Laboratory
 
 This feature is an implementation for review, not a metrology or accreditation approval. Legacy external workbook links and a Temperature repeatability-count discrepancy require formal resolution before production.
 
-## Fabricated Demo Accounts
+## Internal User Account Matrix
+
+The approved internal matrix records each employee's user name, login email or username, branch, role or roles, workspace and activation status. Because this is a public repository, real staff identifiers are not published in README or GitHub Pages.
+
+Authorised Rhomberg and IT reviewers can validate the ignored local roster with `npm run check:private-staff`, then generate the private review table with `npm run docs:private-staff`. The output is written to `docs/private/INTERNAL_USER_ACCOUNT_MATRIX.md`, which is excluded from source control and public deployment. See [Internal User Account Matrix controls](docs/INTERNAL_USER_ACCOUNT_MATRIX.md) for ownership and activation requirements.
+
+No matrix, public or private, may contain passwords, password hashes, recovery codes or temporary credentials.
+
+## Preview Centre Demo Logins
+
+**DEMO CREDENTIALS ONLY — NO PRODUCTION ACCESS**
 
 These accounts exist only in public mock builds. They use reserved `.invalid` or `.test` domains and are excluded from the production candidate.
 

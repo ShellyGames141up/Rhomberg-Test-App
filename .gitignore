@@ -9,6 +9,7 @@ Thumbs.db
 !.env.example
 .netlify/
 private/
+docs/private/
 dist/
 dist-previews/
 dist-production/

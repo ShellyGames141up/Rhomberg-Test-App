@@ -37,7 +37,7 @@ const textFiles = [];
 const collectTextFiles = directory => {
   for (const entry of readdirSync(path.resolve(root, directory), { withFileTypes: true })) {
     const relative = path.join(directory, entry.name);
-    if (entry.isDirectory()) collectTextFiles(relative);
+    if (entry.isDirectory() && relative !== path.join('docs', 'private')) collectTextFiles(relative);
     else if (textExtensions.has(path.extname(entry.name).toLowerCase())) textFiles.push(relative);
   }
 };
@@ -62,7 +62,7 @@ for (const file of [...new Set(textFiles)]) {
 }
 
 const gitignore = read('.gitignore');
-for (const protectedPath of ['.env', '.env.*', 'private/', 'dist-production/']) {
+for (const protectedPath of ['.env', '.env.*', 'private/', 'docs/private/', 'dist-production/']) {
   assert.ok(gitignore.includes(protectedPath), `.gitignore must exclude ${protectedPath}`);
 }
 assert.ok(DEMO_LOGINS.length >= 8, 'the preview must retain fabricated role logins');
