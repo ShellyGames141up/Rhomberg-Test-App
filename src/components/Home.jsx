@@ -1,4 +1,4 @@
-import { LeadTimeNotice, SectionHeading } from './Layout.jsx';
+import { SectionHeading } from './Layout.jsx';
 
 export function Home({ account, enquiries, categories, recommendedCategories, onNavigate, onCategory }) {
   const firstName = account.contact.split(/\s+/)[0];
@@ -19,8 +19,6 @@ export function Home({ account, enquiries, categories, recommendedCategories, on
         </div>
         <AnimatedGauge />
       </div>
-
-      <div className="content-block lead-home"><LeadTimeNotice compact /></div>
 
       <div className="content-block">
         <SectionHeading eyebrow="Quick access" title="How can we help?" />
