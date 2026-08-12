@@ -30,3 +30,4 @@ await import('./accessibility-responsive.test.mjs');
 await import('./user-experience.test.mjs');
 await import('./ui-screen-matrix.test.mjs');
 await import('./visual-regression.test.mjs');
+await import('./build-routing.test.mjs');
