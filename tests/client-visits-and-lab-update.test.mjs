@@ -73,3 +73,5 @@ console.log('Dynamic Temperature, Pressure 6/5/5, assigned Clients, visits, remi
 const visitStyles = readFileSync('styles.css', 'utf8');
 assert.ok(visitStyles.includes('/* Client visit information and KPIs remain readable */'));
 assert.ok(visitStyles.includes('.visit-kpis{grid-template-columns:repeat(3'));
+const visitComponent = readFileSync('src/components/ClientVisitsDashboard.jsx', 'utf8');
+for (const step of ['Client information', 'Visit date and time', 'Purpose', 'Agenda and notes', 'Reminder and follow-up', 'Review and schedule']) assert.ok(visitComponent.includes(step));
