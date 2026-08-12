@@ -33,7 +33,9 @@ assert.equal(roleCan(USER_ROLES.SALES_MANAGER, PERMISSIONS.OVERRIDE_TECHNICAL_QU
 assert.equal(roleCan(USER_ROLES.MANAGER, PERMISSIONS.OVERRIDE_TECHNICAL_QUOTATION_BLOCK), false);
 assert.equal(readFileSync('src/components/Enquiry.jsx', 'utf8').includes('emergency'), false, 'customer RFQ UI must not restore emergency controls');
 assert.ok(readFileSync('src/components/TechnicalSupport.jsx', 'utf8').includes('Send to Technical for Assistance'));
-assert.ok(readFileSync('src/components/TechnicalSupport.jsx', 'utf8').includes('Quote the client or ask Technical'));
+assert.equal(readFileSync('src/components/TechnicalSupport.jsx', 'utf8').includes('Choose the next step'), false);
+assert.ok(readFileSync('src/components/SalesRepresentativeDashboard.jsx', 'utf8').includes("actions.filter(action => action.action === 'mark_quoted')"));
+assert.ok(readFileSync('src/components/TechnicalSupport.jsx', 'utf8').includes('What would you like to do?'));
 assert.ok(readFileSync('src/components/TechnicalSupport.jsx', 'utf8').includes('Send Answer Back to Sales'));
 assert.ok(readFileSync('src/components/TechnicalSupport.jsx', 'utf8').includes('Download Complete RFQ PDF'));
 

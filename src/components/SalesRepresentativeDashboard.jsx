@@ -94,6 +94,7 @@ export function SalesRepresentativeDashboard({ account, rfqs, onAction, onLoadCu
 }
 
 function SalesRfqCard({ rfq, expanded, onToggle, onAction, account, technicalSupportActions, onRecordsChanged }) {
+  const [nextAction, setNextAction] = useState('');
   const status = statusById(rfq.trackingStatus, 'rfq');
   const priority = representativeRfqPriority(rfq);
   const quantity = (rfq.items || []).reduce((sum, item) => sum + Number(item.quantity || 1), 0);
@@ -131,9 +132,9 @@ function SalesRfqCard({ rfq, expanded, onToggle, onAction, account, technicalSup
           {rfq.quotation && <RepresentativeQuotationSummary rfq={rfq} />}
           {rfq.acceptance && <RepresentativeAcceptanceSummary rfq={rfq} />}
           <div className="expeditor-products">{(rfq.items || []).map(item => <span key={item.lineId}><img src={item.image} alt="" /><strong>{item.code}</strong><small>{item.name}</small><b>× {item.quantity}</b></span>)}</div>
-          {technicalSupportActions && <RepresentativeTechnicalSupport rfq={rfq} account={account} actions={technicalSupportActions} onChanged={onRecordsChanged} canQuote={canQuote} onQuote={() => document.getElementById(quoteActionId)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />}
-          {actions.length
-            ? <div id={quoteActionId}><WorkflowActionPanel record={rfq} actions={actions} onAction={onAction} title="RFQ actions" description="Actions are controlled by assignment, role and current RFQ stage" preferredAction={canQuote ? 'mark_quoted' : 'start_rep_review'} /></div>
+          {technicalSupportActions && <RepresentativeTechnicalSupport rfq={rfq} account={account} actions={technicalSupportActions} onChanged={onRecordsChanged} canQuote={canQuote} onQuote={() => { setNextAction('quote'); window.setTimeout(() => document.getElementById(quoteActionId)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }} />}
+          {actions.length && (!canQuote || nextAction === 'quote')
+            ? <div id={quoteActionId}><WorkflowActionPanel record={rfq} actions={canQuote ? actions.filter(action => action.action === 'mark_quoted') : actions} onAction={onAction} title={canQuote ? 'Quote Client' : 'Start RFQ Review'} description="" preferredAction={canQuote ? 'mark_quoted' : 'start_rep_review'} /></div>
             : <p className="tracking-storage-note expeditor-readonly-note"><span>i</span><span><strong>No action at this stage</strong> This RFQ is retained in your inbox for reference and follow-up.</span></p>}
           <div className="expeditor-history"><h3>Recent activity</h3>{[...(rfq.trackingHistory || [])].reverse().slice(0, 5).map(event => <span key={event.id}><i /><small>{formatDate(event.createdAt)}</small><strong>{statusById(event.toStatus || event.status, event.entityType).label}</strong><p>{event.note}</p></span>)}</div>
         </div>
