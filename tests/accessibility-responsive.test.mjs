@@ -143,5 +143,7 @@ assert.ok(css.includes('bottom:calc(var(--mobile-nav-height) + env(safe-area-ins
 const technicalSource = readFileSync('src/components/TechnicalSupport.jsx', 'utf8');
 assert.ok(technicalSource.includes('technical-filterbar'));
 assert.ok(css.includes('.technical-filterbar label>span{display:block;white-space:nowrap;word-break:normal;writing-mode:horizontal-tb'), 'Technical filter labels must never break vertically');
+assert.ok(css.includes('.planning-order-row{grid-template-columns:repeat(2,minmax(0,1fr))}.planning-order-reference,.planning-open-cell{grid-column:1/-1}'), 'Planning must use a readable tablet card/table hybrid');
+assert.ok(css.includes('.planning-table{border:0;border-radius:0;background:transparent'), 'Planning must use individual cards on narrow screens');
 
 console.log('Accessibility contrast, semantic tokens, typography, status badges and responsive contracts passed.');
