@@ -133,5 +133,8 @@ assert.ok(expeditorSource.includes("from './ConfiguredUnitDetails.jsx'"), 'Exped
 assert.ok(expeditorSource.includes('<ConfiguredUnitDetails'), 'Expeditor must expose complete expandable unit details');
 assert.equal(expeditorSource.includes("'Handed to Dispatch.'"), false, 'Expeditor must not retain a redundant Dispatch hand-off banner');
 assert.ok(expeditorSource.includes("order.trackingStatus !== 'awaiting_dispatch'"), 'Dispatch hand-off status must rely on the workflow status, history and brief global confirmation');
+assert.ok(expeditorSource.includes('expediting-history-notes'), 'Expeditor history must use a flat, readable note structure');
+assert.ok(expeditorSource.includes('Customer-safe update'));
+assert.equal(expeditorSource.includes('expediting-history-marker'), false, 'decorative nested timeline markers must not compete with update content');
 
 console.log('Accessibility contrast, semantic tokens, typography, status badges and responsive contracts passed.');

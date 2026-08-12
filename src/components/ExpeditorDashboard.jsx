@@ -269,15 +269,16 @@ function ExpeditingOrder({ order, expanded, onToggle, onAction, account, options
           )}
 
           <section className="expediting-update-history">
-            <div className="planning-section-heading"><div><span className="eyebrow">Expeditor update history</span><h3>Customer and internal record</h3></div><small>Newest first</small></div>
+            <div className="planning-section-heading"><div><span className="eyebrow">Update history</span><h3>Expeditor updates</h3></div><small>Newest first</small></div>
             {updates.length ? (
-              <div>
+              <div className="expediting-history-list">
                 {updates.map(update => (
                   <article key={update.id}>
-                    <span className="expediting-history-marker" />
                     <header><strong>{stepById(update.progressStep).label}</strong><small>{formatDateTime(update.createdAt)} · {update.updatedBy?.displayName || 'Expeditor'}</small></header>
-                    <p className="is-customer"><b>Customer update</b>{update.customerMessage}</p>
-                    {update.internalNote && <p className="is-internal"><b>Internal note</b>{update.internalNote}</p>}
+                    <dl className="expediting-history-notes">
+                      <div className="is-customer"><dt>Customer-safe update</dt><dd>{update.customerMessage}</dd></div>
+                      {update.internalNote && <div className="is-internal"><dt>Internal note</dt><dd>{update.internalNote}</dd></div>}
+                    </dl>
                     <footer>
                       {update.estimatedCompletionDate && <span>Estimate: {formatDate(update.estimatedCompletionDate)}</span>}
                       {update.delayReason && <span>Delay: {update.delayReason}</span>}
