@@ -37,6 +37,8 @@ assert.ok(stylesheet.includes('/* RFQ success dialog is viewport-centred and saf
 assert.ok(stylesheet.includes('.dialog-backdrop{inset:0;min-height:100dvh;place-items:center'), 'RFQ success overlay must cover and centre within the dynamic viewport');
 assert.ok(stylesheet.includes('/* Customer timeline connectors align only between event markers */'));
 assert.ok(stylesheet.includes('.timeline-event:not(:last-child):after'), 'timeline connectors must stop at the final event marker');
+assert.ok(stylesheet.includes('/* Catalogue cards scale without clipped copy */'));
+assert.ok(stylesheet.includes('.unit-card{grid-template-columns:1fr;grid-template-rows:132px auto'), 'catalogue units must become readable cards on narrow screens');
 assert.ok(stylesheet.includes('/* Settings content always clears the save controls */'));
 assert.ok(stylesheet.includes('.settings-save-bar{position:static;bottom:auto'), 'mobile settings actions must follow content instead of covering it');
 assert.ok(stylesheet.includes('/* Security settings remain contained on tablet and mobile */'));
