@@ -14,24 +14,15 @@ This repository contains the shared React implementation for **Rhomberg Connect*
 
 The official experience now includes refined responsive Rhomberg Connect logo assets, a professional startup splash, one-time customer welcome, an interactive isolated fake-RFQ tutorial, varied adjustable UI sounds/mobile haptics, restrained micro-interactions and a dedicated service-backed Settings area for every user role. Customer-defined application colours and company-logo branding have been removed; Light, Dark, System and approved accessibility options use the protected official design system. A customer's first authorised representative choice is remembered at company level and reused on later RFQs.
 
-## Application Previews
+## Launch Rhomberg Connect
 
-1. [Rhomberg Connect - Customer Desktop](https://shellygames141up.github.io/Rhomberg-Test-App/preview/customer-desktop/)
-   Desktop customer workspace for the product catalogue, RFQs, quotation acknowledgement, order tracking, certificates, notifications and account settings.
+### [🚀 Open Rhomberg Connect Application](https://shellygames141up.github.io/Rhomberg-Test-App/preview/customer-desktop/)
 
-2. [Rhomberg Connect - Customer Mobile](https://shellygames141up.github.io/Rhomberg-Test-App/preview/customer-mobile/)
-   Touch-first customer interface using the same company-isolated workflows and service contracts.
+Opens the normal Rhomberg Connect application experience in your browser.
 
-3. [Rhomberg Connect - Rep & Expeditor Mobile](https://shellygames141up.github.io/Rhomberg-Test-App/preview/internal-mobile/)
-   Mobile access for Sales Representatives, including safe document upload for **Load Customer Order**, authorised managers and Expeditors. Planning, Laboratory, QA, Dispatch and Administration are desktop-only.
+### [🖥 Open the Preview Centre](https://shellygames141up.github.io/Rhomberg-Test-App/)
 
-4. [Rhomberg Connect - Internal Desktop](https://shellygames141up.github.io/Rhomberg-Test-App/preview/internal-desktop/)
-   Internal workspace for Sales Representatives, the combined Technical Advisor workspace, Sales Managers, Company Owner or authorised management, Planning, Laboratory, Expediting, Quality Assurance, Dispatch, Buyer and Administrator roles.
-
-5. [Executive Workflow Demo](https://shellygames141up.github.io/Rhomberg-Test-App/demo/executive-workflow/)
-   Internal presentation route using fabricated data, guided scenarios and controlled role switching. It is not a production environment. Role-switching and executive-demo controls are excluded from production builds.
-
-[Open the Preview Centre](https://shellygames141up.github.io/Rhomberg-Test-App/)
+Opens the controlled customer, internal, mobile and executive demonstration choices. All public previews use fabricated browser-local data.
 
 ## Project Status
 
@@ -49,6 +40,17 @@ The official experience now includes refined responsive Rhomberg Connect logo as
 - Current verification: 90 React source files compile; final test and preview-build results are recorded at phase completion
 
 ## Current Updates
+
+### Final workflow and interface refinement — Steps 20–27
+
+- The Sales Representative **Load Customer Order** workflow no longer displays a redundant public-preview banner.
+- Representatives must first choose an existing customer or a new/offline customer. New customers create a validated pending profile with no automatic portal access, remain separate from active accounts and produce immutable audit evidence.
+- Sales Representatives now use their role-defined landing page automatically while retaining approved application, language, sound, notification, accessibility, security and download settings.
+- Expediting reuses the shared expandable configured-unit component so complete immutable product configuration can be inspected consistently across departments.
+- The permanent **Handed to Dispatch** banner was removed; the brief action confirmation, workflow status and immutable history remain the hand-off evidence.
+- Expeditor history is a simpler chronological record with customer-safe messages and internal notes visibly separated.
+- The Expeditor progress form now keeps selectors, messages, dates, delay information and controlled references contained at all supported widths, with its save action clear of mobile bottom navigation.
+- Management now presents **Download Operational PDF** as the primary export. Date range, authorised report sections, representative and branch scope remain selectable; CSV is retained only as an advanced secondary option.
 
 ### Laboratory worksheets and Sales client visits
 
