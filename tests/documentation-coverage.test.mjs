@@ -24,6 +24,6 @@ for (let step = 1; step <= 62; step += 1) {
   assert.match(readme, new RegExp(`\\| ${step} \\|`), `README delivery ledger must include Step ${step}`);
 }
 assert.equal((readme.match(/https:\/\/shellygames141up\.github\.io\/Rhomberg-Test-App/g) || []).length, 2, 'README must contain only the Application and Preview Centre deployment links');
-assert.ok(readme.includes('Steps 1–59 are implemented and committed individually'));
+assert.ok(readme.includes('Steps 1–60 are implemented and committed individually'));
 
 console.log('Required documentation and README Steps 1–62 delivery ledger passed.');

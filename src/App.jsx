@@ -781,7 +781,7 @@ export default function App() {
 
   if (appStatus === 'loading') return <AppLoading theme={theme} onToggleTheme={toggleTheme} />;
   if (appStatus === 'error') return <AppLoadError message={appError} onRetry={() => setRetryToken(value => value + 1)} />;
-  if (PREVIEW_CONTEXT.landing) return <PreviewLanding demoLogins={demoLogins} serviceMode={services.mode} />;
+  if (PREVIEW_CONTEXT.landing) return <PreviewLanding demoLogins={demoLogins} serviceMode={services.mode} theme={theme} onToggleTheme={toggleTheme} />;
   if (PREVIEW_CONTEXT.unsupported) return <UnsupportedPreview />;
   if (PREVIEW_CONTEXT.executiveDemo && !account) {
     return (

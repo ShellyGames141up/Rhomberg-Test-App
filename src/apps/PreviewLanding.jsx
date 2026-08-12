@@ -4,10 +4,11 @@ const loginForPreview = (logins, definition) => (
   (logins || []).find(login => definition.allowedRoles.includes(login.role))
 );
 
-export function PreviewLanding({ demoLogins = [], serviceMode = 'mock' }) {
+export function PreviewLanding({ demoLogins = [], serviceMode = 'mock', theme = 'light', onToggleTheme }) {
   const landing = landingUrlFromPath(globalThis.location?.pathname || '/');
   return (
-    <main className="preview-landing">
+    <main className={`preview-landing is-${theme}`}>
+      <button className="preview-landing-theme" type="button" onClick={onToggleTheme} aria-label={`Switch Preview Centre to ${theme === 'dark' ? 'light' : 'dark'} theme`}>{theme === 'dark' ? '☀ Light' : '☾ Dark'}</button>
       <header className="preview-landing-hero">
         <div className="preview-landing-brand">
           <img src={`${landing}assets/images/rhomberg-connect-logo-full-dark.png`} alt="Rhomberg Connect" />

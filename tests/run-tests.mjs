@@ -32,3 +32,4 @@ await import('./ui-screen-matrix.test.mjs');
 await import('./visual-regression.test.mjs');
 await import('./build-routing.test.mjs');
 await import('./documentation-coverage.test.mjs');
+await import('./manual-ui-review.test.mjs');

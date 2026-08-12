@@ -58,6 +58,8 @@ for (const definition of PREVIEW_DEFINITIONS) {
 const rootPage = readFileSync(path.resolve('index.html'), 'utf8');
 const serviceWorker = readFileSync(path.resolve('sw.js'), 'utf8');
 const previewLandingSource = readFileSync(path.resolve('src', 'apps', 'PreviewLanding.jsx'), 'utf8');
+assert.ok(previewLandingSource.includes('preview-landing-theme'), 'Preview Centre must support manual light/dark review');
+assert.ok(previewLandingSource.includes("is-${theme}"), 'Preview Centre must apply its selected semantic theme');
 assert.ok(rootPage.includes('app.js?v=43'), 'Preview Centre must request the current application bundle');
 for (const purpose of ['Not the normal application entry point', 'presentations', 'development review', 'showcase events', 'management demonstrations', 'IT testing']) {
   assert.ok(previewLandingSource.toLowerCase().includes(purpose.toLowerCase()), `Preview Centre must identify its ${purpose} purpose`);
