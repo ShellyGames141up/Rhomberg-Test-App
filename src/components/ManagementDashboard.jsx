@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ORDER_STATUSES, RFQ_STATUSES, workflowStatusById } from '../domain/workflow.js';
 import { MANAGEMENT_REPORT_SECTIONS } from '../domain/managementReports.js';
 import { formatDurationDaysHours } from '../domain/salesAnalytics.js';
+import { formatSouthAfricanCurrency } from '../domain/formatting.js';
 import { roleProfileFor } from '../domain/accessControl.js';
 import { accountCan, friendlyServiceError, PERMISSIONS } from '../services/contracts.js';
 import { ConfiguredUnitDetails } from './ConfiguredUnitDetails.jsx';
@@ -64,7 +65,7 @@ const downloadPdfReport = report => {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
-const formatMoney = value => `ZAR ${Number(value || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const formatMoney = formatSouthAfricanCurrency;
 const formatPercent = value => `${Number(value || 0).toLocaleString('en-ZA', { maximumFractionDigits: 1 })}%`;
 const formatStageTime = value => formatDurationDaysHours(value || 0);
 
