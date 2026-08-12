@@ -836,6 +836,8 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   const writeCredentialChallenges = records => store.set(STORE_KEYS.credentialChallenges, records);
   const readCustomerRepresentativeAssignments = () => store.get(STORE_KEYS.customerRepresentativeAssignments, {});
   const writeCustomerRepresentativeAssignments = records => store.set(STORE_KEYS.customerRepresentativeAssignments, records);
+  const readPendingCustomerProfiles = () => store.get(STORE_KEYS.pendingCustomerProfiles, []);
+  const writePendingCustomerProfiles = records => store.set(STORE_KEYS.pendingCustomerProfiles, records);
   const readAdministrationCatalogueOverrides = () => store.get(STORE_KEYS.administrationCatalogueOverrides, { categories: {}, products: {} });
   const writeAdministrationCatalogueOverrides = records => store.set(STORE_KEYS.administrationCatalogueOverrides, records);
   const readUserLoginHistory = () => store.get(STORE_KEYS.userLoginHistory, []);
@@ -2195,7 +2197,40 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const candidate = validated.order;
       validateConfiguredProducts(candidate.items);
       const customerAccounts = representativeOrderCustomersFor(account);
-      const customer = customerAccounts.find(item => item.id === candidate.customerContactId && item.companyId === candidate.companyId);
+      let pendingCustomerProfile = null;
+      let customer = customerAccounts.find(item => item.id === candidate.customerContactId && item.companyId === candidate.companyId);
+      if (candidate.customerType === 'new') {
+        const pendingProfiles = readPendingCustomerProfiles();
+        const matchingProfile = pendingProfiles.find(profile => profile.workEmail === candidate.newCustomer.workEmail
+          && profile.companyName.toLowerCase() === candidate.newCustomer.companyName.toLowerCase());
+        const companyId = matchingProfile?.companyId || makeId('pending-company');
+        const contactId = matchingProfile?.contactId || makeId('pending-contact');
+        pendingCustomerProfile = {
+          id: matchingProfile?.id || makeId('pending-customer-profile'),
+          companyId,
+          contactId,
+          ...candidate.newCustomer,
+          branchId: candidate.branchId,
+          representativeId: candidate.representativeId,
+          status: 'pending_review',
+          portalAccess: false,
+          createdBy: account.id,
+          createdAt: matchingProfile?.createdAt || now().toISOString(),
+          updatedAt: now().toISOString(),
+        };
+        customer = {
+          id: contactId,
+          companyId,
+          company: candidate.newCustomer.companyName,
+          contact: candidate.newCustomer.contactName,
+          email: candidate.newCustomer.workEmail,
+          phone: candidate.newCustomer.telephone,
+          area: branches.find(item => item.id === candidate.branchId)?.name || '',
+          industry: 'Pending customer profile',
+        };
+        candidate.companyId = companyId;
+        candidate.customerContactId = contactId;
+      }
       if (!customer) {
         throw new ServiceError('Select an authorised contact for an available customer company.', {
           code: 'CUSTOMER_CONTACT_NOT_AUTHORISED',
@@ -2247,6 +2282,14 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
           fieldErrors: { duplicateConfirmation: 'Confirm that this is a separate authorised order before resubmitting.' },
           details: { duplicateCheck },
         });
+      }
+
+      if (pendingCustomerProfile) {
+        const pendingProfiles = readPendingCustomerProfiles();
+        writePendingCustomerProfiles([
+          ...pendingProfiles.filter(profile => profile.id !== pendingCustomerProfile.id),
+          pendingCustomerProfile,
+        ]);
       }
 
       const createdAt = now().toISOString();
@@ -2303,6 +2346,8 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
           sourceExplanation: candidate.orderSourceOther,
           createdByRepresentativeId: account.id,
           createdAt,
+          customerType: candidate.customerType,
+          pendingCustomerProfileId: pendingCustomerProfile?.id || '',
         },
         accountId: customer.id,
         companyId: customer.companyId,
@@ -2393,6 +2438,24 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         toStatus: 'awaiting_planning',
         fieldsChanged: ['orderOrigin', 'orderSource', 'items', 'quotationDocumentId', 'purchaseOrderDocumentId', 'trackingStatus'],
         details: { sourceRecordId, duplicateCheck, pricingStored: false },
+        immutable: true,
+        createdAt,
+      });
+      if (pendingCustomerProfile) appendAuditEvent({
+        id: makeId('audit'),
+        eventType: 'pending_customer_profile_created',
+        action: 'customer.pending_profile_created',
+        outcome: 'success',
+        entityType: 'customer_profile',
+        entityId: pendingCustomerProfile.id,
+        companyId: pendingCustomerProfile.companyId,
+        companyName: pendingCustomerProfile.companyName,
+        reference: order.reference,
+        actorId: account.id,
+        actorRole: account.role,
+        actorDisplayName: account.contact,
+        fieldsChanged: ['companyName', 'contactName', 'workEmail', 'telephone', 'address', 'registrationInformation', 'notes', 'branchId', 'representativeId', 'status'],
+        details: { portalAccessGranted: false, status: 'pending_review' },
         immutable: true,
         createdAt,
       });

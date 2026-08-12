@@ -2137,6 +2137,12 @@ html,body,#root{max-width:100%;overflow-x:clip}
 .representative-field-wide{grid-column:1/-1}
 .representative-order-selection{display:flex;flex-wrap:wrap;gap:8px 18px;margin:0;padding:14px 16px;border-radius:12px;background:var(--status-information-background);color:var(--status-information-foreground)}
 .representative-order-selection strong{width:100%}
+.representative-customer-choice{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 16px;padding:0;border:0}
+.representative-customer-choice legend{grid-column:1/-1;margin:0 0 2px;font-weight:800;color:var(--text-primary)}
+.representative-customer-choice label{display:flex;align-items:center;gap:12px;min-height:68px;padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--surface);color:var(--text-primary);cursor:pointer}
+.representative-customer-choice label.selected{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 18%,transparent)}
+.representative-customer-choice input{inline-size:20px;block-size:20px;flex:0 0 auto}
+.representative-customer-choice span{display:grid;gap:2px}.representative-customer-choice strong{font-size:1rem}
 .representative-product-builder{display:grid;gap:16px;padding:18px;border:1px dashed var(--border-strong);border-radius:16px;background:var(--surface-muted)}
 .representative-configuration-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .representative-config-toggle,.representative-config-multi{min-width:0;border:1px solid var(--border-default);border-radius:12px;padding:13px;background:var(--background-surface);color:var(--text-primary)}
@@ -2190,6 +2196,7 @@ html,body,#root{max-width:100%;overflow-x:clip}
 @media(max-width:700px){
   .representative-order-screen{padding-inline:12px}
   .representative-order-hero{margin-inline:-12px}
+  .representative-customer-choice{grid-template-columns:1fr}
   .representative-order-grid,.representative-configuration-grid,.representative-document-columns{grid-template-columns:1fr}
   .representative-order-lines article{grid-template-columns:48px minmax(0,1fr) auto}
   .representative-order-lines img{width:48px;height:48px}

@@ -43,6 +43,9 @@ assert.ok(loaderSource.includes('Load Customer Order'));
 assert.ok(loaderSource.includes('Internal priority'));
 assert.ok(loaderSource.includes('quotationFile'));
 assert.ok(loaderSource.includes('purchaseOrderFile'));
+assert.ok(loaderSource.includes('Customer already exists in Rhomberg Connect?'));
+assert.ok(loaderSource.includes('New / offline customer'));
+assert.ok(loaderSource.includes('No portal access will be granted automatically'));
 assert.equal(readFileSync('src/lib/rfqEmail.js', 'utf8').includes('Emergency:'), false);
 assert.equal(readFileSync('src/lib/rfqPdf.js', 'utf8').includes("'Emergency'"), false);
 
@@ -136,6 +139,11 @@ assert.throws(
   error => error instanceof ServiceError && Boolean(error.fieldErrors.purchaseOrderFile),
   'quotation and PO attachments may not be the same file',
 );
+assert.throws(
+  () => validateRepresentativeLoadedOrder({ ...baseInput, customerType: 'new', companyId: '', customerContactId: '', newCustomer: {} }, { today: '2026-08-04' }),
+  error => error instanceof ServiceError && Boolean(error.fieldErrors['newCustomer.companyName']) && Boolean(error.fieldErrors['newCustomer.workEmail']),
+  'new offline customers must include validated mandatory customer details',
+);
 for (const [file, expectedField] of [
   [new File([], 'Q-DEMO-empty.pdf', { type: 'application/pdf' }), 'quotationFile'],
   [new File([new Uint8Array([1])], 'Q-DEMO-script.exe', { type: 'application/octet-stream' }), 'quotationFile'],
@@ -160,6 +168,37 @@ assert.equal(created.order.quotationDocumentId, created.order.documents.find(doc
 assert.equal(created.order.purchaseOrderDocumentId, created.order.documents.find(document => document.documentType === 'purchase_order').id);
 assert.equal(created.order.sourceConfirmation.confirmed, true);
 assert.equal(created.order.trackingHistory[0].action, 'create_representative_order');
+
+const pendingCustomerOrder = await services.representativeOrders.create({
+  ...baseInput,
+  submissionKey: 'representative-order-new-customer-0001',
+  customerType: 'new',
+  companyId: '',
+  customerContactId: '',
+  quotationNumber: 'Q-NEW-9002',
+  quotationFile: new File([new Uint8Array([8])], 'Q-NEW-9002.pdf', { type: 'application/pdf' }),
+  purchaseOrderNumber: 'PO-NEW-9002',
+  purchaseOrderFile: new File([new Uint8Array([9])], 'PO-NEW-9002.pdf', { type: 'application/pdf' }),
+  newCustomer: {
+    companyName: 'Fabricated Offline Processors',
+    contactName: 'Nomsa Test',
+    workEmail: 'nomsa.offline@example.invalid',
+    telephone: '+27 21 000 0099',
+    address: '99 Fabricated Industrial Road, Cape Town',
+    registrationInformation: 'Demo registration 2026/000099/07',
+    notes: 'Pending authorised review.',
+  },
+});
+assert.equal(pendingCustomerOrder.order.representativeLoadedOrder.customerType, 'new');
+assert.ok(pendingCustomerOrder.order.representativeLoadedOrder.pendingCustomerProfileId);
+const pendingProfiles = JSON.parse(storage.getItem(STORE_KEYS.pendingCustomerProfiles));
+assert.equal(pendingProfiles.length, 1);
+assert.equal(pendingProfiles[0].status, 'pending_review');
+assert.equal(pendingProfiles[0].portalAccess, false, 'creating the pending customer must never grant portal access');
+const accountRecords = JSON.parse(storage.getItem(STORE_KEYS.accounts));
+assert.equal(accountRecords.some(item => item.email === 'nomsa.offline@example.invalid'), false, 'pending profiles must remain separate from active portal accounts');
+const auditRecords = JSON.parse(storage.getItem(STORE_KEYS.audit));
+assert.ok(auditRecords.some(event => event.entityId === pendingProfiles[0].id && event.action === 'customer.pending_profile_created' && event.immutable === true));
 
 const repeated = await services.representativeOrders.create(baseInput);
 assert.equal(repeated.idempotent, true);

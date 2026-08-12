@@ -150,8 +150,18 @@ const sameFileMetadata = (left, right) => Boolean(left && right
 
 export function validateRepresentativeLoadedOrder(data = {}, { today = new Date().toISOString().slice(0, 10) } = {}) {
   const errors = {};
+  const customerType = present(data.customerType) || 'existing';
   const companyId = present(data.companyId);
   const customerContactId = present(data.customerContactId);
+  const newCustomer = {
+    companyName: present(data.newCustomer?.companyName),
+    contactName: present(data.newCustomer?.contactName),
+    workEmail: present(data.newCustomer?.workEmail).toLowerCase(),
+    telephone: present(data.newCustomer?.telephone),
+    address: present(data.newCustomer?.address),
+    registrationInformation: present(data.newCustomer?.registrationInformation),
+    notes: present(data.newCustomer?.notes),
+  };
   const branchId = present(data.branchId);
   const representativeId = present(data.representativeId);
   const orderSource = present(data.orderSource);
@@ -173,8 +183,18 @@ export function validateRepresentativeLoadedOrder(data = {}, { today = new Date(
   const items = Array.isArray(data.items) ? data.items : [];
   const supportingDocuments = Array.isArray(data.supportingDocuments) ? data.supportingDocuments.filter(Boolean) : [];
 
-  if (!companyId) errors.companyId = 'Select an existing customer company.';
-  if (!customerContactId) errors.customerContactId = 'Select an authorised customer contact.';
+  if (!['existing', 'new'].includes(customerType)) errors.customerType = 'Choose whether the customer already exists.';
+  if (customerType === 'existing' && !companyId) errors.companyId = 'Select an existing customer company.';
+  if (customerType === 'existing' && !customerContactId) errors.customerContactId = 'Select an authorised customer contact.';
+  if (customerType === 'new') {
+    if (newCustomer.companyName.length < 2) errors['newCustomer.companyName'] = 'Enter the customer company name.';
+    if (newCustomer.contactName.length < 2) errors['newCustomer.contactName'] = 'Enter the customer contact name.';
+    if (!emailPattern.test(newCustomer.workEmail)) errors['newCustomer.workEmail'] = 'Enter a valid work email address.';
+    if (newCustomer.telephone.length < 7) errors['newCustomer.telephone'] = 'Enter a valid telephone number.';
+    if (newCustomer.address.length < 5) errors['newCustomer.address'] = 'Enter the physical or company address.';
+    if (newCustomer.registrationInformation.length > 300) errors['newCustomer.registrationInformation'] = 'Keep registration information below 300 characters.';
+    if (newCustomer.notes.length > 2000) errors['newCustomer.notes'] = 'Keep customer profile notes below 2,000 characters.';
+  }
   if (!branchId) errors.branchId = 'Select the assigned branch.';
   if (!representativeId) errors.representativeId = 'Select the dedicated representative.';
   if (!REPRESENTATIVE_ORDER_SOURCE_IDS.includes(orderSource)) errors.orderSource = 'Select an approved order source.';
@@ -223,8 +243,10 @@ export function validateRepresentativeLoadedOrder(data = {}, { today = new Date(
   return {
     order: {
       submissionKey,
+      customerType,
       companyId,
       customerContactId,
+      newCustomer: customerType === 'new' ? newCustomer : null,
       branchId,
       representativeId,
       orderSource,

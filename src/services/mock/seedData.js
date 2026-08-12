@@ -22,6 +22,7 @@ export const STORE_KEYS = Object.freeze({
   certificateFiles: 'rhombergPreviewCertificateFilesV1',
   credentialChallenges: 'rhombergPreviewCredentialChallengesV1',
   customerRepresentativeAssignments: 'rhombergPreviewCustomerRepresentativeAssignmentsV1',
+  pendingCustomerProfiles: 'rhombergPreviewPendingCustomerProfilesV1',
   administrationCatalogueOverrides: 'rhombergPreviewAdministrationCatalogueOverridesV1',
   userLoginHistory: 'rhombergPreviewUserLoginHistoryV1',
   userProfileImages: 'rhombergPreviewUserProfileImagesV1',

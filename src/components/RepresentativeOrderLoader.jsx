@@ -7,6 +7,7 @@ const newSubmissionKey = () => globalThis.crypto?.randomUUID?.()
   || `representative-order-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyValues = Object.freeze({
+  customerType: '',
   companyId: '',
   customerContactId: '',
   branchId: '',
@@ -36,6 +37,7 @@ const humanise = value => String(value || '').replace(/([a-z0-9])([A-Z])/g, '$1 
 export function RepresentativeOrderLoader({ actions, maxDocumentBytes, onCreated, onClose }) {
   const [options, setOptions] = useState({ companies: [], contacts: [], branches: [], representatives: [], products: [], orderSources: [], priorities: [] });
   const [values, setValues] = useState(emptyValues);
+  const [newCustomer, setNewCustomer] = useState({ companyName: '', contactName: '', workEmail: '', telephone: '', address: '', registrationInformation: '', notes: '' });
   const [quotationFile, setQuotationFile] = useState(null);
   const [purchaseOrderFile, setPurchaseOrderFile] = useState(null);
   const [supportingDocuments, setSupportingDocuments] = useState([]);
@@ -85,6 +87,10 @@ export function RepresentativeOrderLoader({ actions, maxDocumentBytes, onCreated
     setFieldErrors(current => ({ ...current, [key]: undefined }));
     setValues(current => {
       const next = { ...current, [key]: value };
+      if (key === 'customerType') {
+        next.companyId = '';
+        next.customerContactId = '';
+      }
       if (key === 'companyId') next.customerContactId = '';
       if (key === 'branchId' && !options.representatives.some(rep => rep.id === next.representativeId && rep.branchId === value)) next.representativeId = '';
       if (key === 'representativeId') {
@@ -169,6 +175,7 @@ export function RepresentativeOrderLoader({ actions, maxDocumentBytes, onCreated
     try {
       const result = await actions.create({
         ...values,
+        newCustomer,
         submissionKey: submissionKey.current,
         items: lines,
         quotationFile,
@@ -210,15 +217,33 @@ export function RepresentativeOrderLoader({ actions, maxDocumentBytes, onCreated
       <LeadTimeNotice compact />
 
       <form className="representative-order-form" onSubmit={submit} noValidate>
-        <OrderSection index="01" title="Customer and assignment" help="Select an existing authorised account before entering order details.">
+        <OrderSection index="01" title="Customer and assignment" help="Choose an existing customer or create a pending profile for a customer who is not yet on Rhomberg Connect.">
+          <fieldset className="representative-customer-choice">
+            <legend>Customer already exists in Rhomberg Connect?</legend>
+            <label className={values.customerType === 'existing' ? 'selected' : ''}><input type="radio" name="customerType" value="existing" checked={values.customerType === 'existing'} onChange={() => update('customerType', 'existing')} /><span><strong>Yes</strong>Existing customer</span></label>
+            <label className={values.customerType === 'new' ? 'selected' : ''}><input type="radio" name="customerType" value="new" checked={values.customerType === 'new'} onChange={() => update('customerType', 'new')} /><span><strong>No</strong>New / offline customer</span></label>
+          </fieldset>
+          {fieldErrors.customerType && <p className="field-error" role="alert">{fieldErrors.customerType}</p>}
           <div className="form-grid representative-order-grid">
-            <Field label="Customer company" error={fieldErrors.companyId}><select value={values.companyId} onChange={event => update('companyId', event.target.value)} required><option value="">Choose company</option>{options.companies.map(company => <option key={company.id} value={company.id}>{company.name} · {company.area}</option>)}</select></Field>
-            <Field label="Authorised customer contact" error={fieldErrors.customerContactId}><select value={values.customerContactId} onChange={event => update('customerContactId', event.target.value)} required disabled={!values.companyId}><option value="">Choose contact</option>{companyContacts.map(contact => <option key={contact.id} value={contact.id}>{contact.name} · {contact.email}</option>)}</select></Field>
+            {values.customerType === 'existing' && <>
+              <Field label="Customer company" error={fieldErrors.companyId}><select value={values.companyId} onChange={event => update('companyId', event.target.value)} required><option value="">Choose company</option>{options.companies.map(company => <option key={company.id} value={company.id}>{company.name} · {company.area}</option>)}</select></Field>
+              <Field label="Authorised customer contact" error={fieldErrors.customerContactId}><select value={values.customerContactId} onChange={event => update('customerContactId', event.target.value)} required disabled={!values.companyId}><option value="">Choose contact</option>{companyContacts.map(contact => <option key={contact.id} value={contact.id}>{contact.name} · {contact.email}</option>)}</select></Field>
+            </>}
+            {values.customerType === 'new' && <>
+              <Field label="Company name" error={fieldErrors['newCustomer.companyName']}><input value={newCustomer.companyName} onChange={event => setNewCustomer(current => ({ ...current, companyName: event.target.value }))} required /></Field>
+              <Field label="Customer contact name" error={fieldErrors['newCustomer.contactName']}><input value={newCustomer.contactName} onChange={event => setNewCustomer(current => ({ ...current, contactName: event.target.value }))} required /></Field>
+              <Field label="Work email" error={fieldErrors['newCustomer.workEmail']}><input type="email" value={newCustomer.workEmail} onChange={event => setNewCustomer(current => ({ ...current, workEmail: event.target.value }))} required /></Field>
+              <Field label="Telephone" error={fieldErrors['newCustomer.telephone']}><input type="tel" value={newCustomer.telephone} onChange={event => setNewCustomer(current => ({ ...current, telephone: event.target.value }))} required /></Field>
+              <Field label="Physical / company address" error={fieldErrors['newCustomer.address']} wide><textarea rows="3" value={newCustomer.address} onChange={event => setNewCustomer(current => ({ ...current, address: event.target.value }))} required /></Field>
+              <Field label="Company registration information (where applicable)" error={fieldErrors['newCustomer.registrationInformation']} wide><input value={newCustomer.registrationInformation} onChange={event => setNewCustomer(current => ({ ...current, registrationInformation: event.target.value }))} /></Field>
+              <Field label="Customer profile notes" error={fieldErrors['newCustomer.notes']} wide><textarea rows="3" value={newCustomer.notes} onChange={event => setNewCustomer(current => ({ ...current, notes: event.target.value }))} /></Field>
+            </>}
             <Field label="Assigned branch" error={fieldErrors.branchId}><select value={values.branchId} onChange={event => update('branchId', event.target.value)} required><option value="">Choose branch</option>{options.branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></Field>
             <Field label="Dedicated representative" error={fieldErrors.representativeId}><select value={values.representativeId} onChange={event => update('representativeId', event.target.value)} required disabled={!values.branchId}><option value="">Choose representative</option>{branchRepresentatives.map(rep => <option key={rep.id} value={rep.id}>{rep.name} · Code {rep.code}</option>)}</select></Field>
             <Field label="Order source" error={fieldErrors.orderSource}><select value={values.orderSource} onChange={event => update('orderSource', event.target.value)} required><option value="">Choose approved source</option>{options.orderSources.map(source => <option key={source.id} value={source.id}>{source.label}</option>)}</select></Field>
             {values.orderSource === 'other_approved_source' && <Field label="Other approved source" error={fieldErrors.orderSourceOther}><input value={values.orderSourceOther} onChange={event => update('orderSourceOther', event.target.value)} placeholder="Explain how the order was received" required /></Field>}
           </div>
+          {values.customerType === 'new' && <p className="representative-order-selection"><strong>Pending customer profile</strong><span>No portal access will be granted automatically. An authorised administrator can review and activate the account later.</span></p>}
           {selectedCompany && selectedContact && <p className="representative-order-selection"><strong>{selectedCompany.name}</strong><span>{selectedContact.name} · {selectedContact.email}</span>{selectedRepresentative && <span>{selectedRepresentative.name} · {selectedRepresentative.branchName}</span>}</p>}
         </OrderSection>
 
