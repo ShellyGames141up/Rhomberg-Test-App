@@ -34,6 +34,8 @@ assert.ok(stylesheet.includes('/* Settings content always clears the save contro
 assert.ok(stylesheet.includes('.settings-save-bar{position:static;bottom:auto'), 'mobile settings actions must follow content instead of covering it');
 assert.ok(stylesheet.includes('/* Security settings remain contained on tablet and mobile */'));
 assert.ok(stylesheet.includes('.settings-content .credential-change-card{grid-template-columns:1fr'), 'security credentials must stack at tablet widths');
+assert.ok(stylesheet.includes('/* Compact and consistent recommended cards */'));
+assert.ok(stylesheet.includes('-webkit-line-clamp:2'), 'recommended product names must remain compact and readable');
 assert.equal(settingsSource.includes('companyLogo'), false, 'customers must not replace official application branding');
 assert.ok(settingsSource.includes('Sounds & Vibration'));
 assert.ok(settingsSource.includes('Security & Sign-In'));

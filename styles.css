@@ -2024,6 +2024,17 @@ html,body,#root{max-width:100%;overflow-x:clip}
   .settings-content .credential-change-actions>*,.settings-content .credential-change-form>div>*{width:100%;min-width:0}
 }
 
+/* Compact and consistent recommended cards */
+.recommended-scroll{align-items:stretch}
+.home-category-card,.preview-customer-desktop .home-category-card{height:auto;min-height:0;display:grid;grid-template-rows:clamp(100px,28vw,128px) minmax(66px,auto)}
+.home-category-visual,.preview-customer-desktop .home-category-visual{height:auto;min-height:0;aspect-ratio:auto;overflow:hidden}
+.home-category-visual img{display:block;width:100%;height:100%;padding:10px;object-fit:contain}
+.home-category-card>span:last-child{min-height:66px;padding:10px 34px 11px 11px}
+.home-category-card strong{line-height:1.25;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+@media(min-width:768px){
+  .home-category-card,.preview-customer-desktop .home-category-card{grid-template-rows:clamp(112px,12vw,138px) minmax(70px,auto)}
+}
+
 @media(forced-colors:active){
   *{forced-color-adjust:auto}
   .status-badge,.primary-button,.secondary-button{border:2px solid currentColor}
