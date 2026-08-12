@@ -94,6 +94,12 @@ assert.ok(previewAllowsRole(applicationContext, USER_ROLES.ADMINISTRATOR));
 const applicationPage = readFileSync(path.resolve('app', 'index.html'), 'utf8');
 assert.ok(applicationPage.includes('<meta name="rhomberg-preview" content="application">'));
 assert.ok(applicationPage.includes('<base href="../">'));
+const appSource = readFileSync(path.resolve('src', 'App.jsx'), 'utf8');
+const authSource = readFileSync(path.resolve('src', 'components', 'Auth.jsx'), 'utf8');
+const layoutSource = readFileSync(path.resolve('src', 'components', 'Layout.jsx'), 'utf8');
+assert.ok(appSource.includes('__PUBLIC_PREVIEW__ && !PREVIEW_CONTEXT.unified'), 'unified application headers must not show Preview Centre navigation');
+assert.ok(authSource.includes('!preview.unified'), 'unified sign-in must not link back to role previews');
+assert.ok(layoutSource.includes('__PUBLIC_PREVIEW__ && !preview?.unified'), 'unified app header may show a discrete demo indicator but no preview link');
 
 const customerDesktop = PREVIEW_BY_ID[PREVIEW_IDS.CUSTOMER_DESKTOP];
 const customerMobile = PREVIEW_BY_ID[PREVIEW_IDS.CUSTOMER_MOBILE];

@@ -106,7 +106,7 @@ export function Auth({
         ) : null}
 
         <p className="preview-note"><span>i</span> {__PUBLIC_PREVIEW__ && serviceMode === 'mock' ? 'Public test preview: use sample data only and do not upload confidential Purchase Orders. Accounts, RFQs and order updates are stored locally on this device.' : 'Private-cloud mode: access is controlled by the company service. Contact IT if you cannot access your authorised company.'}</p>
-        {__PUBLIC_PREVIEW__ && preview && <a className="preview-back-link" href="./">Back to all test previews</a>}
+        {__PUBLIC_PREVIEW__ && preview && !preview.unified && <a className="preview-back-link" href="./">Back to all test previews</a>}
       </section>
     </main>
   );
