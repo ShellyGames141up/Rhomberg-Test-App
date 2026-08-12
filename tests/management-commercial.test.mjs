@@ -75,5 +75,9 @@ assert.equal((await services.management.getDashboard()).salesPerformance.authori
 const managementSource = readFileSync('src/components/ManagementDashboard.jsx', 'utf8');
 assert.ok(managementSource.includes('Download Operational PDF'), 'PDF must be the primary management export action');
 assert.ok(managementSource.includes('Advanced: download CSV'), 'CSV may remain only as a secondary advanced option');
+assert.ok(managementSource.includes('data-label={column.label}'), 'Executive tables must expose labels for responsive card rows');
+const styles = readFileSync('styles.css', 'utf8');
+assert.ok(styles.includes('Executive and owner metrics favour readable values over dense columns'));
+assert.ok(styles.includes('.management-performance-table td:before{content:attr(data-label)'), 'Executive tables must become labelled cards on narrow screens');
 
 console.log('Commercial quotation analytics, access control and management PDF tests passed.');

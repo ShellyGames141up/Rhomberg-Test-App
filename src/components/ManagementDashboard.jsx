@@ -109,7 +109,7 @@ function PerformanceTable({ title, columns, rows, empty = 'No data is available 
   return (
     <section className="management-performance-table">
       <h3>{title}</h3>
-      {rows.length ? <div className="management-table-scroll"><table><thead><tr>{columns.map(column => <th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={row.id || row.label || index}>{columns.map(column => <td key={column.key}>{column.render ? column.render(row[column.key], row) : row[column.key]}</td>)}</tr>)}</tbody></table></div> : <p>{empty}</p>}
+      {rows.length ? <div className="management-table-scroll"><table><thead><tr>{columns.map(column => <th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={row.id || row.label || index}>{columns.map(column => <td key={column.key} data-label={column.label}>{column.render ? column.render(row[column.key], row) : row[column.key]}</td>)}</tr>)}</tbody></table></div> : <p>{empty}</p>}
     </section>
   );
 }
