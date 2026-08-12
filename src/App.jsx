@@ -373,7 +373,7 @@ export default function App() {
       const signedInAccount = await services.auth.signIn({
         email,
         password,
-        realm: PREVIEW_CONTEXT.executiveDemo ? undefined : PREVIEW_CONTEXT.customer ? 'customer' : 'internal',
+        realm: PREVIEW_CONTEXT.executiveDemo || PREVIEW_CONTEXT.unified ? undefined : PREVIEW_CONTEXT.customer ? 'customer' : 'internal',
       });
       if (!previewAllowsRole(PREVIEW_CONTEXT, signedInAccount.role)) {
         await services.auth.signOut();
@@ -394,7 +394,7 @@ export default function App() {
 
   const register = async data => {
     try {
-      if (!PREVIEW_CONTEXT.customer) {
+      if (!PREVIEW_CONTEXT.customer && !PREVIEW_CONTEXT.unified) {
         return { ok: false, message: 'Company account registration is available only in a Rhomberg Connect customer preview.', fieldErrors: {} };
       }
       const created = await services.auth.register(data);
@@ -794,7 +794,7 @@ export default function App() {
     );
   }
   if (!PREVIEW_CONTEXT.executiveDemo && !introComplete) return <Intro onComplete={() => setIntroComplete(true)} />;
-  if (!account) return <Auth onSignIn={login} onCreateAccount={register} theme={theme} onToggleTheme={toggleTheme} registrationOptions={registrationOptions} demoLogins={demoLogins} serviceMode={services.mode} preview={PREVIEW_CONTEXT} allowRegistration={Boolean(PREVIEW_CONTEXT.customer)} accessError={accessError} />;
+  if (!account) return <Auth onSignIn={login} onCreateAccount={register} theme={theme} onToggleTheme={toggleTheme} registrationOptions={registrationOptions} demoLogins={demoLogins} serviceMode={services.mode} preview={PREVIEW_CONTEXT} allowRegistration={Boolean(PREVIEW_CONTEXT.customer || PREVIEW_CONTEXT.unified)} accessError={accessError} />;
   if (isCustomerExperience && !PREVIEW_CONTEXT.executiveDemo && welcomeVisible) return <FirstCustomerWelcome account={account} reduceMotion={userSettings.accessibility.reduceMotion} onComplete={completeWelcome} />;
 
   const backFromDetail = () => {

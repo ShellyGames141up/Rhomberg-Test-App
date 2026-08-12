@@ -38,7 +38,7 @@ const server = http.createServer(async (request, response) => {
     const requestPath = decodeURIComponent(new URL(request.url, `http://127.0.0.1:${port}`).pathname);
     let relative = requestPath.replace(/^\/+/, '');
     if (!relative || relative.endsWith('/')) relative += 'index.html';
-    const permitted = allowedRootFiles.has(relative) || relative.startsWith('assets/') || relative.startsWith('preview/') || relative.startsWith('demo/');
+    const permitted = allowedRootFiles.has(relative) || relative.startsWith('assets/') || relative.startsWith('app/') || relative.startsWith('preview/') || relative.startsWith('demo/');
     if (!permitted) {
       response.writeHead(404).end('Not found');
       return;

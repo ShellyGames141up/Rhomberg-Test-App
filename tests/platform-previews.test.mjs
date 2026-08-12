@@ -60,7 +60,7 @@ assert.ok(rootPage.includes('app.js?v=43'), 'Preview Centre must request the cur
 assert.ok(serviceWorker.includes("'./app.js?v=43'"), 'service worker must cache the same application bundle version');
 const readme = readFileSync(path.resolve('README.md'), 'utf8');
 for (const url of [
-  'https://shellygames141up.github.io/Rhomberg-Test-App/preview/customer-desktop/',
+  'https://shellygames141up.github.io/Rhomberg-Test-App/app/',
   'https://shellygames141up.github.io/Rhomberg-Test-App/',
 ]) assert.ok(readme.includes(url), `README must include the approved launch URL ${url}`);
 assert.equal((readme.match(/https:\/\/shellygames141up\.github\.io\/Rhomberg-Test-App/g) || []).length, 2, 'README must expose only the Application and Preview Centre launch links');
@@ -73,7 +73,7 @@ assert.ok(packageScripts['build:previews']);
 const manifest = JSON.parse(readFileSync(path.resolve('manifest.webmanifest'), 'utf8'));
 assert.equal(manifest.display, 'standalone');
 assert.ok(manifest.display_override.includes('standalone'));
-assert.equal(manifest.start_url, './');
+assert.equal(manifest.start_url, './app/');
 assert.ok(manifest.shortcuts.some(shortcut => shortcut.url === './preview/customer-mobile/'));
 assert.ok(manifest.shortcuts.some(shortcut => shortcut.url === './preview/internal-desktop/'));
 const capacitorConfig = JSON.parse(readFileSync(path.resolve('capacitor.config.json'), 'utf8'));
@@ -86,6 +86,14 @@ for (const requirement of ['Capacitor', 'Offline', 'APNs/FCM', 'Windows', 'signi
 assert.equal(previewIdFromPath('/preview/unsupported-interface/'), 'unsupported');
 assert.equal(previewContextForPath('/preview/unsupported-interface/').unsupported, true);
 assert.equal(previewContextForPath('/Rhomberg-Test-App/').landing, true);
+assert.equal(previewIdFromPath('/Rhomberg-Test-App/app/'), PREVIEW_IDS.APPLICATION);
+const applicationContext = previewContextForPath('/Rhomberg-Test-App/app/');
+assert.equal(applicationContext.unified, true);
+assert.ok(previewAllowsRole(applicationContext, USER_ROLES.CUSTOMER));
+assert.ok(previewAllowsRole(applicationContext, USER_ROLES.ADMINISTRATOR));
+const applicationPage = readFileSync(path.resolve('app', 'index.html'), 'utf8');
+assert.ok(applicationPage.includes('<meta name="rhomberg-preview" content="application">'));
+assert.ok(applicationPage.includes('<base href="../">'));
 
 const customerDesktop = PREVIEW_BY_ID[PREVIEW_IDS.CUSTOMER_DESKTOP];
 const customerMobile = PREVIEW_BY_ID[PREVIEW_IDS.CUSTOMER_MOBILE];

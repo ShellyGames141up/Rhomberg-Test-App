@@ -2,6 +2,7 @@ import { USER_ROLES } from '../../services/contracts.js';
 
 export const PREVIEW_IDS = Object.freeze({
   LANDING: 'preview-landing',
+  APPLICATION: 'application',
   CUSTOMER_DESKTOP: 'customer-desktop',
   CUSTOMER_MOBILE: 'customer-mobile',
   INTERNAL_MOBILE: 'internal-mobile',
@@ -137,6 +138,7 @@ const normalisePath = pathname => {
 
 export const previewIdFromPath = pathname => {
   const path = normalisePath(pathname);
+  if (/\/app(?:\/|\/index\.html)?$/i.test(path)) return PREVIEW_IDS.APPLICATION;
   if (/\/demo\/executive-workflow(?:\/|\/index\.html)?$/i.test(path)) return PREVIEW_IDS.EXECUTIVE_DEMO;
   const match = path.match(/\/preview\/([^/]+)(?:\/|\/index\.html)?$/i);
   if (match) return PREVIEW_BY_ID[match[1]] ? match[1] : 'unsupported';
@@ -146,6 +148,21 @@ export const previewIdFromPath = pathname => {
 
 export const previewContextForPath = pathname => {
   const id = previewIdFromPath(pathname);
+  if (id === PREVIEW_IDS.APPLICATION) {
+    return Object.freeze({
+      id,
+      product: 'Rhomberg Connect',
+      platform: 'Application',
+      displayName: 'Rhomberg Connect',
+      route: '/app/',
+      unified: true,
+      customer: false,
+      internal: false,
+      mobile: false,
+      desktop: true,
+      allowedRoles: Object.freeze(Object.values(USER_ROLES)),
+    });
+  }
   if (id === PREVIEW_IDS.LANDING) {
     return Object.freeze({
       id,
@@ -187,6 +204,9 @@ export const previewUrl = (previewId, { origin = '', repositoryBase = '' } = {})
 
 export const landingUrlFromPath = pathname => {
   const path = normalisePath(pathname);
+  const applicationMarker = '/app';
+  const applicationIndex = path.toLowerCase().lastIndexOf(applicationMarker);
+  if (applicationIndex >= 0 && /\/app(?:\/|\/index\.html)?$/i.test(path)) return `${path.slice(0, applicationIndex)}/`;
   const executiveMarker = '/demo/executive-workflow';
   const executiveIndex = path.toLowerCase().indexOf(executiveMarker);
   if (executiveIndex >= 0) return `${path.slice(0, executiveIndex)}/`;

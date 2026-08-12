@@ -16,7 +16,7 @@ The official experience now includes refined responsive Rhomberg Connect logo as
 
 ## Launch Rhomberg Connect
 
-### [🚀 Open Rhomberg Connect Application](https://shellygames141up.github.io/Rhomberg-Test-App/preview/customer-desktop/)
+### [🚀 Open Rhomberg Connect Application](https://shellygames141up.github.io/Rhomberg-Test-App/app/)
 
 Opens the normal Rhomberg Connect application experience in your browser.
 

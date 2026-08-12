@@ -3,7 +3,7 @@
   "short_name": "Rhomberg Connect",
   "description": "Rhomberg Connect customer, operational and executive demonstration experiences.",
   "id": "./",
-  "start_url": "./",
+  "start_url": "./app/",
   "scope": "./",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
