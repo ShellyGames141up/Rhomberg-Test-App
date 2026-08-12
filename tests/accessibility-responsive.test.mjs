@@ -131,6 +131,9 @@ for (const component of [
 const expeditorSource = readFileSync('src/components/ExpeditorDashboard.jsx', 'utf8');
 assert.ok(expeditorSource.includes("from './ConfiguredUnitDetails.jsx'"), 'Expeditor must reuse the immutable configured-unit detail component');
 assert.ok(expeditorSource.includes('<ConfiguredUnitDetails'), 'Expeditor must expose complete expandable unit details');
+const planningSource = readFileSync('src/components/PlanningDashboard.jsx', 'utf8');
+assert.ok(planningSource.includes("from './ConfiguredUnitDetails.jsx'"));
+assert.ok(planningSource.includes('<ConfiguredUnitDetails'), 'Planning must expose the complete immutable unit configuration');
 assert.equal(expeditorSource.includes("'Handed to Dispatch.'"), false, 'Expeditor must not retain a redundant Dispatch hand-off banner');
 assert.ok(expeditorSource.includes("order.trackingStatus !== 'awaiting_dispatch'"), 'Dispatch hand-off status must rely on the workflow status, history and brief global confirmation');
 assert.ok(expeditorSource.includes('expediting-history-notes'), 'Expeditor history must use a flat, readable note structure');

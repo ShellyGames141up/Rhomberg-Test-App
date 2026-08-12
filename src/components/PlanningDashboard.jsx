@@ -14,6 +14,7 @@ import { orderRequiresLaboratory } from '../domain/certification.js';
 import { OrderSummaryPanel } from './OrderSummaryPanel.jsx';
 import { StatusBadge } from './StatusBadge.jsx';
 import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
+import { ConfiguredUnitDetails } from './ConfiguredUnitDetails.jsx';
 
 const formatDateTime = value => {
   if (!value) return 'Not recorded';
@@ -184,7 +185,7 @@ function PlanningOrder({ order, expanded, onToggle, onAction, account, planningO
 
           <section className="planning-line-items">
             <div className="planning-section-heading"><div><span className="eyebrow">Configured units</span><h3>{lineItems} line item{lineItems === 1 ? '' : 's'} to plan</h3></div><small>Immutable RFQ snapshot</small></div>
-            <div className="planning-item-grid">{(order.items || []).map(item => <span key={item.lineId || `${item.productId}-${item.code}`}><img src={item.image} alt="" /><i>{item.code}</i><strong>{item.name}</strong><small>Quantity {item.quantity || 1}</small></span>)}</div>
+            <div className="planning-configured-units">{(order.items || []).map(item => <ConfiguredUnitDetails key={item.lineId || `${item.productId}-${item.code}`} unit={item} context="Planning" />)}</div>
           </section>
 
           {Object.keys(planning).length > 0 && (
