@@ -2053,6 +2053,18 @@ html,body,#root{max-width:100%;overflow-x:clip}
   .config-actions .secondary-button{order:initial}
 }
 
+/* Touch-friendly selected-unit quantity control */
+.quantity-control-group{display:grid;gap:5px;justify-items:end}
+.quantity-control-group>span{color:var(--text-secondary);font-size:var(--type-label);font-weight:850}
+.line-quantity{width:148px;height:46px;grid-template-columns:44px minmax(56px,1fr) 44px;border-radius:11px}
+.line-quantity>button{min-width:44px;min-height:44px;font-size:1.25rem;font-weight:900}
+.line-quantity input{width:100%;min-width:0;height:44px;padding:0 4px;border:0;background:var(--background-surface);color:var(--text-primary);text-align:center;font-size:1rem;font-weight:900}
+@media(max-width:430px){
+  .enquiry-line-tools{display:grid;grid-template-columns:1fr}
+  .quantity-control-group{justify-items:stretch}
+  .line-quantity{width:100%;grid-template-columns:48px minmax(64px,1fr) 48px}
+}
+
 @media(forced-colors:active){
   *{forced-color-adjust:auto}
   .status-badge,.primary-button,.secondary-button{border:2px solid currentColor}
