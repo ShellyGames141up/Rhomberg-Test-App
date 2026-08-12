@@ -18,6 +18,7 @@ import { statusById } from '../domain/tracking.js';
 import { OrderSummaryPanel } from './OrderSummaryPanel.jsx';
 import { StatusBadge } from './StatusBadge.jsx';
 import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
+import { ConfiguredUnitDetails } from './ConfiguredUnitDetails.jsx';
 
 const formatDateTime = value => {
   if (!value) return 'Not recorded';
@@ -210,7 +211,7 @@ function ExpeditingOrder({ order, expanded, onToggle, onAction, account, options
 
           <section className="expediting-products-section">
             <div className="planning-section-heading"><div><span className="eyebrow">Configured units</span><h3>{lineItems} line item{lineItems === 1 ? '' : 's'}</h3></div><small>Immutable RFQ snapshot</small></div>
-            <div className="expediting-product-grid">{(order.items || []).map(item => <span key={item.lineId || `${item.productId}-${item.code}`}><img src={item.image} alt="" /><i>{item.code}</i><strong>{item.name}</strong><small>Quantity {item.quantity || 1}</small></span>)}</div>
+            <div className="expediting-configured-units">{(order.items || []).map(item => <ConfiguredUnitDetails key={item.lineId || `${item.productId}-${item.code}`} unit={item} context="Order" />)}</div>
           </section>
 
           <section className="expediting-progress-section">

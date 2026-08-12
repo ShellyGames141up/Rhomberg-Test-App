@@ -128,4 +128,8 @@ for (const component of [
   assert.equal(/tracking-status status-|status-pill is-/.test(source), false);
 }
 
+const expeditorSource = readFileSync('src/components/ExpeditorDashboard.jsx', 'utf8');
+assert.ok(expeditorSource.includes("from './ConfiguredUnitDetails.jsx'"), 'Expeditor must reuse the immutable configured-unit detail component');
+assert.ok(expeditorSource.includes('<ConfiguredUnitDetails'), 'Expeditor must expose complete expandable unit details');
+
 console.log('Accessibility contrast, semantic tokens, typography, status badges and responsive contracts passed.');
