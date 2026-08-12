@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { extractQuotationDetailsFromPlacements } from '../src/domain/quotationPdf.js';
 import { buildSalesPerformanceAnalytics, formatDurationDaysHours } from '../src/domain/salesAnalytics.js';
 import { createMockServices } from '../src/services/mock/createMockServices.js';
@@ -70,5 +71,9 @@ await assert.rejects(
   error => error instanceof ServiceError && error.status === 403,
 );
 assert.equal((await services.management.getDashboard()).salesPerformance.authorised, false);
+
+const managementSource = readFileSync('src/components/ManagementDashboard.jsx', 'utf8');
+assert.ok(managementSource.includes('Download Operational PDF'), 'PDF must be the primary management export action');
+assert.ok(managementSource.includes('Advanced: download CSV'), 'CSV may remain only as a secondary advanced option');
 
 console.log('Commercial quotation analytics, access control and management PDF tests passed.');

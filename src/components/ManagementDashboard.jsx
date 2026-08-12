@@ -185,7 +185,7 @@ function PerformanceReportBuilder({ config, onConfig, options, reportingProfile,
   return (
     <section className="management-report-builder" aria-labelledby="management-report-title">
       <div className="management-section-heading">
-        <div><span className="eyebrow">Owner and Sales Manager only</span><h2 id="management-report-title">Downloadable management PDF</h2></div>
+        <div><span className="eyebrow">Owner and Sales Manager only</span><h2 id="management-report-title">Operational management PDF</h2></div>
         <small>Every generation is added to the immutable audit history</small>
       </div>
       <div className="management-report-scope">
@@ -198,7 +198,7 @@ function PerformanceReportBuilder({ config, onConfig, options, reportingProfile,
         <label><span>Branch scope</span><select value={config.branchId} onChange={event => set('branchId', event.target.value)}><option value="all">All authorised branches</option>{options.branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
       </div>
       <fieldset className="management-report-sections"><legend>Choose PDF sections</legend>{MANAGEMENT_REPORT_SECTIONS.map(section => <label key={section.id}><input type="checkbox" checked={config.sections.includes(section.id)} onChange={() => toggleSection(section.id)} /><span>{section.label}</span></label>)}</fieldset>
-      <div className="management-report-actions"><p>{config.sections.length} of {MANAGEMENT_REPORT_SECTIONS.length} sections selected</p><button className="primary-button" type="button" disabled={busy || !config.sections.length || (config.periodMode === 'date_range' && (!config.startDate || !config.endDate))} onClick={onExport}>{busy ? 'Generating PDF…' : 'Download selected PDF report'}</button></div>
+      <div className="management-report-actions"><p>{config.sections.length} of {MANAGEMENT_REPORT_SECTIONS.length} sections selected</p><button className="primary-button" type="button" disabled={busy || !config.sections.length || (config.periodMode === 'date_range' && (!config.startDate || !config.endDate))} onClick={onExport}>{busy ? 'Generating PDF…' : 'Download Operational PDF'}</button></div>
     </section>
   );
 }
@@ -304,8 +304,8 @@ export function ManagementDashboard({
           <p>Operational totals use only records authorised for {account.contact}. Protected price-engine values are excluded from this workspace and its exports.</p>
         </div>
         <div className="management-hero-actions">
-          {canUsePerformanceReports && <button className="primary-button" type="button" aria-expanded={showReportBuilder} onClick={() => setShowReportBuilder(value => !value)}>{showReportBuilder ? 'Close PDF report builder' : 'Build management PDF'}</button>}
-          {accountCan(account, PERMISSIONS.EXPORT_OPERATIONAL_REPORTS) && <button className="secondary-button" type="button" disabled={busy === 'export'} onClick={exportReport}>{busy === 'export' ? 'Generating…' : 'Export operational CSV'}</button>}
+          {canUsePerformanceReports && <button className="primary-button" type="button" aria-expanded={showReportBuilder} onClick={() => setShowReportBuilder(value => !value)}>{showReportBuilder ? 'Close PDF options' : 'Download Operational PDF'}</button>}
+          {accountCan(account, PERMISSIONS.EXPORT_OPERATIONAL_REPORTS) && <button className="text-button" type="button" disabled={busy === 'export'} onClick={exportReport}>{busy === 'export' ? 'Generating CSV…' : 'Advanced: download CSV'}</button>}
         </div>
       </header>
 
