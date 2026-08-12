@@ -195,10 +195,10 @@ export function DispatchFields({ action, record, options = {}, data, onChange, e
               <FieldError message={errors.dispatchProofReference} />
             </label>
             <label className="form-field dispatch-proof-file">
-              <span>Proof file <i>Optional · metadata only</i></span>
+              <span>Proof file <i>Optional</i></span>
               <input type="file" accept=".pdf,image/*" onChange={event => set('dispatchProofFile', event.target.files?.[0] || null)} />
               {values.dispatchProofFile && <small>{values.dispatchProofFile.name} · {Math.ceil(Number(values.dispatchProofFile.size || 0) / 1024)} KB</small>}
-              <small>PDF or image, maximum {Math.floor(maxProofBytes / 1024 / 1024)} MB. File bytes are not stored in mock mode.</small>
+              <small>PDF or image, maximum {Math.floor(maxProofBytes / 1024 / 1024)} MB.</small>
               <FieldError message={errors.dispatchProofFile} />
             </label>
           </div>
@@ -206,7 +206,7 @@ export function DispatchFields({ action, record, options = {}, data, onChange, e
       )}
 
       <div className="dispatch-field-group is-communication">
-        <div className="dispatch-field-heading"><span>{showProof ? '04' : '03'}</span><div><strong>Communication</strong><small>Customer and internal information are kept separate by the service layer.</small></div></div>
+        <div className="dispatch-field-heading"><span>{showProof ? '04' : '03'}</span><div><strong>Communication</strong><small>The customer message is shared externally; internal notes remain staff-only.</small></div></div>
         <div className="form-grid">
           <label className="form-field">
             <span>Customer-facing message <b>Required</b></span>

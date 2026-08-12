@@ -64,10 +64,6 @@ export function AuditTrail({ events, serviceMode }) {
         {!filtered.length && <div className="audit-empty"><strong>No audit events match these filters</strong><p>Clear the search or choose a broader record type and outcome.</p></div>}
       </div>
 
-      <p className="tracking-storage-note audit-storage-note">
-        <span>i</span>
-        <span><strong>{serviceMode === 'mock' ? 'Mock immutable history' : 'Server audit history'}</strong> {serviceMode === 'mock' ? 'Events are append-only within this browser preview. The service exposes no ordinary update or delete function.' : 'Production records require append-only database permissions, retention controls and protected exports.'}</span>
-      </p>
     </section>
   );
 }

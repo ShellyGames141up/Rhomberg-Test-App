@@ -158,7 +158,7 @@ export function ArchivedOrders({ account, archiveActions, serviceMode, onRecords
         {!filtered.length && <div className="archive-empty"><strong>No matching archive records</strong><p>Change the search or filters. Active orders remain in their normal operational queues.</p></div>}
       </div>
 
-      <p className="archive-deletion-notice"><strong>No browser deletion.</strong> Permanent deletion is disabled in mock mode. A future backend workflow must enforce legal-hold checks, required approvals, a protected export and an append-only deletion log.</p>
+      <p className="archive-deletion-notice"><strong>Permanent deletion is disabled.</strong> Use archive, restore, export and legal-hold actions according to your permission.</p>
     </section>
   );
 }

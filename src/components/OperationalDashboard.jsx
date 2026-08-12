@@ -70,7 +70,6 @@ export function OperationalDashboard({ account, enquiries, onAction, canUpdate, 
         {!filtered.length && <div className="expeditor-empty"><span>✓</span><strong>No matching requests</strong><p>Change the search or filter to view other work.</p></div>}
       </div>
 
-      <p className="tracking-storage-note expeditor-storage-note"><span>i</span><span><strong>{serviceMode === 'mock' ? 'Same-device testing' : 'Private-cloud workspace'}</strong> {serviceMode === 'mock' ? 'Customer and staff actions share this browser’s local test data. The production API will provide secure multi-device access.' : 'Updates are saved by the company service and access is controlled by staff role.'}</span></p>
     </section>
   );
 }

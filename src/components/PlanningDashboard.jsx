@@ -141,7 +141,6 @@ export function PlanningDashboard({ account, orders, onAction, serviceMode, plan
         )}
       </div>
 
-      <p className="tracking-storage-note planning-storage-note"><span>i</span><span><strong>{serviceMode === 'mock' ? 'Planning preview mode.' : 'Private-cloud Planning workspace.'}</strong> {serviceMode === 'mock' ? 'Actions persist in this browser through the same service layer used by the future private-cloud API. No real documents or customer data should be entered.' : 'Planning changes are protected by role, workflow, audit and server-side data controls.'}</span></p>
     </section>
   );
 }

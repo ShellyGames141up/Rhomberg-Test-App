@@ -62,7 +62,6 @@ export function OrderTracking({
         <div className="tracking-empty"><span>◎</span><h2>No RFQs yet</h2><p>Once you submit an RFQ, its details and future progress updates will appear here.</p><button className="primary-button" type="button" onClick={onStartEnquiry}>Start an enquiry <span>→</span></button></div>
       )}
 
-      <p className="tracking-storage-note"><span>i</span><span><strong>{serviceMode === 'mock' ? 'Public test storage' : 'Authorised company records'}</strong> {serviceMode === 'mock' ? 'Updates are retained in this browser. The production API will provide secure shared records across approved devices.' : 'The server restricts this view to records associated with your authorised company account.'}</span></p>
     </section>
   );
 }
@@ -153,7 +152,6 @@ function CustomerSourceDocuments({ order, actions, serviceMode }) {
       <div>{documents.map(document => <article key={document.id}><div><small>{labels[document.documentType] || 'Order document'} · Version {document.version || 1}</small><strong>{document.fileName}</strong></div><button type="button" disabled={Boolean(busyId)} onClick={() => download(document)}>{busyId === document.id ? 'Checking…' : serviceMode === 'mock' ? 'Verify access' : 'Download'}</button></article>)}</div>
       {message && <p className="form-success" role="status">{message}</p>}
       {error && <p className="form-error" role="alert">{error}</p>}
-      {serviceMode === 'mock' && <p>Mock mode stores document metadata only; access checks and download audit entries are fully simulated.</p>}
     </section>
   );
 }

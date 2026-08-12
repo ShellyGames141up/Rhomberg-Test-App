@@ -96,7 +96,7 @@ export function Settings({
         {section === 'tutorials' && <TutorialSettings account={account} serviceMode={serviceMode} onReplay={onReplayTutorial} />}
         {section === 'privacy' && <PrivacySettings serviceMode={serviceMode} />}
         {section === 'about' && <AboutSettings serviceMode={serviceMode} />}
-        {section !== 'security' && section !== 'home' && <footer className="settings-save-bar"><div>{(message || error) && <p className={error ? 'form-error' : 'settings-success'} role={error ? 'alert' : 'status'}>{error || message}</p>}<small>{serviceMode === 'mock' ? 'Saved on this device in mock mode.' : 'Synchronised through the secure user-settings API.'}</small></div><button className="text-button" type="button" disabled={busy} onClick={reset}>Restore defaults</button><button className="primary-button" type="button" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save settings'}</button></footer>}
+        {section !== 'security' && section !== 'home' && <footer className="settings-save-bar"><div>{(message || error) && <p className={error ? 'form-error' : 'settings-success'} role={error ? 'alert' : 'status'}>{error || message}</p>}<small>Changes apply to this account.</small></div><button className="text-button" type="button" disabled={busy} onClick={reset}>Restore defaults</button><button className="primary-button" type="button" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save settings'}</button></footer>}
       </div>
     </div>
   </section>;

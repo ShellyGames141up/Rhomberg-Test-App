@@ -125,7 +125,7 @@ export function DispatchDashboard({
 
       <div className="dispatch-result-heading">
         <div><span className="eyebrow">Controlled Dispatch queue</span><h2>{filtered.length} matching order{filtered.length === 1 ? '' : 's'}</h2></div>
-        <p><span className="dispatch-live-dot" /> {serviceMode === 'mock' ? 'Current browser test data' : 'Private-cloud operational data'}</p>
+        <p><span className="dispatch-live-dot" /> Current authorised queue</p>
       </div>
 
       <div className="dispatch-table" role="table" aria-label="Dispatch orders">
@@ -162,7 +162,6 @@ export function DispatchDashboard({
         )}
       </div>
 
-      <p className="tracking-storage-note dispatch-storage-note"><span>i</span><span><strong>{serviceMode === 'mock' ? 'Dispatch preview mode.' : 'Private-cloud Dispatch workspace.'}</strong> {serviceMode === 'mock' ? 'Actions persist in this browser through the shared service layer. Proof files are represented by safe metadata only; do not enter real customer information.' : 'Dispatch actions are protected by role, workflow, audit and server-side data controls.'}</span></p>
     </section>
   );
 }

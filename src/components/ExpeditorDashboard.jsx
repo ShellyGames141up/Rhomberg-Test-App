@@ -151,7 +151,6 @@ export function ExpeditorDashboard({ account, orders, onAction, serviceMode, exp
         )}
       </div>
 
-      <p className="tracking-storage-note expediting-storage-note"><span>i</span><span><strong>{serviceMode === 'mock' ? 'Expediting preview mode.' : 'Private-cloud Expediting workspace.'}</strong> {serviceMode === 'mock' ? 'Updates persist in this browser. Document and image fields store metadata references only; do not enter real customer or production information.' : 'Updates are protected by role, workflow, audit and server-side access controls.'}</span></p>
     </section>
   );
 }

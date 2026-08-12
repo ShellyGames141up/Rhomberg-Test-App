@@ -284,7 +284,7 @@ export function RepresentativeOrderLoader({ actions, maxDocumentBytes, onCreated
               <Field label="Purchase Order date" error={fieldErrors.purchaseOrderDate}><input type="date" max={today()} value={values.purchaseOrderDate} onChange={event => update('purchaseOrderDate', event.target.value)} required /></Field>
             </DocumentPanel>
           </div>
-          <label className="representative-supporting-upload"><span>Supporting documents <i>Optional</i></span><input type="file" multiple accept=".pdf,.doc,.docx,image/*" onChange={chooseFile(setSupportingDocuments, true)} /><small>{supportingDocuments.length ? `${supportingDocuments.length} supporting file(s) selected` : 'Up to eight approved documents · metadata only in mock mode'}</small></label>
+          <label className="representative-supporting-upload"><span>Supporting documents <i>Optional</i></span><input type="file" multiple accept=".pdf,.doc,.docx,image/*" onChange={chooseFile(setSupportingDocuments, true)} /><small>{supportingDocuments.length ? `${supportingDocuments.length} supporting file(s) selected` : 'Up to eight approved PDF, DOCX, DOC or image files'}</small></label>
         </OrderSection>
 
         <OrderSection index="05" title="Representative confirmation" help="This confirmation becomes part of the immutable order-origin audit record.">

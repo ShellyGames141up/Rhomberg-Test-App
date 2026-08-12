@@ -146,7 +146,7 @@ export function ExpeditingFields({ action, record, options = {}, data, onChange,
       </div>
 
       <div className="expediting-field-group is-reference">
-        <div className="expediting-field-heading"><span>04</span><div><strong>Controlled reference</strong><small>Metadata only in the public preview; no file content is uploaded.</small></div></div>
+        <div className="expediting-field-heading"><span>04</span><div><strong>Document reference</strong><small>Add the approved document details relevant to this update.</small></div></div>
         <div className="form-grid expediting-reference-grid">
           <label className="form-field">
             <span>Reference type <i>Optional</i></span>

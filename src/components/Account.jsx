@@ -59,17 +59,6 @@ export function Account({
           onChanged={onCredentialChanged}
         />
       )}
-      <div className="account-preview-note">
-        <span>i</span>
-        <div>
-          <strong>{serviceMode === 'mock' ? 'Same-device test storage' : 'Secure service account'}</strong>
-          <p>{serviceMode === 'mock'
-            ? (isStaff
-              ? 'Updates made here are visible to test customer accounts in this browser. Production will use the prepared secure API and staff roles.'
-              : 'This account, its RFQs and order updates remain available after closing and reopening this browser. Production will move them to secure domain storage.')
-            : 'The private-cloud API is responsible for identity, role checks and company-level record isolation.'}</p>
-        </div>
-      </div>
       <button className="sign-out" type="button" onClick={onSignOut}>Sign out</button>
     </section>
   );

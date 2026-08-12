@@ -91,7 +91,7 @@ export function Auth({
           </form>
         ) : null}
 
-        <p className="preview-note"><span>i</span> {__PUBLIC_PREVIEW__ && serviceMode === 'mock' ? 'Public test environment: use fabricated data only. Demo credentials are available exclusively in the separate Preview Centre.' : 'Private-cloud mode: access is controlled by the company service. Contact IT if you cannot access your authorised company.'}</p>
+        <p className="preview-note"><span>i</span> {preview?.unified ? 'Use your authorised Rhomberg Connect account. Contact your administrator if you need access.' : __PUBLIC_PREVIEW__ && serviceMode === 'mock' ? 'Demonstration environment: use fabricated data only.' : 'Access is controlled by the company service. Contact IT if you cannot access your authorised company.'}</p>
         {showPreviewNavigation && <a className="preview-back-link" href="./">Back to all test previews</a>}
       </section>
     </main>

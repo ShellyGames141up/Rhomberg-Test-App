@@ -89,7 +89,6 @@ export function SalesRepresentativeDashboard({ account, rfqs, onAction, onLoadCu
         {!filtered.length && <div className="expeditor-empty"><span>✓</span><strong>No RFQs match this view</strong><p>Try another inbox group, priority or search term.</p></div>}
       </div>
 
-      <p className="tracking-storage-note expeditor-storage-note"><span>i</span><span><strong>{serviceMode === 'mock' ? 'Same-device representative inbox' : 'Private-cloud representative inbox'}</strong> {serviceMode === 'mock' ? 'Customer submissions and representative actions share this browser’s demo service data.' : 'RFQs are supplied by the secured company API and limited to your representative assignment.'}</span></p>
     </section>
   );
 }

@@ -192,11 +192,10 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
 
         <section className="enquiry-section submit-panel">
           <div className="client-summary"><span className="client-avatar">{account.company.slice(0, 1)}</span><div><strong>{account.company}</strong><small>{account.contact} · {account.email} · {account.phone}</small></div></div>
-          <label className="consent-row"><input type="checkbox" required /><span>{deliverySettings?.emailRecipient ? 'I confirm this is an RFQ and agree that these details and any PO attachment may be submitted through the mock Rhomberg workflow. No real email is sent in public demo mode.' : 'I confirm this is an RFQ and agree that these details and any PO attachment may be securely submitted to Rhomberg for processing.'}</span></label>
+          <label className="consent-row"><input type="checkbox" required /><span>I confirm that this is an RFQ and that I am authorised to submit these details and any Purchase Order attachment to Rhomberg.</span></label>
           {error && <p className="form-error submit-error" role="alert">{error}</p>}
           {fallbackUrl && <a className="email-fallback" href={fallbackUrl}>Open my email app with this RFQ summary <span>→</span></a>}
           <button className="primary-button full submit-enquiry" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Submitting RFQ…' : 'Submit RFQ'} <span>{isSubmitting ? '•••' : '→'}</span></button>
-          <p className="preview-submit-note">{deliverySettings?.emailRecipient ? <>Public demo delivery is simulated through the {deliverySettings.emailRecipient}. Real recipient addresses and private pricing remain server-side.</> : <>RFQs are submitted to the private company service and routed according to the customer’s authorised company and representative assignment.</>}</p>
         </section>
       </form>
 
@@ -227,10 +226,10 @@ function SuccessDialog({ success, onClose, persistenceLabel }) {
         <span className="success-icon">✓</span>
         <small>RFQ submitted successfully</small>
         <h2 id="success-title">Thank you, {success.firstName}.</h2>
-        <p>Your RFQ has been permanently saved in {persistenceLabel} and placed in <strong>{success.representative}</strong>’s representative inbox.{success.emailFailed ? ' The optional test email delivery still needs attention.' : ''}</p>
+        <p>Your RFQ has been saved and placed in <strong>{success.representative}</strong>’s representative inbox.{success.emailFailed ? ' Email delivery still needs attention.' : ''}</p>
         <strong className="success-reference">{success.reference}</strong>
         <p className="success-routing-note">Submitted {new Date(success.submittedAt).toLocaleString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} · You can track this reference from your account.</p>
-        {success.pricedPdfAttached ? <p className="priced-pdf-note"><span>PDF</span> A protected rep-only PDF with internal price-list estimates was attached.</p> : !success.emailFailed && <p className="activation-note"><span>i</span> Public demo delivery was simulated. No real email was sent, and private pricing was not exposed.</p>}
+        {success.pricedPdfAttached && <p className="priced-pdf-note"><span>PDF</span> A representative-only pricing document was attached.</p>}
         {success.warning && <p className="activation-note"><span>!</span>{success.warning}</p>}
         {success.fallbackUrl && <a className="email-fallback" href={success.fallbackUrl}>Open my email app with the saved RFQ <span>→</span></a>}
         {success.activationMayBeRequired && <p className="activation-note"><span>i</span> First test only: open the FormSubmit activation email in {success.recipient}. Once confirmed, the queued RFQ will be forwarded.</p>}

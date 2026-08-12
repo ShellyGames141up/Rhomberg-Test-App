@@ -29,6 +29,30 @@ const introSource = readFileSync('src/components/Intro.jsx', 'utf8');
 const onboardingSource = readFileSync('src/components/CustomerOnboarding.jsx', 'utf8');
 const homeSource = readFileSync('src/components/Home.jsx', 'utf8');
 const enquirySource = readFileSync('src/components/Enquiry.jsx', 'utf8');
+const operationalBannerSources = [
+  'Account.jsx',
+  'AuditTrail.jsx',
+  'DispatchDashboard.jsx',
+  'ExpeditorDashboard.jsx',
+  'Notifications.jsx',
+  'OperationalDashboard.jsx',
+  'OrderTracking.jsx',
+  'PlanningDashboard.jsx',
+  'SalesRepresentativeDashboard.jsx',
+].map(file => readFileSync(`src/components/${file}`, 'utf8')).join('\n');
+for (const implementationPhrase of [
+  'Same-device test storage',
+  'Public test storage',
+  'Planning preview mode',
+  'Expediting preview mode',
+  'Dispatch preview mode',
+  'shared service layer',
+  'future private-cloud API',
+  'Mock immutable history',
+  'Safe test notification service',
+]) {
+  assert.equal(operationalBannerSources.includes(implementationPhrase), false, `operational screens must not show implementation banner text: ${implementationPhrase}`);
+}
 assert.equal(appSource.includes("from './apps/customer/CustomerPersonalisation"), false, 'the custom-theme wizard must not be mounted');
 assert.equal(settingsSource.includes('type="color"'), false, 'official settings must not expose colour pickers');
 assert.equal(homeSource.includes('LeadTimeNotice'), false, 'generic Customer Home must not show lead-time information without an RFQ or order context');

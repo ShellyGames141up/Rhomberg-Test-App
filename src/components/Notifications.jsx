@@ -165,7 +165,6 @@ export function Notifications({
             <div><span className="eyebrow">Delivery choices</span><h2 id="notification-settings-title">Notification preferences</h2></div>
             <span className="notification-simulation-badge">{serviceMode === 'mock' ? 'Simulation only' : 'Secure service'}</span>
           </header>
-          <p>In-app alerts remain enabled. In this test preview, email and push choices only change simulated delivery records; no message leaves the browser.</p>
           <div className="notification-channel-grid">
             <label><span><strong>In-app</strong><small>Required workflow inbox</small></span><input type="checkbox" checked readOnly disabled /></label>
             <label><span><strong>Email</strong><small>{serviceMode === 'mock' ? 'Simulated status only' : 'Approved provider required'}</small></span><input type="checkbox" checked={preferenceDraft.channels.email} onChange={event => updateChannel('email', event.target.checked)} /></label>
@@ -242,10 +241,6 @@ export function Notifications({
         )}
       </div>
 
-      <p className="tracking-storage-note notification-storage-note">
-        <span>i</span>
-        <span><strong>{serviceMode === 'mock' ? 'Safe test notification service' : 'Secure notification service'}</strong> {serviceMode === 'mock' ? 'In-app messages, read state, preferences and simulated delivery attempts are isolated by test account and saved in this browser.' : 'Notifications are loaded only for your authorised company, assignment or internal role.'}</span>
-      </p>
     </section>
   );
 }
