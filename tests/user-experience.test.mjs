@@ -33,6 +33,8 @@ assert.equal(settingsSource.includes('type="color"'), false, 'official settings 
 assert.equal(homeSource.includes('LeadTimeNotice'), false, 'generic Customer Home must not show lead-time information without an RFQ or order context');
 assert.ok(enquirySource.includes('quantity-control-group'));
 assert.ok(enquirySource.includes('quantity controls'), 'selected-unit quantity must expose one accessible decrement/value/increment group');
+assert.ok(stylesheet.includes('/* RFQ success dialog is viewport-centred and safe-area aware */'));
+assert.ok(stylesheet.includes('.dialog-backdrop{inset:0;min-height:100dvh;place-items:center'), 'RFQ success overlay must cover and centre within the dynamic viewport');
 assert.ok(stylesheet.includes('/* Settings content always clears the save controls */'));
 assert.ok(stylesheet.includes('.settings-save-bar{position:static;bottom:auto'), 'mobile settings actions must follow content instead of covering it');
 assert.ok(stylesheet.includes('/* Security settings remain contained on tablet and mobile */'));

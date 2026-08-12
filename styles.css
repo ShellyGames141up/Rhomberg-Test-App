@@ -1982,6 +1982,14 @@ html,body,#root{max-width:100%;overflow-x:clip}
   .app-screen :where(.button-row,.action-row,.settings-inline-actions)>*{width:100%}
 }
 
+/* RFQ success dialog is viewport-centred and safe-area aware */
+.dialog-backdrop{inset:0;min-height:100dvh;place-items:center;overflow-y:auto;overscroll-behavior:contain;padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+.success-dialog{max-height:calc(100dvh - max(24px,env(safe-area-inset-top)) - max(24px,env(safe-area-inset-bottom)));overflow-y:auto;transform:translateY(-2dvh)}
+@media(max-height:560px){
+  .dialog-backdrop{place-items:start center}
+  .success-dialog{transform:none;margin-block:auto}
+}
+
 @media(max-width:360px){
   body{font-size:15px}
   .app-screen :where(.content-block,.screen-heading,.catalogue-heading,.operations-queue,.operations-workspace-grid){padding-inline:12px}
