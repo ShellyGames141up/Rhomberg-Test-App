@@ -377,7 +377,7 @@ export function ManagementDashboard({
 
       <div className="management-content-grid">
         <section className="management-records">
-          <div className="management-section-heading"><div><span className="eyebrow">Authorised records</span><h2>{dashboard.records.length} matching record{dashboard.records.length === 1 ? '' : 's'}</h2></div><small>Search and filters are server-ready</small></div>
+          <div className="management-section-heading"><div><span className="eyebrow">Authorised records</span><h2>{dashboard.records.length} matching record{dashboard.records.length === 1 ? '' : 's'}</h2></div><small>Use search and filters to narrow the list</small></div>
           {dashboard.records.map(record => (
             <ManagementRecord
               key={record.id}
@@ -468,12 +468,12 @@ function ManagementRecord({
             <div><dt>Original RFQ</dt><dd>{record.sourceRfqReference || (record.workflowType === 'rfq' ? record.reference : 'Not recorded')}</dd></div>
             <div><dt>Priority</dt><dd>{record.priority === 'urgent' ? 'Urgent' : humanise(record.priority || 'standard')}</dd></div>
           </dl>
-          {!!record.items?.length && <div className="configured-unit-list"><h3>Authorised immutable unit details</h3>{record.items.map(item => <ConfiguredUnitDetails key={item.lineId || item.id || `${item.productId}-${item.code}`} unit={item} context="Management" />)}</div>}
+          {!!record.items?.length && <div className="configured-unit-list"><h3>Unit details</h3>{record.items.map(item => <ConfiguredUnitDetails key={item.lineId || item.id || `${item.productId}-${item.code}`} unit={item} context="Management" />)}</div>}
           {(canReassign || canOverride) && <div className="management-actions">
             {canReassign && <section>
               <h3>Reassign representative</h3>
               <label><span>Representative</span><select value={values.representativeId || record.selectedRep?.id || ''} onChange={event => set('representativeId', event.target.value)}><option value="">Select representative</option>{representatives.map(rep => <option key={rep.id} value={rep.id}>{rep.name} · {rep.branchName}</option>)}</select></label>
-              <label><span>Reason</span><textarea rows="2" value={values.reason || ''} onChange={event => set('reason', event.target.value)} placeholder="Required for the immutable audit history" /></label>
+              <label><span>Reason</span><textarea rows="2" value={values.reason || ''} onChange={event => set('reason', event.target.value)} placeholder="Required and recorded in the audit history" /></label>
               <button className="secondary-button" type="button" disabled={Boolean(busy)} onClick={onReassign}>Save reassignment</button>
             </section>}
             {canOverride && <section>

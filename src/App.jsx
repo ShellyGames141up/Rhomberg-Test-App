@@ -543,7 +543,7 @@ export default function App() {
   const retryNotificationDelivery = async (notificationId, deliveryId) => {
     const delivery = await services.notifications.retryDelivery(notificationId, deliveryId);
     setNotifications(await services.notifications.list());
-    notify(delivery.status.endsWith('_sent') ? 'Simulated delivery retry completed' : 'Simulated delivery remains queued for retry');
+    notify(delivery.status.endsWith('_sent') ? 'Demo delivery retry completed' : 'Demo delivery is still queued for retry');
     return delivery;
   };
 
@@ -562,7 +562,7 @@ export default function App() {
       if (accountCan(account, PERMISSIONS.READ_AUDIT_HISTORY)) {
         services.audit.list().then(setAuditEvents).catch(() => undefined);
       }
-      notify(services.mode === 'mock' ? 'Simulated PDF email recorded' : 'PDF email request submitted');
+      notify(services.mode === 'mock' ? 'Demo PDF email recorded' : 'PDF email request submitted');
       return delivery;
     },
   }), [account]);

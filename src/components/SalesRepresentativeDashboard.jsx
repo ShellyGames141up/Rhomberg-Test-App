@@ -128,7 +128,7 @@ function SalesRfqCard({ rfq, expanded, onToggle, onAction, account, technicalSup
             <span><small>Assigned representative</small><strong>{rfq.selectedRep?.name || 'Unassigned'}<br />{rfq.selectedRep?.branchName || rfq.area}</strong></span>
           </div>
           {(rfq.customerNotes || rfq.notes) && <p className="sales-customer-notes"><span>Customer notes</span>{rfq.customerNotes || rfq.notes}</p>}
-          {documents.length > 0 && <div className="sales-document-list"><strong>Uploaded document metadata</strong>{documents.map(document => <span key={document.id}><b>{document.fileName || document.originalName}</b><small>{document.mimeType || document.mediaType || 'File'} · {Math.ceil(Number(document.sizeBytes || 0) / 1024)} KB</small></span>)}</div>}
+          {documents.length > 0 && <div className="sales-document-list"><strong>Uploaded documents</strong>{documents.map(document => <span key={document.id}><b>{document.fileName || document.originalName}</b><small>{document.mimeType || document.mediaType || 'File'} · {Math.ceil(Number(document.sizeBytes || 0) / 1024)} KB</small></span>)}</div>}
           {rfq.quotation && <RepresentativeQuotationSummary rfq={rfq} />}
           {rfq.acceptance && <RepresentativeAcceptanceSummary rfq={rfq} />}
           <section className="configured-unit-list" aria-label="Configured RFQ units"><h3>Configured unit details</h3>{(rfq.items || []).map(item => <ConfiguredUnitDetails key={item.lineId} unit={item} context="RFQ" extra={{ application: item.application || rfq.application, customerRequirements: item.customerRequirements }} />)}</section>
@@ -150,7 +150,7 @@ function RepresentativeQuotationSummary({ rfq }) {
     : 'Not applicable';
   return (
     <section className="representative-quotation-summary" aria-label="Recorded quotation">
-      <div className="panel-index"><span>Q</span><div><strong>Recorded quotation</strong><small>External Outlook quotation metadata · no pricing stored</small></div></div>
+      <div className="panel-index"><span>Q</span><div><strong>Recorded quotation</strong><small>Quotation document details</small></div></div>
       <dl>
         <div><dt>Quotation number</dt><dd>{quotation.number}</dd></div>
         <div><dt>Quotation date</dt><dd>{formatDateOnly(quotation.date)}</dd></div>
@@ -180,7 +180,7 @@ function RepresentativeAcceptanceSummary({ rfq }) {
     : 'Not recorded';
   return (
     <section className="representative-quotation-summary representative-acceptance-summary" aria-label="Verified order acceptance">
-      <div className="panel-index"><span>✓</span><div><strong>Verified order acceptance</strong><small>External evidence metadata · no payment processing or pricing</small></div></div>
+      <div className="panel-index"><span>✓</span><div><strong>Verified order acceptance</strong><small>Customer acceptance evidence</small></div></div>
       <dl>
         <div><dt>Acceptance type</dt><dd>{labels[acceptance.type] || acceptance.type}</dd></div>
         <div><dt>Acceptance date</dt><dd>{date}</dd></div>
@@ -190,7 +190,7 @@ function RepresentativeAcceptanceSummary({ rfq }) {
         <div><dt>Created order</dt><dd>{rfq.orderReference || 'Order reference pending'}</dd></div>
       </dl>
       <p><strong>Internal verification note</strong>{acceptance.internalNote}</p>
-      {(acceptance.documentReference || acceptance.document) && <p><strong>Supporting evidence</strong>{acceptance.document?.fileName || acceptance.documentReference}<small>Internal metadata only</small></p>}
+      {(acceptance.documentReference || acceptance.document) && <p><strong>Supporting evidence</strong>{acceptance.document?.fileName || acceptance.documentReference}<small>Internal record</small></p>}
     </section>
   );
 }

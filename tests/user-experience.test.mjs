@@ -53,6 +53,15 @@ for (const implementationPhrase of [
 ]) {
   assert.equal(operationalBannerSources.includes(implementationPhrase), false, `operational screens must not show implementation banner text: ${implementationPhrase}`);
 }
+const operationalLanguage = [appSource, settingsSource, operationalBannerSources, enquirySource].join('\n');
+for (const jargon of ['Controlled reference', 'Immutable snapshot', 'Immutable unit details', 'server-ready', 'future approved content', 'future service desk integration']) {
+  assert.equal(operationalLanguage.toLowerCase().includes(jargon.toLowerCase()), false, `operational language must not include ${jargon}`);
+}
+for (const preferredLabel of ['Unit details', 'Document reference', 'Customer-facing message', 'Internal note']) {
+  assert.ok(readFileSync('src/components/ManagementDashboard.jsx', 'utf8').includes(preferredLabel)
+    || readFileSync('src/components/ExpeditingFields.jsx', 'utf8').includes(preferredLabel)
+    || readFileSync('src/components/DispatchFields.jsx', 'utf8').includes(preferredLabel), `operational language must use ${preferredLabel}`);
+}
 assert.equal(appSource.includes("from './apps/customer/CustomerPersonalisation"), false, 'the custom-theme wizard must not be mounted');
 assert.equal(settingsSource.includes('type="color"'), false, 'official settings must not expose colour pickers');
 assert.equal(homeSource.includes('LeadTimeNotice'), false, 'generic Customer Home must not show lead-time information without an RFQ or order context');

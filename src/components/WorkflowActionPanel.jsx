@@ -187,7 +187,7 @@ function WorkflowActionFields({ action, data, onChange, errors = {}, record, acc
   }
   if (QA_REWORK_ACTIONS.has(action.action)) {
     if (action.action === 'start_qa_rework') {
-      return <p className="workflow-helper"><strong>Controlled corrective-work receipt.</strong> This records that Expediting accepted the failed order for correction. The original inspection result remains immutable.</p>;
+      return <p className="workflow-helper"><strong>Correction hand-off.</strong> Confirm that Expediting received the failed order for correction. The original inspection result remains unchanged.</p>;
     }
     return (
       <div className="quotation-confirmation-fields qa-rework-fields">
@@ -270,7 +270,7 @@ function WorkflowActionFields({ action, data, onChange, errors = {}, record, acc
       </div>
     );
   }
-  if (action.action === 'convert_to_order') return <p className="workflow-helper">A new order number and immutable item snapshot will be created automatically.</p>;
+  if (action.action === 'convert_to_order') return <p className="workflow-helper">A new order number and the confirmed item details will be created automatically.</p>;
   if (action.action === 'archive_order') {
     return <label className="form-field"><span>Retention policy identifier</span><input value={data.retentionPolicyId || ''} onChange={event => set('retentionPolicyId', event.target.value)} /></label>;
   }

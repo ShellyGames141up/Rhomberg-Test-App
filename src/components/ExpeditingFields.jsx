@@ -198,7 +198,7 @@ export function ExpeditingFields({ action, record, options = {}, data, onChange,
                   </label>
                   <label className="form-field">
                     <span>Authorisation reference <b>Required</b></span>
-                    <input value={values.expeditingReadyExceptionReference} onChange={event => set('expeditingReadyExceptionReference', event.target.value)} placeholder="Manager name, approval or controlled reference" />
+                    <input value={values.expeditingReadyExceptionReference} onChange={event => set('expeditingReadyExceptionReference', event.target.value)} placeholder="Manager name or approval reference" />
                     <FieldError message={errors.expeditingReadyExceptionReference} />
                   </label>
                 </div>

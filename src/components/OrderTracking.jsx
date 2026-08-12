@@ -37,7 +37,7 @@ export function OrderTracking({
       <header className="tracking-hero">
         <span className="eyebrow">Customer order tracking</span>
         <h1 id="tracking-title">Your requests.<br /><em>One clear timeline.</em></h1>
-        <p>{serviceMode === 'mock' ? `RFQs and orders saved to ${account.company} remain available when you close and reopen this app on this device.` : `RFQs and orders for ${account.company} are loaded from the secure company service.`}</p>
+        <p>View the latest customer updates for {account.company}, from RFQ submission through order completion.</p>
         <div className="tracking-stats"><span><strong>{activeCount}</strong><small>Active</small></span><span><strong>{ordered.length}</strong><small>Total requests</small></span></div>
       </header>
 

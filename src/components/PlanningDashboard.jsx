@@ -183,7 +183,7 @@ function PlanningOrder({ order, expanded, onToggle, onAction, account, planningO
           </div>
 
           <section className="planning-line-items">
-            <div className="planning-section-heading"><div><span className="eyebrow">Configured units</span><h3>{lineItems} line item{lineItems === 1 ? '' : 's'} to plan</h3></div><small>Immutable RFQ snapshot</small></div>
+            <div className="planning-section-heading"><div><span className="eyebrow">Configured units</span><h3>{lineItems} line item{lineItems === 1 ? '' : 's'} to plan</h3></div><small>Unit details</small></div>
             <div className="planning-configured-units">{(order.items || []).map(item => <ConfiguredUnitDetails key={item.lineId || `${item.productId}-${item.code}`} unit={item} context="Planning" />)}</div>
           </section>
 
