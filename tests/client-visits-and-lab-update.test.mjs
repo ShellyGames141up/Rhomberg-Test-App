@@ -70,3 +70,6 @@ assert.equal(safePolicy.routineLocationAnalyticsEnabled, false, 'public mock mod
 assert.match(readFileSync('.gitignore', 'utf8'), /private\//);
 
 console.log('Dynamic Temperature, Pressure 6/5/5, assigned Clients, visits, reminders, geofence, QR, compliance, privacy and location controls passed.');
+const visitStyles = readFileSync('styles.css', 'utf8');
+assert.ok(visitStyles.includes('/* Client visit information and KPIs remain readable */'));
+assert.ok(visitStyles.includes('.visit-kpis{grid-template-columns:repeat(3'));

@@ -2297,3 +2297,14 @@ html,body,#root{max-width:100%;overflow-x:clip}
   .visit-form-grid, .client-health-card dl { grid-template-columns: 1fr; }
   .visit-client-toolbar { align-items: stretch; flex-direction: column; }
 }
+
+/* Client visit information and KPIs remain readable */
+.client-visits-screen :where(.privacy-stop,.location-precision-note){background:#f7fafb;color:#10252f;border-color:#b9cdd3;border-left-color:#98630f}
+.client-visits-screen :where(.privacy-stop,.location-precision-note) :where(strong,span){color:inherit}
+.visit-kpis{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.visit-kpis>article{min-height:92px;display:grid;align-content:center;gap:4px;padding:14px;background:var(--background-surface);color:var(--text-primary);border:1px solid var(--border-default);border-radius:13px}
+.visit-kpis>article strong{font-size:clamp(1.55rem,3vw,2.3rem);line-height:1;color:var(--action-primary)}
+.visit-kpis>article span{color:var(--text-secondary);font-weight:750;line-height:1.25}
+[data-theme="dark"] .client-visits-screen :where(.privacy-stop,.location-precision-note){background:var(--status-warning-background);color:var(--status-warning-foreground);border-color:var(--border-strong)}
+@media(max-width:900px){.visit-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:360px){.visit-kpis{grid-template-columns:1fr}.visit-kpis>article{min-height:76px}}
