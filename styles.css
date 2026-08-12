@@ -2042,6 +2042,17 @@ html,body,#root{max-width:100%;overflow-x:clip}
 :root:not([data-theme="dark"]) .product-detail .product-tabs button{color:var(--text-secondary-light-background)}
 :root:not([data-theme="dark"]) .product-detail .product-tabs button.active{color:var(--text-on-action-primary)}
 
+/* Configuration questions flow directly into their actions */
+.configurator-screen{padding-bottom:max(20px,env(safe-area-inset-bottom))}
+.config-stage{width:min(calc(100% - 32px),760px);margin-inline:auto;margin-bottom:12px}
+.config-actions{position:sticky;left:auto;bottom:0;transform:none;width:min(100%,792px);margin:0 auto;padding-bottom:max(10px,env(safe-area-inset-bottom))}
+.config-question{display:grid;align-content:start;gap:0}
+.config-question :where(.choice-grid,.multi-choice-grid,.config-select,.config-input,.toggle-choice,.large-quantity){margin-top:0}
+@media(max-width:599px){
+  .config-actions{grid-template-columns:auto minmax(0,1fr)}
+  .config-actions .secondary-button{order:initial}
+}
+
 @media(forced-colors:active){
   *{forced-color-adjust:auto}
   .status-badge,.primary-button,.secondary-button{border:2px solid currentColor}

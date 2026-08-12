@@ -36,6 +36,8 @@ assert.ok(stylesheet.includes('/* Security settings remain contained on tablet a
 assert.ok(stylesheet.includes('.settings-content .credential-change-card{grid-template-columns:1fr'), 'security credentials must stack at tablet widths');
 assert.ok(stylesheet.includes('/* Compact and consistent recommended cards */'));
 assert.ok(stylesheet.includes('-webkit-line-clamp:2'), 'recommended product names must remain compact and readable');
+assert.ok(stylesheet.includes('/* Configuration questions flow directly into their actions */'));
+assert.ok(stylesheet.includes('.config-actions{position:sticky'), 'configuration actions must follow the active question in normal document flow');
 assert.equal(settingsSource.includes('companyLogo'), false, 'customers must not replace official application branding');
 assert.ok(settingsSource.includes('Sounds & Vibration'));
 assert.ok(settingsSource.includes('Security & Sign-In'));
