@@ -113,7 +113,7 @@ export function ExpeditingFields({ action, record, options = {}, data, onChange,
 
       <div className="expediting-field-group is-communication">
         <div className="expediting-field-heading"><span>02</span><div><strong>Communication</strong><small>Keep customer and internal information clearly separated.</small></div></div>
-        <div className="form-grid">
+        <div className="form-grid expediting-communication-grid">
           <label className="form-field">
             <span>Customer-facing message <b>Required</b></span>
             <textarea rows="4" value={values.expeditingCustomerMessage} onChange={event => set('expeditingCustomerMessage', event.target.value)} placeholder="Explain the current progress in clear customer-friendly language." />
@@ -129,7 +129,7 @@ export function ExpeditingFields({ action, record, options = {}, data, onChange,
 
       <div className="expediting-field-group is-schedule">
         <div className="expediting-field-heading"><span>03</span><div><strong>Completion and delay</strong><small>Update the current estimate and record any delay context.</small></div></div>
-        <div className="form-grid">
+        <div className="form-grid expediting-schedule-grid">
           <label className="form-field">
             <span>Estimated completion date <i>Optional</i></span>
             <input type="date" value={values.expeditingEstimatedCompletionDate} onInput={event => set('expeditingEstimatedCompletionDate', event.target.value)} onChange={event => set('expeditingEstimatedCompletionDate', event.target.value)} />
@@ -147,7 +147,7 @@ export function ExpeditingFields({ action, record, options = {}, data, onChange,
 
       <div className="expediting-field-group is-reference">
         <div className="expediting-field-heading"><span>04</span><div><strong>Controlled reference</strong><small>Metadata only in the public preview; no file content is uploaded.</small></div></div>
-        <div className="form-grid">
+        <div className="form-grid expediting-reference-grid">
           <label className="form-field">
             <span>Reference type <i>Optional</i></span>
             <select value={values.expeditingDocumentType} onChange={event => set('expeditingDocumentType', event.target.value)}>

@@ -136,5 +136,9 @@ assert.ok(expeditorSource.includes("order.trackingStatus !== 'awaiting_dispatch'
 assert.ok(expeditorSource.includes('expediting-history-notes'), 'Expeditor history must use a flat, readable note structure');
 assert.ok(expeditorSource.includes('Customer-safe update'));
 assert.equal(expeditorSource.includes('expediting-history-marker'), false, 'decorative nested timeline markers must not compete with update content');
+const expeditingFieldsSource = readFileSync('src/components/ExpeditingFields.jsx', 'utf8');
+for (const fieldGroup of ['expediting-communication-grid', 'expediting-schedule-grid', 'expediting-reference-grid']) assert.ok(expeditingFieldsSource.includes(fieldGroup));
+assert.ok(css.includes('.expediting-communication-grid,.expediting-schedule-grid,.expediting-reference-grid{grid-template-columns:1fr}'), 'Expeditor progress fields must stack cleanly on mobile');
+assert.ok(css.includes('bottom:calc(var(--mobile-nav-height) + env(safe-area-inset-bottom,0px) + 6px)'), 'Expeditor save action must clear bottom navigation and device safe areas');
 
 console.log('Accessibility contrast, semantic tokens, typography, status badges and responsive contracts passed.');
