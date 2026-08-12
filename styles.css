@@ -1998,6 +1998,17 @@ html,body,#root{max-width:100%;overflow-x:clip}
 .timeline-event>span{min-width:0;padding-bottom:2px}
 .timeline-event p{margin-top:4px}
 
+/* Shared configured-unit snapshot */
+.configured-unit-list{display:grid;gap:9px;margin-block:14px}.configured-unit-list>h3{margin:0 0 3px}
+.configured-unit-details{overflow:hidden;border:1px solid var(--border-default);border-radius:13px;background:var(--background-surface);color:var(--text-primary)}
+.configured-unit-summary{width:100%;display:grid;grid-template-columns:52px minmax(0,1fr) auto;align-items:center;gap:11px;padding:11px;background:transparent;color:inherit;text-align:left}
+.configured-unit-summary>span:nth-child(2){display:grid;gap:2px}.configured-unit-summary small,.configured-unit-summary em{color:var(--text-muted);font-size:var(--type-helper)}
+.configured-unit-summary>b{color:var(--link-colour);font-size:var(--type-label)}
+.configured-unit-image{width:50px;height:50px;display:grid;place-items:center;overflow:hidden;border-radius:10px;background:var(--surface-muted);font-weight:900}.configured-unit-image img{width:100%;height:100%;object-fit:contain;padding:4px}
+.configured-unit-body{padding:0 12px 12px}.configured-unit-body dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:0;padding-top:11px;border-top:1px solid var(--border-default)}
+.configured-unit-body dl>div{padding:9px;border-radius:9px;background:var(--surface-muted)}.configured-unit-body dt{color:var(--text-muted);font-size:var(--type-helper);font-weight:850}.configured-unit-body dd{margin:3px 0 0;color:var(--text-primary);font-weight:750;overflow-wrap:anywhere}
+@media(max-width:600px){.configured-unit-summary{grid-template-columns:46px minmax(0,1fr)}.configured-unit-summary>b{grid-column:1/-1}.configured-unit-body dl{grid-template-columns:1fr}}
+
 /* Catalogue cards scale without clipped copy */
 .category-overview-card{height:auto;min-height:0;display:grid;grid-template-rows:44px clamp(96px,24vw,130px) minmax(112px,auto)}
 .category-overview-card>img{height:100%}

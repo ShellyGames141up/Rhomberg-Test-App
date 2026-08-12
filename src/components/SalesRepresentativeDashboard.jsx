@@ -12,6 +12,7 @@ import { statusById } from '../domain/tracking.js';
 import { StatusBadge } from './StatusBadge.jsx';
 import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
 import { RepresentativeTechnicalSupport } from './TechnicalSupport.jsx';
+import { ConfiguredUnitDetails } from './ConfiguredUnitDetails.jsx';
 
 const formatDate = value => value ? new Date(value).toLocaleString('en-ZA', {
   day: '2-digit',
@@ -131,7 +132,7 @@ function SalesRfqCard({ rfq, expanded, onToggle, onAction, account, technicalSup
           {documents.length > 0 && <div className="sales-document-list"><strong>Uploaded document metadata</strong>{documents.map(document => <span key={document.id}><b>{document.fileName || document.originalName}</b><small>{document.mimeType || document.mediaType || 'File'} · {Math.ceil(Number(document.sizeBytes || 0) / 1024)} KB</small></span>)}</div>}
           {rfq.quotation && <RepresentativeQuotationSummary rfq={rfq} />}
           {rfq.acceptance && <RepresentativeAcceptanceSummary rfq={rfq} />}
-          <div className="expeditor-products">{(rfq.items || []).map(item => <span key={item.lineId}><img src={item.image} alt="" /><strong>{item.code}</strong><small>{item.name}</small><b>× {item.quantity}</b></span>)}</div>
+          <section className="configured-unit-list" aria-label="Configured RFQ units"><h3>Configured unit details</h3>{(rfq.items || []).map(item => <ConfiguredUnitDetails key={item.lineId} unit={item} context="RFQ" extra={{ application: item.application || rfq.application, customerRequirements: item.customerRequirements }} />)}</section>
           {technicalSupportActions && <RepresentativeTechnicalSupport rfq={rfq} account={account} actions={technicalSupportActions} onChanged={onRecordsChanged} canQuote={canQuote} onQuote={() => { setNextAction('quote'); window.setTimeout(() => document.getElementById(quoteActionId)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }} />}
           {actions.length && (!canQuote || nextAction === 'quote')
             ? <div id={quoteActionId}><WorkflowActionPanel record={rfq} actions={canQuote ? actions.filter(action => action.action === 'mark_quoted') : actions} onAction={onAction} title={canQuote ? 'Quote Client' : 'Start RFQ Review'} description="" preferredAction={canQuote ? 'mark_quoted' : 'start_rep_review'} /></div>

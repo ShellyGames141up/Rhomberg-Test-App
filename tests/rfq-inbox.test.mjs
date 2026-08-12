@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   filterRepresentativeRfqs,
   REPRESENTATIVE_RFQ_GROUPS,
@@ -83,3 +84,5 @@ assert.deepEqual(
 );
 
 console.log('Representative RFQ inbox grouping, priority, search and age tests passed.');
+assert.ok(readFileSync('src/components/SalesRepresentativeDashboard.jsx', 'utf8').includes('ConfiguredUnitDetails'));
+assert.ok(readFileSync('src/components/ConfiguredUnitDetails.jsx', 'utf8').includes('Open unit details'));
