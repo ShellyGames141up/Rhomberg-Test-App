@@ -52,6 +52,7 @@ const secretPatterns = [
   ['GitHub access token', /\bgh[pousr]_[A-Za-z0-9]{30,}\b/],
   ['OpenAI-style secret key', /\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}\b/],
   ['credential-bearing database URL', /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^:\s/]+:[^@\s/]+@/i],
+  ['real Rhomberg staff email address', /\b[A-Z0-9._%+-]+@rhom\.co\.za\b/i],
 ];
 for (const file of [...new Set(textFiles)]) {
   const source = read(file);
@@ -66,6 +67,9 @@ for (const protectedPath of ['.env', '.env.*', 'private/', 'dist-production/']) 
 }
 assert.ok(DEMO_LOGINS.length >= 8, 'the preview must retain fabricated role logins');
 assert.ok(DEMO_LOGINS.every(login => /\.(?:invalid|test)$/i.test(login.email)), 'every mock login must use a reserved test domain');
+const employeeAccountSource = read('src/domain/employeeAccounts.js');
+assert.match(employeeAccountSource, /crypto\.getRandomValues\(bytes\)/, 'temporary passwords must use a cryptographically secure random source');
+assert.doesNotMatch(employeeAccountSource.match(/export const generateTemporaryPassword[\s\S]*?\n};/)?.[0] || '', /Math\.random/, 'temporary password generation must never fall back to Math.random');
 
 const catalogueSource = read('src/data/catalogue.js');
 const seedSource = read('src/services/mock/seedData.js');

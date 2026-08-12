@@ -79,6 +79,11 @@ assert.ok((await services.administration.getUserLoginHistory(created.account.id)
 const reset = await services.administration.resetUserLogin(created.account.id, { reason: 'Approved fabricated login reset test.', verification: ADMINISTRATOR_ACCOUNT.password });
 assert.equal(reset.displayOnce, true);
 assert.ok(reset.temporaryPassword);
+const postResetAudit = await services.administration.getUserAudit(created.account.id);
+const auditPayload = JSON.stringify(postResetAudit);
+assert.equal(auditPayload.includes(created.temporaryPassword), false, 'initial temporary passwords must never enter audit history');
+assert.equal(auditPayload.includes(reset.temporaryPassword), false, 'reset temporary passwords must never enter audit history');
+assert.equal(JSON.stringify(await services.administration.getOverview()).includes(reset.temporaryPassword), false, 'temporary passwords must not persist in administrator directory responses');
 await services.administration.archiveEmployee(created.account.id, { lastWorkingDate: '2026-08-31', replacementEmployeeId: '', reason: 'Approved fabricated employee offboarding test.', verification: ADMINISTRATOR_ACCOUNT.password });
 assert.equal((await services.administration.getOverview()).users.find(user => user.id === created.account.id).status, 'archived');
 await assert.rejects(() => services.auth.signIn({ email: 'lab.amina', password: reset.temporaryPassword, realm: 'internal' }), error => error instanceof ServiceError && error.status === 401);

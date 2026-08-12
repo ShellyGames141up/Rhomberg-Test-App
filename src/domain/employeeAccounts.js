@@ -101,9 +101,11 @@ export const validateEmployeeProfileImage = file => {
 };
 
 export const generateTemporaryPassword = () => {
+  if (!globalThis.crypto?.getRandomValues) {
+    throw new Error('Secure password generation is unavailable. Use an approved backend identity service.');
+  }
   const bytes = new Uint8Array(18);
-  globalThis.crypto?.getRandomValues?.(bytes);
-  if (!bytes.some(Boolean)) bytes.forEach((_, index) => { bytes[index] = Math.floor(Math.random() * 256); });
+  globalThis.crypto.getRandomValues(bytes);
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
   return [...bytes].map(value => alphabet[value % alphabet.length]).join('');
 };
