@@ -77,6 +77,8 @@
   --type-status:.875rem;
   --type-table:.875rem;
   --type-navigation:.875rem;
+  --mobile-nav-height:76px;
+  --mobile-content-clearance:24px;
 
   /* Documentation-only breakpoint values; media queries use the same pixel values. */
   --breakpoint-small-mobile:360px;
@@ -1987,6 +1989,16 @@ html,body,#root{max-width:100%;overflow-x:clip}
 
 @media(max-width:320px){
   .app-screen :where(.primary-button,.secondary-button){padding-inline:10px}
+}
+
+/* Mobile navigation safe-area contract */
+@media(max-width:1023px){
+  .app-main{padding-bottom:calc(var(--mobile-nav-height) + var(--mobile-content-clearance) + env(safe-area-inset-bottom))}
+  .bottom-nav{min-height:calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));height:auto;padding-bottom:max(7px,env(safe-area-inset-bottom))}
+  .settings-save-bar,.representative-order-submit{bottom:calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 8px)}
+  .toast{bottom:calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 14px)}
+  .app-screen :where(.sticky-action-bar,.sticky-actions,.form-actions.is-sticky){bottom:calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));scroll-margin-bottom:calc(var(--mobile-nav-height) + 24px)}
+  .app-screen :where(input,select,textarea,button,[type="file"]){scroll-margin-bottom:calc(var(--mobile-nav-height) + 32px + env(safe-area-inset-bottom))}
 }
 
 @media(forced-colors:active){

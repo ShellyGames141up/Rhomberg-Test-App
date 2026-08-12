@@ -104,6 +104,9 @@ for (const marker of [
   '@media(forced-colors:active)',
   '/* Final responsive foundation */',
   'overflow-wrap:anywhere',
+  '/* Mobile navigation safe-area contract */',
+  '--mobile-nav-height:76px',
+  'env(safe-area-inset-bottom)',
 ]) assert.ok(css.includes(marker), `responsive/accessibility CSS must include ${marker}`);
 
 for (const component of [
