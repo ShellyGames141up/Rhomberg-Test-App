@@ -37,6 +37,7 @@ const enquirySource = readFileSync('src/components/Enquiry.jsx', 'utf8');
 assert.equal(enquirySource.includes('Is this an emergency request?'), false);
 assert.equal(enquirySource.includes('setEmergency'), false);
 assert.equal(enquirySource.includes('emergency,'), false);
+assert.ok(readFileSync('styles.css', 'utf8').includes('/* Legacy customer emergency controls stay retired */'));
 const loaderSource = readFileSync('src/components/RepresentativeOrderLoader.jsx', 'utf8');
 assert.ok(loaderSource.includes('Load Customer Order'));
 assert.ok(loaderSource.includes('Internal priority'));

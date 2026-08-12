@@ -1998,6 +1998,9 @@ html,body,#root{max-width:100%;overflow-x:clip}
 .timeline-event>span{min-width:0;padding-bottom:2px}
 .timeline-event p{margin-top:4px}
 
+/* Legacy customer emergency controls stay retired */
+.enquiry-screen :where(.compact-choice button.emergency,.emergency-fee){display:none!important}
+
 /* Shared configured-unit snapshot */
 .configured-unit-list{display:grid;gap:9px;margin-block:14px}.configured-unit-list>h3{margin:0 0 3px}
 .configured-unit-details{overflow:hidden;border:1px solid var(--border-default);border-radius:13px;background:var(--background-surface);color:var(--text-primary)}
