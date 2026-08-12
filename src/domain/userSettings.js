@@ -15,6 +15,8 @@ export const HAPTIC_CATEGORIES = Object.freeze([
   'buttons', 'success', 'warning', 'error', 'importantWorkflow',
 ]);
 
+export const showsDefaultLandingPageForRole = role => role !== USER_ROLES.SALES_REPRESENTATIVE;
+
 export const CUSTOMER_NOTIFICATION_GROUPS = Object.freeze([
   { id: 'rfqs', label: 'RFQs', items: ['RFQ Submitted', 'RFQ Under Review', 'Technical Review Required', 'RFQ Updates'] },
   { id: 'quotations', label: 'Quotations', items: ['Quotation Available', 'Amended Quotation', 'Quotation Expiring', 'PO Required'] },

@@ -6,6 +6,7 @@ import {
   notificationGroupsForRole,
   normaliseUserSettings,
   settingsSectionsForRole,
+  showsDefaultLandingPageForRole,
   tutorialDraftForStep,
   TUTORIAL_STEPS,
 } from '../src/domain/userSettings.js';
@@ -86,6 +87,8 @@ for (const role of Object.values(USER_ROLES)) {
 }
 assert.equal(settingsSectionsForRole(USER_ROLES.CUSTOMER).includes('privacy'), true);
 assert.equal(settingsSectionsForRole(USER_ROLES.DISPATCH).includes('privacy'), false);
+assert.equal(showsDefaultLandingPageForRole(USER_ROLES.SALES_REPRESENTATIVE), false, 'representatives must use their role-defined landing page');
+assert.equal(showsDefaultLandingPageForRole(USER_ROLES.CUSTOMER), true, 'other roles may retain their approved landing-page preference');
 
 const defaults = createDefaultUserSettings();
 assert.deepEqual(defaults.appearance.mode, 'light', 'Light Mode must be the default for a user without a saved preference');

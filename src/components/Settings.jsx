@@ -8,6 +8,7 @@ import {
   SOUND_CATEGORIES,
   HAPTIC_CATEGORIES,
   TUTORIALS,
+  showsDefaultLandingPageForRole,
 } from '../domain/userSettings.js';
 import { CredentialChangePanel } from './Account.jsx';
 
@@ -61,7 +62,10 @@ export function Settings({
   const save = async () => {
     setBusy(true); setError(''); setMessage('');
     try {
-      const saved = await onSave(draft);
+      const candidate = showsDefaultLandingPageForRole(account.role)
+        ? draft
+        : { ...draft, app: { ...draft.app, defaultLandingPage: 'role_default' } };
+      const saved = await onSave(candidate);
       if (section === 'notifications') await onSaveNotifications(notificationDraft);
       setDraft(normaliseUserSettings(saved));
       setMessage('Settings saved for this account.');
@@ -83,7 +87,7 @@ export function Settings({
       <div className="settings-content">
         {account.forcePasswordChange && <div className="operations-message is-warning" role="alert"><strong>First login security step required.</strong> Change the temporary password before continuing. Confirm your profile, branch, department and notification preferences with your Administrator if anything is incorrect.</div>}
         {section === 'home' && <SettingsHome sections={sections.filter(id => id !== 'home')} onOpen={setSection} />}
-        {section === 'app' && <AppSettings value={draft.app} onChange={values => patch('app', values)} onResetTutorial={isCustomerAccount(account) ? () => onReplayTutorial('reset') : null} />}
+        {section === 'app' && <AppSettings value={draft.app} onChange={values => patch('app', values)} showDefaultLandingPage={showsDefaultLandingPageForRole(account.role)} onResetTutorial={isCustomerAccount(account) ? () => onReplayTutorial('reset') : null} />}
         {section === 'sounds' && <SoundSettings value={draft} onPatch={patch} onToggleMap={toggleMap} onTestSound={() => onTestSound(draft)} onTestHaptic={() => onTestHaptic(draft)} />}
         {section === 'notifications' && <NotificationSettings groups={notificationGroups} settings={draft} onSettings={setDraft} value={notificationDraft} onChange={setNotificationDraft} serviceMode={serviceMode} />}
         {section === 'appearance' && <AppearanceSettings value={draft.appearance} onChange={values => patch('appearance', values)} />}
@@ -106,8 +110,8 @@ function SettingToggle({ label, help, checked, disabled = false, onChange }) {
   return <label className="setting-toggle"><span><strong>{label}</strong>{help && <small>{help}</small>}</span><input type="checkbox" checked={Boolean(checked)} disabled={disabled} onChange={event => onChange(event.target.checked)} /></label>;
 }
 
-function AppSettings({ value, onChange, onResetTutorial }) {
-  return <SettingsPanel title="Application behaviour"><label className="settings-field"><span>Default landing page</span><select value={value.defaultLandingPage} onChange={event => onChange({ defaultLandingPage: event.target.value })}><option value="role_default">Role default</option><option value="notifications">Notifications</option><option value="account">Profile</option></select></label><SettingToggle label="Remember last section" checked={value.rememberLastSection} onChange={checked => onChange({ rememberLastSection: checked })} /><SettingToggle label="Confirm important submissions" help="Business validation and authorisation always remain enforced." checked={value.confirmImportantSubmissions} onChange={checked => onChange({ confirmImportantSubmissions: checked })} /><SettingToggle label="Open downloaded documents automatically" checked={value.automaticDocumentOpening} onChange={checked => onChange({ automaticDocumentOpening: checked })} /><label className="settings-field"><span>Language</span><select value={value.language} onChange={event => onChange({ language: event.target.value })}><option value="en-ZA">English (South Africa)</option></select><small>Additional languages require future approved translations.</small></label><div className="settings-inline-actions">{onResetTutorial && <button type="button" className="secondary-button" onClick={onResetTutorial}>Reset tutorial progress</button>}<button type="button" className="secondary-button" disabled>Clear temporary app data through service</button></div><p className="settings-note">Download locations are controlled by your browser or installed application. Settings cannot bypass workflow rules.</p></SettingsPanel>;
+function AppSettings({ value, onChange, showDefaultLandingPage, onResetTutorial }) {
+  return <SettingsPanel title="Application behaviour">{showDefaultLandingPage && <label className="settings-field"><span>Default landing page</span><select value={value.defaultLandingPage} onChange={event => onChange({ defaultLandingPage: event.target.value })}><option value="role_default">Role default</option><option value="notifications">Notifications</option><option value="account">Profile</option></select></label>}<SettingToggle label="Remember last section" checked={value.rememberLastSection} onChange={checked => onChange({ rememberLastSection: checked })} /><SettingToggle label="Confirm important submissions" help="Business validation and authorisation always remain enforced." checked={value.confirmImportantSubmissions} onChange={checked => onChange({ confirmImportantSubmissions: checked })} /><SettingToggle label="Open downloaded documents automatically" checked={value.automaticDocumentOpening} onChange={checked => onChange({ automaticDocumentOpening: checked })} /><label className="settings-field"><span>Language</span><select value={value.language} onChange={event => onChange({ language: event.target.value })}><option value="en-ZA">English (South Africa)</option></select><small>Additional languages require future approved translations.</small></label><div className="settings-inline-actions">{onResetTutorial && <button type="button" className="secondary-button" onClick={onResetTutorial}>Reset tutorial progress</button>}<button type="button" className="secondary-button" disabled>Clear temporary app data through service</button></div><p className="settings-note">Download locations are controlled by your browser or installed application. Settings cannot bypass workflow rules.</p></SettingsPanel>;
 }
 
 function SoundSettings({ value, onPatch, onToggleMap, onTestSound, onTestHaptic }) {
