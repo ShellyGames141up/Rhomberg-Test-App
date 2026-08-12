@@ -77,6 +77,10 @@ All signed-in roles receive only the notification rows produced for their existi
 
 The table is explanatory. `src/services/contracts.js`, service scoping and workflow guards are canonical. A role never grants cross-company access by itself.
 
+## Unit-detail and commercial-field boundaries
+
+Sales, Planning, Expediting, Laboratory, Quality, Dispatch, Management and Administration reuse the shared expandable unit-detail view. Its protected-field policy removes private pricing, audit, staff-only and internal metadata before rendering. The internal Sales Order Number is available only in authorised Planning/management contexts and is never included in customer projections. Management commercial values additionally require the explicit protected-pricing permission.
+
 ## Administrator workspace and Executive Demo
 
 The Administrator desktop workspace is opened by `administer_users`. Mutations then require separate capabilities for customer companies, customer contacts, internal staff, roles/permissions, notification preferences, catalogue data and approved record corrections. An Administrator account may carry only a subset; the role name alone does not grant a mutation. Components never perform browser-storage writes. See [ADMINISTRATOR_MANAGEMENT.md](ADMINISTRATOR_MANAGEMENT.md).

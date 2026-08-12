@@ -6,6 +6,8 @@ New local accounts start as `pending_activation`. A temporary password is displa
 
 The preview uses fabricated browser-only accounts and is not production authentication.
 
+All normal Customer Mobile, Customer Desktop, Representative/Expeditor Mobile and Internal Desktop entries follow the same order: Rhomberg Connect splash, then sign-in. They never redirect through Preview Centre. The application route accepts the appropriate authorised customer or internal identity and derives the first workspace from the server-verified role.
+
 ## Separate realms
 
 Customer and internal staff authentication are distinct realms with different login screens, route sets and role populations. A valid account from one realm cannot sign in through the other. Shared implementation is acceptable only when the session retains a server-verified realm and every route enforces it.
@@ -20,6 +22,8 @@ Customer and internal staff authentication are distinct realms with different lo
 6. A confirmation notification is queued without echoing the new credential.
 
 Mock mode simulates delivery and may show a clearly labelled development code. Production builds must exclude demo accounts and development codes. Passwords require an approved modern hash, strength controls, breach screening, reset safeguards, suspicious-activity monitoring and secure cookies. Logs must never contain credentials or verification codes.
+
+Temporary-password generation fails closed if a cryptographically secure random source is unavailable. It must never fall back to `Math.random`. High-risk identity, permission and suspension changes require confirmation, reason evidence and immutable audit events.
 
 ## Executive Demo role switching
 

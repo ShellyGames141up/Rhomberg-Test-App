@@ -53,6 +53,77 @@ The normal **Rhomberg Connect Application** link opens the shared splash and sig
 - Current `main` scope: representative-loaded customer orders, controlled Laboratory calibration and RFQ Technical Support are integrated in mock mode
 - Current verification: 90 React source files compile; final test and preview-build results are recorded at phase completion
 
+## Final UI/UX Delivery Ledger — 62 Steps
+
+This ledger records the complete final review specification. Steps 1–59 are implemented and committed individually. Steps 60–62 are the final manual review, completion report and release-verification checkpoint and are updated when their evidence is complete.
+
+| Step | Delivered checkpoint | Status |
+| ---: | --- | :---: |
+| 1 | Global default theme | Complete |
+| 2 | Complete responsive UI audit | Complete |
+| 3 | Mobile bottom navigation | Complete |
+| 4 | Customer Settings — Sounds & Vibration | Complete |
+| 5 | Customer Settings — Security | Complete |
+| 6 | Customer Home — lead time | Complete |
+| 7 | Customer Home — recommended cards | Complete |
+| 8 | Customer product details | Complete |
+| 9 | Customer product configuration | Complete |
+| 10 | RFQ selected-unit quantity | Complete |
+| 11 | RFQ submission success modal | Complete |
+| 12 | Customer order timeline | Complete |
+| 13 | Customer catalogue | Complete |
+| 14 | Representative RFQ details | Complete |
+| 15 | Representative unit details | Complete |
+| 16 | Remove customer emergency data | Complete |
+| 17 | Client Visit dashboard readability | Complete |
+| 18 | Client Visit scheduling | Complete |
+| 19 | Client Visit customer cards | Complete |
+| 20 | Representative Load Customer Order | Complete |
+| 21 | Representative-loaded order — existing or new client | Complete |
+| 22 | Representative Settings | Complete |
+| 23 | Expeditor unit details | Complete |
+| 24 | Expeditor hand-off banner cleanup | Complete |
+| 25 | Expeditor update history | Complete |
+| 26 | Expeditor progress form | Complete |
+| 27 | Management export | Complete |
+| 28 | Executive/Owner responsiveness | Complete |
+| 29 | Technical Support filters | Complete |
+| 30 | Internal desktop Clients page | Complete |
+| 31 | Planning queue | Complete |
+| 32 | Planning unit details | Complete |
+| 33 | Planning form cleanup | Complete |
+| 34 | Sales Order Number | Complete |
+| 35 | Dispatch queue | Complete |
+| 36 | Dispatch unit details | Complete |
+| 37 | Common internal unit-detail component | Complete |
+| 38 | Laboratory demo-login cleanup | Complete |
+| 39 | Normal application entry flow | Complete |
+| 40 | Remove Preview links from normal app UI | Complete |
+| 41 | Preview Centre | Complete |
+| 42 | Login screen | Complete |
+| 43 | Real internal login identifiers | Complete |
+| 44 | Password security | Complete |
+| 45 | README login documentation | Complete |
+| 46 | README Preview Centre instructions | Complete |
+| 47 | Remove Preview Centre from normal app | Complete |
+| 48 | Executive dashboard | Complete |
+| 49 | Global information-banner cleanup | Complete |
+| 50 | Global language cleanup | Complete |
+| 51 | Text readability | Complete |
+| 52 | Table responsiveness | Complete |
+| 53 | Form responsiveness | Complete |
+| 54 | Sticky action bars | Complete |
+| 55 | Preview badges | Complete |
+| 56 | Automated UI testing | Complete |
+| 57 | Visual-regression framework | Complete |
+| 58 | Build and routing verification | Complete |
+| 59 | Documentation | Complete |
+| 60 | Final manual review | In final review |
+| 61 | Final report | Pending final evidence |
+| 62 | Consolidated release verification and final push | Pending final evidence |
+
+The detailed operating, access, responsive-layout and preview rules are maintained in `docs/`. Git history preserves the separate pushed checkpoint for every completed step.
+
 ## Current Updates
 
 ### Final workflow and interface refinement — Steps 20–27

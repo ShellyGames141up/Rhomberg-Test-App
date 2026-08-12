@@ -24,6 +24,8 @@ The Preview Centre is a separate, public demonstration environment for authorise
 
 Normal users open the Application link in README. That route presents the Rhomberg Connect splash and sign-in screen directly and contains no navigation back to the Preview Centre.
 
+Preview builds retain a small **DEMO PREVIEW** badge and an explicit return path. The normal application splash, sign-in and authenticated shell render no preview badge, banner, caption or Preview Centre link. Build and routing tests enforce this separation.
+
 ## Safety boundary
 
 - Use fabricated credentials and records only.
@@ -31,3 +33,4 @@ Normal users open the Application link in README. That route presents the Rhombe
 - Browser-local changes do not synchronise across devices.
 - Mock email, push, files and audit persistence are demonstrations only.
 - Production identity, API, database and private document storage are not connected.
+- Preview screenshots are reviewed at the supported responsive widths, but the Preview Centre is never a substitute for production acceptance testing.

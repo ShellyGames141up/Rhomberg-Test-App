@@ -31,3 +31,4 @@ await import('./user-experience.test.mjs');
 await import('./ui-screen-matrix.test.mjs');
 await import('./visual-regression.test.mjs');
 await import('./build-routing.test.mjs');
+await import('./documentation-coverage.test.mjs');

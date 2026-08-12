@@ -52,3 +52,7 @@ Customers can view and download only the current customer-visible quotation and 
 ## Production enforcement
 
 `POST /representatives/orders` must perform permission, company, contact, representative, product, document, duplicate and idempotency validation on the server in one transaction. Browser navigation and validation are usability controls only. See [API_CONTRACT.md](API_CONTRACT.md), [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) and [DOCUMENT_ACCESS_MATRIX.md](DOCUMENT_ACCESS_MATRIX.md).
+
+## Responsive Representative experience
+
+Representative Mobile includes the assigned RFQ inbox and detail, quotation workflow, Technical Support hand-off, assigned Clients, visit scheduling, Load Customer Order and user Settings. RFQ and order records expose complete authorised configured-unit detail through the common internal component. Customer urgency controls remain absent, while internal priority stays permission-controlled. Forms stack on compact screens and their primary action remains clear of bottom navigation.

@@ -25,3 +25,9 @@ Never keep paired fields side by side when either label, input value, help text 
 Primary actions for RFQ submission, product configuration, order creation, Planning, Expediting, Dispatch and settings use the shared `sticky-action-bar` contract. On tablet and mobile, the action surface clears the role navigation and the device safe area. Button text may wrap and controls retain a 44 px minimum target. Settings actions return to normal document flow on compact phones so they never conceal the final fields.
 
 Do not add a fixed bottom action without applying the shared clearance variable. If a screen contains several record-level action groups, keep those groups in normal flow; only the currently active workflow action may become sticky.
+
+## Required review widths and themes
+
+Review at 360, 390, 412, 768, 1024, 1366 and 1920 px. Page-level horizontal overflow is prohibited; only explicitly contained data regions may scroll. Light is the initial mode and Dark is a manual user choice. Both modes use semantic surfaces and text tokens, retain visible focus, keep complete button labels and avoid navigation/action overlap.
+
+Use `npm run test:visual` where Playwright is available. The visual runner and approved horizontal-scroll exceptions are documented in `VISUAL_REGRESSION.md`.
