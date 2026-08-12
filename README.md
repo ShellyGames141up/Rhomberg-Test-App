@@ -55,7 +55,7 @@ The normal **Rhomberg Connect Application** link opens the shared splash and sig
 
 ## Final UI/UX Delivery Ledger — 62 Steps
 
-This ledger records the complete final review specification. Steps 1–60 are implemented and committed individually. Steps 61–62 are the completion report and consolidated release-verification checkpoint and are updated when their evidence is complete.
+This ledger records the complete final review specification. Steps 1–61 are implemented and committed individually. Step 62 is the consolidated release-verification checkpoint and is updated when its final evidence is complete.
 
 | Step | Delivered checkpoint | Status |
 | ---: | --- | :---: |
@@ -119,10 +119,12 @@ This ledger records the complete final review specification. Steps 1–60 are im
 | 58 | Build and routing verification | Complete |
 | 59 | Documentation | Complete |
 | 60 | Final manual review | Complete |
-| 61 | Final report | Pending final evidence |
+| 61 | Final report | Complete |
 | 62 | Consolidated release verification and final push | Pending final evidence |
 
 The detailed operating, access, responsive-layout and preview rules are maintained in `docs/`. Git history preserves the separate pushed checkpoint for every completed step.
+
+See `docs/FINAL_COMPLETION_REPORT.md` for the detailed final UI/UX report and `docs/FINAL_MANUAL_UI_REVIEW.md` for the role/theme inspection evidence.
 
 ## Current Updates
 
