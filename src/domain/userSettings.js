@@ -73,7 +73,7 @@ export const createDefaultUserSettings = () => ({
     categories: enabledMap(HAPTIC_CATEGORIES),
   },
   appearance: {
-    mode: 'system',
+    mode: 'light',
     increasedText: false,
     highContrast: false,
     reducedTransparency: false,

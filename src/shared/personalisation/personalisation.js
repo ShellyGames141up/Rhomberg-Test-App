@@ -52,7 +52,7 @@ export const createDefaultCustomerPersonalisation = () => ({
   themePreset: 'rhomberg-default',
   fontSize: 'medium',
   density: 'standard',
-  appearanceMode: 'system',
+  appearanceMode: 'light',
   notificationPreferences: { ...DEFAULT_NOTIFICATION_PREFERENCES },
   profileImage: null,
   updatedAt: '',

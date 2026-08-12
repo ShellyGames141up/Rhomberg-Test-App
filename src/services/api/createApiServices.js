@@ -581,7 +581,7 @@ export function createApiServices(config = {}) {
 
   const preferences = {
     async getTheme() {
-      return preferenceStore.get(THEME_PREFERENCE_KEY, null) || (globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      return preferenceStore.get(THEME_PREFERENCE_KEY, null) || 'light';
     },
     async setTheme(theme) {
       const safeTheme = theme === 'dark' ? 'dark' : 'light';

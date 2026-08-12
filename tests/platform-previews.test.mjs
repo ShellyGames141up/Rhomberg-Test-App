@@ -195,7 +195,7 @@ assert.equal(reset.setupCompleted, false);
 assert.equal(reset.themePreset, 'rhomberg-default');
 assert.equal(reset.fontSize, 'medium');
 assert.equal(reset.density, 'standard');
-assert.equal(reset.appearanceMode, 'system');
+assert.equal(reset.appearanceMode, 'light');
 
 const personalisationRecords = JSON.parse(storage.getItem(STORE_KEYS.personalisation));
 assert.deepEqual(Object.keys(personalisationRecords), [DEMO_ACCOUNT.id], 'preferences must remain isolated by authorised account');

@@ -5807,7 +5807,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
 
   const preferences = {
     async getTheme() {
-      return store.get(STORE_KEYS.theme, null) || (globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      return store.get(STORE_KEYS.theme, null) || 'light';
     },
 
     async setTheme(theme) {

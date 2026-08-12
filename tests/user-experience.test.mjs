@@ -9,6 +9,7 @@ import {
   tutorialDraftForStep,
   TUTORIAL_STEPS,
 } from '../src/domain/userSettings.js';
+
 import { playUiSound, triggerHaptic } from '../src/shared/experience/feedback.js';
 import { createMockServices } from '../src/services/mock/createMockServices.js';
 import { USER_ROLES } from '../src/services/contracts.js';
@@ -67,7 +68,7 @@ assert.equal(settingsSectionsForRole(USER_ROLES.CUSTOMER).includes('privacy'), t
 assert.equal(settingsSectionsForRole(USER_ROLES.DISPATCH).includes('privacy'), false);
 
 const defaults = createDefaultUserSettings();
-assert.deepEqual(defaults.appearance.mode, 'system');
+assert.deepEqual(defaults.appearance.mode, 'light', 'Light Mode must be the default for a user without a saved preference');
 assert.equal(defaults.sounds.enabled, true);
 assert.ok(defaults.sounds.volume >= 0.45, 'default feedback should be clearly audible while remaining user-adjustable');
 assert.equal(defaults.haptics.enabled, true);
@@ -95,7 +96,7 @@ await services.auth.signIn({ email: 'cape.demo@client.test', password: 'Demo123!
 assert.equal((await services.userSettings.get()).onboarding.tutorialProgress, 7, 'settings must persist through the service layer');
 await services.auth.signOut();
 await services.auth.signIn({ email: 'dispatch.workflow@example.invalid', password: 'Dispatch123!' });
-assert.equal((await services.userSettings.get()).appearance.mode, 'system', 'settings must remain account-isolated');
+assert.equal((await services.userSettings.get()).appearance.mode, 'light', 'settings must remain account-isolated and default new users to Light Mode');
 await services.userSettings.save({ ...defaults, haptics: { ...defaults.haptics, enabled: false } });
 await services.auth.signOut();
 await services.auth.signIn({ email: 'administrator.workflow@example.invalid', password: 'Admin123!' });
