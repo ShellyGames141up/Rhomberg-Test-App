@@ -35,7 +35,11 @@ assert.equal(unit.labWork.status, 'calculation_review_required');
 assert.equal(unit.labWork.worksheet.locked, true);
 
 await signIn(LAB_MANAGER_ACCOUNT);
-await assert.rejects(() => services.laboratory.saveWorksheet(order.id, unit.id, {}), error => error instanceof ServiceError && error.status === 403);
+await assert.rejects(
+  () => services.laboratory.saveWorksheet(order.id, unit.id, {}),
+  error => error instanceof ServiceError && error.status === 409 && error.code === 'LAB_WORKSHEET_STAGE_INVALID',
+  'calculated raw data must remain immutable even for Laboratory management',
+);
 await services.laboratory.approveFormulaValidation(order.id, unit.id, { confirmed: true, reason: 'Fabricated management review evidence.' });
 await signIn(LAB_ACCOUNT);
 await services.laboratory.completeCalibration(order.id, unit.id, { technicianConfirmed: true, resultSummary: 'Fabricated completed result' });
