@@ -146,6 +146,8 @@ const expeditingFieldsSource = readFileSync('src/components/ExpeditingFields.jsx
 for (const fieldGroup of ['expediting-communication-grid', 'expediting-schedule-grid', 'expediting-reference-grid']) assert.ok(expeditingFieldsSource.includes(fieldGroup));
 assert.ok(css.includes('.expediting-communication-grid,.expediting-schedule-grid,.expediting-reference-grid{grid-template-columns:1fr}'), 'Expeditor progress fields must stack cleanly on mobile');
 assert.ok(css.includes('bottom:calc(var(--mobile-nav-height) + env(safe-area-inset-bottom,0px) + 6px)'), 'Expeditor save action must clear bottom navigation and device safe areas');
+assert.ok(css.includes('container:dispatch-queue/inline-size'), 'Dispatch must respond to its available workspace width');
+assert.ok(css.includes('@container dispatch-queue (max-width:1260px)'), 'Dispatch must switch to labelled cards before its desktop queue can clip');
 const technicalSource = readFileSync('src/components/TechnicalSupport.jsx', 'utf8');
 assert.ok(technicalSource.includes('technical-filterbar'));
 assert.ok(css.includes('.technical-filterbar label>span{display:block;white-space:nowrap;word-break:normal;writing-mode:horizontal-tb'), 'Technical filter labels must never break vertically');
