@@ -661,6 +661,26 @@ body,.app-shell,.app-header,.bottom-nav,.auth-card,
   :where(.audit-list,.archive-list,.sales-rfq-list,.technical-queue,.operations-queue){grid-template-columns:1fr}
 }
 
+/* Reusable responsive form grid: two columns, adaptive tablet, one-column mobile. */
+:where(
+  .responsive-form-grid,.form-grid,.form-two-col,.administrator-form-grid,
+  .planning-form-grid-three,.dispatch-form-grid,.visit-form-grid,
+  .technical-form-grid,.credential-change-form,.management-report-scope
+){min-width:0}
+:where(
+  .responsive-form-grid,.form-grid,.form-two-col,.administrator-form-grid,
+  .dispatch-form-grid,.visit-form-grid,.technical-form-grid,.credential-change-form
+){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+:where(.planning-form-grid-three,.management-report-scope){display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+:where(.responsive-form-grid,.form-grid,.form-two-col,.administrator-form-grid,.planning-form-grid-three,.dispatch-form-grid,.visit-form-grid,.technical-form-grid,.credential-change-form,.management-report-scope)>:where(.wide,[data-span="full"]){grid-column:1/-1}
+@media(max-width:1024px){
+  :where(.responsive-form-grid,.form-grid,.form-two-col,.administrator-form-grid,.planning-form-grid-three,.dispatch-form-grid,.visit-form-grid,.technical-form-grid,.credential-change-form,.management-report-scope){grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))}
+}
+@media(max-width:600px){
+  :where(.responsive-form-grid,.form-grid,.form-two-col,.administrator-form-grid,.planning-form-grid-three,.dispatch-form-grid,.visit-form-grid,.technical-form-grid,.credential-change-form,.management-report-scope){grid-template-columns:minmax(0,1fr)!important}
+  :where(.responsive-form-grid,.form-grid,.form-two-col,.administrator-form-grid,.planning-form-grid-three,.dispatch-form-grid,.visit-form-grid,.technical-form-grid,.credential-change-form,.management-report-scope)>*{grid-column:auto!important;min-width:0}
+}
+
 /* Version 3.2 - shared mobile and desktop Expediting workspace */
 .expediting-screen{min-height:calc(100dvh - 62px);padding-bottom:28px;background:var(--paper)}
 .expediting-hero{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(560px,.82fr);gap:30px;overflow:hidden;padding:38px 34px 30px;color:#fff;background:linear-gradient(132deg,#032b3f 0,#07556d 54%,#1190a0 100%)}

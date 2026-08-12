@@ -124,6 +124,7 @@ for (const marker of [
   '/* Product details use surface-safe text colours */',
   '.management-commercial-block,.management-performance-table,.notification-settings',
   '/* Reusable responsive data display: desktop table, tablet compression, mobile cards. */',
+  '/* Reusable responsive form grid: two columns, adaptive tablet, one-column mobile. */',
   ':root:not([data-theme="dark"]) .product-detail',
 ]) assert.ok(css.includes(marker), `responsive/accessibility CSS must include ${marker}`);
 
@@ -138,6 +139,10 @@ for (const breakpoint of ['@media(max-width:1024px)', '@media(max-width:767px)']
 for (const administratorCardLabel of ['content:"User"', 'content:"Branch / department"', 'content:"Role(s)"', 'content:"Actions"']) {
   assert.ok(css.includes(administratorCardLabel), `mobile Administrator cards must include ${administratorCardLabel}`);
 }
+for (const formGrid of ['.form-grid', '.administrator-form-grid', '.planning-form-grid-three', '.dispatch-form-grid', '.visit-form-grid', '.technical-form-grid', '.credential-change-form', '.management-report-scope']) {
+  assert.ok(css.includes(formGrid), `responsive form contract must cover ${formGrid}`);
+}
+assert.ok(css.includes('grid-template-columns:minmax(0,1fr)!important'), 'mobile forms must enforce one unsqueezed column');
 
 for (const component of [
   'Account.jsx',
