@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createMockServices } from '../src/services/mock/createMockServices.js';
-import { LAB_END_TO_END_ACCOUNT } from '../src/services/mock/seedData.js';
+import { LAB_MANAGER_ACCOUNT } from '../src/services/mock/seedData.js';
 import { PERMISSIONS } from '../src/services/contracts.js';
 import { PRESSURE_POINT_SEQUENCE } from '../src/domain/laboratoryCalibration.js';
 
@@ -13,7 +13,8 @@ class TestStorage {
 
 const services = createMockServices({ storage: new TestStorage(), now: () => new Date('2026-08-05T09:30:00.000Z') });
 await services.initialize();
-const session = await services.auth.signIn({ email: LAB_END_TO_END_ACCOUNT.email, password: LAB_END_TO_END_ACCOUNT.password });
+const session = await services.auth.signIn({ email: LAB_MANAGER_ACCOUNT.email, password: LAB_MANAGER_ACCOUNT.password });
+assert.equal(session.contact, 'Brinley', 'the existing Laboratory Manager login must support the complete authorised journey');
 assert.ok(session.permissions.includes(PERMISSIONS.ENTER_RAW_CALIBRATION_DATA), 'secondary technician roles must grant raw-data permission');
 assert.ok(session.permissions.includes(PERMISSIONS.APPROVE_CALCULATION_REVIEW), 'manager permissions must remain available');
 

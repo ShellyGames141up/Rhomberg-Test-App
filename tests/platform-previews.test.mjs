@@ -59,9 +59,11 @@ const serviceWorker = readFileSync(path.resolve('sw.js'), 'utf8');
 assert.ok(rootPage.includes('app.js?v=43'), 'Preview Centre must request the current application bundle');
 assert.ok(serviceWorker.includes("'./app.js?v=43'"), 'service worker must cache the same application bundle version');
 const readme = readFileSync(path.resolve('README.md'), 'utf8');
-for (const definition of PREVIEW_DEFINITIONS) {
-  assert.ok(readme.includes(`https://shellygames141up.github.io/Rhomberg-Test-App${definition.route}`), `README must launch ${definition.id}`);
-}
+for (const url of [
+  'https://shellygames141up.github.io/Rhomberg-Test-App/preview/customer-desktop/',
+  'https://shellygames141up.github.io/Rhomberg-Test-App/',
+]) assert.ok(readme.includes(url), `README must include the approved launch URL ${url}`);
+assert.equal((readme.match(/https:\/\/shellygames141up\.github\.io\/Rhomberg-Test-App/g) || []).length, 2, 'README must expose only the Application and Preview Centre launch links');
 const packageScripts = JSON.parse(readFileSync(path.resolve('package.json'), 'utf8')).scripts;
 for (const previewId of ['customer-desktop', 'customer-mobile', 'internal-mobile', 'internal-desktop', 'executive-demo']) {
   assert.ok(packageScripts[`dev:${previewId}`], `development command missing for ${previewId}`);
@@ -110,6 +112,9 @@ const storage = new TestStorage();
 const services = createMockServices({ storage, now: () => new Date('2026-07-27T09:00:00.000Z') });
 await services.initialize();
 const demoLogins = await services.auth.getDemoLogins();
+assert.equal(demoLogins.some(login => login.id === 'laboratory_end_to_end' || /end-to-end Laboratory demo/i.test(login.label)), false, 'normal Preview login must not include a fake end-to-end Laboratory user');
+const laboratoryManagerLogin = demoLogins.find(login => login.id === 'laboratory_manager');
+assert.ok(laboratoryManagerLogin, 'the existing Laboratory Manager login must remain available');
 assert.ok(filterDemoLoginsForPreview(demoLogins, customerMobile).every(login => login.role === USER_ROLES.CUSTOMER));
 assert.deepEqual(
   new Set(filterDemoLoginsForPreview(demoLogins, internalMobile).map(login => login.role)),

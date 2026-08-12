@@ -79,7 +79,7 @@ Opens the controlled customer, internal, mobile and executive demonstration choi
 - The controlled request covers assignment, review, routed information requests, append-only correspondence, recommendation and completion. Final quotation is blocked while review is active; only Sales Managers and Administrators have a reasoned audited override.
 - One active Technical Support cycle adds one 24-hour quotation allowance. The customer is notified when the RFQ moves to Technical and again when it returns to the representative, while internal questions, answers, calculations, notes and warnings remain protected.
 - Central notifications, immutable audit events, management metrics, future API contracts and PostgreSQL proposals are included. Email/push remain simulated and mock attachments remain metadata-only.
-- Open the [Internal Desktop preview](https://shellygames141up.github.io/Rhomberg-Test-App/preview/internal-desktop/) and use the Technical Advisor credentials below. See the [Technical Support workflow](docs/TECHNICAL_SUPPORT_WORKFLOW.md) and [RFQ workflow](docs/RFQ_WORKFLOW.md) for the complete controlled process.
+- Open the Internal Desktop experience from the Preview Centre and use the Technical Advisor credentials below. See the [Technical Support workflow](docs/TECHNICAL_SUPPORT_WORKFLOW.md) and [RFQ workflow](docs/RFQ_WORKFLOW.md) for the complete controlled process.
 
 ### Customer RFQs and representative-loaded orders
 

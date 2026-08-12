@@ -208,7 +208,6 @@ import {
   EXPEDITOR_ACCOUNT,
   EXTRA_DEMO_ACCOUNTS,
   LAB_ACCOUNT,
-  LAB_END_TO_END_ACCOUNT,
   LAB_MANAGER_ACCOUNT,
   LEGACY_STORE_KEYS,
   MANAGER_ACCOUNT,
@@ -1408,7 +1407,13 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     let accounts = store.get(STORE_KEYS.accounts, null);
     if (!accounts) accounts = store.get(LEGACY_STORE_KEYS.accounts, []);
     accounts = accounts
-      .filter(account => account.id !== 'staff-technical-manager-demo' && account.email?.toLowerCase() !== 'technical.manager@example.invalid')
+      .filter(account => ![
+        'staff-technical-manager-demo',
+        'staff-laboratory-end-to-end-preview',
+      ].includes(account.id) && ![
+        'technical.manager@example.invalid',
+        'laboratory.endtoend@example.invalid',
+      ].includes(account.email?.toLowerCase()))
       .map(normaliseAccount);
     for (const seed of [
       DEMO_ACCOUNT,
@@ -1416,7 +1421,6 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       PLANNING_ACCOUNT,
       EXPEDITOR_ACCOUNT,
       LAB_ACCOUNT,
-      LAB_END_TO_END_ACCOUNT,
       LAB_MANAGER_ACCOUNT,
       QA_ACCOUNT,
       QA_MANAGER_ACCOUNT,

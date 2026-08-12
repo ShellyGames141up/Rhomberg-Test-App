@@ -143,26 +143,9 @@ export const LAB_MANAGER_ACCOUNT = Object.freeze({
   role: 'laboratory_manager',
   labBranchId: 'cape_town',
   authorisedLabBranchIds: ['cape_town'],
-  labRoles: ['laboratory_manager', 'laboratory_temperature_technician', 'technical_signatory'],
+  labRoles: ['laboratory_manager', 'laboratory_technician', 'laboratory_temperature_technician', 'technical_signatory'],
   password: 'LabManager123!',
   createdAt: '2026-07-28T07:05:00.000Z',
-});
-
-export const LAB_END_TO_END_ACCOUNT = Object.freeze({
-  id: 'staff-laboratory-end-to-end-preview',
-  companyId: 'company-rhomberg',
-  company: 'Rhomberg Instruments',
-  contact: 'Laboratory End-to-End Demo',
-  email: 'laboratory.endtoend@example.invalid',
-  phone: 'Fabricated internal account',
-  area: 'National',
-  industry: 'Internal laboratory demonstration',
-  role: 'laboratory_manager',
-  labBranchId: 'cape_town',
-  authorisedLabBranchIds: ['cape_town', 'johannesburg'],
-  labRoles: ['laboratory_manager', 'laboratory_technician', 'laboratory_temperature_technician', 'technical_signatory'],
-  password: 'LabJourney123!',
-  createdAt: '2026-08-05T07:00:00.000Z',
 });
 
 export const QA_ACCOUNT = Object.freeze({
@@ -383,19 +366,10 @@ export const DEMO_LOGINS = Object.freeze([
     id: 'laboratory_manager',
     role: 'laboratory_manager',
     label: 'Use Laboratory Manager login',
-    description: 'Verify certificates and release Laboratory orders',
+    description: 'Operate Laboratory work and manage certificate release',
     avatar: 'L',
     email: LAB_MANAGER_ACCOUNT.email,
     password: LAB_MANAGER_ACCOUNT.password,
-  },
-  {
-    id: 'laboratory_end_to_end',
-    role: 'laboratory_manager',
-    label: 'Use end-to-end Laboratory demo',
-    description: 'Complete Pressure or Temperature calibration through signed certificate release',
-    avatar: 'L',
-    email: LAB_END_TO_END_ACCOUNT.email,
-    password: LAB_END_TO_END_ACCOUNT.password,
   },
   {
     id: 'quality_assurance',
