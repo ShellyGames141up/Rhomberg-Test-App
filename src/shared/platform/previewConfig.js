@@ -195,6 +195,10 @@ export const filterDemoLoginsForPreview = (logins, previewContext) => (
   (logins || []).filter(login => previewAllowsRole(previewContext, login.role))
 );
 
+export const previewNavigationAllowed = ({ publicPreview = false, preview } = {}) => (
+  Boolean(publicPreview && preview && !preview.unified && !preview.landing && !preview.unsupported)
+);
+
 export const previewUrl = (previewId, { origin = '', repositoryBase = '' } = {}) => {
   const definition = PREVIEW_BY_ID[previewId];
   if (!definition) return `${origin}${repositoryBase || '/'}`;

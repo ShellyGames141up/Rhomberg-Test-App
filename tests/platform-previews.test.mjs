@@ -9,6 +9,7 @@ import {
   previewAllowsRole,
   previewContextForPath,
   previewIdFromPath,
+  previewNavigationAllowed,
 } from '../src/shared/platform/previewConfig.js';
 import {
   createDefaultCustomerPersonalisation,
@@ -99,6 +100,7 @@ assert.equal(previewContextForPath('/Rhomberg-Test-App/').landing, true);
 assert.equal(previewIdFromPath('/Rhomberg-Test-App/app/'), PREVIEW_IDS.APPLICATION);
 const applicationContext = previewContextForPath('/Rhomberg-Test-App/app/');
 assert.equal(applicationContext.unified, true);
+assert.equal(previewNavigationAllowed({ publicPreview: true, preview: applicationContext }), false, 'normal application routes must never link to the Preview Centre');
 assert.ok(previewAllowsRole(applicationContext, USER_ROLES.CUSTOMER));
 assert.ok(previewAllowsRole(applicationContext, USER_ROLES.ADMINISTRATOR));
 const applicationPage = readFileSync(path.resolve('app', 'index.html'), 'utf8');
@@ -107,9 +109,20 @@ assert.ok(applicationPage.includes('<base href="../">'));
 const appSource = readFileSync(path.resolve('src', 'App.jsx'), 'utf8');
 const authSource = readFileSync(path.resolve('src', 'components', 'Auth.jsx'), 'utf8');
 const layoutSource = readFileSync(path.resolve('src', 'components', 'Layout.jsx'), 'utf8');
-assert.ok(appSource.includes('__PUBLIC_PREVIEW__ && !PREVIEW_CONTEXT.unified'), 'unified application headers must not show Preview Centre navigation');
-assert.ok(authSource.includes('!preview.unified'), 'unified sign-in must not link back to role previews');
-assert.ok(layoutSource.includes('__PUBLIC_PREVIEW__ && !preview?.unified'), 'unified app header may show a discrete demo indicator but no preview link');
+for (const source of [appSource, authSource, layoutSource]) assert.ok(source.includes('previewNavigationAllowed'), 'every shell-level preview link must use the central separation policy');
+for (const component of [
+  'Home.jsx',
+  'SalesRepresentativeDashboard.jsx',
+  'PlanningDashboard.jsx',
+  'LaboratoryDashboard.jsx',
+  'QualityDashboard.jsx',
+  'DispatchDashboard.jsx',
+  'ManagementDashboard.jsx',
+  'AdministratorDashboard.jsx',
+]) {
+  const source = readFileSync(path.resolve('src', 'components', component), 'utf8');
+  assert.doesNotMatch(source, /(?:href|to)\s*=.*(?:preview\/|executive-workflow|Preview Centre)/i, `${component} must not navigate into the Preview Centre`);
+}
 assert.equal(authSource.includes('demoLogins.map'), false, 'normal and role-preview login screens must not render demo shortcut buttons');
 assert.equal(authSource.includes('demo-account'), false, 'demo account actions belong only in the Preview Centre');
 for (const requiredLoginControl of ['Forgot password?', 'Activate or create customer account', 'Email or sign-in name', 'Password', 'Sign in']) {
@@ -122,6 +135,8 @@ const customerMobile = PREVIEW_BY_ID[PREVIEW_IDS.CUSTOMER_MOBILE];
 const internalMobile = PREVIEW_BY_ID[PREVIEW_IDS.INTERNAL_MOBILE];
 const internalDesktop = PREVIEW_BY_ID[PREVIEW_IDS.INTERNAL_DESKTOP];
 const executiveDemo = PREVIEW_BY_ID[PREVIEW_IDS.EXECUTIVE_DEMO];
+assert.equal(previewNavigationAllowed({ publicPreview: false, preview: internalDesktop }), false, 'private application routes must never link to the Preview Centre');
+assert.equal(previewNavigationAllowed({ publicPreview: true, preview: customerDesktop }), true, 'controlled role previews may return to the separate Preview Centre');
 assert.ok(previewAllowsRole(customerDesktop, USER_ROLES.CUSTOMER));
 assert.ok(previewAllowsRole(customerMobile, USER_ROLES.CUSTOMER));
 assert.equal(previewAllowsRole(customerMobile, USER_ROLES.SALES_REPRESENTATIVE), false);

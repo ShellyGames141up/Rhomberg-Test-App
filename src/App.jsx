@@ -37,6 +37,7 @@ import {
   PREVIEW_BY_ID,
   previewAllowsRole,
   previewContextForPath,
+  previewNavigationAllowed,
 } from './shared/platform/previewConfig.js';
 import {
   accountCan,
@@ -69,6 +70,7 @@ const DOCUMENT_PREVIEW_ID = globalThis.document?.querySelector?.('meta[name="rho
 const PREVIEW_CONTEXT = PUBLIC_PREVIEW
   ? (PREVIEW_BY_ID[DOCUMENT_PREVIEW_ID] || previewContextForPath(globalThis.location?.pathname || '/'))
   : previewContextForPath('/preview/internal-desktop/');
+const SHOW_PREVIEW_NAVIGATION = previewNavigationAllowed({ publicPreview: PUBLIC_PREVIEW, preview: PREVIEW_CONTEXT });
 const listEnquiriesForAccount = signedInAccount => (
   usesRepresentativeInbox(signedInAccount)
     ? services.enquiries.listRepresentativeInbox()
@@ -844,7 +846,7 @@ export default function App() {
       )}
       <span className="desktop-caption">{PREVIEW_CONTEXT.product.toUpperCase()} · {PREVIEW_CONTEXT.platform.toUpperCase()} · {__PUBLIC_PREVIEW__ ? 'DEMO PREVIEW' : 'PRIVATE CLOUD'}</span>
       <div className={`app-shell ${isStaff ? 'expeditor-shell' : ''} ${isPlanningWorkspace ? 'planning-shell' : ''} ${isExpeditorWorkspace ? 'expediting-workspace-shell' : ''} ${isLaboratoryWorkspace ? 'laboratory-workspace-shell' : ''} ${isQualityWorkspace ? 'quality-workspace-shell' : ''} ${isDispatchWorkspace ? 'dispatch-workspace-shell' : ''}`}>
-        {__PUBLIC_PREVIEW__ && !PREVIEW_CONTEXT.unified && <div className="platform-preview-banner"><span><strong>{PREVIEW_CONTEXT.product}</strong> {PREVIEW_CONTEXT.platform}</span><a href={PREVIEW_CONTEXT.executiveDemo ? '../../' : './'}>All previews</a></div>}
+        {SHOW_PREVIEW_NAVIGATION && <div className="platform-preview-banner"><span><strong>{PREVIEW_CONTEXT.product}</strong> {PREVIEW_CONTEXT.platform}</span><a href={PREVIEW_CONTEXT.executiveDemo ? '../../' : './'}>All previews</a></div>}
         <AppHeader account={account} onNavigate={navigate} onBack={detailView ? backFromDetail : null} backLabel={view === 'settings' ? 'Settings' : view === 'configurator' ? 'Product configuration' : selectedProduct?.code || 'Catalogue'} theme={document.documentElement.dataset.theme || theme} onToggleTheme={toggleTheme} serviceMode={services.mode} preview={PREVIEW_CONTEXT} showThemeToggle={!isCustomerExperience} personalisation={isCustomerExperience ? customerPersonalisation : null} />
         <main className="app-main">
           {isStaff ? (
