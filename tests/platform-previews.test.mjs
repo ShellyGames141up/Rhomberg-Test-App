@@ -68,6 +68,12 @@ for (const url of [
   'https://shellygames141up.github.io/Rhomberg-Test-App/',
 ]) assert.ok(readme.includes(url), `README must include the approved launch URL ${url}`);
 assert.equal((readme.match(/https:\/\/shellygames141up\.github\.io\/Rhomberg-Test-App/g) || []).length, 2, 'README must expose only the Application and Preview Centre launch links');
+for (const previewName of ['Customer Mobile', 'Customer Desktop', 'Rep/Expeditor Mobile', 'Internal Desktop', 'Executive Workflow Demo']) {
+  assert.ok(readme.includes(previewName), `README Preview Centre must list ${previewName}`);
+}
+for (const instruction of ['authorised project reviews', 'select the device or workflow experience', 'Preview Centre Demo Logins', 'opens the shared splash and sign-in journey directly']) {
+  assert.ok(readme.includes(instruction), `README Preview Centre must explain ${instruction}`);
+}
 const packageScripts = JSON.parse(readFileSync(path.resolve('package.json'), 'utf8')).scripts;
 for (const previewId of ['customer-desktop', 'customer-mobile', 'internal-mobile', 'internal-desktop', 'executive-demo']) {
   assert.ok(packageScripts[`dev:${previewId}`], `development command missing for ${previewId}`);

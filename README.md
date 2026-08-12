@@ -24,6 +24,20 @@ Opens the normal Rhomberg Connect application experience in your browser.
 
 Opens the controlled customer, internal, mobile and executive demonstration choices. All public previews use fabricated browser-local data.
 
+## Preview Centre
+
+The separate Preview Centre is for authorised project reviews, presentations, management demonstrations and IT testing. It provides:
+
+- Customer Mobile
+- Customer Desktop
+- Rep/Expeditor Mobile
+- Internal Desktop
+- Executive Workflow Demo
+
+For a presentation, open the Preview Centre link above, select the device or workflow experience, and use only the fabricated account listed under **Preview Centre Demo Logins** below. Start with the Executive Workflow Demo for a guided end-to-end story, or choose a role preview for focused department review. Reset the fabricated scenario before a new audience and never enter real customer, employee, pricing or document data.
+
+The normal **Rhomberg Connect Application** link opens the shared splash and sign-in journey directly. It does not open or link back to the Preview Centre. See [Preview Centre instructions](docs/PREVIEW_CENTRE.md) for the presenter sequence and access boundaries.
+
 ## Project Status
 
 - Version: `5.1.0`
