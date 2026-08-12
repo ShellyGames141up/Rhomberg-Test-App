@@ -36,10 +36,6 @@ export function PlanningFields({ record, account, options = {}, data, onChange, 
 
   return (
     <div className="planning-form-fields">
-      <p className="workflow-helper planning-workflow-helper">
-        <strong>Internal Planning record.</strong> Customers receive only the appropriate workflow update. Job numbers, notes, scheduling details and internal document references remain restricted.
-      </p>
-
       <div className="planning-field-group is-identifiers">
         <div className="planning-field-group-heading"><span>01</span><div><strong>Required references</strong><small>Identify the internal job and the customer instruction.</small></div></div>
         <div className="form-grid">

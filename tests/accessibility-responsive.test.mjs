@@ -134,6 +134,9 @@ assert.ok(expeditorSource.includes('<ConfiguredUnitDetails'), 'Expeditor must ex
 const planningSource = readFileSync('src/components/PlanningDashboard.jsx', 'utf8');
 assert.ok(planningSource.includes("from './ConfiguredUnitDetails.jsx'"));
 assert.ok(planningSource.includes('<ConfiguredUnitDetails'), 'Planning must expose the complete immutable unit configuration');
+const planningFieldsSource = readFileSync('src/components/PlanningFields.jsx', 'utf8');
+assert.equal(planningFieldsSource.includes('Internal Planning record.'), false, 'Planning must not repeat internal-record explanations above the form');
+assert.ok(planningSource.includes("'Save planning details'"));
 assert.equal(expeditorSource.includes("'Handed to Dispatch.'"), false, 'Expeditor must not retain a redundant Dispatch hand-off banner');
 assert.ok(expeditorSource.includes("order.trackingStatus !== 'awaiting_dispatch'"), 'Dispatch hand-off status must rely on the workflow status, history and brief global confirmation');
 assert.ok(expeditorSource.includes('expediting-history-notes'), 'Expeditor history must use a flat, readable note structure');

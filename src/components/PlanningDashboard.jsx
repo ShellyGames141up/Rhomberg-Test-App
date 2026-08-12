@@ -224,8 +224,8 @@ function PlanningOrder({ order, expanded, onToggle, onAction, account, planningO
               onAction={onAction}
               account={account}
               planningOptions={planningOptions}
-              title={primaryAction.action === 'complete_planning' ? 'Complete the Planning record' : laboratoryRoute ? 'Route to Laboratory' : 'Route to Expediting'}
-              description={primaryAction.action === 'complete_planning' ? 'Required fields are checked before the plan can be saved' : 'This controlled action records the user, date, time, selected route and audit history'}
+              title={primaryAction.action === 'complete_planning' ? 'Save planning details' : laboratoryRoute ? 'Route to Laboratory' : 'Route to Expediting'}
+              description={primaryAction.action === 'complete_planning' ? 'Complete the required fields below.' : 'Confirm the next department for this order.'}
             />
           ) : (
             <p className="tracking-storage-note expeditor-readonly-note"><span>i</span><span><strong>No Planning action is available.</strong> This order may require a different authorised role or a refreshed record.</span></p>
