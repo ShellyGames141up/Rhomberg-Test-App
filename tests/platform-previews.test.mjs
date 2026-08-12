@@ -110,6 +110,10 @@ const appSource = readFileSync(path.resolve('src', 'App.jsx'), 'utf8');
 const authSource = readFileSync(path.resolve('src', 'components', 'Auth.jsx'), 'utf8');
 const layoutSource = readFileSync(path.resolve('src', 'components', 'Layout.jsx'), 'utf8');
 for (const source of [appSource, authSource, layoutSource]) assert.ok(source.includes('previewNavigationAllowed'), 'every shell-level preview link must use the central separation policy');
+assert.ok(layoutSource.includes('{showPreviewNavigation && <a className="preview-status"'), 'the in-app preview badge must render only in Preview Centre builds');
+assert.equal(layoutSource.includes(': <span className="preview-status"'), false, 'normal application headers must not render a preview-status fallback');
+assert.ok(authSource.includes('{showPreviewNavigation && <span className="preview-chip">Demo Preview'), 'the sign-in preview badge must render only in Preview Centre builds');
+assert.ok(appSource.includes('{SHOW_PREVIEW_NAVIGATION && <span className="desktop-caption">'), 'desktop preview captions must use the central separation policy');
 for (const component of [
   'Home.jsx',
   'SalesRepresentativeDashboard.jsx',
