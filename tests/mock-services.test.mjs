@@ -538,6 +538,7 @@ plannedOrder = await reopenedServices.workflow.performAction(plannedOrder.id, {
   comment: '',
   data: {
     planningInternalJobNumber: 'JOB-TEST-001',
+    planningSalesOrderNumber: 'SO-TEST-001',
     planningCustomerPoNumber: 'PO-TEST-001',
     planningNotes: 'Fabricated Planning service test note.',
     planningStartDate: '2026-07-23',
@@ -551,6 +552,7 @@ plannedOrder = await reopenedServices.workflow.performAction(plannedOrder.id, {
   expectedVersion: plannedOrder.version,
 });
 assert.equal(plannedOrder.planning.internalJobNumber, 'JOB-TEST-001');
+assert.equal(plannedOrder.planning.salesOrderNumber, 'SO-TEST-001');
 assert.equal(plannedOrder.planning.assignedPlanningUserName, 'Planning Workflow Test');
 assert.equal(plannedOrder.planning.productionLocationName, 'Cape Town');
 assert.equal(plannedOrder.plannedBy.id, 'staff-planning-preview');
@@ -568,6 +570,7 @@ await reopenedServices.auth.signIn({ email: 'cape.demo@client.test', password: '
 const customerPlannedOrder = (await reopenedServices.orders.list()).find(order => order.id === plannedOrder.id);
 assert.equal(customerPlannedOrder.planning, undefined, 'Planning notes, schedule and ownership must be hidden from customers');
 assert.equal(customerPlannedOrder.internalJobNumber, undefined, 'internal job numbers must be hidden from customers');
+assert.equal(customerPlannedOrder.salesOrderNumber, undefined, 'Sales Order Numbers must be hidden from customers');
 assert.equal(customerPlannedOrder.customerPoNumber, undefined, 'internal Planning PO fields must be hidden from customers');
 assert.equal(customerPlannedOrder.plannedBy, undefined, 'internal Planning actor metadata must be hidden from customers');
 assert.equal(customerPlannedOrder.trackingStatus, 'submitted_to_expediting', 'customers must receive the approved Planning hand-off update');
@@ -1111,6 +1114,7 @@ await apiServices.workflow.performAction(apiSubmission.enquiry.id, {
   comment: '',
   data: {
     planningInternalJobNumber: 'JOB-API-TEST',
+    planningSalesOrderNumber: 'SO-API-TEST',
     planningCustomerPoNumber: 'PO-API-TEST',
     planningAssignedUserId: 'planner-api-test',
     planningPriority: 'standard',
@@ -1157,6 +1161,7 @@ const planningWorkflowRequest = orderWorkflowRequests.find(request => (
   && JSON.parse(request.options.body).action === 'complete_planning'
 ));
 assert.equal(JSON.parse(planningWorkflowRequest.options.body).data.planning.internalJobNumber, 'JOB-API-TEST', 'the API adapter must send validated structured Planning data');
+assert.equal(JSON.parse(planningWorkflowRequest.options.body).data.planning.salesOrderNumber, 'SO-API-TEST', 'the API adapter must send the internal Sales Order Number');
 assert.equal(JSON.parse(planningWorkflowRequest.options.body).data.planning.assignedPlanningUserId, 'planner-api-test');
 const workflowRequest = orderWorkflowRequests.find(request => (
   !(request.options.body instanceof FormData)

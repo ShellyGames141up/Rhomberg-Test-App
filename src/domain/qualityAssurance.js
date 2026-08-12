@@ -42,6 +42,7 @@ export const qaSearchText = order => [
   order.reference,
   order.sourceRfqReference,
   order.internalJobNumber,
+  order.salesOrderNumber,
   order.customerPoNumber,
   order.company,
   order.contact,

@@ -9,6 +9,7 @@ import {
 assert.throws(
   () => validatePlanningSubmission({
     planningInternalJobNumber: 'JOB-TEST-PAST',
+    planningSalesOrderNumber: 'SO-TEST-PAST',
     planningCustomerPoNumber: 'PO-TEST-PAST',
     planningStartDate: '2026-07-20',
     planningEstimatedCompletionDate: '2026-07-27',

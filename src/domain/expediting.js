@@ -249,6 +249,8 @@ const searchableText = order => [
   order?.selectedRep?.branchName,
   order?.internalJobNumber,
   order?.planning?.internalJobNumber,
+  order?.salesOrderNumber,
+  order?.planning?.salesOrderNumber,
   order?.customerPoNumber,
   order?.planning?.customerPoNumber,
   order?.poNumber,

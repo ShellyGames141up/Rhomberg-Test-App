@@ -202,6 +202,7 @@ function ExpeditingOrder({ order, expanded, onToggle, onAction, account, options
 
           <div className="expediting-fact-grid">
             <span><small>Internal job</small><strong>{internalJob || 'Not recorded'}</strong></span>
+            <span><small>Sales Order</small><strong>{order.planning?.salesOrderNumber || order.salesOrderNumber || 'Not recorded'}</strong></span>
             <span><small>Customer PO</small><strong>{customerPo || 'Authorised exception / pending'}</strong></span>
             <span><small>Customer contact</small><strong>{order.contact}</strong><em>{order.phone}<br />{order.email}</em></span>
             <span><small>Assigned representative</small><strong>{order.selectedRep?.name || 'Not assigned'}</strong><em>{order.selectedRep?.code || 'No code'} · {order.selectedRep?.branchName || order.area}</em></span>

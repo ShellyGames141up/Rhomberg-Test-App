@@ -176,6 +176,7 @@ function DispatchOrder({ order, expanded, onToggle, onAction, account, dispatchO
   const lineItems = (order.items || []).length;
   const jobNumber = order.planning?.internalJobNumber || order.internalJobNumber || '';
   const customerPo = order.planning?.customerPoNumber || order.customerPoNumber || order.poNumber || '';
+  const salesOrderNumber = order.planning?.salesOrderNumber || order.salesOrderNumber || '';
   const updates = [...(dispatch.updates || [])].reverse();
   const address = order.fulfilment === 'delivery'
     ? order.deliveryAddress
@@ -209,7 +210,7 @@ function DispatchOrder({ order, expanded, onToggle, onAction, account, dispatchO
             <section className="dispatch-detail-card is-customer"><span>01</span><div><small>Customer contact</small><strong>{order.contact}</strong><p>{order.company}<br />{order.phone}<br />{order.email}</p></div></section>
             <section className="dispatch-detail-card is-address"><span>02</span><div><small>{order.fulfilment === 'delivery' ? 'Authorised delivery address' : 'Collection branch'}</small><strong>{order.fulfilment === 'delivery' ? 'Delivery' : 'Collection'}</strong><p>{address || 'No authorised handover address is recorded.'}</p></div></section>
             <section className="dispatch-detail-card is-sales"><span>03</span><div><small>Assigned representative</small><strong>{order.selectedRep?.name || 'Not assigned'}</strong><p>{order.selectedRep?.code || 'No rep code'}<br />{order.selectedRep?.branchName || order.area}</p></div></section>
-            <section className="dispatch-detail-card is-references"><span>04</span><div><small>Controlled references</small><strong>{jobNumber || 'No job number'}</strong><p>Customer PO: {customerPo || 'Not recorded'}<br />RFQ: {order.sourceRfqReference || 'Not linked'}</p></div></section>
+            <section className="dispatch-detail-card is-references"><span>04</span><div><small>Order references</small><strong>{jobNumber || 'No job number'}</strong><p>Sales Order: {salesOrderNumber || 'Not recorded'}<br />Customer PO: {customerPo || 'Not recorded'}<br />RFQ: {order.sourceRfqReference || 'Not linked'}</p></div></section>
           </div>
 
           <section className="dispatch-package-section">

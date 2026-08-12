@@ -314,6 +314,7 @@ const transitions = [
     action: 'complete_planning', from: 'planning_in_progress', to: 'planned', roles: PLANNING_ACTION_ROLES, label: 'Save planning details',
     requiredFields: [
       required('input.planning.internalJobNumber', 'Internal job number'),
+      required('input.planning.salesOrderNumber', 'Sales Order Number'),
       required('input.planning.assignedPlanningUserId', 'Assigned Planning user'),
       required('input.planning.submissionDate', 'Planning submission date'),
       required('entity.selectedRep.id', 'Assigned representative'),
@@ -325,12 +326,13 @@ const transitions = [
     actorField: 'plannedBy',
     auditNotePath: 'input.planning.notes',
     customerVisible: false,
-    persistInputFields: ['planning', 'internalJobNumber', 'customerPoNumber'],
+    persistInputFields: ['planning', 'internalJobNumber', 'salesOrderNumber', 'customerPoNumber'],
   }),
   orderTransition({
     action: 'submit_to_expediting', from: 'planned', to: '__planning_route__', roles: PLANNING_ACTION_ROLES, label: 'Submit planned order',
     requiredFields: [
       required('entity.planning.internalJobNumber', 'Internal job number'),
+      required('entity.planning.salesOrderNumber', 'Sales Order Number'),
       required('entity.planning.assignedPlanningUserId', 'Assigned Planning user'),
       required('entity.planning.submissionDate', 'Planning submission date'),
       required('entity.selectedRep.id', 'Assigned representative'),
@@ -794,6 +796,7 @@ const assertPlanningDetails = planning => {
   const details = planning || {};
   const fieldErrors = {};
   const internalJobNumber = String(details.internalJobNumber || '').trim();
+  const salesOrderNumber = String(details.salesOrderNumber || '').trim();
   const customerPoNumber = String(details.customerPoNumber || '').trim();
   const poException = details.customerPoException;
   const poExceptionReason = String(poException?.reason || '').trim();
@@ -802,6 +805,8 @@ const assertPlanningDetails = planning => {
 
   if (!internalJobNumber) fieldErrors.planningInternalJobNumber = 'Enter the internal job number.';
   if (internalJobNumber.length > 100) fieldErrors.planningInternalJobNumber = 'Keep the internal job number below 100 characters.';
+  if (!salesOrderNumber) fieldErrors.planningSalesOrderNumber = 'Enter the Sales Order Number.';
+  if (salesOrderNumber.length > 100) fieldErrors.planningSalesOrderNumber = 'Keep the Sales Order Number below 100 characters.';
   if (customerPoNumber.length > 100) fieldErrors.planningCustomerPoNumber = 'Keep the customer Purchase Order number below 100 characters.';
   if (!customerPoNumber && poException?.authorised !== true) {
     fieldErrors.planningPoExceptionAuthorised = 'Enter the customer Purchase Order number or record an authorised exception.';

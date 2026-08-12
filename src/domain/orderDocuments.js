@@ -83,6 +83,7 @@ export const buildOrderSummaryModel = ({ order, copyType, generatedAt, generated
     },
     references: {
       jobNumber: planning.internalJobNumber || order.internalJobNumber || 'Not assigned',
+      ...(internal ? { salesOrderNumber: planning.salesOrderNumber || order.salesOrderNumber || 'Not assigned' } : {}),
       purchaseOrder: planning.customerPoNumber || order.customerPoNumber || order.poNumber || order.poFileName || 'Not supplied',
     },
     requirements: [
@@ -273,6 +274,9 @@ export async function generateOrderSummaryPdf(model) {
   keyValues([
     { label: 'Original RFQ', value: model.rfqReference },
     { label: 'Job number', value: model.references.jobNumber },
+    ...(model.copyType === ORDER_COPY_TYPES.INTERNAL
+      ? [{ label: 'Sales Order Number', value: model.references.salesOrderNumber }]
+      : []),
     { label: 'Purchase order', value: model.references.purchaseOrder },
     { label: 'Last updated', value: formatDate(model.dates.updated) },
   ]);

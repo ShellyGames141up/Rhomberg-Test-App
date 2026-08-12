@@ -476,6 +476,7 @@ const normaliseDocumentReferences = value => {
 export function validatePlanningSubmission(data = {}, { today = new Date().toISOString().slice(0, 10) } = {}) {
   const errors = {};
   const internalJobNumber = present(planningValue(data, 'internalJobNumber', 'planningInternalJobNumber'));
+  const salesOrderNumber = present(planningValue(data, 'salesOrderNumber', 'planningSalesOrderNumber'));
   const customerPoNumber = present(planningValue(data, 'customerPoNumber', 'planningCustomerPoNumber'));
   const poExceptionAuthorised = planningValue(data, 'poExceptionAuthorised', 'planningPoExceptionAuthorised') === true
     || data?.planning?.customerPoException?.authorised === true;
@@ -495,6 +496,9 @@ export function validatePlanningSubmission(data = {}, { today = new Date().toISO
   if (!internalJobNumber) errors.planningInternalJobNumber = 'Enter the internal job number.';
   else if (!referencePattern.test(internalJobNumber)) errors.planningInternalJobNumber = 'Use letters, numbers and normal reference punctuation only.';
   else if (internalJobNumber.length > 100) errors.planningInternalJobNumber = 'Keep the internal job number below 100 characters.';
+  if (!salesOrderNumber) errors.planningSalesOrderNumber = 'Enter the Sales Order Number.';
+  else if (!referencePattern.test(salesOrderNumber)) errors.planningSalesOrderNumber = 'Use letters, numbers and normal reference punctuation only.';
+  else if (salesOrderNumber.length > 100) errors.planningSalesOrderNumber = 'Keep the Sales Order Number below 100 characters.';
   if (customerPoNumber.length > 100) errors.planningCustomerPoNumber = 'Keep the customer Purchase Order number below 100 characters.';
   else if (customerPoNumber && !referencePattern.test(customerPoNumber)) errors.planningCustomerPoNumber = 'Use letters, numbers and normal reference punctuation only.';
   if (!customerPoNumber && !poExceptionAuthorised) {
@@ -532,6 +536,7 @@ export function validatePlanningSubmission(data = {}, { today = new Date().toISO
   return {
     planning: {
       internalJobNumber,
+      salesOrderNumber,
       customerPoNumber,
       customerPoException: customerPoNumber ? null : {
         authorised: true,
@@ -549,6 +554,7 @@ export function validatePlanningSubmission(data = {}, { today = new Date().toISO
       submissionDate,
     },
     internalJobNumber,
+    salesOrderNumber,
     customerPoNumber,
   };
 }

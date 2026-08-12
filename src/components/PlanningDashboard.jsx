@@ -179,7 +179,7 @@ function PlanningOrder({ order, expanded, onToggle, onAction, account, planningO
           <div className="planning-detail-grid">
             <section className="planning-detail-card is-customer"><span className="planning-detail-index">01</span><div><small>Customer</small><strong>{order.company}</strong><p>{order.contact}<br />{order.phone}<br />{order.email}</p></div></section>
             <section className="planning-detail-card is-sales"><span className="planning-detail-index">02</span><div><small>Sales representative</small><strong>{order.selectedRep?.name || 'Not assigned'}</strong><p>{order.selectedRep?.code || 'No rep code'}<br />{order.selectedRep?.branchName || order.area}</p></div></section>
-            <section className="planning-detail-card is-references"><span className="planning-detail-index">03</span><div><small>References</small><strong>{order.sourceRfqReference || 'No RFQ reference'}</strong><p>Customer PO: {customerPo || (planning.customerPoException?.authorised ? 'Authorised exception' : 'Not supplied')}<br />Internal job: {planning.internalJobNumber || order.internalJobNumber || 'Not assigned'}</p></div></section>
+            <section className="planning-detail-card is-references"><span className="planning-detail-index">03</span><div><small>References</small><strong>{order.sourceRfqReference || 'No RFQ reference'}</strong><p>Customer PO: {customerPo || (planning.customerPoException?.authorised ? 'Authorised exception' : 'Not supplied')}<br />Internal job: {planning.internalJobNumber || order.internalJobNumber || 'Not assigned'}<br />Sales Order: {planning.salesOrderNumber || order.salesOrderNumber || 'Not assigned'}</p></div></section>
             <section className="planning-detail-card is-activity"><span className="planning-detail-index">04</span><div><small>Activity</small><strong>{planningOrderAgeLabel(order)}</strong><p>Received {formatDateTime(order.createdAt)}<br />Updated {formatDateTime(planningOrderLastActivityAt(order))}</p></div></section>
           </div>
 
@@ -193,6 +193,7 @@ function PlanningOrder({ order, expanded, onToggle, onAction, account, planningO
               <div className="planning-section-heading"><div><span className="eyebrow">Saved plan</span><h3>Internal Planning summary</h3></div><small>Authorised staff only</small></div>
               <div className="planning-saved-grid">
                 <span><small>Planning owner</small><strong>{planning.assignedPlanningUserName || 'Not assigned'}</strong></span>
+                <span><small>Sales Order Number</small><strong>{planning.salesOrderNumber || order.salesOrderNumber || 'Not assigned'}</strong></span>
                 <span><small>Production location</small><strong>{planning.productionLocationName || 'To be confirmed'}</strong></span>
                 <span><small>Planned start</small><strong>{formatDate(planning.plannedStartDate)}</strong></span>
                 <span><small>Estimated completion</small><strong>{formatDate(planning.estimatedCompletionDate)}</strong></span>

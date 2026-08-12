@@ -56,6 +56,7 @@ export const managementRecordSearchText = record => [
   record.reference,
   record.sourceRfqReference,
   record.internalJobNumber,
+  record.salesOrderNumber,
   record.customerPoNumber,
   record.poNumber,
   record.company,

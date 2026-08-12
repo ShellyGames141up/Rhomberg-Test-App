@@ -130,6 +130,7 @@ function QualityOrder({ order, expanded, values, options, onToggle, onValue, onA
           <dl className="operations-facts">
             <div><dt>Original RFQ</dt><dd>{order.sourceRfqReference}</dd></div>
             <div><dt>Customer PO</dt><dd>{order.customerPoNumber || 'Not recorded'}</dd></div>
+            <div><dt>Sales Order Number</dt><dd>{order.salesOrderNumber || order.planning?.salesOrderNumber || 'Not recorded'}</dd></div>
             <div><dt>Inspection attempt</dt><dd>{order.qualityAssurance?.attempt || 0}</dd></div>
             <div><dt>Rework cycle</dt><dd>{order.qualityAssurance?.reworkCycle || 0}</dd></div>
           </dl>

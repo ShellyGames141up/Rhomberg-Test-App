@@ -91,6 +91,10 @@ const plannedLabOrder = {
   trackingStatus: 'planned',
   status: 'Planning completed',
   version: 0,
+  planning: {
+    ...(sanasSeed.planning || {}),
+    salesOrderNumber: sanasSeed.salesOrderNumber || 'SO-PHASE21-LAB',
+  },
 };
 const plannedStandardOrder = {
   ...standardSeed,
@@ -99,6 +103,7 @@ const plannedStandardOrder = {
   version: 0,
   planning: {
     internalJobNumber: standardSeed.internalJobNumber,
+    salesOrderNumber: standardSeed.salesOrderNumber || 'SO-PHASE21-STANDARD',
     customerPoNumber: standardSeed.customerPoNumber,
     assignedPlanningUserId: 'phase21-planner',
     submissionDate: '2026-07-29',

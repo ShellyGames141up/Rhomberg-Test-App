@@ -209,6 +209,7 @@ order = await services.workflow.performAction(order.id, {
   comment: '',
   data: {
     planningInternalJobNumber: 'JOB-DEMO-E2E-001',
+    planningSalesOrderNumber: 'SO-DEMO-E2E-001',
     planningCustomerPoNumber: 'PO-DEMO-E2E-001',
     planningNotes: 'Fabricated internal Planning note.',
     planningStartDate: '2026-07-30',

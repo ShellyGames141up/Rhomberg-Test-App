@@ -12,6 +12,7 @@ export const planningActionDataFor = (record, account, options = {}, changes = {
   const defaultUserId = currentUserIsAvailable ? account.id : options.users?.[0]?.id || '';
   const base = {
     planningInternalJobNumber: planning.internalJobNumber || record?.internalJobNumber || '',
+    planningSalesOrderNumber: planning.salesOrderNumber || record?.salesOrderNumber || '',
     planningCustomerPoNumber: planning.customerPoNumber || record?.customerPoNumber || record?.poNumber || '',
     planningPoExceptionAuthorised: Boolean(planning.customerPoException?.authorised),
     planningPoExceptionReason: planning.customerPoException?.reason || '',
@@ -48,6 +49,11 @@ export function PlanningFields({ record, account, options = {}, data, onChange, 
             <span>Customer Purchase Order number</span>
             <input value={values.planningCustomerPoNumber} onChange={event => set('planningCustomerPoNumber', event.target.value)} placeholder="Enter PO number when available" />
             <FieldError message={errors.planningCustomerPoNumber} />
+          </label>
+          <label className="form-field">
+            <span>Sales Order Number <b>Required</b></span>
+            <input value={values.planningSalesOrderNumber} onChange={event => set('planningSalesOrderNumber', event.target.value)} placeholder="Example: SO-TEST-1024" />
+            <FieldError message={errors.planningSalesOrderNumber} />
           </label>
         </div>
         {!hasCustomerPo && (

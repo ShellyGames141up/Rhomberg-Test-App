@@ -694,6 +694,7 @@ const toCustomerVisibleRecord = enquiry => {
     } : undefined,
     dispatch: toCustomerVisibleDispatch(enquiry.dispatch),
     internalJobNumber: undefined,
+    salesOrderNumber: undefined,
     customerPoNumber: undefined,
     workflowContext: undefined,
     planningStartedBy: undefined,
@@ -1462,7 +1463,16 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         reference: currentSeed.reference || record.reference,
         sourceRfqReference: record.sourceRfqReference || currentSeed.sourceRfqReference || '',
         internalJobNumber: record.internalJobNumber || currentSeed.internalJobNumber || '',
+        salesOrderNumber: record.salesOrderNumber || record.planning?.salesOrderNumber
+          || currentSeed.salesOrderNumber || currentSeed.planning?.salesOrderNumber
+          || `SO-${String(record.reference || record.id).replace(/[^A-Z0-9]/gi, '').slice(-12)}`,
         customerPoNumber: record.customerPoNumber || currentSeed.customerPoNumber || '',
+        planning: {
+          ...(record.planning || currentSeed.planning || {}),
+          salesOrderNumber: record.planning?.salesOrderNumber || record.salesOrderNumber
+            || currentSeed.planning?.salesOrderNumber || currentSeed.salesOrderNumber
+            || `SO-${String(record.reference || record.id).replace(/[^A-Z0-9]/gi, '').slice(-12)}`,
+        },
       };
     });
     if (!store.has(STORE_KEYS.seedVersion)) {
@@ -3000,7 +3010,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         .filter(order => stateFilter === 'all' || order.retentionStatus === stateFilter)
         .filter(order => legalHoldFilter === 'all' || Boolean(order.legalHold?.active) === (legalHoldFilter === 'held'))
         .filter(order => !term || [
-          order.reference, order.sourceRfqReference, order.internalJobNumber, order.customerPoNumber,
+          order.reference, order.sourceRfqReference, order.internalJobNumber, order.salesOrderNumber, order.customerPoNumber,
           order.poNumber, order.company, order.contact, order.selectedRep?.name, order.archiveReason,
           order.legalHold?.reason,
         ].some(value => String(value || '').toLowerCase().includes(term)));
@@ -5022,6 +5032,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         .map(item => ({
           id: item.id, workflowType: item.workflowType, reference: item.reference, companyId: item.companyId, company: item.company,
           contact: item.contact, internalJobNumber: item.internalJobNumber || item.planning?.internalJobNumber || '',
+          salesOrderNumber: item.salesOrderNumber || item.planning?.salesOrderNumber || '',
           customerPoNumber: item.customerPoNumber || item.poNumber || item.planning?.customerPoNumber || '',
           trackingStatus: item.trackingStatus, version: item.version,
         })),
@@ -5419,7 +5430,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       if (Number(input.expectedVersion) !== Number(located.record.version)) throw new ServiceError('This record changed. Refresh before applying the correction.', { code: 'VERSION_CONFLICT', status: 409 });
       const forbidden = ['trackingStatus', 'trackingHistory', 'quotation', 'quotationHistory', 'certificates', 'laboratory', 'audit', 'internalNotes'];
       if (forbidden.some(key => Object.hasOwn(input.values || {}, key))) throw new ServiceError('Signed certificates, workflow state, quotation history and audit data cannot be corrected here.', { code: 'IMMUTABLE_FIELD', status: 409 });
-      const allowed = located.entityType === 'order' ? ['contact', 'internalJobNumber', 'customerPoNumber'] : ['contact'];
+      const allowed = located.entityType === 'order' ? ['contact', 'internalJobNumber', 'salesOrderNumber', 'customerPoNumber'] : ['contact'];
       const supplied = Object.keys(input.values || {});
       if (!supplied.length || supplied.some(key => !allowed.includes(key))) throw new ServiceError('Only approved reference and contact fields may be corrected.', { code: 'CORRECTION_FIELD_INVALID', status: 422 });
       const previousValue = Object.fromEntries(supplied.map(key => [key, located.record[key] || '']));

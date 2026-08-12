@@ -38,6 +38,8 @@ assert.ok(order, 'the order-document test requires the seeded collection order')
 
 const sensitiveOrder = {
   ...order,
+  salesOrderNumber: 'SO-INTERNAL-TEST-001',
+  planning: { ...order.planning, salesOrderNumber: 'SO-INTERNAL-TEST-001' },
   notes: 'Staff-only order note',
   auditMetadata: { requestId: 'must-not-leak' },
   items: [{
@@ -62,6 +64,7 @@ const customerModel = buildOrderSummaryModel({
 });
 const customerJson = JSON.stringify(customerModel);
 assert.equal(customerModel.internal, null);
+assert.equal(customerModel.references.salesOrderNumber, undefined, 'customer-safe copies must exclude the Sales Order Number');
 assert.equal(customerJson.includes('Restricted package location'), false);
 assert.equal(customerJson.includes('Staff-only order note'), false);
 assert.equal(customerJson.includes('secret-engine-output'), false);
@@ -76,6 +79,7 @@ const internalModel = buildOrderSummaryModel({
   generatedBy: 'Manager Test',
 });
 assert.equal(internalModel.internal.dispatchNotes, 'Restricted package location');
+assert.equal(internalModel.references.salesOrderNumber, 'SO-INTERNAL-TEST-001');
 assert.equal(JSON.stringify(internalModel).includes('secret-engine-output'), false, 'private price-engine information must never enter either PDF model');
 
 const sharingOptions = await services.orderDocuments.getSharingOptions(order.id);

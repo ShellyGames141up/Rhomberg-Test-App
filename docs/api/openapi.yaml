@@ -3574,6 +3574,10 @@ components:
         companyId: { type: string, format: uuid }
         companyName: { type: string, example: Fabricated Cape Engineering }
         internalJobNumber: { type: string, example: JOB-DEMO-2101 }
+        salesOrderNumber:
+          type: string
+          example: SO-DEMO-2101
+          description: Internal-only reference; omitted from customer responses.
         customerPoNumber: { type: string, example: PO-DEMO-2101 }
         trackingStatus: { type: string }
         routing:
@@ -4285,9 +4289,14 @@ components:
     PlanningRecord:
       type: object
       additionalProperties: false
-      required: [internalJobNumber, assignedPlanningUserId, priority, submissionDate]
+      required: [internalJobNumber, salesOrderNumber, assignedPlanningUserId, priority, submissionDate]
       properties:
         internalJobNumber: { type: string, minLength: 1, maxLength: 100 }
+        salesOrderNumber:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Internal sales-order reference. Never returned in customer projections or customer-safe documents.
         customerPoNumber: { type: string, minLength: 1, maxLength: 100 }
         customerPoException:
           oneOf:
@@ -5257,6 +5266,9 @@ components:
         reference: { type: string }
         sourceRfqReference: { type: string }
         internalJobNumber: { type: string }
+        salesOrderNumber:
+          type: string
+          description: Internal-only reference; omitted from customer responses.
         customerPoNumber: { type: string }
         companyId: { type: string }
         company: { type: string }

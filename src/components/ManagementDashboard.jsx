@@ -461,6 +461,7 @@ function ManagementRecord({
         <div className="management-record-detail">
           <dl>
             <div><dt>Job number</dt><dd>{record.internalJobNumber || 'Not assigned'}</dd></div>
+            <div><dt>Sales Order Number</dt><dd>{record.salesOrderNumber || record.planning?.salesOrderNumber || 'Not assigned'}</dd></div>
             <div><dt>Purchase Order</dt><dd>{record.customerPoNumber || record.poNumber || 'Not supplied'}</dd></div>
             <div><dt>Original RFQ</dt><dd>{record.sourceRfqReference || (record.workflowType === 'rfq' ? record.reference : 'Not recorded')}</dd></div>
             <div><dt>Priority</dt><dd>{record.priority === 'urgent' ? 'Urgent' : humanise(record.priority || 'standard')}</dd></div>

@@ -66,6 +66,7 @@ const searchTextFor = order => [
   order.poNumber,
   order.poFileName,
   order.planning?.internalJobNumber,
+  order.planning?.salesOrderNumber,
   order.planning?.customerPoNumber,
   order.planning?.assignedPlanningUserName,
   order.planning?.productionLocationName,

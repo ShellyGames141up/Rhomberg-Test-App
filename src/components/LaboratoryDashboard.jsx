@@ -105,7 +105,7 @@ export function LaboratoryDashboard({ account, orders, laboratoryActions, labora
         && (technician === 'all' || unit.labWork?.assignedTechnicianId === technician)
         && (!urgentOnly || order.emergency === 'yes' || order.priority === 'urgent')
         && statusMatches
-        && (!term || [order.reference, order.company, order.contact, order.internalJobNumber, order.customerPoNumber, unit.jobNumber, unit.certificateNumber, unit.serialNumber, unit.productName].some(value => String(value || '').toLowerCase().includes(term)));
+        && (!term || [order.reference, order.company, order.contact, order.internalJobNumber, order.salesOrderNumber, order.customerPoNumber, unit.jobNumber, unit.certificateNumber, unit.serialNumber, unit.productName].some(value => String(value || '').toLowerCase().includes(term)));
     });
   }, [branch, discipline, laboratoryOptions.methods, query, status, technician, units, urgentOnly]);
   const counts = useMemo(() => ({
@@ -195,7 +195,7 @@ function UnitWorkspace({ order, unit, item, open, onOpen, options, actions }) {
       <StatusBadge as="b" status={workflow.status} label={humanise(workflow.status)} className="status-pill" />
     </button>
     {open && <div className="lab-unit-workspace">
-      <dl className="operations-facts"><div><dt>Customer contact</dt><dd>{order.contact}</dd></div><div><dt>Representative</dt><dd>{order.selectedRep?.name || 'Unassigned'}</dd></div><div><dt>PO number</dt><dd>{order.customerPoNumber || order.planning?.customerPoNumber || 'Not recorded'}</dd></div><div><dt>Priority</dt><dd>{form.urgent ? 'Urgent' : 'Standard'}</dd></div></dl>
+      <dl className="operations-facts"><div><dt>Customer contact</dt><dd>{order.contact}</dd></div><div><dt>Representative</dt><dd>{order.selectedRep?.name || 'Unassigned'}</dd></div><div><dt>PO number</dt><dd>{order.customerPoNumber || order.planning?.customerPoNumber || 'Not recorded'}</dd></div><div><dt>Sales Order Number</dt><dd>{order.salesOrderNumber || order.planning?.salesOrderNumber || 'Not recorded'}</dd></div><div><dt>Priority</dt><dd>{form.urgent ? 'Urgent' : 'Standard'}</dd></div></dl>
       <LaboratoryProgress status={workflow.status || 'awaiting_lab_receipt'} />
       <StagePanel order={order} unit={unit} item={item} form={form} set={set} setPoint={(index, key, value) => actions.setPoint(order, unit, item, index, key, value)} options={options} allowedStandards={allowedStandards} actions={actions.laboratoryActions} call={call} account={actions.account} disabled={disabled} />
       <DocumentCentre documents={workflow.documents || []} onDownload={document => call(`download-${document.id}`, () => actions.laboratoryActions.downloadLabDocument(document.id), 'Laboratory document download prepared and audited.', true)} disabled={disabled} />

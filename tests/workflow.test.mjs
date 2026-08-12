@@ -255,6 +255,7 @@ assert.equal(order.planningStartedBy.id, planning.id);
 const validPlanningInput = {
   planning: {
     internalJobNumber: 'JOB-TEST',
+    salesOrderNumber: 'SO-TEST',
     customerPoNumber: 'PO-TEST',
     customerPoException: null,
     notes: 'Fabricated Planning test note.',
@@ -269,6 +270,7 @@ const validPlanningInput = {
     submissionDate: '2026-07-22',
   },
   internalJobNumber: 'JOB-TEST',
+  salesOrderNumber: 'SO-TEST',
   customerPoNumber: 'PO-TEST',
 };
 await assert.rejects(
@@ -310,6 +312,7 @@ assert.equal(exceptionPlan.planning.customerPoException.authorised, true);
 result = run(order, 'complete_planning', planning, validPlanningInput);
 order = result.entity;
 assert.equal(order.internalJobNumber, 'JOB-TEST');
+assert.equal(order.salesOrderNumber, 'SO-TEST');
 assert.equal(order.planning.assignedPlanningUserId, planning.id);
 assert.equal(order.plannedBy.id, planning.id);
 assert.equal(result.auditEvent.comment, 'Fabricated Planning test note.');
