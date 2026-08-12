@@ -142,6 +142,12 @@ assert.ok(expeditorSource.includes("order.trackingStatus !== 'awaiting_dispatch'
 assert.ok(expeditorSource.includes('expediting-history-notes'), 'Expeditor history must use a flat, readable note structure');
 assert.ok(expeditorSource.includes('Customer-safe update'));
 assert.equal(expeditorSource.includes('expediting-history-marker'), false, 'decorative nested timeline markers must not compete with update content');
+const dispatchSource = readFileSync('src/components/DispatchDashboard.jsx', 'utf8');
+assert.ok(dispatchSource.includes("from './ConfiguredUnitDetails.jsx'"), 'Dispatch must reuse the immutable configured-unit detail component');
+assert.ok(dispatchSource.includes('<ConfiguredUnitDetails'), 'Dispatch must expose expandable configuration, certificate and handover details');
+for (const detail of ['certificateRequirement', 'handoverType', 'packages', 'deliveryNoteNumber', 'trackingReference', 'documentReferences']) {
+  assert.ok(dispatchSource.includes(detail), `Dispatch configured-unit details must include ${detail}`);
+}
 const expeditingFieldsSource = readFileSync('src/components/ExpeditingFields.jsx', 'utf8');
 for (const fieldGroup of ['expediting-communication-grid', 'expediting-schedule-grid', 'expediting-reference-grid']) assert.ok(expeditingFieldsSource.includes(fieldGroup));
 assert.ok(css.includes('.expediting-communication-grid,.expediting-schedule-grid,.expediting-reference-grid{grid-template-columns:1fr}'), 'Expeditor progress fields must stack cleanly on mobile');

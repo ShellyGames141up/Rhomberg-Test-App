@@ -11,7 +11,9 @@ import {
   dispatchReceivedAt,
   filterDispatchOrders,
 } from '../domain/dispatch.js';
+import { certificationTypeForItem } from '../domain/certification.js';
 import { statusById } from '../domain/tracking.js';
+import { ConfiguredUnitDetails } from './ConfiguredUnitDetails.jsx';
 import { OrderSummaryPanel } from './OrderSummaryPanel.jsx';
 import { StatusBadge } from './StatusBadge.jsx';
 import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
@@ -228,7 +230,22 @@ function DispatchOrder({ order, expanded, onToggle, onAction, account, dispatchO
 
           <section className="dispatch-products-section">
             <div className="planning-section-heading"><div><span className="eyebrow">Configured units</span><h3>{lineItems} immutable line item{lineItems === 1 ? '' : 's'}</h3></div><small>Order snapshot</small></div>
-            <div className="dispatch-product-grid">{(order.items || []).map(item => <span key={item.lineId || `${item.productId}-${item.code}`}><img src={item.image} alt="" /><i>{item.code}</i><strong>{item.name}</strong><small>Quantity {item.quantity || 1}</small></span>)}</div>
+            <div className="dispatch-configured-units">{(order.items || []).map(item => {
+              const certificateType = certificationTypeForItem(item);
+              return <ConfiguredUnitDetails
+                key={item.lineId || `${item.productId}-${item.code}`}
+                unit={item}
+                context="Dispatch"
+                extra={{
+                  certificateRequirement: certificateType ? `${certificateType.toUpperCase()} certificate` : 'No calibration certificate required',
+                  handoverType: dispatch.method ? method.label : (order.fulfilment === 'collect' ? 'Customer collection' : 'Delivery'),
+                  packages: dispatch.numberOfPackages ? `${dispatch.numberOfPackages} package${dispatch.numberOfPackages === 1 ? '' : 's'}` : 'Not packed',
+                  deliveryNoteNumber: dispatch.deliveryNoteNumber || 'Not recorded',
+                  trackingReference: dispatch.trackingReference || 'Not recorded',
+                  documentReferences: (order.planning?.documentReferences || []).join(', ') || 'No Planning document references',
+                }}
+              />;
+            })}</div>
           </section>
 
           {documentActions && <OrderSummaryPanel order={order} serviceMode={serviceMode} {...documentActions} />}
