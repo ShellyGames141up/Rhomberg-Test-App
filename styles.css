@@ -1280,6 +1280,16 @@ h1,h2,h3,h4{
   color:var(--text-primary);
 }
 :where(
+  .management-commercial-block,.management-performance-table,.notification-settings,
+  .archive-card,.technical-support-card,.technical-answer-panel,
+  .customer-source-documents,.order-summary-card,.settings-panel
+){color:var(--text-primary)}
+:where(
+  .management-commercial-block,.management-performance-table,.notification-settings,
+  .archive-card,.technical-support-card,.technical-answer-panel,
+  .customer-source-documents,.order-summary-card,.settings-panel
+) :where(p,small,dt){color:var(--text-muted)}
+:where(
   .home-hero,.profile-hero,.contact-hero,.configurator-hero,.product-hero,
   .operations-hero,.nearest-branch-card,.review-product,.activity-card,
   .executive-demo-controls,.executive-demo-launcher

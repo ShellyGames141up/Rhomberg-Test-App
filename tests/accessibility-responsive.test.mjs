@@ -9,6 +9,7 @@ import {
 import {
   BREAKPOINTS,
   RESPONSIVE_AUDIT_WIDTHS,
+  SEMANTIC_COLOURS,
   STATUS_COLOURS,
   TYPOGRAPHY_SCALE,
 } from '../src/shared/design/tokens.js';
@@ -26,6 +27,19 @@ import {
 
 assert.equal(contrastRatio('#000000', '#ffffff'), 21);
 assert.equal(meetsContrast('#10252f', '#ffffff'), true);
+
+for (const [theme, colours] of Object.entries(SEMANTIC_COLOURS)) {
+  for (const surface of ['page', 'surface', 'elevated']) {
+    for (const text of ['textPrimary', 'textSecondary', 'textMuted']) {
+      assert.ok(
+        contrastRatio(colours[surface], colours[text]) >= 4.5,
+        `${theme} ${text} must meet 4.5:1 on ${surface}`,
+      );
+    }
+  }
+  assert.ok(contrastRatio(colours.surface, colours.link) >= 4.5, `${theme} links must meet 4.5:1 on a standard surface`);
+  assert.ok(contrastRatio(colours.page, colours.textDisabled) >= 3, `${theme} disabled text must remain visually distinguishable`);
+}
 
 for (const [tone, pair] of Object.entries(STATUS_COLOURS)) {
   assert.ok(
@@ -108,6 +122,7 @@ for (const marker of [
   '--mobile-nav-height:76px',
   'env(safe-area-inset-bottom)',
   '/* Product details use surface-safe text colours */',
+  '.management-commercial-block,.management-performance-table,.notification-settings',
   ':root:not([data-theme="dark"]) .product-detail',
 ]) assert.ok(css.includes(marker), `responsive/accessibility CSS must include ${marker}`);
 
