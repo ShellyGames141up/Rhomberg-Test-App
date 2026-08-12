@@ -33,7 +33,7 @@ const emptyValues = Object.freeze({
 const fieldValue = value => Array.isArray(value) ? value.join(', ') : typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value || '');
 const humanise = value => String(value || '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, character => character.toUpperCase());
 
-export function RepresentativeOrderLoader({ actions, serviceMode, maxDocumentBytes, onCreated, onClose }) {
+export function RepresentativeOrderLoader({ actions, maxDocumentBytes, onCreated, onClose }) {
   const [options, setOptions] = useState({ companies: [], contacts: [], branches: [], representatives: [], products: [], orderSources: [], priorities: [] });
   const [values, setValues] = useState(emptyValues);
   const [quotationFile, setQuotationFile] = useState(null);
@@ -208,7 +208,6 @@ export function RepresentativeOrderLoader({ actions, serviceMode, maxDocumentByt
         <p>Create an order received outside Rhomberg Connect. A matching customer quotation and Purchase Order are mandatory.</p>
       </header>
       <LeadTimeNotice compact />
-      <p className="tracking-storage-note"><span>i</span><span><strong>{serviceMode === 'mock' ? 'Fabricated test data only.' : 'Secure company service.'}</strong> {serviceMode === 'mock' ? 'Files are validated, but only document metadata persists in this GitHub Pages preview.' : 'The production backend must validate content, scan files for malware and enforce access again.'}</span></p>
 
       <form className="representative-order-form" onSubmit={submit} noValidate>
         <OrderSection index="01" title="Customer and assignment" help="Select an existing authorised account before entering order details.">

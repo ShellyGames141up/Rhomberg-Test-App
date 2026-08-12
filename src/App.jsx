@@ -850,7 +850,7 @@ export default function App() {
           {isStaff ? (
             <>
               {view === 'administration' && <AdministratorDashboard account={account} administrationActions={services.administration} serviceMode={services.mode} onOpenManagement={() => navigate('expeditor')} onOpenAudit={() => navigate('audit')} onOpenArchive={() => navigate('archive')} onRecordsChanged={refreshAfterManagementAction} />}
-              {view === 'load-order' && <RepresentativeOrderLoader actions={services.representativeOrders} serviceMode={services.mode} maxDocumentBytes={services.preview.maxRepresentativeOrderDocumentBytes} onCreated={representativeOrderCreated} onClose={() => navigate('expeditor')} />}
+              {view === 'load-order' && <RepresentativeOrderLoader actions={services.representativeOrders} maxDocumentBytes={services.preview.maxRepresentativeOrderDocumentBytes} onCreated={representativeOrderCreated} onClose={() => navigate('expeditor')} />}
               {view === 'expeditor' && (accountCan(account, PERMISSIONS.VIEW_ASSIGNED_RFQS)
                 && notificationTarget?.entityType !== 'order'
                 ? <SalesRepresentativeDashboard account={account} rfqs={enquiries} onAction={performWorkflowAction} onLoadCustomerOrder={() => navigate('load-order')} technicalSupportActions={services.technicalSupport} onRecordsChanged={refreshTechnicalRecords} serviceMode={services.mode} focusRecordId={notificationTarget?.entityId} />
