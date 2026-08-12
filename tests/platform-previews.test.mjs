@@ -104,6 +104,12 @@ const layoutSource = readFileSync(path.resolve('src', 'components', 'Layout.jsx'
 assert.ok(appSource.includes('__PUBLIC_PREVIEW__ && !PREVIEW_CONTEXT.unified'), 'unified application headers must not show Preview Centre navigation');
 assert.ok(authSource.includes('!preview.unified'), 'unified sign-in must not link back to role previews');
 assert.ok(layoutSource.includes('__PUBLIC_PREVIEW__ && !preview?.unified'), 'unified app header may show a discrete demo indicator but no preview link');
+assert.equal(authSource.includes('demoLogins.map'), false, 'normal and role-preview login screens must not render demo shortcut buttons');
+assert.equal(authSource.includes('demo-account'), false, 'demo account actions belong only in the Preview Centre');
+for (const requiredLoginControl of ['Forgot password?', 'Activate or create customer account', 'Email or sign-in name', 'Password', 'Sign in']) {
+  assert.ok(authSource.includes(requiredLoginControl), `normal login must include ${requiredLoginControl}`);
+}
+assert.ok(previewLandingSource.includes('View Demo Login'), 'fabricated login details must remain in the separate Preview Centre');
 
 const customerDesktop = PREVIEW_BY_ID[PREVIEW_IDS.CUSTOMER_DESKTOP];
 const customerMobile = PREVIEW_BY_ID[PREVIEW_IDS.CUSTOMER_MOBILE];

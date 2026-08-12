@@ -6,7 +6,6 @@ export function Auth({
   theme,
   onToggleTheme,
   registrationOptions,
-  demoLogins,
   serviceMode,
   preview,
   allowRegistration = true,
@@ -51,14 +50,6 @@ export function Auth({
     }
   };
 
-  const useDemo = async login => {
-    resetErrors();
-    setIsSubmitting(true);
-    const result = await onSignIn(login.email, login.password);
-    setIsSubmitting(false);
-    if (!result.ok) setError(result.message);
-  };
-
   return (
     <main className="auth-view">
       <button className="auth-theme-toggle" type="button" onClick={onToggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}><span>{theme === 'dark' ? '☀' : '☾'}</span>{theme === 'dark' ? 'Light' : 'Dark'}</button>
@@ -81,14 +72,7 @@ export function Auth({
             <PasswordField name="password" label="Password" show={showPassword} onToggle={() => setShowPassword(value => !value)} error={fieldErrors.password} />
             {(error || accessError) && <p className="form-error" role="alert">{error || accessError}</p>}
             <button className="primary-button full" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Sign in'} <span>{isSubmitting ? '•••' : '→'}</span></button>
-            {__PUBLIC_PREVIEW__ && demoLogins.map(login => (
-              <div className="demo-login-wrap" key={login.id}>
-                <button className={`demo-account ${!login.id.includes('customer') ? 'internal-demo' : ''}`} type="button" disabled={isSubmitting} onClick={() => useDemo(login)}>
-                  <span className="demo-avatar">{login.avatar}</span><span><strong>{login.label}</strong><small>{login.description}</small></span><i>›</i>
-                </button>
-                <p className="demo-credentials">{login.id.includes('customer') ? 'Customer demo' : 'Internal test'}: {login.email} · {login.password}</p>
-              </div>
-            ))}
+            <div className="auth-help-actions"><button type="button" onClick={() => { resetErrors(); setError(serviceMode === 'mock' ? 'Demo password recovery is not connected. Use the fabricated credentials shown only in the Preview Centre.' : 'Contact your authorised Rhomberg administrator to recover or activate your account.'); }}>Forgot password?</button>{allowRegistration && <button type="button" onClick={() => { setTab('register'); resetErrors(); }}>Activate or create customer account</button>}</div>
           </form>
         ) : allowRegistration ? (
           <form className="auth-form register-grid" onSubmit={submitRegister} noValidate>
@@ -105,7 +89,7 @@ export function Auth({
           </form>
         ) : null}
 
-        <p className="preview-note"><span>i</span> {__PUBLIC_PREVIEW__ && serviceMode === 'mock' ? 'Public test preview: use sample data only and do not upload confidential Purchase Orders. Accounts, RFQs and order updates are stored locally on this device.' : 'Private-cloud mode: access is controlled by the company service. Contact IT if you cannot access your authorised company.'}</p>
+        <p className="preview-note"><span>i</span> {__PUBLIC_PREVIEW__ && serviceMode === 'mock' ? 'Public test environment: use fabricated data only. Demo credentials are available exclusively in the separate Preview Centre.' : 'Private-cloud mode: access is controlled by the company service. Contact IT if you cannot access your authorised company.'}</p>
         {__PUBLIC_PREVIEW__ && preview && !preview.unified && <a className="preview-back-link" href="./">Back to all test previews</a>}
       </section>
     </main>
