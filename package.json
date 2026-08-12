@@ -20,6 +20,7 @@
     "build:netlify": "npm run build && node ./scripts/stage-static.mjs",
     "check": "node ./scripts/check-app.mjs",
     "check:css": "node ./scripts/check-css.mjs",
+    "check:private-staff": "node ./scripts/validate-private-staff.mjs",
     "test": "node ./tests/run-tests.mjs"
   },
   "dependencies": {

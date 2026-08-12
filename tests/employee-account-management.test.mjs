@@ -85,5 +85,12 @@ await assert.rejects(() => services.auth.signIn({ email: 'lab.amina', password: 
 
 const publicSources = ['src/services/mock/seedData.js', 'src/components/Auth.jsx', 'src/components/AdministratorDashboard.jsx', 'demo/executive-workflow/index.html'].map(path => readFileSync(path, 'utf8')).join('\n');
 assert.equal(/@rhom\.co\.za/i.test(publicSources), false, 'real staff email addresses must not enter public demo source or login screens');
+const privateValidator = readFileSync('scripts/validate-private-staff.mjs', 'utf8');
+assert.ok(privateValidator.includes("path.resolve('private', 'internal-staff.local.json')"));
+for (const forbidden of ['passwordHash', 'temporaryPassword', 'secret', 'credential']) assert.ok(privateValidator.includes(forbidden));
+const privateContract = readFileSync('docs/PRIVATE_STAFF_IMPORT.md', 'utf8');
+for (const requirement of ['ignored local file', 'authenticated backend administration endpoint', 'immutable audit', 'must never contain passwords', 'fabricated']) {
+  assert.ok(privateContract.toLowerCase().includes(requirement.toLowerCase()), `private staff import contract must document ${requirement}`);
+}
 
 console.log('Reusable employee creation, username login, multi-role workspace, first login, branch, image, audit, reset, archive and public-demo separation tests passed.');

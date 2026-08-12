@@ -154,9 +154,8 @@ for (const component of ['SalesRepresentativeDashboard.jsx', 'PlanningDashboard.
   assert.ok(source.includes('<ConfiguredUnitDetails'), `${component} must render the shared immutable unit detail component`);
 }
 const configuredUnitSource = readFileSync('src/components/ConfiguredUnitDetails.jsx', 'utf8');
-for (const protectedField of ['privatePriceEngine', 'internalSupplierCost', 'protectedPricing', 'auditMetadata', 'internalNotes', 'staffComments']) {
-  assert.ok(configuredUnitSource.includes(protectedField), `shared unit details must exclude ${protectedField}`);
-}
+assert.ok(configuredUnitSource.includes('configurationFieldIsProtected'), 'shared unit details must use a central protected-field policy');
+for (const protectedCategory of ['private', 'internal', 'price', 'pricing', 'audit', 'staff']) assert.ok(configuredUnitSource.includes(protectedCategory));
 const expeditingFieldsSource = readFileSync('src/components/ExpeditingFields.jsx', 'utf8');
 for (const fieldGroup of ['expediting-communication-grid', 'expediting-schedule-grid', 'expediting-reference-grid']) assert.ok(expeditingFieldsSource.includes(fieldGroup));
 assert.ok(css.includes('.expediting-communication-grid,.expediting-schedule-grid,.expediting-reference-grid{grid-template-columns:1fr}'), 'Expeditor progress fields must stack cleanly on mobile');
