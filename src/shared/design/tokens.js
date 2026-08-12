@@ -9,6 +9,10 @@ export const BREAKPOINTS = Object.freeze({
   ultrawide: 2560,
 });
 
+export const RESPONSIVE_AUDIT_WIDTHS = Object.freeze([
+  320, 360, 390, 412, 430, 768, 820, 1024, 1280, 1366, 1440, 1920,
+]);
+
 export const TYPOGRAPHY_SCALE = Object.freeze({
   display: 'clamp(2.75rem, 5vw, 5.75rem)',
   pageHeading: 'clamp(2.125rem, 3.6vw, 4.25rem)',

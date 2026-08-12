@@ -8,6 +8,7 @@ import {
 } from '../src/shared/design/contrast.js';
 import {
   BREAKPOINTS,
+  RESPONSIVE_AUDIT_WIDTHS,
   STATUS_COLOURS,
   TYPOGRAPHY_SCALE,
 } from '../src/shared/design/tokens.js';
@@ -59,6 +60,7 @@ for (const key of ['body', 'secondary', 'label', 'button', 'input', 'helper', 's
 }
 
 assert.deepEqual(Object.values(BREAKPOINTS), [360, 600, 768, 1024, 1280, 1440, 1920, 2560]);
+assert.deepEqual(RESPONSIVE_AUDIT_WIDTHS, [320, 360, 390, 412, 430, 768, 820, 1024, 1280, 1366, 1440, 1920]);
 assert.deepEqual(EXECUTIVE_LAYOUT_MODES, ['full', 'device']);
 assert.deepEqual(EXECUTIVE_DEVICE_PREVIEWS, ['phone', 'tablet', 'desktop']);
 assert.equal(normaliseExecutiveDemoState({ layoutMode: 'device', devicePreview: 'tablet' }).layoutMode, 'device');
@@ -100,6 +102,8 @@ for (const marker of [
   '@media(min-width:1920px)',
   '@media(min-width:2560px)',
   '@media(forced-colors:active)',
+  '/* Final responsive foundation */',
+  'overflow-wrap:anywhere',
 ]) assert.ok(css.includes(marker), `responsive/accessibility CSS must include ${marker}`);
 
 for (const component of [
