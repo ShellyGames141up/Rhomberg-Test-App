@@ -1990,6 +1990,14 @@ html,body,#root{max-width:100%;overflow-x:clip}
   .success-dialog{transform:none;margin-block:auto}
 }
 
+/* Customer timeline connectors align only between event markers */
+.tracking-timeline:before{display:none}
+.timeline-event{grid-template-columns:16px minmax(0,1fr);gap:12px;padding-bottom:18px}
+.timeline-event>i{position:relative;width:14px;height:14px;margin-top:4px;justify-self:center}
+.timeline-event:not(:last-child):after{content:"";position:absolute;z-index:0;left:7px;top:18px;bottom:0;width:2px;background:var(--border-default)}
+.timeline-event>span{min-width:0;padding-bottom:2px}
+.timeline-event p{margin-top:4px}
+
 @media(max-width:360px){
   body{font-size:15px}
   .app-screen :where(.content-block,.screen-heading,.catalogue-heading,.operations-queue,.operations-workspace-grid){padding-inline:12px}
