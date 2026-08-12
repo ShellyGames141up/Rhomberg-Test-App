@@ -2273,6 +2273,7 @@ html,body,#root{max-width:100%;overflow-x:clip}
 .client-health-card dl div { display: grid; gap: .1rem; }
 .client-health-card dt { color: var(--text-muted); font-size: .78rem; }
 .client-health-card dd { margin: 0; font-weight: 650; }
+.client-health-card{align-content:start}.client-health-card>.primary-button{justify-self:start;margin-top:2px}.client-health-card dl div{padding:6px 0;border-bottom:1px solid var(--border-default)}
 .visit-schedule-modal, .visit-qr-card { width: min(44rem, calc(100vw - 2rem)); max-height: 90vh; overflow: auto; }
 .visit-schedule-progress{height:4px;overflow:hidden;border-radius:999px;background:var(--surface-muted)}.visit-schedule-progress i{display:block;height:100%;background:var(--action-primary)}
 .visit-schedule-step{display:grid;gap:12px;min-height:260px;align-content:start}.visit-schedule-step h3{margin:0}.visit-schedule-step dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0}.visit-schedule-step dl>div{padding:10px;border-radius:9px;background:var(--surface-muted)}.visit-schedule-step dt{color:var(--text-muted);font-size:var(--type-helper)}.visit-schedule-step dd{margin:3px 0 0;font-weight:750}.visit-schedule-actions{display:flex;justify-content:flex-end;gap:9px;padding-top:12px;border-top:1px solid var(--border-default)}

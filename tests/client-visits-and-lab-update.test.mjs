@@ -75,3 +75,6 @@ assert.ok(visitStyles.includes('/* Client visit information and KPIs remain read
 assert.ok(visitStyles.includes('.visit-kpis{grid-template-columns:repeat(3'));
 const visitComponent = readFileSync('src/components/ClientVisitsDashboard.jsx', 'utf8');
 for (const step of ['Client information', 'Visit date and time', 'Purpose', 'Agenda and notes', 'Reminder and follow-up', 'Review and schedule']) assert.ok(visitComponent.includes(step));
+assert.ok(visitComponent.includes('Monthly activity'));
+assert.ok(visitComponent.includes('Open RFQs/orders'));
+assert.equal(visitComponent.includes('<p>{client.notes}</p>'), false);
