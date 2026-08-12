@@ -22,7 +22,8 @@
     "check:css": "node ./scripts/check-css.mjs",
     "check:private-staff": "node ./scripts/validate-private-staff.mjs",
     "docs:private-staff": "node ./scripts/generate-private-account-matrix.mjs",
-    "test": "node ./tests/run-tests.mjs"
+    "test": "node ./tests/run-tests.mjs",
+    "test:visual": "node ./scripts/capture-visual-regression.mjs"
   },
   "dependencies": {
     "pdf-lib": "1.17.1",
