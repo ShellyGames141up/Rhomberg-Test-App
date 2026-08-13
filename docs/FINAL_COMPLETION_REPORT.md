@@ -1,5 +1,44 @@
 # Final UI/UX completion report
 
+## Step 63 - private-account readiness and normal entry-point cleanup
+
+The production-oriented authentication handover pass adds explicit normal Desktop and Mobile routes, a single device-access matrix, owner-supplied private roster placeholders, a locally generated encrypted administrator credential document, fabricated Representative test-client assignment and stronger public-build leak scanning. It does not claim production authentication is complete: the private backend or identity provider, secure hashing, MFA, sessions, account provisioning and recovery remain Innovate IT responsibilities.
+
+### Entry points
+
+- Desktop: `https://shellygames141up.github.io/Rhomberg-Test-App/desktop/`
+- Mobile: `https://shellygames141up.github.io/Rhomberg-Test-App/mobile/`
+- Preview Centre: `https://shellygames141up.github.io/Rhomberg-Test-App/`
+- Normal routes show splash then Sign In, reject public demo identities, disable browser-local public registration and contain no Preview Centre navigation.
+
+### Private administration
+
+- The tracked private roster is placeholder-only and contains no credentials.
+- `npm run docs:private-credentials` generates an ignored AES-256 encrypted PDF on an authorised administrator device.
+- The document password is `Rhom123!` and unlocks the PDF only.
+- Each initial account password is a unique 20-character cryptographically random value with uppercase, lowercase, numbers and symbols.
+- The generated PDF was decrypted with the correct password, rejected an incorrect password and visually reviewed across both pages. It remains outside Git, public assets, service-worker caches and build outputs.
+
+### Access and responsive verification
+
+- Customer, Sales Representative, Expeditor and Manager: Desktop and Mobile.
+- Planning, Dispatch, Laboratory, QA, Technical, Sales Manager, Company Owner and Administrator: Desktop only.
+- Buyer: Desktop prepared/inactive.
+- Fabricated Sales Workflow Test (`C-27`) is linked to `TEST CLIENT - Sales Workflow Test`; service tests confirm assigned-client isolation.
+- Rendered normal login checks passed with zero page overflow at 320, 360, 375, 390, 412, 480, 600, 768, 820, 1024, 1280, 1366, 1440, 1920 and 2560 px. Portrait/landscape checks also passed.
+- Customer, Sales, Expeditor, Planning, Dispatch, Laboratory, Quality, Technical, Management, Owner and Administrator workspaces were opened with fabricated preview identities and checked for correct rendering and zero page overflow.
+
+### Security and build verification
+
+- Public artifact scanners reject the credential PDF, private roster, owner placeholders, approved private identity markers and prohibited demo credentials in production output.
+- Production service-worker cache naming and preview-route removal are isolated.
+- Production build contains no source maps, demo accounts, Preview Centre strings, private pricing markers or real Rhomberg email domain.
+- GitHub Pages, standalone preview and API-only production candidates build from separate controlled paths.
+
+### Remaining production work
+
+Innovate IT must supply the production identity provider/backend, approved real roster, server-side permissions and tenant enforcement, secure password hashing and first-login change, MFA, sessions, secrets, private document storage, malware scanning, monitoring, backups and incident response. GitHub Pages remains demonstration-only.
+
 Report date: 12 August 2026  
 Specification coverage: Steps 1–61 complete; Step 62 is the final consolidated verification checkpoint  
 Delivery branch: `main`

@@ -1,5 +1,9 @@
 # Responsive UI Guidelines
 
+## Verification matrix
+
+Normal Desktop, Mobile and representative role-preview routes are checked at 320, 360, 375, 390, 412, 480, 600, 768, 820, 1024, 1280, 1366, 1440, 1920 and 2560 CSS pixels. CSS media/container queries are the primary adaptation mechanism; viewport changes, rotation, split-screen and zoom reflow without reload. Page-level horizontal overflow is prohibited, while explicitly approved data regions may use contained scrolling when a meaningful card reflow is not possible.
+
 Rhomberg Connect uses one shared responsive system across Customer, Sales, Technical, Planning, Laboratory, Quality Assurance, Dispatch, Management, Audit, Archive and Administration workspaces.
 
 ## Data displays

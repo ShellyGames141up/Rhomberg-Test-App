@@ -1,5 +1,9 @@
 # Role and preview access matrix
 
+## Application surface authority
+
+`src/shared/platform/applicationAccess.js` is the single normal-route device-access authority. Customer, Sales Representative, Expeditor and Manager are active on Desktop and Mobile. Planning, Dispatch, Laboratory roles, QA roles, Technical Advisor, Technical Director, Sales Manager, Company Owner and Administrator are active on Desktop only. Buyer is Desktop prepared/inactive. This surface matrix does not replace the permission matrix below; service permissions still decide which records and workflow actions an authenticated account may use.
+
 Accounts may hold multiple roles; effective permissions are data-driven and never depend on an employee name. New definitions include `branch_manager`, `technical_manager`, `laboratory_manager_pressure` and `laboratory_manager_temperature`. Branch Manager reads remain constrained by authorised company and branch scope. Technical Manager receives Technical Support queue, assignment, correspondence, escalation and reporting capabilities. Discipline-specific Laboratory Manager roles receive certificate review and release only within authorised Laboratory scope.
 
 Retention controls are internal-only. Managers and Administrators can search archive records, archive eligible completed orders, restore, export and manage legal holds. Only Administrators can alter demonstration retention settings. No browser role can permanently delete an order.

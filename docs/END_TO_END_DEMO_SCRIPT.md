@@ -107,7 +107,7 @@ Repeat A1–A7 with seeded Traceable order `OR-LAB-2102`, selecting certificate 
 
 - Customer and internal accounts cannot cross authentication realms.
 - Request a demo credential change, use the labelled mock code once, and verify expiry/reuse rejection.
-- Durban shows Dawie and Nadia only; Port Elizabeth shows Carmen only.
+- Durban and Port Elizabeth show only clearly fabricated branch-specific representative identities in the public demonstration.
 - A dedicated company representative is reused on later RFQs; only authorised management can reassign it.
 
 ## Representative-loaded order demonstration

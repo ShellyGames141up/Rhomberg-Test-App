@@ -1,5 +1,11 @@
 # Authentication and credential-change design
 
+## Normal Desktop and Mobile entry points
+
+The normal routes are `/desktop/` and `/mobile/`. Both show the shared startup animation before Sign In, contain no Preview Centre navigation and use the same authentication service. Public GitHub Pages deliberately rejects fabricated `.invalid` and `.test` Preview Centre identities on these normal routes and disables public browser-local registration. Approved private accounts require the production backend or identity provider described in [Private User Administration](PRIVATE_USER_ADMINISTRATION.md).
+
+Device access is enforced by the authoritative `APPLICATION_ACCESS_MATRIX` before a workspace is loaded. Changing a URL cannot grant a desktop-only role access to Mobile. The API must repeat and own this decision in production.
+
 Internal identities support one or more role assignments and one active workspace. Work email is preferred; an approved username is supported when no email exists. The employee profile remains independent of the authentication method so Microsoft Entra ID, Active Directory or another approved provider can replace local authentication without losing historical ownership.
 
 New local accounts start as `pending_activation`. A temporary password is displayed once, hashed before storage, invalidated on change and never audited. First login opens Security settings and requires a replacement password. Production must use MFA, IT-approved slow password hashing and policy, breached-password checks, rate limiting, lockout, reset expiry and session revocation.

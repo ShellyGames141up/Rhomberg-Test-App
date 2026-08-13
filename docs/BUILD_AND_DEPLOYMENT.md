@@ -1,5 +1,11 @@
 # Build and Deployment
 
+## Entry points and private exclusions
+
+The GitHub Pages build stages `/desktop/`, `/mobile/`, legacy `/app/`, dedicated `/preview/` routes and the executive demo. Desktop and Mobile are normal splash-to-sign-in entry points; only the repository root opens the Preview Centre. `build:production` uses the normal Desktop document and the API adapter, excludes mock services and demo modules, and scans generated artifacts.
+
+Ignored `private/`, the encrypted credential PDF and `private/internal-staff.local.json` are never deployment inputs. Public and production artifact scanners fail if a protected filename, approved private identity marker, owner-supplied placeholder or prohibited demo credential appears. Source maps are not produced by the production build.
+
 ## Development Servers
 
 ```text

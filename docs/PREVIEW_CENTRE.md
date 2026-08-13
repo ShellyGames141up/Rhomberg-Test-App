@@ -1,5 +1,7 @@
 # Preview Centre
 
+Normal application links are intentionally not shown inside the Preview Centre. The Preview Centre cannot provision or authenticate private operational accounts. Fabricated `.invalid` and `.test` identities remain confined to dedicated preview routes, while `/desktop/` and `/mobile/` reject them in the public build.
+
 The Preview Centre is a separate, public demonstration environment for authorised project reviewers. It is intended for presentations, development review, showcase events, management demonstrations and IT testing. It is not the normal Rhomberg Connect application entry and must never receive real data.
 
 ## Experiences
@@ -22,7 +24,7 @@ The Preview Centre is a separate, public demonstration environment for authorise
 6. Use device preview when demonstrating responsive behaviour; use Full Application for detailed desktop operation.
 7. Reset the fabricated scenario before presenting to a new audience.
 
-Normal users open the Application link in README. That route presents the Rhomberg Connect splash and sign-in screen directly and contains no navigation back to the Preview Centre.
+Normal users open the Desktop or Mobile Application link in README. Those routes present the Rhomberg Connect splash and sign-in screen directly and contain no navigation back to the Preview Centre.
 
 Preview builds retain a small **DEMO PREVIEW** badge and an explicit return path. The normal application splash, sign-in and authenticated shell render no preview badge, banner, caption or Preview Centre link. Build and routing tests enforce this separation.
 

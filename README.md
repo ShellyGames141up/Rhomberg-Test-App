@@ -1,4 +1,4 @@
-# Rhomberg Connect - IT Handover Repository
+﻿# Rhomberg Connect - IT Handover Repository
 
 ## Secure employee account management
 
@@ -14,18 +14,55 @@ This repository contains the shared React implementation for **Rhomberg Connect*
 
 The official experience now includes refined responsive Rhomberg Connect logo assets, a professional startup splash, one-time customer welcome, an interactive isolated fake-RFQ tutorial, varied adjustable UI sounds/mobile haptics, restrained micro-interactions and a dedicated service-backed Settings area for every user role. Customer-defined application colours and company-logo branding have been removed; Light, Dark, System and approved accessibility options use the protected official design system. A customer's first authorised representative choice is remembered at company level and reused on later RFQs.
 
-## Launch Rhomberg Connect
+## Normal Application
+### Desktop
 
-### [🚀 Open Rhomberg Connect Application](https://shellygames141up.github.io/Rhomberg-Test-App/app/)
+[Open Rhomberg Connect - Desktop](https://shellygames141up.github.io/Rhomberg-Test-App/desktop/)
 
-Opens the normal Rhomberg Connect application experience in your browser.
+### Mobile
 
-### [🖥 Open the Preview Centre](https://shellygames141up.github.io/Rhomberg-Test-App/)
+[Open Rhomberg Connect - Mobile](https://shellygames141up.github.io/Rhomberg-Test-App/mobile/)
 
-Opens the controlled customer, internal, mobile and executive demonstration choices. All public previews use fabricated browser-local data.
+Both normal entry points share one responsive application, authentication service, role model and workflow implementation. They show the Rhomberg Connect splash, proceed directly to Sign In and contain no Preview Centre navigation or fabricated-login shortcuts. The public GitHub Pages build cannot authenticate private operational users; that requires the approved backend or identity provider.
+
+## Private User Administration
+
+Real staff identities belong only in the ignored `private/internal-staff.local.json` roster. The tracked `private-config/internal-staff.example.json` contains explicit owner-supplied placeholders and no credentials. After the owner and IT approve the roster, an authorised administrator runs `npm run docs:private-credentials` on a controlled device to create:
+
+`private/RHOMBERG_CONNECT_INITIAL_USER_CREDENTIALS.pdf`
+
+The encrypted document is ignored by Git, excluded from every public/production build and must be transferred through an IT-approved private channel. It is not available from GitHub Pages or any public repository URL.
+
+Credential document password: `Rhom123!`
+
+**This password unlocks the encrypted credential document only. It is not an application login password.** Each configured account receives a unique cryptographically random temporary password of at least 16 characters and must change it at first successful login. Secure server-side hashing, MFA, expiry, recovery and session enforcement still require the production backend or identity provider. See [Private User Administration](docs/PRIVATE_USER_ADMINISTRATION.md).
+
+## Application access matrix
+
+| Role | Desktop | Mobile | Status |
+| --- | :---: | :---: | --- |
+| Customer | Yes | Yes | Active |
+| Sales Representative | Yes | Yes | Active |
+| Expeditor | Yes | Yes | Active |
+| Manager | Yes | Yes | Active |
+| Planning, Dispatch, Laboratory, QA, Technical, Sales Manager, Company Owner, Administrator | Yes | No | Active desktop workflows |
+| Buyer | Yes | No | Prepared/inactive |
+
+`src/shared/platform/applicationAccess.js` is the single route-access authority; the existing service permission model remains the workflow authority. Editing a URL cannot grant an unauthorised workspace.
+
+## Sales Representative test-client matrix
+
+| Fabricated Representative | Fabricated test company | Customer login | Supported application |
+| --- | --- | --- | --- |
+| Sales Workflow Test (`C-27`) | `TEST CLIENT - Sales Workflow Test` | `cape.demo@client.test` | Customer Desktop and Mobile |
+
+The test client is fabricated, assigned to exactly one representative and contains enough browser-local records to exercise RFQ, quotation, order, visit and customer workflows. Automated isolation checks confirm the representative cannot see another representative's client records.
 
 ## Preview Centre
 
+### [Open the Preview Centre](https://shellygames141up.github.io/Rhomberg-Test-App/)
+
+The Preview Centre is for authorised demonstrations and showcase presentations only. It uses fabricated `.invalid` and `.test` identities and browser-local data.
 The separate Preview Centre is for authorised project reviews, presentations, management demonstrations and IT testing. It provides:
 
 - Customer Mobile
@@ -36,11 +73,11 @@ The separate Preview Centre is for authorised project reviews, presentations, ma
 
 For a presentation, open the Preview Centre link above, select the device or workflow experience, and use only the fabricated account listed under **Preview Centre Demo Logins** below. Start with the Executive Workflow Demo for a guided end-to-end story, or choose a role preview for focused department review. Reset the fabricated scenario before a new audience and never enter real customer, employee, pricing or document data.
 
-The normal **Rhomberg Connect Application** link opens the shared splash and sign-in journey directly. It does not open or link back to the Preview Centre. See [Preview Centre instructions](docs/PREVIEW_CENTRE.md) for the presenter sequence and access boundaries.
+The normal Desktop and Mobile links above open the shared splash and sign-in journey directly. They do not open or link back to the Preview Centre. See [Preview Centre instructions](docs/PREVIEW_CENTRE.md) for the presenter sequence and access boundaries.
 
 ## Project Status
 
-- Version: `5.1.0`
+- Version: `5.2.0`
 - Handover scope: executive demonstration and Innovate IT technical review
 - Front end: React 19 and shared CSS
 - Current public service: browser-local mock adapter
@@ -51,7 +88,7 @@ The normal **Rhomberg Connect Application** link opens the shared splash and sig
 - Email and push: simulated only
 - Production deployment: not started
 - Current `main` scope: representative-loaded customer orders, controlled Laboratory calibration and RFQ Technical Support are integrated in mock mode
-- Current verification: 90 React source files compile; final test and preview-build results are recorded at phase completion
+- Current verification: 94 React source files compile; automated, production-leak, encrypted-PDF and rendered responsive results are recorded in the final completion report
 
 ## Final UI/UX Delivery Ledger — 62 Steps
 
@@ -420,6 +457,7 @@ No infrastructure values, credentials or private endpoints belong in this reposi
 - [Laboratory workflow](docs/LAB_WORKFLOW.md), [implementation completion report](docs/LAB_IMPLEMENTATION_COMPLETION_REPORT.md), [template analysis](docs/LAB_TEMPLATE_ANALYSIS.md), [calculation specification](docs/LAB_CALCULATION_SPECIFICATION.md), [validation report](docs/LAB_CALCULATION_VALIDATION_REPORT.md), [reference standards](docs/LAB_REFERENCE_STANDARDS.md), [uncertainty budget](docs/UNCERTAINTY_BUDGET.md), [PDF templates](docs/LAB_PDF_TEMPLATES.md), [role matrix](docs/LAB_ROLE_PERMISSION_MATRIX.md), [certificate workflow](docs/LAB_CERTIFICATE_WORKFLOW.md), [signature workflow](docs/LAB_SIGNATURE_WORKFLOW.md) and [test plan](docs/LAB_TEST_PLAN.md)
 - [QA workflow](docs/QA_WORKFLOW.md)
 - [Authentication](docs/AUTHENTICATION.md)
+- [Private User Administration](docs/PRIVATE_USER_ADMINISTRATION.md)
 - [Management analytics](docs/MANAGEMENT_ANALYTICS.md)
 - [Release notes](docs/RELEASE_NOTES_v1.0.0_IT_HANDOVER.md)
 

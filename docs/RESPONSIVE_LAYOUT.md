@@ -1,5 +1,9 @@
 # Responsive Layout
 
+## Normal application entry verification
+
+The shared normal application now has explicit `/desktop/` and `/mobile/` entry documents without duplicating React code. Both rely on fluid CSS, container/media queries and the same navigation/workspace components. Automated and rendered review covers 320, 360, 375, 390, 412, 480, 600, 768, 820, 1024, 1280, 1366, 1440, 1920 and 2560 CSS pixels, plus representative portrait/landscape changes. At 320 px the normal sign-in has no page-level horizontal overflow; large displays preserve readable max-widths and operational grids.
+
 ## Product modes
 
 The shared React application renders four product previews plus the Executive Workflow Demo.
