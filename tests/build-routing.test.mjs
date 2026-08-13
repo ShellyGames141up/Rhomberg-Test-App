@@ -24,6 +24,7 @@ for (const [route, document, id] of [['/Rhomberg-Test-App/desktop/', desktopDocu
   assert.equal(previewNavigationAllowed({ publicPreview: true, preview: application }), false, 'normal application users must not be routed through Preview Centre');
   assert.ok(document.includes(`content="${id}"`));
   assert.ok(document.includes('<base href="../">'));
+  assert.ok(document.includes('initial-scale=1.0'), 'normal application entry points must start at 100% viewport scale');
 }
 
 for (const forbiddenRedirect of [/http-equiv=["']refresh/i, /location\.(?:assign|replace)\s*\(/, /window\.location\s*=/]) {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rhomberg-connect-preview-v46';
+const CACHE_NAME = 'rhomberg-connect-preview-v47';
 
 const APP_FILES = [
   './',
@@ -6,7 +6,7 @@ const APP_FILES = [
   './app/',
   './desktop/',
   './mobile/',
-  './styles.css?v=41',
+  './styles.css?v=42',
   './runtime-config.js?v=11',
   './app.js?v=44',
   './preview/customer-desktop/',

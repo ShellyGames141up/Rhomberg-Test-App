@@ -197,6 +197,9 @@ assert.equal(filterDemoLoginsForPreview(demoLogins, internalDesktop).some(login 
 await services.auth.signIn({ email: DEMO_ACCOUNT.email, password: DEMO_ACCOUNT.password });
 const initial = await services.personalisation.get();
 assert.equal(initial.setupCompleted, false, 'customer-only onboarding must open until a complete preference set is saved');
+const defaultScale = customerPersonalisationCss(initial);
+assert.equal(defaultScale['--customer-font-scale'], '1', 'default application text scale must be 100%');
+assert.equal(defaultScale['--customer-density-scale'], '1', 'default application density scale must be 100%');
 
 const completeSettings = {
   ...createDefaultCustomerPersonalisation(),

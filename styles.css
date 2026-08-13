@@ -1274,7 +1274,7 @@ button,input,select,textarea{font-family:inherit}
    This final layer is intentionally authoritative over legacy preview CSS.
    ========================================================================== */
 
-html{font-size:16px}
+html{font-size:100%}
 body{
   overflow-x:hidden;
   background:var(--background-page);
@@ -1700,7 +1700,7 @@ h1,h2,h3,h4{
 
 /* Small mobile and phone previews */
 @media(max-width:599px){
-  html{font-size:16px}
+  html{font-size:100%}
   body{background:var(--background-page)}
   .app-shell{width:100%;margin:0;box-shadow:none}
   .app-main{padding-bottom:calc(92px + env(safe-area-inset-bottom))}
@@ -2029,7 +2029,7 @@ h1,h2,h3,h4{
 }
 
 @media(min-width:2560px){
-  body{font-size:17px}
+  body{font-size:1rem}
   .preview-customer-desktop,.preview-internal-desktop,.preview-executive-demo.executive-layout-full{
     display:grid;
     place-items:start center;
