@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "notice": "PRIVATE CONFIGURATION PLACEHOLDERS ONLY. Copy to private/internal-staff.local.json and replace every placeholder with owner-approved staff information. Never add credentials to this file.",
+  "staff": [
+    { "displayName": "OWNER TO SUPPLY - Administrator", "username": "OWNER_TO_SUPPLY_ADMINISTRATOR", "branchId": "cape-town", "department": "Administration", "roles": ["administrator"], "activationStatus": "pending_owner_configuration" },
+    { "displayName": "OWNER TO SUPPLY - Company Owner", "username": "OWNER_TO_SUPPLY_COMPANY_OWNER", "branchId": "cape-town", "department": "Executive", "roles": ["company_owner"], "activationStatus": "pending_owner_configuration" },
+    { "displayName": "OWNER TO SUPPLY - Manager", "username": "OWNER_TO_SUPPLY_MANAGER", "branchId": "cape-town", "department": "Executive", "roles": ["manager"], "activationStatus": "pending_owner_configuration" },
+    { "displayName": "OWNER TO SUPPLY - Sales Manager", "username": "OWNER_TO_SUPPLY_SALES_MANAGER", "branchId": "cape-town", "department": "Sales", "roles": ["sales_manager"], "activationStatus": "pending_owner_configuration" },
+    { "displayName": "OWNER TO SUPPLY - Sales Representative", "username": "OWNER_TO_SUPPLY_SALES_REPRESENTATIVE", "branchId": "cape-town", "department": "Sales", "roles": ["sales_representative"], "activationStatus": "pending_owner_configuration" },
+    { "displayName": "OWNER TO SUPPLY - Expeditor", "username": "OWNER_TO_SUPPLY_EXPEDITOR", "branchId": "cape-town", "department": "Expediting", "roles": ["expeditor"], "activationStatus": "pending_owner_configuration" },
+    { "displayName": "OWNER TO SUPPLY - Planning", "username": "OWNER_TO_SUPPLY_PLANNING", "branchId": "cape-town", "department": "Planning", "roles": ["planning"], "activationStatus": "pending_owner_configuration" },
+    { "displayName": "OWNER TO SUPPLY - Dispatch", "username": "OWNER_TO_SUPPLY_DISPATCH", "branchId": "cape-town", "department": "Dispatch", "roles": ["dispatch"], "activationStatus": "pending_owner_configuration" },
+    { "displayName": "OWNER TO SUPPLY - Laboratory User", "username": "OWNER_TO_SUPPLY_LABORATORY_USER", "branchId": "cape-town", "department": "Pressure Laboratory", "roles": ["laboratory_user"], "activationStatus": "pending_owner_configuration" },
+    { "displayName": "OWNER TO SUPPLY - Laboratory Manager", "username": "OWNER_TO_SUPPLY_LABORATORY_MANAGER", "branchId": "cape-town", "department": "Pressure Laboratory", "roles": ["laboratory_manager"], "activationStatus": "pending_owner_configuration" },
+    { "displayName": "OWNER TO SUPPLY - Quality Assurance", "username": "OWNER_TO_SUPPLY_QUALITY_ASSURANCE", "branchId": "cape-town", "department": "Quality Assurance", "roles": ["quality_assurance"], "activationStatus": "pending_owner_configuration" },
+    { "displayName": "OWNER TO SUPPLY - Quality Manager", "username": "OWNER_TO_SUPPLY_QUALITY_MANAGER", "branchId": "cape-town", "department": "Quality Assurance", "roles": ["quality_manager"], "activationStatus": "pending_owner_configuration" },
+    { "displayName": "OWNER TO SUPPLY - Technical Advisor", "username": "OWNER_TO_SUPPLY_TECHNICAL_ADVISOR", "branchId": "cape-town", "department": "Technical Support", "roles": ["technical_support"], "activationStatus": "pending_owner_configuration" },
+    { "displayName": "OWNER TO SUPPLY - Technical Director", "username": "OWNER_TO_SUPPLY_TECHNICAL_DIRECTOR", "branchId": "cape-town", "department": "Technical Support", "roles": ["technical_director"], "activationStatus": "pending_owner_configuration" },
+    { "displayName": "OWNER TO SUPPLY - Buyer (prepared/inactive)", "username": "OWNER_TO_SUPPLY_BUYER", "branchId": "cape-town", "department": "Administration", "roles": ["buyer"], "activationStatus": "prepared_inactive" }
+  ]
+}

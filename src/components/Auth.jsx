@@ -59,7 +59,7 @@ export function Auth({
         <div className="auth-brand">
           <img src="assets/images/rhomberg-connect-logo-full-dark.png" alt="Rhomberg Connect" />
         </div>
-        {showPreviewNavigation && <span className="preview-chip">Demo Preview{preview?.platform ? ` · ${preview.platform}` : ''}</span>}
+        {__PUBLIC_PREVIEW__ && showPreviewNavigation && <span className="preview-chip">Demo Preview{preview?.platform ? ` · ${preview.platform}` : ''}</span>}
         <h1 id="auth-title">{tab === 'signin' ? <>Welcome to {preview?.product || 'Rhomberg'}<br /><em>{preview?.platform || 'Instruments'}.</em></> : <>Create your company<br /><em>workspace.</em></>}</h1>
         <p className="auth-intro">{preview?.customer ? 'Browse instruments, submit RFQs and follow customer-safe order progress.' : preview?.internal ? 'Open the authorised operational queue for your role and continue controlled workflow actions.' : 'Find the right instrument, submit clear RFQs and follow every saved request or order from one place.'}</p>
 
@@ -92,7 +92,7 @@ export function Auth({
         ) : null}
 
         <p className="preview-note"><span>i</span> {preview?.unified ? 'Use your authorised Rhomberg Connect account. Contact your administrator if you need access.' : __PUBLIC_PREVIEW__ && serviceMode === 'mock' ? 'Demonstration environment: use fabricated data only.' : 'Access is controlled by the company service. Contact IT if you cannot access your authorised company.'}</p>
-        {showPreviewNavigation && <a className="preview-back-link" href="./">Back to all test previews</a>}
+        {__PUBLIC_PREVIEW__ && showPreviewNavigation && <a className="preview-back-link" href="./">Back to all test previews</a>}
       </section>
     </main>
   );

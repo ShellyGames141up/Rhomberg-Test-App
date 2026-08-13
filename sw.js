@@ -1,12 +1,14 @@
-const CACHE_NAME = 'rhomberg-connect-preview-v45';
+const CACHE_NAME = 'rhomberg-connect-preview-v46';
 
 const APP_FILES = [
   './',
   './index.html',
   './app/',
+  './desktop/',
+  './mobile/',
   './styles.css?v=41',
   './runtime-config.js?v=11',
-  './app.js?v=43',
+  './app.js?v=44',
   './preview/customer-desktop/',
   './preview/customer-mobile/',
   './preview/internal-mobile/',

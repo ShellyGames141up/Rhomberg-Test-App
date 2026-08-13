@@ -53,28 +53,29 @@ for (const definition of PREVIEW_DEFINITIONS) {
   const page = readFileSync(path.resolve(definition.sourcePath, 'index.html'), 'utf8');
   assert.match(page, new RegExp(`<meta name="rhomberg-preview" content="${definition.id}">`));
   assert.ok(page.includes('<base href="../../">'), `${definition.id} must preserve the GitHub Pages base path`);
-  assert.ok(page.includes('app.js?v=43'), `${definition.id} must request the current application bundle`);
+  assert.ok(page.includes('app.js?v=44'), `${definition.id} must request the current application bundle`);
 }
 const rootPage = readFileSync(path.resolve('index.html'), 'utf8');
 const serviceWorker = readFileSync(path.resolve('sw.js'), 'utf8');
 const previewLandingSource = readFileSync(path.resolve('src', 'apps', 'PreviewLanding.jsx'), 'utf8');
 assert.ok(previewLandingSource.includes('preview-landing-theme'), 'Preview Centre must support manual light/dark review');
 assert.ok(previewLandingSource.includes("is-${theme}"), 'Preview Centre must apply its selected semantic theme');
-assert.ok(rootPage.includes('app.js?v=43'), 'Preview Centre must request the current application bundle');
+assert.ok(rootPage.includes('app.js?v=44'), 'Preview Centre must request the current application bundle');
 for (const purpose of ['Not the normal application entry point', 'presentations', 'development review', 'showcase events', 'management demonstrations', 'IT testing']) {
   assert.ok(previewLandingSource.toLowerCase().includes(purpose.toLowerCase()), `Preview Centre must identify its ${purpose} purpose`);
 }
-assert.ok(serviceWorker.includes("'./app.js?v=43'"), 'service worker must cache the same application bundle version');
+assert.ok(serviceWorker.includes("'./app.js?v=44'"), 'service worker must cache the same application bundle version');
 const readme = readFileSync(path.resolve('README.md'), 'utf8');
 for (const url of [
-  'https://shellygames141up.github.io/Rhomberg-Test-App/app/',
+  'https://shellygames141up.github.io/Rhomberg-Test-App/desktop/',
+  'https://shellygames141up.github.io/Rhomberg-Test-App/mobile/',
   'https://shellygames141up.github.io/Rhomberg-Test-App/',
 ]) assert.ok(readme.includes(url), `README must include the approved launch URL ${url}`);
-assert.equal((readme.match(/https:\/\/shellygames141up\.github\.io\/Rhomberg-Test-App/g) || []).length, 2, 'README must expose only the Application and Preview Centre launch links');
+assert.equal((readme.match(/https:\/\/shellygames141up\.github\.io\/Rhomberg-Test-App/g) || []).length, 3, 'README must expose only Desktop, Mobile and Preview Centre launch links');
 for (const previewName of ['Customer Mobile', 'Customer Desktop', 'Rep/Expeditor Mobile', 'Internal Desktop', 'Executive Workflow Demo']) {
   assert.ok(readme.includes(previewName), `README Preview Centre must list ${previewName}`);
 }
-for (const instruction of ['authorised project reviews', 'select the device or workflow experience', 'Preview Centre Demo Logins', 'opens the shared splash and sign-in journey directly']) {
+for (const instruction of ['authorised project reviews', 'select the device or workflow experience', 'Preview Centre Demo Logins', 'open the shared splash and sign-in journey directly']) {
   assert.ok(readme.includes(instruction), `README Preview Centre must explain ${instruction}`);
 }
 const packageScripts = JSON.parse(readFileSync(path.resolve('package.json'), 'utf8')).scripts;
@@ -108,14 +109,30 @@ assert.ok(previewAllowsRole(applicationContext, USER_ROLES.ADMINISTRATOR));
 const applicationPage = readFileSync(path.resolve('app', 'index.html'), 'utf8');
 assert.ok(applicationPage.includes('<meta name="rhomberg-preview" content="application">'));
 assert.ok(applicationPage.includes('<base href="../">'));
+for (const [route, id, roleAllowed, roleDenied] of [
+  ['/Rhomberg-Test-App/desktop/', PREVIEW_IDS.APPLICATION_DESKTOP, USER_ROLES.ADMINISTRATOR, null],
+  ['/Rhomberg-Test-App/mobile/', PREVIEW_IDS.APPLICATION_MOBILE, USER_ROLES.CUSTOMER, USER_ROLES.ADMINISTRATOR],
+]) {
+  const context = previewContextForPath(route);
+  assert.equal(context.id, id);
+  assert.ok(previewAllowsRole(context, roleAllowed));
+  if (roleDenied) assert.equal(previewAllowsRole(context, roleDenied), false, 'editing a mobile URL must not expose a desktop-only workspace');
+  assert.equal(previewNavigationAllowed({ publicPreview: true, preview: context }), false);
+}
+for (const [folder, id] of [['desktop', PREVIEW_IDS.APPLICATION_DESKTOP], ['mobile', PREVIEW_IDS.APPLICATION_MOBILE]]) {
+  const document = readFileSync(path.resolve(folder, 'index.html'), 'utf8');
+  assert.ok(document.includes(`content="${id}"`));
+  assert.ok(document.includes('app.js?v=44'));
+  assert.doesNotMatch(document, /preview\//i);
+}
 const appSource = readFileSync(path.resolve('src', 'App.jsx'), 'utf8');
 const authSource = readFileSync(path.resolve('src', 'components', 'Auth.jsx'), 'utf8');
 const layoutSource = readFileSync(path.resolve('src', 'components', 'Layout.jsx'), 'utf8');
 for (const source of [appSource, authSource, layoutSource]) assert.ok(source.includes('previewNavigationAllowed'), 'every shell-level preview link must use the central separation policy');
-assert.ok(layoutSource.includes('{showPreviewNavigation && <a className="preview-status"'), 'the in-app preview badge must render only in Preview Centre builds');
+assert.ok(layoutSource.includes('{__PUBLIC_PREVIEW__ && showPreviewNavigation && <a className="preview-status"'), 'the in-app preview badge must render only in Preview Centre builds');
 assert.equal(layoutSource.includes(': <span className="preview-status"'), false, 'normal application headers must not render a preview-status fallback');
-assert.ok(authSource.includes('{showPreviewNavigation && <span className="preview-chip">Demo Preview'), 'the sign-in preview badge must render only in Preview Centre builds');
-assert.ok(appSource.includes('{SHOW_PREVIEW_NAVIGATION && <span className="desktop-caption">'), 'desktop preview captions must use the central separation policy');
+assert.ok(authSource.includes('{__PUBLIC_PREVIEW__ && showPreviewNavigation && <span className="preview-chip">Demo Preview'), 'the sign-in preview badge must render only in Preview Centre builds');
+assert.ok(appSource.includes('{__PUBLIC_PREVIEW__ && SHOW_PREVIEW_NAVIGATION && <span className="desktop-caption">'), 'desktop preview captions must use the central separation policy');
 for (const component of [
   'Home.jsx',
   'SalesRepresentativeDashboard.jsx',
@@ -131,6 +148,8 @@ for (const component of [
 }
 assert.equal(authSource.includes('demoLogins.map'), false, 'normal and role-preview login screens must not render demo shortcut buttons');
 assert.equal(authSource.includes('demo-account'), false, 'demo account actions belong only in the Preview Centre');
+assert.ok(appSource.includes('normalPublicRouteRejectsDemoIdentity'), 'normal public routes must reject fabricated Preview Centre identities');
+assert.ok(appSource.includes('Public account creation is disabled on the normal application route'), 'normal public routes must not create browser-local pseudo-production accounts');
 for (const requiredLoginControl of ['Forgot password?', 'Activate or create customer account', 'Email or sign-in name', 'Password', 'Sign in']) {
   assert.ok(authSource.includes(requiredLoginControl), `normal login must include ${requiredLoginControl}`);
 }

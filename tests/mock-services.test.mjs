@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { createApiServices } from '../src/services/api/createApiServices.js';
@@ -94,10 +94,10 @@ assert.ok(catalogue.products.length > 50, 'catalogue products should load throug
 assert.deepEqual(
   Object.fromEntries(Object.entries(representativesByBranch).map(([branch, reps]) => [branch, reps.map(rep => rep.name)])),
   {
-    'cape-town': ['Alphonso Majiet', 'Andrew Japtha', 'Quintin van Wyk', 'Arthur Daniels', 'Ericu Vercuiel'],
-    durban: ['Dawie', 'Nadia'],
-    johannesburg: ['Daniel Golden', 'Siya'],
-    'port-elizabeth': ['Carmen'],
+    'cape-town': ['Fabricated Cape Representative 11', 'Fabricated Cape Representative 13', 'Fabricated Cape Representative 14', 'Fabricated Cape Representative 17', 'Fabricated Cape Representative 27'],
+    durban: ['Fabricated Durban Representative 31', 'Fabricated Durban Representative 32'],
+    johannesburg: ['Fabricated Johannesburg Representative 21', 'Fabricated Johannesburg Representative 23'],
+    'port-elizabeth': ['Fabricated Port Elizabeth Representative 16'],
   },
   'only the approved branch representatives should be available',
 );
@@ -196,7 +196,7 @@ assert.equal(submission.enquiry.companyId, customer.companyId);
 assert.equal(submission.enquiry.trackingStatus, 'submitted', 'internal assignment should remain hidden in the customer projection');
 assert.equal(submission.enquiry.submittedAt, '2026-07-22T12:00:00.000Z');
 assert.equal(submission.enquiry.selectedRep.id, 'C-27');
-assert.equal(submission.enquiry.selectedRep.name, 'Ericu Vercuiel', 'the service must replace client-supplied representative text with the approved directory record');
+assert.equal(submission.enquiry.selectedRep.name, 'Fabricated Cape Representative 27', 'the service must replace client-supplied representative text with the approved directory record');
 assert.equal(submission.enquiry.selectedRep.branchName, 'Cape Town');
 assert.deepEqual(submission.enquiry.companySnapshot, {
   id: customer.companyId,

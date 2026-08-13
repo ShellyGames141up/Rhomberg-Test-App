@@ -1,8 +1,11 @@
 import { USER_ROLES } from '../../services/contracts.js';
+import { APPLICATION_SURFACES, rolesForApplicationSurface } from './applicationAccess.js';
 
 export const PREVIEW_IDS = Object.freeze({
   LANDING: 'preview-landing',
   APPLICATION: 'application',
+  APPLICATION_DESKTOP: 'application-desktop',
+  APPLICATION_MOBILE: 'application-mobile',
   CUSTOMER_DESKTOP: 'customer-desktop',
   CUSTOMER_MOBILE: 'customer-mobile',
   INTERNAL_MOBILE: 'internal-mobile',
@@ -138,6 +141,8 @@ const normalisePath = pathname => {
 
 export const previewIdFromPath = pathname => {
   const path = normalisePath(pathname);
+  if (/\/desktop(?:\/|\/index\.html)?$/i.test(path)) return PREVIEW_IDS.APPLICATION_DESKTOP;
+  if (/\/mobile(?:\/|\/index\.html)?$/i.test(path)) return PREVIEW_IDS.APPLICATION_MOBILE;
   if (/\/app(?:\/|\/index\.html)?$/i.test(path)) return PREVIEW_IDS.APPLICATION;
   if (/\/demo\/executive-workflow(?:\/|\/index\.html)?$/i.test(path)) return PREVIEW_IDS.EXECUTIVE_DEMO;
   const match = path.match(/\/preview\/([^/]+)(?:\/|\/index\.html)?$/i);
@@ -148,19 +153,22 @@ export const previewIdFromPath = pathname => {
 
 export const previewContextForPath = pathname => {
   const id = previewIdFromPath(pathname);
-  if (id === PREVIEW_IDS.APPLICATION) {
+  if ([PREVIEW_IDS.APPLICATION, PREVIEW_IDS.APPLICATION_DESKTOP, PREVIEW_IDS.APPLICATION_MOBILE].includes(id)) {
+    const mobile = id === PREVIEW_IDS.APPLICATION_MOBILE;
+    const surface = mobile ? APPLICATION_SURFACES.MOBILE : APPLICATION_SURFACES.DESKTOP;
     return Object.freeze({
       id,
       product: 'Rhomberg Connect',
-      platform: 'Application',
-      displayName: 'Rhomberg Connect',
-      route: '/app/',
+      platform: mobile ? 'Mobile Application' : 'Desktop Application',
+      displayName: mobile ? 'Rhomberg Connect - Mobile' : 'Rhomberg Connect - Desktop',
+      route: id === PREVIEW_IDS.APPLICATION ? '/app/' : `/${surface}/`,
+      applicationSurface: surface,
       unified: true,
       customer: false,
       internal: false,
-      mobile: false,
-      desktop: true,
-      allowedRoles: Object.freeze(Object.values(USER_ROLES)),
+      mobile,
+      desktop: !mobile,
+      allowedRoles: rolesForApplicationSurface(surface),
     });
   }
   if (id === PREVIEW_IDS.LANDING) {
@@ -208,6 +216,8 @@ export const previewUrl = (previewId, { origin = '', repositoryBase = '' } = {})
 
 export const landingUrlFromPath = pathname => {
   const path = normalisePath(pathname);
+  const normalApplicationMatch = path.match(/\/(?:desktop|mobile)(?:\/|\/index\.html)?$/i);
+  if (normalApplicationMatch) return `${path.slice(0, normalApplicationMatch.index)}/`;
   const applicationMarker = '/app';
   const applicationIndex = path.toLowerCase().lastIndexOf(applicationMarker);
   if (applicationIndex >= 0 && /\/app(?:\/|\/index\.html)?$/i.test(path)) return `${path.slice(0, applicationIndex)}/`;

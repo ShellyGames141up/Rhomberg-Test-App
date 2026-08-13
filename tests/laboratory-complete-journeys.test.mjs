@@ -14,7 +14,7 @@ class TestStorage {
 const services = createMockServices({ storage: new TestStorage(), now: () => new Date('2026-08-05T09:30:00.000Z') });
 await services.initialize();
 const session = await services.auth.signIn({ email: LAB_MANAGER_ACCOUNT.email, password: LAB_MANAGER_ACCOUNT.password });
-assert.equal(session.contact, 'Brinley', 'the existing Laboratory Manager login must support the complete authorised journey');
+assert.equal(session.contact, 'Fabricated Laboratory Manager', 'the fabricated Laboratory Manager login must support the complete authorised journey');
 assert.ok(session.permissions.includes(PERMISSIONS.ENTER_RAW_CALIBRATION_DATA), 'secondary technician roles must grant raw-data permission');
 assert.ok(session.permissions.includes(PERMISSIONS.APPROVE_CALCULATION_REVIEW), 'manager permissions must remain available');
 

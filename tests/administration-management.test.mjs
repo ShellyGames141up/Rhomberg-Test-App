@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import { createMockServices } from '../src/services/mock/createMockServices.js';
 import { ADMINISTRATOR_ACCOUNT, STORE_KEYS } from '../src/services/mock/seedData.js';
 import { PERMISSIONS, ServiceError, USER_ROLES } from '../src/services/contracts.js';
@@ -25,11 +25,11 @@ assert.ok(overview.correctionRecords.length > 0);
 
 const capeCompany = overview.companies.find(company => company.id === 'company-demo-cape');
 await services.administration.updateCompany(capeCompany.id, {
-  values: { name: 'Cape Process Demo Updated', area: 'Western Cape', industry: 'Process Industry', branchId: 'cape-town' },
+  values: { name: 'TEST CLIENT - Sales Workflow Test Updated', area: 'Western Cape', industry: 'Process Industry', branchId: 'cape-town' },
   reason: 'Approved customer-company master-data correction.',
 });
 overview = await services.administration.getOverview();
-assert.equal(overview.companies.find(company => company.id === capeCompany.id).name, 'Cape Process Demo Updated');
+assert.equal(overview.companies.find(company => company.id === capeCompany.id).name, 'TEST CLIENT - Sales Workflow Test Updated');
 
 const customer = overview.users.find(user => user.companyId === capeCompany.id);
 await services.administration.updateAccount(customer.id, {

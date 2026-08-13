@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { tutorialDraftForStep, TUTORIAL_STEPS, TUTORIALS } from '../domain/userSettings.js';
 
-const FAKE_RFQ = Object.freeze({ reference: 'RQ-TUTORIAL-0001', productCode: 'PBG', productName: 'Bourdon Tube Pressure Gauge', representative: 'Ericu' });
+const FAKE_RFQ = Object.freeze({ reference: 'RQ-TUTORIAL-0001', productCode: 'PBG', productName: 'Bourdon Tube Pressure Gauge', representative: 'Fabricated Representative' });
 
 export function FirstCustomerWelcome({ account, reduceMotion, onComplete }) {
   useEffect(() => {

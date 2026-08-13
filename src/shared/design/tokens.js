@@ -10,7 +10,7 @@ export const BREAKPOINTS = Object.freeze({
 });
 
 export const RESPONSIVE_AUDIT_WIDTHS = Object.freeze([
-  320, 360, 390, 412, 430, 768, 820, 1024, 1280, 1366, 1440, 1920,
+  320, 360, 375, 390, 412, 480, 600, 768, 820, 1024, 1280, 1366, 1440, 1920, 2560,
 ]);
 
 export const TYPOGRAPHY_SCALE = Object.freeze({

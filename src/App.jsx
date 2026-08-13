@@ -69,8 +69,10 @@ const PUBLIC_PREVIEW = __PUBLIC_PREVIEW__;
 const DOCUMENT_PREVIEW_ID = globalThis.document?.querySelector?.('meta[name="rhomberg-preview"]')?.content || '';
 const PREVIEW_CONTEXT = PUBLIC_PREVIEW
   ? (PREVIEW_BY_ID[DOCUMENT_PREVIEW_ID] || previewContextForPath(globalThis.location?.pathname || '/'))
-  : previewContextForPath('/preview/internal-desktop/');
+  : previewContextForPath(globalThis.location?.pathname || '/');
 const SHOW_PREVIEW_NAVIGATION = previewNavigationAllowed({ publicPreview: PUBLIC_PREVIEW, preview: PREVIEW_CONTEXT });
+const isFabricatedPreviewIdentity = account => /\.(?:invalid|test)$/i.test(String(account?.email || account?.username || ''));
+const normalPublicRouteRejectsDemoIdentity = account => PUBLIC_PREVIEW && PREVIEW_CONTEXT.unified && isFabricatedPreviewIdentity(account);
 const listEnquiriesForAccount = signedInAccount => (
   usesRepresentativeInbox(signedInAccount)
     ? services.enquiries.listRepresentativeInbox()
@@ -150,9 +152,15 @@ export default function App() {
 
         let session = PREVIEW_CONTEXT.landing ? null : savedSession;
         let previewAccessError = '';
-        if (session && !previewAllowsRole(PREVIEW_CONTEXT, session.role)) {
+        if (session && normalPublicRouteRejectsDemoIdentity(session)) {
           await services.auth.signOut();
-          previewAccessError = `${session.role.replaceAll('_', ' ')} accounts cannot enter ${PREVIEW_CONTEXT.displayName}. Choose a compatible preview or demo login.`;
+          previewAccessError = 'Fabricated demonstration accounts are available only in the separate Preview Centre. The normal application requires an approved private account and production identity service.';
+          session = null;
+        } else if (session && !previewAllowsRole(PREVIEW_CONTEXT, session.role)) {
+          await services.auth.signOut();
+          previewAccessError = PREVIEW_CONTEXT.unified
+            ? `This account is not authorised for the ${PREVIEW_CONTEXT.platform}. Use an approved application surface or contact your administrator.`
+            : `${session.role.replaceAll('_', ' ')} accounts cannot enter ${PREVIEW_CONTEXT.displayName}. Choose a compatible demonstration preview.`;
           session = null;
         }
         let loadedDraft = [];
@@ -377,11 +385,21 @@ export default function App() {
         password,
         realm: PREVIEW_CONTEXT.executiveDemo || PREVIEW_CONTEXT.unified ? undefined : PREVIEW_CONTEXT.customer ? 'customer' : 'internal',
       });
+      if (normalPublicRouteRejectsDemoIdentity(signedInAccount)) {
+        await services.auth.signOut();
+        return {
+          ok: false,
+          message: 'Fabricated demonstration accounts are available only in the separate Preview Centre. The normal application requires an approved private account and production identity service.',
+          fieldErrors: {},
+        };
+      }
       if (!previewAllowsRole(PREVIEW_CONTEXT, signedInAccount.role)) {
         await services.auth.signOut();
         return {
           ok: false,
-          message: `${signedInAccount.role.replaceAll('_', ' ')} accounts cannot enter ${PREVIEW_CONTEXT.displayName}. Return to the preview centre and choose a compatible interface.`,
+          message: PREVIEW_CONTEXT.unified
+            ? `This account is not authorised for the ${PREVIEW_CONTEXT.platform}. Use an approved application surface or contact your administrator.`
+            : `${signedInAccount.role.replaceAll('_', ' ')} accounts cannot enter ${PREVIEW_CONTEXT.displayName}. Return to the Preview Centre and choose a compatible demonstration interface.`,
           fieldErrors: {},
         };
       }
@@ -396,6 +414,9 @@ export default function App() {
 
   const register = async data => {
     try {
+      if (PUBLIC_PREVIEW && PREVIEW_CONTEXT.unified) {
+        return { ok: false, message: 'Public account creation is disabled on the normal application route. Account activation will be provided by the approved production identity service.', fieldErrors: {} };
+      }
       if (!PREVIEW_CONTEXT.customer && !PREVIEW_CONTEXT.unified) {
         return { ok: false, message: 'Company account registration is available only in a Rhomberg Connect customer preview.', fieldErrors: {} };
       }
@@ -796,7 +817,7 @@ export default function App() {
     );
   }
   if (!PREVIEW_CONTEXT.executiveDemo && !introComplete) return <Intro onComplete={() => setIntroComplete(true)} />;
-  if (!account) return <Auth onSignIn={login} onCreateAccount={register} theme={theme} onToggleTheme={toggleTheme} registrationOptions={registrationOptions} serviceMode={services.mode} preview={PREVIEW_CONTEXT} allowRegistration={Boolean(PREVIEW_CONTEXT.customer || PREVIEW_CONTEXT.unified)} accessError={accessError} />;
+  if (!account) return <Auth onSignIn={login} onCreateAccount={register} theme={theme} onToggleTheme={toggleTheme} registrationOptions={registrationOptions} serviceMode={services.mode} preview={PREVIEW_CONTEXT} allowRegistration={Boolean((PREVIEW_CONTEXT.customer || PREVIEW_CONTEXT.unified) && !(PUBLIC_PREVIEW && PREVIEW_CONTEXT.unified))} accessError={accessError} />;
   if (isCustomerExperience && !PREVIEW_CONTEXT.executiveDemo && welcomeVisible) return <FirstCustomerWelcome account={account} reduceMotion={userSettings.accessibility.reduceMotion} onComplete={completeWelcome} />;
 
   const backFromDetail = () => {
@@ -844,9 +865,9 @@ export default function App() {
           canOpenAudit={accountCan(account, PERMISSIONS.READ_AUDIT_HISTORY)}
         />
       )}
-      {SHOW_PREVIEW_NAVIGATION && <span className="desktop-caption">{PREVIEW_CONTEXT.product.toUpperCase()} · {PREVIEW_CONTEXT.platform.toUpperCase()} · DEMO PREVIEW</span>}
+      {__PUBLIC_PREVIEW__ && SHOW_PREVIEW_NAVIGATION && <span className="desktop-caption">{PREVIEW_CONTEXT.product.toUpperCase()} · {PREVIEW_CONTEXT.platform.toUpperCase()} · DEMO PREVIEW</span>}
       <div className={`app-shell ${isStaff ? 'expeditor-shell' : ''} ${isPlanningWorkspace ? 'planning-shell' : ''} ${isExpeditorWorkspace ? 'expediting-workspace-shell' : ''} ${isLaboratoryWorkspace ? 'laboratory-workspace-shell' : ''} ${isQualityWorkspace ? 'quality-workspace-shell' : ''} ${isDispatchWorkspace ? 'dispatch-workspace-shell' : ''}`}>
-        {SHOW_PREVIEW_NAVIGATION && <div className="platform-preview-banner"><span><strong>{PREVIEW_CONTEXT.product}</strong> {PREVIEW_CONTEXT.platform}</span><a href={PREVIEW_CONTEXT.executiveDemo ? '../../' : './'}>All previews</a></div>}
+        {__PUBLIC_PREVIEW__ && SHOW_PREVIEW_NAVIGATION && <div className="platform-preview-banner"><span><strong>{PREVIEW_CONTEXT.product}</strong> {PREVIEW_CONTEXT.platform}</span><a href={PREVIEW_CONTEXT.executiveDemo ? '../../' : './'}>All previews</a></div>}
         <AppHeader account={account} onNavigate={navigate} onBack={detailView ? backFromDetail : null} backLabel={view === 'settings' ? 'Settings' : view === 'configurator' ? 'Product configuration' : selectedProduct?.code || 'Catalogue'} theme={document.documentElement.dataset.theme || theme} onToggleTheme={toggleTheme} serviceMode={services.mode} preview={PREVIEW_CONTEXT} showThemeToggle={!isCustomerExperience} personalisation={isCustomerExperience ? customerPersonalisation : null} />
         <main className="app-main">
           {isStaff ? (

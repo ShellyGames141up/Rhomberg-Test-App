@@ -14,12 +14,12 @@ export const LABORATORY_ROLES = Object.freeze({
 });
 
 export const LABORATORY_STAFF = Object.freeze([
-  Object.freeze({ id: 'lab-staff-brinley', name: 'Brinley', branchId: 'cape_town', roles: Object.freeze([LABORATORY_ROLES.MANAGER, LABORATORY_ROLES.TEMPERATURE_TECHNICIAN, LABORATORY_ROLES.TECHNICAL_SIGNATORY]) }),
-  Object.freeze({ id: 'lab-staff-mandisi', name: 'Mandisi', branchId: 'cape_town', roles: Object.freeze([LABORATORY_ROLES.MANAGER, LABORATORY_ROLES.TECHNICAL_SIGNATORY]) }),
-  Object.freeze({ id: 'lab-staff-bonga', name: 'Bonga', branchId: 'cape_town', roles: Object.freeze([LABORATORY_ROLES.TECHNICIAN]) }),
-  Object.freeze({ id: 'lab-staff-saeed', name: 'Saeed', branchId: 'cape_town', roles: Object.freeze([LABORATORY_ROLES.TECHNICIAN]) }),
-  Object.freeze({ id: 'lab-staff-leah', name: 'Leah', branchId: 'johannesburg', roles: Object.freeze([LABORATORY_ROLES.TECHNICIAN]) }),
-  Object.freeze({ id: 'lab-staff-thabiso', name: 'Thabiso', branchId: 'johannesburg', roles: Object.freeze([LABORATORY_ROLES.TECHNICIAN]) }),
+  Object.freeze({ id: 'lab-staff-manager-demo', name: 'Fabricated Laboratory Manager', branchId: 'cape_town', roles: Object.freeze([LABORATORY_ROLES.MANAGER, LABORATORY_ROLES.TEMPERATURE_TECHNICIAN, LABORATORY_ROLES.TECHNICAL_SIGNATORY]) }),
+  Object.freeze({ id: 'lab-staff-manager-demo-2', name: 'Fabricated Laboratory Manager 2', branchId: 'cape_town', roles: Object.freeze([LABORATORY_ROLES.MANAGER, LABORATORY_ROLES.TECHNICAL_SIGNATORY]) }),
+  Object.freeze({ id: 'lab-staff-cape-demo-1', name: 'Fabricated Cape Laboratory User 1', branchId: 'cape_town', roles: Object.freeze([LABORATORY_ROLES.TECHNICIAN]) }),
+  Object.freeze({ id: 'lab-staff-cape-demo-2', name: 'Fabricated Cape Laboratory User 2', branchId: 'cape_town', roles: Object.freeze([LABORATORY_ROLES.TECHNICIAN]) }),
+  Object.freeze({ id: 'lab-staff-jhb-demo-2', name: 'Fabricated Johannesburg Laboratory User 2', branchId: 'johannesburg', roles: Object.freeze([LABORATORY_ROLES.TECHNICIAN]) }),
+  Object.freeze({ id: 'lab-staff-jhb-demo-1', name: 'Fabricated Johannesburg Laboratory User 1', branchId: 'johannesburg', roles: Object.freeze([LABORATORY_ROLES.TECHNICIAN]) }),
 ]);
 
 export const LAB_METHOD_IDS = Object.freeze({

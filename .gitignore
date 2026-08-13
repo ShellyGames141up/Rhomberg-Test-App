@@ -9,6 +9,7 @@ Thumbs.db
 !.env.example
 .netlify/
 private/
+*RHOMBERG_CONNECT_INITIAL_USER_CREDENTIALS*.pdf
 docs/private/
 dist/
 dist-previews/

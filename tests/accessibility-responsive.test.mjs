@@ -74,7 +74,7 @@ for (const key of ['body', 'secondary', 'label', 'button', 'input', 'helper', 's
 }
 
 assert.deepEqual(Object.values(BREAKPOINTS), [360, 600, 768, 1024, 1280, 1440, 1920, 2560]);
-assert.deepEqual(RESPONSIVE_AUDIT_WIDTHS, [320, 360, 390, 412, 430, 768, 820, 1024, 1280, 1366, 1440, 1920]);
+assert.deepEqual(RESPONSIVE_AUDIT_WIDTHS, [320, 360, 375, 390, 412, 480, 600, 768, 820, 1024, 1280, 1366, 1440, 1920, 2560]);
 assert.deepEqual(EXECUTIVE_LAYOUT_MODES, ['full', 'device']);
 assert.deepEqual(EXECUTIVE_DEVICE_PREVIEWS, ['phone', 'tablet', 'desktop']);
 assert.equal(normaliseExecutiveDemoState({ layoutMode: 'device', devicePreview: 'tablet' }).layoutMode, 'device');

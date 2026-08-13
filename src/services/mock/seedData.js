@@ -1,4 +1,4 @@
-import { THEME_PREFERENCE_KEY } from '../serviceKeys.js';
+﻿import { THEME_PREFERENCE_KEY } from '../serviceKeys.js';
 
 export const STORE_KEYS = Object.freeze({
   accounts: 'rhombergPreviewAccountsV2',
@@ -86,6 +86,20 @@ export const SALES_ACCOUNT = Object.freeze({
   createdAt: '2026-07-22T08:00:00.000Z',
 });
 
+export const FABRICATED_REP_TEST_CLIENT_ASSIGNMENTS = Object.freeze([
+  Object.freeze({
+    representativeAccountId: 'staff-sales-preview',
+    representativeId: 'C-27',
+    representativeDisplayName: 'Sales Workflow Test',
+    testCompanyId: 'company-demo-cape',
+    testCompanyName: 'TEST CLIENT - Sales Workflow Test',
+    customerAccountId: 'company-demo-cape',
+    customerLogin: 'cape.demo@client.test',
+    supportedSurfaces: Object.freeze(['desktop', 'mobile']),
+    fabricated: true,
+  }),
+]);
+
 export const PLANNING_ACCOUNT = Object.freeze({
   id: 'staff-planning-preview',
   companyId: 'company-rhomberg',
@@ -118,7 +132,7 @@ export const LAB_ACCOUNT = Object.freeze({
   id: 'staff-laboratory-preview',
   companyId: 'company-rhomberg',
   company: 'Rhomberg Instruments',
-  contact: 'Bonga',
+  contact: 'Fabricated Laboratory User',
   email: 'laboratory.workflow@example.invalid',
   phone: 'Internal test account',
   area: 'Cape Town',
@@ -135,7 +149,7 @@ export const LAB_MANAGER_ACCOUNT = Object.freeze({
   id: 'staff-laboratory-manager-preview',
   companyId: 'company-rhomberg',
   company: 'Rhomberg Instruments',
-  contact: 'Brinley',
+  contact: 'Fabricated Laboratory Manager',
   email: 'laboratory.manager@example.invalid',
   phone: 'Internal test account',
   area: 'Cape Town',
@@ -248,7 +262,7 @@ export const ADMINISTRATOR_ACCOUNT = Object.freeze({
 
 export const EXTRA_DEMO_ACCOUNTS = Object.freeze([
   {
-    id: 'company-demo-cape', companyId: 'company-demo-cape', company: 'Cape Process Demo', contact: 'Lerato Test', email: 'cape.demo@client.test',
+    id: 'company-demo-cape', companyId: 'company-demo-cape', company: 'TEST CLIENT - Sales Workflow Test', contact: 'Lerato Test', email: 'cape.demo@client.test',
     phone: '+27 21 000 0101', area: 'Western Cape', industry: 'Food & Beverage', role: 'customer', password: 'Demo123!', createdAt: '2026-07-18T09:00:00.000Z',
   },
   {
@@ -256,19 +270,19 @@ export const EXTRA_DEMO_ACCOUNTS = Object.freeze([
     phone: '+27 31 000 0202', area: 'KwaZulu-Natal', industry: 'Water & Wastewater', role: 'customer', password: 'Demo123!', createdAt: '2026-07-18T09:30:00.000Z',
   },
   {
-    id: 'staff-lab-saeed-demo', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Saeed', email: 'saeed.laboratory@example.invalid',
+    id: 'staff-lab-cape-demo-2', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Fabricated Cape Laboratory User 2', email: 'cape.laboratory.2@example.invalid',
     phone: 'Fabricated internal account', area: 'Cape Town', industry: 'Internal laboratory', role: 'laboratory_technician', labBranchId: 'cape_town', authorisedLabBranchIds: ['cape_town'], labRoles: ['laboratory_technician'], password: 'LabDemo123!', createdAt: '2026-08-03T08:00:00.000Z',
   },
   {
-    id: 'staff-lab-mandisi-demo', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Mandisi', email: 'mandisi.laboratory@example.invalid',
+    id: 'staff-lab-manager-demo-2', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Fabricated Laboratory Manager 2', email: 'laboratory.manager.2@example.invalid',
     phone: 'Fabricated internal account', area: 'Cape Town', industry: 'Internal laboratory', role: 'laboratory_manager', labBranchId: 'cape_town', authorisedLabBranchIds: ['cape_town'], labRoles: ['laboratory_manager', 'technical_signatory'], password: 'LabManagerDemo123!', createdAt: '2026-08-03T08:05:00.000Z',
   },
   {
-    id: 'staff-lab-leah-demo', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Leah', email: 'leah.laboratory@example.invalid',
+    id: 'staff-lab-jhb-demo-2', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Fabricated Johannesburg Laboratory User 2', email: 'johannesburg.laboratory.2@example.invalid',
     phone: 'Fabricated internal account', area: 'Johannesburg', industry: 'Internal laboratory', role: 'laboratory_technician', labBranchId: 'johannesburg', authorisedLabBranchIds: ['johannesburg'], labRoles: ['laboratory_technician'], password: 'LabDemo123!', createdAt: '2026-08-03T08:10:00.000Z',
   },
   {
-    id: 'staff-lab-thabiso-demo', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Thabiso', email: 'thabiso.laboratory@example.invalid',
+    id: 'staff-lab-jhb-demo-1', companyId: 'company-rhomberg', company: 'Rhomberg Instruments', contact: 'Fabricated Johannesburg Laboratory User 1', email: 'johannesburg.laboratory.1@example.invalid',
     phone: 'Fabricated internal account', area: 'Johannesburg', industry: 'Internal laboratory', role: 'laboratory_technician', labBranchId: 'johannesburg', authorisedLabBranchIds: ['johannesburg'], labRoles: ['laboratory_technician'], password: 'LabDemo123!', createdAt: '2026-08-03T08:15:00.000Z',
   },
   {
@@ -484,12 +498,12 @@ export const DEMO_ENQUIRIES = Object.freeze([
   },
   {
     id: 'enquiry-demo-cape-001', reference: 'RQ-TEST-0002', version: 5, accountId: 'company-demo-cape', companyId: 'company-demo-cape',
-    company: 'Cape Process Demo', contact: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101',
+    company: 'TEST CLIENT - Sales Workflow Test', contact: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101',
     area: 'Western Cape', application: 'Steam line temperature indication for a packaging plant.', medium: 'Steam', priority: 'urgent',
     fulfilment: 'collect', deliveryAddress: '', collectionBranch: 'Cape Town - Head Office', notes: 'Public preview sample only.',
     poMode: 'none', poNumber: '', poFileName: '',
-    selectedRep: { id: 'C-27', code: '27', name: 'Ericu Vercuiel', branchId: 'cape-town', branchName: 'Cape Town' },
-    items: [{ lineId: 'demo-line-tps', productId: 'tps', code: 'TPS', name: 'Bi-metal dial thermometer', quantity: 2, image: 'assets/images/products/tps.webp', configuration: { dialSize: '100 mm', range: '0 to 200 °C', mounting: 'Bottom entry', stemLength: '150 mm' } }],
+    selectedRep: { id: 'C-27', code: '27', name: 'Fabricated Cape Representative 27', branchId: 'cape-town', branchName: 'Cape Town' },
+    items: [{ lineId: 'demo-line-tps', productId: 'tps', code: 'TPS', name: 'Bi-metal dial thermometer', quantity: 2, image: 'assets/images/products/tps.webp', configuration: { dialSize: '100 mm', range: '0 to 200 Â°C', mounting: 'Bottom entry', stemLength: '150 mm' } }],
     workflowType: 'rfq', trackingStatus: 'under_rep_review', status: 'Under review', createdAt: '2026-07-20T10:10:00.000Z', updatedAt: '2026-07-21T06:55:00.000Z', isDemo: true,
     trackingHistory: [
       { id: 'event-demo-2a', status: 'rfq-submitted', note: 'RFQ received.', actor: 'Customer', createdAt: '2026-07-20T10:10:00.000Z' },
@@ -498,33 +512,33 @@ export const DEMO_ENQUIRIES = Object.freeze([
   },
   {
     id: 'enquiry-demo-sales-new-001', reference: 'RQ-TEST-0005', version: 2, accountId: 'company-demo-cape', companyId: 'company-demo-cape',
-    company: 'Cape Process Demo', contact: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101',
+    company: 'TEST CLIENT - Sales Workflow Test', contact: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101',
     area: 'Western Cape', application: 'Replacement pressure indication for a clean-water utility line.', medium: 'Clean water', priority: 'standard',
     fulfilment: 'collect', deliveryAddress: '', collectionBranch: 'Cape Town - Head Office', notes: 'Fabricated new-inbox RFQ for Start Review testing.', customerNotes: 'Fabricated new-inbox RFQ for Start Review testing.',
     poMode: 'none', poNumber: '', poFileName: '', documents: [],
     submittingCustomerId: 'company-demo-cape',
     submittingCustomer: { id: 'company-demo-cape', name: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101' },
-    companySnapshot: { id: 'company-demo-cape', name: 'Cape Process Demo', area: 'Western Cape', industry: 'Food & Beverage' },
-    selectedRep: { id: 'C-27', code: '27', name: 'Ericu Vercuiel', branchId: 'cape-town', branchName: 'Cape Town' },
+    companySnapshot: { id: 'company-demo-cape', name: 'TEST CLIENT - Sales Workflow Test', area: 'Western Cape', industry: 'Food & Beverage' },
+    selectedRep: { id: 'C-27', code: '27', name: 'Fabricated Cape Representative 27', branchId: 'cape-town', branchName: 'Cape Town' },
     representativeId: 'C-27',
     items: [{ lineId: 'demo-line-new-pbg', productId: 'pbg', code: 'PBG', name: 'General purpose pressure gauge', quantity: 2, image: 'assets/images/products/pbg.webp', configuration: { dialSize: '100 mm', range: '0 to 10 bar', connectionPosition: 'Bottom entry' } }],
     workflowType: 'rfq', trackingStatus: 'assigned_to_rep', status: 'Assigned to representative',
     submittedAt: '2026-07-23T07:40:00.000Z', assignedAt: '2026-07-23T07:40:00.000Z', createdAt: '2026-07-23T07:40:00.000Z', updatedAt: '2026-07-23T07:40:00.000Z', isDemo: true,
     trackingHistory: [
       { id: 'event-demo-5a', entityType: 'rfq', action: 'submit_rfq', fromStatus: 'draft', toStatus: 'submitted', status: 'submitted', note: 'RFQ submitted by the demo customer.', actor: 'Lerato Test', actorRole: 'customer', customerVisible: true, createdAt: '2026-07-23T07:40:00.000Z' },
-      { id: 'event-demo-5b', entityType: 'rfq', action: 'assign_representative', fromStatus: 'submitted', toStatus: 'assigned_to_rep', status: 'assigned_to_rep', note: 'RFQ assigned to Ericu Vercuiel.', actor: 'Workflow service', actorRole: 'system', customerVisible: false, createdAt: '2026-07-23T07:40:00.000Z' },
+      { id: 'event-demo-5b', entityType: 'rfq', action: 'assign_representative', fromStatus: 'submitted', toStatus: 'assigned_to_rep', status: 'assigned_to_rep', note: 'RFQ assigned to Fabricated Cape Representative 27.', actor: 'Workflow service', actorRole: 'system', customerVisible: false, createdAt: '2026-07-23T07:40:00.000Z' },
     ],
   },
   {
     id: 'enquiry-demo-sales-accept-001', reference: 'RQ-TEST-0006', version: 4, accountId: 'company-demo-cape', companyId: 'company-demo-cape',
-    company: 'Cape Process Demo', contact: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101',
+    company: 'TEST CLIENT - Sales Workflow Test', contact: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101',
     area: 'Western Cape', application: 'Replacement process gauge for a fabricated packaging-line test case.', medium: 'Clean water', priority: 'standard',
     fulfilment: 'collect', deliveryAddress: '', collectionBranch: 'Cape Town - Head Office', notes: 'Fabricated RFQ ready for Accept Order testing.', customerNotes: 'Fabricated RFQ ready for Accept Order testing.',
     poMode: 'none', poNumber: '', poFileName: '', documents: [],
     submittingCustomerId: 'company-demo-cape',
     submittingCustomer: { id: 'company-demo-cape', name: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101' },
-    companySnapshot: { id: 'company-demo-cape', name: 'Cape Process Demo', area: 'Western Cape', industry: 'Food & Beverage' },
-    selectedRep: { id: 'C-27', code: '27', name: 'Ericu Vercuiel', branchId: 'cape-town', branchName: 'Cape Town' },
+    companySnapshot: { id: 'company-demo-cape', name: 'TEST CLIENT - Sales Workflow Test', area: 'Western Cape', industry: 'Food & Beverage' },
+    selectedRep: { id: 'C-27', code: '27', name: 'Fabricated Cape Representative 27', branchId: 'cape-town', branchName: 'Cape Town' },
     representativeId: 'C-27',
     items: [{ lineId: 'demo-line-accept-pbg', productId: 'pbg', code: 'PBG', name: 'General purpose pressure gauge', quantity: 4, image: 'assets/images/products/pbg.webp', configuration: { dialSize: '100 mm', material: '316 stainless steel', range: '0 to 10 bar', connectionPosition: 'Bottom entry', optionalFeatures: ['No optional feature required'] } }],
     quotation: {
@@ -552,7 +566,7 @@ export const DEMO_ENQUIRIES = Object.freeze([
     submittedAt: '2026-07-21T08:00:00.000Z', assignedAt: '2026-07-21T08:00:00.000Z', createdAt: '2026-07-21T08:00:00.000Z', updatedAt: '2026-07-22T12:00:00.000Z', isDemo: true,
     trackingHistory: [
       { id: 'event-demo-6a', entityType: 'rfq', action: 'submit_rfq', fromStatus: 'draft', toStatus: 'submitted', status: 'submitted', note: 'RFQ submitted by the demo customer.', actor: 'Lerato Test', actorRole: 'customer', customerVisible: true, createdAt: '2026-07-21T08:00:00.000Z' },
-      { id: 'event-demo-6b', entityType: 'rfq', action: 'assign_representative', fromStatus: 'submitted', toStatus: 'assigned_to_rep', status: 'assigned_to_rep', note: 'RFQ assigned to Ericu Vercuiel.', actor: 'Workflow service', actorRole: 'system', customerVisible: false, createdAt: '2026-07-21T08:00:00.000Z' },
+      { id: 'event-demo-6b', entityType: 'rfq', action: 'assign_representative', fromStatus: 'submitted', toStatus: 'assigned_to_rep', status: 'assigned_to_rep', note: 'RFQ assigned to Fabricated Cape Representative 27.', actor: 'Workflow service', actorRole: 'system', customerVisible: false, createdAt: '2026-07-21T08:00:00.000Z' },
       { id: 'event-demo-6c', entityType: 'rfq', action: 'start_rep_review', fromStatus: 'assigned_to_rep', toStatus: 'under_rep_review', status: 'under_rep_review', note: 'The assigned representative started review.', actor: 'Sales Workflow Test', actorRole: 'sales_representative', customerVisible: true, createdAt: '2026-07-21T08:30:00.000Z' },
       { id: 'event-demo-6d', entityType: 'rfq', action: 'mark_quoted', fromStatus: 'under_rep_review', toStatus: 'quoted', status: 'quoted', note: 'Quotation Q-TEST-1006 was recorded and sent separately by email.', actor: 'Sales Workflow Test', actorRole: 'sales_representative', customerVisible: true, createdAt: '2026-07-22T09:10:00.000Z' },
       { id: 'event-demo-6e', entityType: 'rfq', action: 'acknowledge_quotation', fromStatus: 'quoted', toStatus: 'awaiting_customer_acceptance', status: 'awaiting_customer_acceptance', note: 'The demo customer acknowledged receiving the quotation.', actor: 'Lerato Test', actorRole: 'customer', customerVisible: true, createdAt: '2026-07-22T12:00:00.000Z' },
@@ -609,11 +623,11 @@ export const DEMO_ENQUIRIES = Object.freeze([
   },
   {
     id: 'order-demo-planning-002', reference: 'OR-TEST-0007', version: 2, accountId: 'company-demo-cape', companyId: 'company-demo-cape',
-    company: 'Cape Process Demo', contact: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101',
+    company: 'TEST CLIENT - Sales Workflow Test', contact: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101',
     area: 'Western Cape', application: 'Priority pressure indication replacement for a fabricated packaging-line test case.', medium: 'Clean water', priority: 'urgent',
     fulfilment: 'delivery', deliveryAddress: 'Fabricated test destination, Cape Town', collectionBranch: '', notes: 'Public preview sample only.',
     poMode: 'none', poNumber: '', poFileName: '',
-    selectedRep: { id: 'C-27', code: '27', name: 'Ericu Vercuiel', branchId: 'cape-town', branchName: 'Cape Town' },
+    selectedRep: { id: 'C-27', code: '27', name: 'Fabricated Cape Representative 27', branchId: 'cape-town', branchName: 'Cape Town' },
     quotation: { number: 'Q-TEST-0007', date: '2026-07-21', expiryMode: 'dated', expiryDate: '2026-08-05', commercialTotal: 28462.75, currency: 'ZAR', extractionStatus: 'verified_fields_found', extractionConfidence: 'high' },
     items: [
       { lineId: 'demo-line-planning-pbg-007', productId: 'pbg', code: 'PBG', name: 'General purpose pressure gauge', quantity: 2, image: 'assets/images/products/pbg.webp', configuration: { dialSize: '100 mm', range: '0 to 16 bar', connectionPosition: 'Bottom entry' } },
@@ -631,12 +645,12 @@ export const DEMO_ENQUIRIES = Object.freeze([
   },
   {
     id: 'order-demo-planning-003', reference: 'OR-TEST-0008', version: 3, accountId: 'company-demo-cape', companyId: 'company-demo-cape',
-    company: 'Cape Process Demo', contact: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101',
+    company: 'TEST CLIENT - Sales Workflow Test', contact: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101',
     area: 'Western Cape', application: 'Fabricated temperature-monitoring replacement package for Planning hand-off testing.', medium: 'Process water', priority: 'high',
     fulfilment: 'collect', deliveryAddress: '', collectionBranch: 'Cape Town test branch', notes: 'Public preview sample only.',
     poMode: 'number', poNumber: 'PO-TEST-0008', poFileName: '',
-    selectedRep: { id: 'C-27', code: '27', name: 'Ericu Vercuiel', branchId: 'cape-town', branchName: 'Cape Town' },
-    items: [{ lineId: 'demo-line-planning-rbt-008', productId: 'rbt103', code: 'RBT103', name: 'Industrial temperature gauge', quantity: 4, image: 'assets/images/products/rbt103.webp', configuration: { range: '0 to 120 °C', connectionPosition: 'Bottom entry' } }],
+    selectedRep: { id: 'C-27', code: '27', name: 'Fabricated Cape Representative 27', branchId: 'cape-town', branchName: 'Cape Town' },
+    items: [{ lineId: 'demo-line-planning-rbt-008', productId: 'rbt103', code: 'RBT103', name: 'Industrial temperature gauge', quantity: 4, image: 'assets/images/products/rbt103.webp', configuration: { range: '0 to 120 Â°C', connectionPosition: 'Bottom entry' } }],
     workflowType: 'order', sourceEnquiryId: 'enquiry-demo-planning-source-003', sourceRfqReference: 'RQ-TEST-0008', sourceRfqStatus: 'converted_to_order',
     acceptedAt: '2026-07-20T09:00:00.000Z', planningStartedAt: '2026-07-20T09:30:00.000Z', plannedAt: '2026-07-23T11:30:00.000Z',
     planningStartedBy: { id: PLANNING_ACCOUNT.id, role: 'planning', displayName: PLANNING_ACCOUNT.contact },
@@ -667,11 +681,11 @@ export const DEMO_ENQUIRIES = Object.freeze([
   },
   {
     id: 'order-demo-expediting-001', reference: 'OR-TEST-0009', version: 4, accountId: 'company-demo-cape', companyId: 'company-demo-cape',
-    company: 'Cape Process Demo', contact: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101',
+    company: 'TEST CLIENT - Sales Workflow Test', contact: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101',
     area: 'Western Cape', application: 'Fabricated priority pressure-gauge replacement for Expediting start testing.', medium: 'Process water',
     priority: 'urgent', fulfilment: 'delivery', deliveryAddress: 'Fabricated test destination, Cape Town',
     collectionBranch: '', notes: 'Public preview sample only.', poMode: 'number', poNumber: 'PO-TEST-0009', poFileName: '',
-    selectedRep: { id: 'C-27', code: '27', name: 'Ericu Vercuiel', branchId: 'cape-town', branchName: 'Cape Town' },
+    selectedRep: { id: 'C-27', code: '27', name: 'Fabricated Cape Representative 27', branchId: 'cape-town', branchName: 'Cape Town' },
     items: [{ lineId: 'demo-line-expediting-pbg-009', productId: 'pbg', code: 'PBG', name: 'General purpose pressure gauge', quantity: 5, image: 'assets/images/products/pbg.webp', configuration: { dialSize: '100 mm', range: '0 to 16 bar', connectionPosition: 'Bottom entry' } }],
     workflowType: 'order', sourceEnquiryId: 'enquiry-demo-expediting-source-001', sourceRfqReference: 'RQ-TEST-0009', sourceRfqStatus: 'converted_to_order',
     acceptedAt: '2026-07-22T09:00:00.000Z', submittedToExpeditingAt: '2026-07-23T08:10:00.000Z',
@@ -787,13 +801,13 @@ export const DEMO_ENQUIRIES = Object.freeze([
   },
   {
     id: 'order-demo-dispatch-delivery-001', reference: 'OR-TEST-0012', version: 9, accountId: 'company-demo-cape', companyId: 'company-demo-cape',
-    company: 'Cape Process Demo', contact: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101',
+    company: 'TEST CLIENT - Sales Workflow Test', contact: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101',
     area: 'Western Cape', application: 'Fabricated temperature-instrument package dispatched for delivery testing.', medium: 'Steam',
     priority: 'urgent', fulfilment: 'delivery', deliveryAddress: 'Fabricated test destination, Cape Town', collectionBranch: '',
     notes: 'Public preview sample only.', poMode: 'number', poNumber: 'PO-TEST-0012', poFileName: '',
-    selectedRep: { id: 'C-27', code: '27', name: 'Ericu Vercuiel', branchId: 'cape-town', branchName: 'Cape Town' },
+    selectedRep: { id: 'C-27', code: '27', name: 'Fabricated Cape Representative 27', branchId: 'cape-town', branchName: 'Cape Town' },
     representativeId: 'C-27',
-    items: [{ lineId: 'demo-line-dispatch-tps-012', productId: 'tps', code: 'TPS', name: 'Bi-metal dial thermometer', quantity: 3, image: 'assets/images/products/tps.webp', configuration: { dialSize: '100 mm', range: '0 to 200 °C', mounting: 'Bottom entry', stemLength: '150 mm' } }],
+    items: [{ lineId: 'demo-line-dispatch-tps-012', productId: 'tps', code: 'TPS', name: 'Bi-metal dial thermometer', quantity: 3, image: 'assets/images/products/tps.webp', configuration: { dialSize: '100 mm', range: '0 to 200 Â°C', mounting: 'Bottom entry', stemLength: '150 mm' } }],
     workflowType: 'order', sourceEnquiryId: 'enquiry-demo-dispatch-source-012', sourceRfqReference: 'RQ-TEST-0012', sourceRfqStatus: 'converted_to_order',
     acceptedAt: '2026-07-18T10:00:00.000Z', submittedToDispatchAt: '2026-07-24T10:30:00.000Z',
     submittedToDispatchBy: { id: EXPEDITOR_ACCOUNT.id, role: 'expeditor', displayName: EXPEDITOR_ACCOUNT.contact },
@@ -832,11 +846,11 @@ export const DEMO_ENQUIRIES = Object.freeze([
   },
   {
     id: 'rfq-demo-lost-001', reference: 'RQ-LOSS-0001', version: 5,
-    accountId: 'company-demo-cape', companyId: 'company-demo-cape', company: 'Cape Process Demo',
+    accountId: 'company-demo-cape', companyId: 'company-demo-cape', company: 'TEST CLIENT - Sales Workflow Test',
     contact: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101',
     area: 'Western Cape', application: 'Fabricated quotation-loss example for management analytics.', medium: 'Clean water',
     priority: 'standard', fulfilment: 'collect', collectionBranch: 'Cape Town - Head Office',
-    selectedRep: { id: 'C-27', code: '27', name: 'Ericu Vercuiel', branchId: 'cape-town', branchName: 'Cape Town' },
+    selectedRep: { id: 'C-27', code: '27', name: 'Fabricated Cape Representative 27', branchId: 'cape-town', branchName: 'Cape Town' },
     representativeId: 'C-27',
     items: [{ lineId: 'loss-line-001', code: 'PBG', name: 'General purpose pressure gauge', quantity: 1, configuration: { range: '0 to 10 bar' } }],
     quotation: { number: 'Q-LOSS-0001', date: '2026-06-15', expiryMode: 'dated', expiryDate: '2026-06-30', commercialTotal: 12950, currency: 'ZAR', extractionStatus: 'verified_fields_found', extractionConfidence: 'high' },
@@ -868,15 +882,15 @@ export const DEMO_ENQUIRIES = Object.freeze([
   },
   {
     id: 'order-demo-archived-001', reference: 'OR-ARCHIVE-0002', version: 14,
-    accountId: 'company-demo-cape', companyId: 'company-demo-cape', company: 'Cape Process Demo',
+    accountId: 'company-demo-cape', companyId: 'company-demo-cape', company: 'TEST CLIENT - Sales Workflow Test',
     contact: 'Lerato Test', email: 'cape.demo@client.test', phone: '+27 21 000 0101',
     area: 'Western Cape', application: 'Fabricated archived order retained for audit and legal-hold testing.', medium: 'Steam',
     priority: 'standard', fulfilment: 'delivery', deliveryAddress: 'Fabricated test destination, Cape Town',
     notes: 'Fabricated archived record with an investigation hold.', poNumber: 'PO-ARCHIVE-0002',
-    selectedRep: { id: 'C-27', code: '27', name: 'Ericu Vercuiel', branchId: 'cape-town', branchName: 'Cape Town' },
+    selectedRep: { id: 'C-27', code: '27', name: 'Fabricated Cape Representative 27', branchId: 'cape-town', branchName: 'Cape Town' },
     quotation: { number: 'Q-ARCHIVE-0002', date: '2025-07-31', expiryMode: 'dated', expiryDate: '2025-08-15', commercialTotal: 22480, currency: 'ZAR', extractionStatus: 'verified_fields_found', extractionConfidence: 'high' },
     representativeId: 'C-27',
-    items: [{ lineId: 'archive-line-002', code: 'TPS', name: 'Bi-metal dial thermometer', quantity: 1, configuration: { dialSize: '100 mm', range: '0 to 200 °C' } }],
+    items: [{ lineId: 'archive-line-002', code: 'TPS', name: 'Bi-metal dial thermometer', quantity: 1, configuration: { dialSize: '100 mm', range: '0 to 200 Â°C' } }],
     workflowType: 'order', sourceEnquiryId: 'rfq-archive-source-002', sourceRfqReference: 'RQ-ARCHIVE-0002',
     sourceRfqStatus: 'converted_to_order', internalJobNumber: 'JOB-ARCHIVE-0002', customerPoNumber: 'PO-ARCHIVE-0002',
     trackingStatus: 'completed', status: 'Completed', completedAt: '2025-08-15T10:00:00.000Z',
@@ -959,7 +973,7 @@ export const PHASE21_DEMO_ORDERS = Object.freeze([
     version: 6,
     accountId: 'company-demo-cape',
     companyId: 'company-demo-cape',
-    company: 'Cape Process Demo',
+    company: 'TEST CLIENT - Sales Workflow Test',
     contact: 'Lerato Test',
     email: 'cape.demo@client.test',
     phone: '+27 21 000 0101',
@@ -968,7 +982,7 @@ export const PHASE21_DEMO_ORDERS = Object.freeze([
     priority: 'standard',
     fulfilment: 'collect',
     collectionBranch: 'Cape Town - Head Office',
-    selectedRep: { id: 'C-27', code: '27', name: 'Ericu Vercuiel', branchId: 'cape-town', branchName: 'Cape Town' },
+    selectedRep: { id: 'C-27', code: '27', name: 'Fabricated Cape Representative 27', branchId: 'cape-town', branchName: 'Cape Town' },
     representativeId: 'C-27',
     items: [{
       lineId: 'phase21-traceable-line-001',
@@ -978,7 +992,7 @@ export const PHASE21_DEMO_ORDERS = Object.freeze([
       category: 'temperature',
       quantity: 2,
       image: 'assets/images/products/tps.webp',
-      configuration: { dialSize: '100 mm', range: '0 to 200 °C', traceability: 'Traceability certificate required' },
+      configuration: { dialSize: '100 mm', range: '0 to 200 Â°C', traceability: 'Traceability certificate required' },
     }],
     workflowType: 'order',
     sourceRfqReference: 'RQ-LAB-TEST-0002',

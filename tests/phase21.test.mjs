@@ -406,8 +406,8 @@ await assert.rejects(
   error => error instanceof ServiceError && error.code === 'CREDENTIAL_CODE_EXPIRED',
 );
 
-assert.deepEqual(representativesByBranch.durban.map(rep => rep.name), ['Dawie', 'Nadia']);
-assert.deepEqual(representativesByBranch['port-elizabeth'].map(rep => rep.name), ['Carmen']);
+assert.deepEqual(representativesByBranch.durban.map(rep => rep.name), ['Fabricated Durban Representative 31', 'Fabricated Durban Representative 32']);
+assert.deepEqual(representativesByBranch['port-elizabeth'].map(rep => rep.name), ['Fabricated Port Elizabeth Representative 16']);
 assert.equal(previewAllowsRole(PREVIEW_BY_ID[PREVIEW_IDS.INTERNAL_MOBILE], USER_ROLES.LABORATORY_USER), false);
 assert.equal(previewAllowsRole(PREVIEW_BY_ID[PREVIEW_IDS.INTERNAL_DESKTOP], USER_ROLES.LABORATORY_USER), true);
 assert.equal(previewAllowsRole(PREVIEW_BY_ID[PREVIEW_IDS.INTERNAL_MOBILE], USER_ROLES.QUALITY_ASSURANCE), false);

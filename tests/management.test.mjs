@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import {
   buildManagementDashboard,
   createOperationalReportCsv,
@@ -32,7 +32,7 @@ const sourceRecord = {
   companyId: 'company-a',
   company: 'Authorised Company',
   contact: 'Authorised Contact',
-  selectedRep: { id: 'C-27', name: 'Ericu Vercuiel', branchId: 'cape-town', branchName: 'Cape Town' },
+  selectedRep: { id: 'C-27', name: 'Fabricated Cape Representative 27', branchId: 'cape-town', branchName: 'Cape Town' },
   price: 1234,
   pricing: { margin: 20 },
   items: [{ code: 'PBG', unitPrice: 12, configuration: { range: '0 to 10 bar' } }],
@@ -100,7 +100,7 @@ const overridden = await services.management.approveWorkflowOverride(target.id, 
 });
 assert.equal(overridden.trackingStatus, 'under_rep_review');
 
-const report = await services.management.exportOperationalReport({ search: 'Cape Process' });
+const report = await services.management.exportOperationalReport({ search: 'TEST CLIENT' });
 assert.equal(report.mimeType, 'text/csv;charset=utf-8');
 assert.ok(report.rowCount > 0);
 assert.doesNotMatch(report.csv, /unitPrice|priceEngine|pricingResult/i);

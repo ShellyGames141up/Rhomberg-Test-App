@@ -48,7 +48,7 @@ assert.equal(activeOrders.some(order => order.reference === 'OR-ARCHIVE-0002'), 
 let archiveRecords = await services.archive.list();
 assert.ok(archiveRecords.some(order => order.reference === 'OR-ARCHIVE-0001' && order.retentionStatus === 'archive_eligible'));
 assert.ok(archiveRecords.some(order => order.reference === 'OR-ARCHIVE-0002' && order.retentionStatus === 'archived' && order.legalHold.active));
-assert.deepEqual(filterArchiveRecords(archiveRecords, { search: 'Cape Process', legalHold: 'held' }).map(order => order.reference), ['OR-ARCHIVE-0002']);
+assert.deepEqual(filterArchiveRecords(archiveRecords, { search: 'TEST CLIENT', legalHold: 'held' }).map(order => order.reference), ['OR-ARCHIVE-0002']);
 
 const eligibleOrder = archiveRecords.find(order => order.reference === 'OR-ARCHIVE-0001');
 const originalHistoryLength = eligibleOrder.trackingHistory.length;

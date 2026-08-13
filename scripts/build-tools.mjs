@@ -57,6 +57,8 @@ export async function stageGitHubPagesPreview() {
   }
   await fs.cp(path.join(root, 'assets'), path.join(output, 'assets'), { recursive: true });
   await fs.cp(path.join(root, 'app'), path.join(output, 'app'), { recursive: true });
+  await fs.cp(path.join(root, 'desktop'), path.join(output, 'desktop'), { recursive: true });
+  await fs.cp(path.join(root, 'mobile'), path.join(output, 'mobile'), { recursive: true });
   await fs.cp(path.join(root, 'preview'), path.join(output, 'preview'), { recursive: true });
   await fs.cp(path.join(root, 'demo'), path.join(output, 'demo'), { recursive: true });
   return output;

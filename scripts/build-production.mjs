@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { build } from 'esbuild';
+import { assertPublicArtifactSafe } from './assert-public-artifact-safe.mjs';
 
 const root = process.cwd();
 const output = path.resolve(root, 'dist-production');
@@ -33,7 +34,7 @@ await build({
       buildContext.onResolve({ filter: /^\.\/MockAdministrationControls\.jsx$/ }, () => ({
         path: path.join(root, 'src/components/ProductionAdministrationControls.jsx'),
       }));
-      buildContext.onResolve({ filter: /^\.\/shared\/platform\/previewConfig\.js$/ }, () => ({
+      buildContext.onResolve({ filter: /(?:^|\/)shared\/platform\/previewConfig\.js$/ }, () => ({
         path: path.join(root, 'src/shared/platform/productionPlatformConfig.js'),
       }));
     },
@@ -107,13 +108,12 @@ for (const file of ['styles.css', 'runtime-config.js']) {
 }
 const productionServiceWorkerSource = await fs.readFile(path.join(root, 'sw.js'), 'utf8');
 const productionServiceWorker = productionServiceWorkerSource
-  .replace(/rhomberg-app-preview-v(\d+)/, 'rhomberg-app-production-v$1')
+  .replace(/rhomberg-connect-preview-v(\d+)/, 'rhomberg-connect-production-v$1')
   .replace(/^\s*'\.\/(?:preview|demo)\/.*\r?\n/gm, '');
 if (productionServiceWorker === productionServiceWorkerSource) throw new Error('Production service-worker cache name was not isolated from the preview cache.');
 await fs.writeFile(path.join(output, 'sw.js'), productionServiceWorker, 'utf8');
-const productionIndex = (await fs.readFile(path.join(root, 'index.html'), 'utf8'))
-  .replace('Rhomberg Platform Preview Centre for five controlled customer, internal and executive demonstration experiences.', 'Rhomberg Instruments private-cloud product catalogue, RFQ and order-tracking application.')
-  .replace('Rhomberg Platform Preview Centre', 'Rhomberg Instruments Private Cloud App');
+const productionIndex = (await fs.readFile(path.join(root, 'desktop', 'index.html'), 'utf8'))
+  .replace('<base href="../">', '<base href="./">');
 await fs.writeFile(path.join(output, 'index.html'), productionIndex, 'utf8');
 
 const productionManifest = JSON.parse(await fs.readFile(path.join(root, 'manifest.webmanifest'), 'utf8'));
@@ -123,5 +123,7 @@ productionManifest.description = 'Rhomberg Instruments private-cloud catalogue, 
 delete productionManifest.shortcuts;
 await fs.writeFile(path.join(output, 'manifest.webmanifest'), `${JSON.stringify(productionManifest, null, 2)}\n`, 'utf8');
 await fs.cp(path.join(root, 'assets'), path.join(output, 'assets'), { recursive: true });
+
+await assertPublicArtifactSafe(output, { root, allowDemoAccounts: false });
 
 console.log(`Prepared and scanned API-only production candidate in ${output}`);

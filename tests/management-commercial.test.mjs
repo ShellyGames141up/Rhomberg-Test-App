@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import { formatSouthAfricanCurrency } from '../src/domain/formatting.js';
 import { readFileSync } from 'node:fs';
 import { extractQuotationDetailsFromPlacements } from '../src/domain/quotationPdf.js';
@@ -35,8 +35,8 @@ for (const readabilityRule of ['white-space:nowrap;font-variant-numeric:tabular-
 }
 
 const records = [
-  { id: 'converted', workflowType: 'order', reference: 'OR-1', rfqReference: 'RQ-1', trackingStatus: 'delayed', companyId: 'c1', company: 'First Client', createdAt: '2026-07-01T08:00:00Z', updatedAt: '2026-07-02T08:00:00Z', delayPromiseDate: '2026-07-20', selectedRep: { id: 'C-27', name: 'Ericu', branchId: 'cape-town', branchName: 'Cape Town' }, quotation: { commercialTotal: 37087.5, currency: 'ZAR', extractionStatus: 'verified_fields_found' } },
-  { id: 'lost', workflowType: 'rfq', reference: 'RQ-2', trackingStatus: 'expired', companyId: 'c2', company: 'Second Client', createdAt: '2026-07-04T08:00:00Z', updatedAt: '2026-07-15T08:00:00Z', selectedRep: { id: 'C-27', name: 'Ericu', branchId: 'cape-town', branchName: 'Cape Town' }, quotation: { commercialTotal: 12000, currency: 'ZAR', extractionStatus: 'verified_fields_found' } },
+  { id: 'converted', workflowType: 'order', reference: 'OR-1', rfqReference: 'RQ-1', trackingStatus: 'delayed', companyId: 'c1', company: 'First Client', createdAt: '2026-07-01T08:00:00Z', updatedAt: '2026-07-02T08:00:00Z', delayPromiseDate: '2026-07-20', selectedRep: { id: 'C-27', name: 'Fabricated Cape Representative 27', branchId: 'cape-town', branchName: 'Cape Town' }, quotation: { commercialTotal: 37087.5, currency: 'ZAR', extractionStatus: 'verified_fields_found' } },
+  { id: 'lost', workflowType: 'rfq', reference: 'RQ-2', trackingStatus: 'expired', companyId: 'c2', company: 'Second Client', createdAt: '2026-07-04T08:00:00Z', updatedAt: '2026-07-15T08:00:00Z', selectedRep: { id: 'C-27', name: 'Fabricated Cape Representative 27', branchId: 'cape-town', branchName: 'Cape Town' }, quotation: { commercialTotal: 12000, currency: 'ZAR', extractionStatus: 'verified_fields_found' } },
 ];
 const analytics = buildSalesPerformanceAnalytics(records, {
   now: new Date('2026-07-31T12:00:00.000Z'),

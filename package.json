@@ -22,6 +22,7 @@
     "check:css": "node ./scripts/check-css.mjs",
     "check:private-staff": "node ./scripts/validate-private-staff.mjs",
     "docs:private-staff": "node ./scripts/generate-private-account-matrix.mjs",
+    "docs:private-credentials": "node ./scripts/run-private-credentials.mjs",
     "test": "node ./tests/run-tests.mjs",
     "test:visual": "node ./scripts/capture-visual-regression.mjs"
   },

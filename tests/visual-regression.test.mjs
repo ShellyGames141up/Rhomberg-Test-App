@@ -6,9 +6,10 @@ import {
   VISUAL_WIDTHS,
 } from '../src/shared/testing/visualRegression.js';
 
-assert.deepEqual(VISUAL_WIDTHS, [360, 390, 412, 768, 1024, 1366, 1920]);
+assert.deepEqual(VISUAL_WIDTHS, [320, 360, 375, 390, 412, 480, 600, 768, 820, 1024, 1280, 1366, 1440, 1920, 2560]);
 assert.deepEqual(VISUAL_ROUTES.map(([, route]) => route), [
-  '/app/',
+  '/desktop/',
+  '/mobile/',
   '/preview/customer-mobile/',
   '/preview/internal-mobile/',
   '/preview/internal-desktop/',
