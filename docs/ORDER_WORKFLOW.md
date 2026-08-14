@@ -76,3 +76,6 @@ Planning
 Every important action creates an immutable audit entry and, when customer-visible, a simplified tracking entry. Internal notes are excluded from customer projections.
 
 RFQ Technical Support is completed before quotation/order conversion and does not change order statuses. See [TECHNICAL_SUPPORT_WORKFLOW.md](TECHNICAL_SUPPORT_WORKFLOW.md). Customer RFQ urgency controls remain removed; existing authorised internal order priority remains unchanged.
+# Laboratory launch routing amendment
+
+Orders containing unit-level **Yes — SANAS** or **Yes — Traceable** requirements create Laboratory certificate tasks. Each physical quantity creates one calibration-unit certificate requirement and carries the immutable recipient snapshot from the RFQ. Certificate completion updates status/reporting but does not silently alter the separate physical fulfilment state.

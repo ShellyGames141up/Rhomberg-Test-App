@@ -25,7 +25,6 @@ import {
   DEMO_ACCOUNT,
   DISPATCH_ACCOUNT,
   EXPEDITOR_ACCOUNT,
-  LAB_ACCOUNT,
   LAB_MANAGER_ACCOUNT,
   PHASE21_DEMO_ORDERS,
   QA_ACCOUNT,
@@ -133,53 +132,8 @@ const labStorage = new TestStorage();
 let labClock = new Date('2026-07-29T09:00:00.000Z');
 const labServices = createMockServices({ storage: labStorage, now: () => new Date(labClock) });
 await labServices.initialize();
-await signIn(labServices, LAB_ACCOUNT);
+await signIn(labServices, LAB_MANAGER_ACCOUNT);
 let labOrder = (await labServices.laboratory.listOrders()).find(order => order.id === sanasSeed.id);
-labOrder = await workflow(labServices, labOrder, 'receive_lab_order');
-assert.equal(labOrder.trackingStatus, 'lab_received');
-assert.ok(labOrder.laboratory.units.every(unit => unit.status === 'received'));
-labOrder = await workflow(labServices, labOrder, 'start_lab_calibration');
-for (const unit of labOrder.laboratory.units) {
-  await labServices.laboratory.updateUnit(labOrder.id, unit.id, 'start', {
-    serialNumber: `SERIAL-${unit.unitNumber}`,
-    customerMessage: 'Calibration work has started.',
-  });
-  await labServices.laboratory.updateUnit(labOrder.id, unit.id, 'complete', {
-    serialNumber: `SERIAL-${unit.unitNumber}`,
-    calibrationResult: `Fabricated passing result ${unit.unitNumber}`,
-    customerMessage: 'Calibration work for this unit is complete.',
-  });
-}
-labOrder = (await labServices.laboratory.listOrders()).find(order => order.id === sanasSeed.id);
-labOrder = await workflow(labServices, labOrder, 'complete_lab_calibration');
-labOrder = await workflow(labServices, labOrder, 'mark_lab_ready_for_release');
-await labServices.auth.signOut();
-await signIn(labServices, LAB_MANAGER_ACCOUNT);
-labOrder = (await labServices.laboratory.listOrders()).find(order => order.id === sanasSeed.id);
-labOrder = await workflow(labServices, labOrder, 'release_from_lab', {
-  labRelease: { destination: 'dispatch', note: 'Fabricated controlled release.' },
-});
-assert.equal(labOrder.trackingStatus, 'awaiting_lab_receipt_dispatch');
-assert.ok(labOrder.laboratory.units.every(unit => unit.status === 'released'));
-assert.equal(allRequiredCertificatesPresent(labOrder), false, 'physical release must be allowed while certificates remain pending');
-
-await assert.rejects(
-  () => labServices.laboratory.archiveCertificates(labOrder.id),
-  error => error instanceof ServiceError && error.code === 'CERTIFICATE_ARCHIVE_PENDING',
-  'Lab archival must be blocked while any unit certificate is pending',
-);
-
-await labServices.auth.signOut();
-await signIn(labServices, DISPATCH_ACCOUNT);
-let dispatchLabOrder = (await labServices.orders.list()).find(order => order.id === sanasSeed.id);
-dispatchLabOrder = await workflow(labServices, dispatchLabOrder, 'confirm_lab_receipt_dispatch');
-assert.equal(dispatchLabOrder.trackingStatus, 'awaiting_dispatch');
-assert.equal(dispatchLabOrder.dispatch.sourceDepartment, 'laboratory');
-assert.ok(dispatchLabOrder.dispatch.receivedAt);
-
-await labServices.auth.signOut();
-await signIn(labServices, LAB_MANAGER_ACCOUNT);
-labOrder = (await labServices.laboratory.listOrders()).find(order => order.id === sanasSeed.id);
 const pdfFile = unitNumber => ({
   name: `fabricated-certificate-${unitNumber}.pdf`,
   type: 'application/pdf',
@@ -191,19 +145,21 @@ await labServices.laboratory.uploadCertificate(labOrder.id, firstUnit.id, {
   certificateNumber: 'SANAS-TEST-0001',
   issueDate: '2026-07-29',
   file: pdfFile(1),
+  serialNumber: 'SERIAL-1', certificationType: firstUnit.certificationType, confirmAssociation: true,
 });
 await assert.rejects(
   () => labServices.laboratory.uploadCertificate(labOrder.id, firstUnit.id, {
     certificateNumber: 'SANAS-TEST-REPLACEMENT',
     issueDate: '2026-07-29',
     file: pdfFile(1),
+    serialNumber: 'SERIAL-1', certificationType: firstUnit.certificationType, confirmAssociation: true,
   }),
   error => error instanceof ServiceError && error.code === 'DUPLICATE_UNIT_CERTIFICATE',
   'one certificate must not be able to satisfy or replace the same physical unit',
 );
 await assert.rejects(
   () => labServices.laboratory.archiveCertificates(labOrder.id),
-  error => error instanceof ServiceError && error.code === 'CERTIFICATE_ARCHIVE_PENDING',
+  error => error instanceof ServiceError && error.code === 'CERTIFICATE_ARCHIVE_UNIT_ACTIVE',
 );
 const refreshedAfterFirst = (await labServices.laboratory.listOrders()).find(order => order.id === sanasSeed.id);
 const secondUnit = refreshedAfterFirst.laboratory.units[1];
@@ -211,9 +167,10 @@ await labServices.laboratory.uploadCertificate(labOrder.id, secondUnit.id, {
   certificateNumber: 'SANAS-TEST-0002',
   issueDate: '2026-07-29',
   file: pdfFile(2),
+  serialNumber: 'SERIAL-2', certificationType: secondUnit.certificationType, confirmAssociation: true,
 });
-const archivedCertificates = await labServices.laboratory.archiveCertificates(labOrder.id);
-assert.ok(archivedCertificates.every(unit => unit.certificateStatus === 'archived'));
+const completedLabOrder = (await labServices.laboratory.listOrders()).find(order => order.id === sanasSeed.id);
+assert.equal(completedLabOrder.laboratory.status, 'completed');
 
 await labServices.auth.signOut();
 await signIn(labServices, DEMO_ACCOUNT, 'customer');
@@ -409,7 +366,8 @@ await assert.rejects(
 assert.deepEqual(representativesByBranch.durban.map(rep => rep.name), ['Fabricated Durban Representative 31', 'Fabricated Durban Representative 32']);
 assert.deepEqual(representativesByBranch['port-elizabeth'].map(rep => rep.name), ['Fabricated Port Elizabeth Representative 16']);
 assert.equal(previewAllowsRole(PREVIEW_BY_ID[PREVIEW_IDS.INTERNAL_MOBILE], USER_ROLES.LABORATORY_USER), false);
-assert.equal(previewAllowsRole(PREVIEW_BY_ID[PREVIEW_IDS.INTERNAL_DESKTOP], USER_ROLES.LABORATORY_USER), true);
+assert.equal(previewAllowsRole(PREVIEW_BY_ID[PREVIEW_IDS.INTERNAL_DESKTOP], USER_ROLES.LABORATORY_USER), false);
+assert.equal(previewAllowsRole(PREVIEW_BY_ID[PREVIEW_IDS.INTERNAL_DESKTOP], USER_ROLES.LABORATORY_MANAGER), true);
 assert.equal(previewAllowsRole(PREVIEW_BY_ID[PREVIEW_IDS.INTERNAL_MOBILE], USER_ROLES.QUALITY_ASSURANCE), false);
 assert.equal(previewAllowsRole(PREVIEW_BY_ID[PREVIEW_IDS.INTERNAL_DESKTOP], USER_ROLES.QUALITY_ASSURANCE), true);
 

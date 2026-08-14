@@ -349,7 +349,24 @@ const baseSpecs = product => {
   ];
 };
 
-const resolveConfig = product => {
+const certificateRecipientFields = certificateKey => {
+  const certified = { key: certificateKey, values: certificateKey === 'sanas' ? ['Yes — SANAS'] : ['Yes — Traceable'] };
+  const client = { key: 'certificateRecipientType', value: 'My Client' };
+  return [
+    { ...choice('certificateRecipientType', 'Who should appear as the customer on the certificate?', ['My Company', 'My Client']), showWhen: certified },
+    { ...text('certificateClientName', 'Client / Certificate Customer Name', 'Enter the legal or display name', true), showWhen: client },
+    { ...text('certificateAddressLine1', 'Certificate Address Line 1', 'Street or site address', true), showWhen: client },
+    { ...text('certificateAddressLine2', 'Certificate Address Line 2', 'Building, suburb or area'), showWhen: client },
+    { ...text('certificateCity', 'Certificate City', 'City', true), showWhen: client },
+    { ...text('certificateProvince', 'Certificate Province / State', 'Province or state', true), showWhen: client },
+    { ...text('certificatePostalCode', 'Certificate Postal Code', 'Postal code', true), showWhen: client },
+    { ...text('certificateCountry', 'Certificate Country', 'Country', true), showWhen: client },
+    { ...text('certificateContact', 'Certificate Contact Person', 'Optional contact person'), showWhen: client },
+    { ...text('certificateCustomerReference', 'Certificate Customer Reference', 'Optional reference'), showWhen: client },
+  ];
+};
+
+const resolveBaseConfig = product => {
   if (product.consultationOnly) return consultationConfig(product);
   if (product.category === 'pressure' && product.variant === 'gauge') return pressureGaugeConfig(product);
   if (product.category === 'pressure' && ['RDPG10', 'DPG-S281'].includes(product.code)) return digitalPressureConfig(product);
@@ -364,6 +381,16 @@ const resolveConfig = product => {
   if (product.category === 'switches') return switchConfig(product);
   if (product.category === 'analysis') return analysisConfig(product);
   return calibrationConfig(product);
+};
+
+const resolveConfig = product => {
+  const fields = resolveBaseConfig(product).map(field => {
+    if (field.key === 'sanas') return { ...field, label: 'SANAS Calibration Required?', options: ['Yes — SANAS', 'No SANAS'] };
+    if (field.key === 'traceability') return { ...field, label: 'Traceable Certificate Required?', options: ['Yes — Traceable', 'No Traceable Certificate'] };
+    return field;
+  });
+  const certificateField = fields.find(field => ['sanas', 'traceability'].includes(field.key));
+  return certificateField ? [...fields, ...certificateRecipientFields(certificateField.key)] : fields;
 };
 
 const defaultDatasheets = product => {

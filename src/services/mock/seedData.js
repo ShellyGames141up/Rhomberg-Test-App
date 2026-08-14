@@ -52,6 +52,7 @@ export const DEMO_ACCOUNT = Object.freeze({
   phone: '+27 82 000 0000',
   area: 'Gauteng',
   industry: 'Mining',
+  certificateAddress: '100 Fabricated Mine Road, Sandton, Gauteng, 2196, South Africa',
   role: 'customer',
   password: 'Demo123!',
   createdAt: '2026-07-20T08:00:00.000Z',
@@ -143,6 +144,8 @@ export const LAB_ACCOUNT = Object.freeze({
   labRoles: ['laboratory_technician'],
   password: 'Lab12345!',
   createdAt: '2026-07-28T07:00:00.000Z',
+  active: false,
+  launchStatus: 'future_inactive',
 });
 
 export const LAB_MANAGER_ACCOUNT = Object.freeze({
@@ -157,7 +160,7 @@ export const LAB_MANAGER_ACCOUNT = Object.freeze({
   role: 'laboratory_manager',
   labBranchId: 'cape_town',
   authorisedLabBranchIds: ['cape_town'],
-  labRoles: ['laboratory_manager', 'laboratory_technician', 'laboratory_temperature_technician', 'technical_signatory'],
+  labRoles: ['laboratory_manager', 'laboratory_manager_pressure', 'laboratory_manager_temperature'],
   password: 'LabManager123!',
   createdAt: '2026-07-28T07:05:00.000Z',
 });
@@ -368,19 +371,10 @@ export const DEMO_LOGINS = Object.freeze([
     password: DISPATCH_ACCOUNT.password,
   },
   {
-    id: 'laboratory_user',
-    role: 'laboratory_user',
-    label: 'Use Laboratory test login',
-    description: 'Receive and process SANAS or Traceable units',
-    avatar: 'L',
-    email: LAB_ACCOUNT.email,
-    password: LAB_ACCOUNT.password,
-  },
-  {
     id: 'laboratory_manager',
     role: 'laboratory_manager',
     label: 'Use Laboratory Manager login',
-    description: 'Operate Laboratory work and manage certificate release',
+    description: 'Upload and manage final SANAS or Traceable certificates',
     avatar: 'L',
     email: LAB_MANAGER_ACCOUNT.email,
     password: LAB_MANAGER_ACCOUNT.password,

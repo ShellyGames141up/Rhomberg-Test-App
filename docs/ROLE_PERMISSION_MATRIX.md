@@ -110,3 +110,6 @@ The desktop Technical Support roles are `technical_support` (presented as **Tech
 - Sales Manager: representative compliance, missed/overdue customers, verification evidence and authorised aggregate working-location statistics.
 - Company Owner: approved aggregate operational statistics only.
 - Administrator: office/customer location metadata, visit-cycle, radius and working-hour policy; no editing immutable verification history.
+# Laboratory launch amendment (2026-08-14)
+
+Only `laboratory_manager`, `laboratory_manager_pressure`, and `laboratory_manager_temperature` may open the launch certificate workspace. `laboratory_user`, technicians, technical signatories and Laboratory administrators are `future_inactive` and have no live workspace access. Managers can view the certificate queue, upload/replace/download certificates, inspect audit history and view approved analytics; they cannot use deferred technician worksheet/calculation actions.

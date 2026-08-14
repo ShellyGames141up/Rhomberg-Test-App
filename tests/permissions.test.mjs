@@ -193,8 +193,10 @@ assert.ok(canAccessNotification(salesA, customerNotification));
 assert.equal(canAccessNotification(buyer, customerNotification), false);
 assert.ok(canAccessNotification(manager, customerNotification));
 
+const deferredLaboratoryActions = new Set(['receive_lab_order', 'start_lab_calibration', 'hold_lab_calibration', 'resume_lab_calibration', 'complete_lab_calibration', 'mark_lab_ready_for_release', 'release_from_lab']);
 for (const definition of WORKFLOW_TRANSITIONS) {
   assert.equal(definition.permission, WORKFLOW_ACTION_PERMISSIONS[definition.action], `${definition.action} must use the central action permission`);
+  if (deferredLaboratoryActions.has(definition.action)) continue;
   for (const role of definition.roles.filter(role => role !== SYSTEM_ACTOR_ROLE)) {
     assert.ok(roleCan(role, definition.permission), `${role} must hold ${definition.permission} for ${definition.action}`);
   }

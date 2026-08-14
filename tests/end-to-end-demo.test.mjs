@@ -27,7 +27,9 @@ const buildRequiredConfiguration = product => {
     for (const field of product.configurations) {
       if (!field.required || !shouldShowField(field, configuration) || configuration[field.key] !== undefined) continue;
       const allowed = optionsForField(field, configuration);
-      configuration[field.key] = allowed.length ? allowed[0] : 'Fabricated demonstration option';
+      configuration[field.key] = field.key === 'sanas' ? 'No SANAS'
+        : field.key === 'traceability' ? 'No Traceable Certificate'
+          : allowed.length ? allowed[0] : 'Fabricated demonstration option';
     }
   }
   return configuration;

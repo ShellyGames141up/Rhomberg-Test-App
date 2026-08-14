@@ -56,3 +56,6 @@ Customers can view and download only the current customer-visible quotation and 
 ## Responsive Representative experience
 
 Representative Mobile includes the assigned RFQ inbox and detail, quotation workflow, Technical Support hand-off, assigned Clients, visit scheduling, Load Customer Order and user Settings. RFQ and order records expose complete authorised configured-unit detail through the common internal component. Customer urgency controls remain absent, while internal priority stays permission-controlled. Forms stack on compact screens and their primary action remains clear of bottom navigation.
+# Laboratory certificate visibility amendment
+
+Representatives see SANAS/Traceable selection and the recipient type, name and address under each configured unit. They receive certificate-upload and all-complete notifications but cannot change the frozen recipient snapshot or use Laboratory manager controls.

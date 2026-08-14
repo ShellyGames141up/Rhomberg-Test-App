@@ -4,7 +4,7 @@ import { LeadTimeNotice } from './Layout.jsx';
 
 const normaliseQuantity = value => Math.min(9999, Math.max(1, Math.trunc(Number(value) || 1)));
 
-export function Configurator({ product, existingLine, onSave, onCancel }) {
+export function Configurator({ product, existingLine, account, onSave, onCancel }) {
   const [values, setValues] = useState(existingLine?.configuration || {});
   const [quantity, setQuantity] = useState(existingLine?.quantity || 1);
   const [stepIndex, setStepIndex] = useState(0);
@@ -96,7 +96,7 @@ export function Configurator({ product, existingLine, onSave, onCancel }) {
         {field.type === 'text' && <TextStep field={field} value={values[field.key] || ''} onChange={update} />}
         {field.type === 'textarea' && <TextAreaStep field={field} value={values[field.key] || ''} onChange={update} />}
         {field.type === 'toggle' && <ToggleStep field={field} value={Boolean(values[field.key])} onChange={update} />}
-        {field.type === 'review' && <ReviewStep product={product} quantity={quantity} values={values} fields={product.configurations} />}
+        {field.type === 'review' && <ReviewStep product={product} quantity={quantity} values={values} fields={product.configurations} account={account} />}
         {error && <p className="config-error" role="alert">{error}</p>}
       </div>
 
@@ -152,7 +152,7 @@ function ToggleStep({ field, value, onChange }) {
   );
 }
 
-function ReviewStep({ product, quantity, values, fields }) {
+function ReviewStep({ product, quantity, values, fields, account }) {
   const rows = fields
     .filter(field => shouldShowField(field, values))
     .filter(field => values[field.key] !== undefined && values[field.key] !== '');
@@ -160,6 +160,7 @@ function ReviewStep({ product, quantity, values, fields }) {
     <div className="config-question review-question"><span className="eyebrow">Final check</span><h2>Review this configured unit</h2><p>You can edit it again from the enquiry page before submission.</p>
       <div className="review-product"><img src={product.image} alt="" /><div><strong>{product.code}</strong><small>{product.name}</small></div><b>Qty {quantity}</b></div>
       <dl className="review-config-list">{rows.map(field => <div key={field.key}><dt>{field.label}</dt><dd>{formatConfigurationValue(values[field.key])}</dd></div>)}</dl>
+      {values.certificateRecipientType === 'My Company' && <div className="certificate-recipient-review"><strong>Certificate Customer</strong><span>Company: {account?.company || 'Your authorised company'}</span><span>Address: {account?.certificateAddress || account?.address || 'Approved account address'}</span><small>This is reviewed from your company account and snapshotted when the RFQ is submitted.</small></div>}
     </div>
   );
 }

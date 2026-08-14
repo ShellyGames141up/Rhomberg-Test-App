@@ -2642,4 +2642,33 @@ CREATE POLICY client_visits_company_scope ON app.client_visits USING (app.can_ac
 CREATE TRIGGER visit_verification_events_immutable BEFORE UPDATE OR DELETE ON app.visit_verification_events FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
 CREATE TRIGGER missed_visit_events_immutable BEFORE UPDATE OR DELETE ON app.missed_visit_events FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
 
+-- Launch-only Laboratory certificate upload model. Detailed technician worksheets are future/inactive.
+CREATE TABLE app.lab_certificate_tasks (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL REFERENCES app.companies(id), order_id uuid NOT NULL REFERENCES app.orders(id),
+  status text NOT NULL CHECK (status IN ('awaiting_certificate','certificate_uploaded','completed')), received_at timestamptz, completed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE (order_id)
+);
+CREATE TABLE app.certificate_recipient_snapshots (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL REFERENCES app.companies(id), order_item_id uuid NOT NULL REFERENCES app.order_items(id),
+  recipient_type text NOT NULL CHECK (recipient_type IN ('customer_company','customer_client')), recipient_name text NOT NULL, recipient_address jsonb NOT NULL,
+  source text NOT NULL, created_by uuid NOT NULL REFERENCES app.users(id), created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE app.certificate_upload_events (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, company_id uuid NOT NULL REFERENCES app.companies(id), certificate_id uuid NOT NULL REFERENCES app.certificates(id),
+  event_type text NOT NULL CHECK (event_type IN ('uploaded','replaced','superseded')), actor_user_id uuid NOT NULL REFERENCES app.users(id), reason text,
+  created_at timestamptz NOT NULL DEFAULT now(), correlation_id uuid NOT NULL
+);
+CREATE TABLE app.certificate_download_events (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, company_id uuid NOT NULL REFERENCES app.companies(id), certificate_id uuid NOT NULL REFERENCES app.certificates(id),
+  actor_user_id uuid NOT NULL REFERENCES app.users(id), created_at timestamptz NOT NULL DEFAULT now(), correlation_id uuid NOT NULL
+);
+CREATE INDEX lab_certificate_tasks_active_idx ON app.lab_certificate_tasks (status, updated_at) WHERE status <> 'completed';
+CREATE INDEX certificate_recipient_company_idx ON app.certificate_recipient_snapshots (company_id, order_item_id);
+ALTER TABLE app.lab_certificate_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app.certificate_recipient_snapshots ENABLE ROW LEVEL SECURITY;
+CREATE POLICY lab_certificate_tasks_company_scope ON app.lab_certificate_tasks USING (app.can_access_company(company_id)) WITH CHECK (app.can_access_company(company_id));
+CREATE POLICY certificate_recipient_company_scope ON app.certificate_recipient_snapshots USING (app.can_access_company(company_id)) WITH CHECK (app.can_access_company(company_id));
+CREATE TRIGGER certificate_upload_events_immutable BEFORE UPDATE OR DELETE ON app.certificate_upload_events FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+CREATE TRIGGER certificate_download_events_immutable BEFORE UPDATE OR DELETE ON app.certificate_download_events FOR EACH ROW EXECUTE FUNCTION app.reject_audit_event_mutation();
+
 COMMIT;

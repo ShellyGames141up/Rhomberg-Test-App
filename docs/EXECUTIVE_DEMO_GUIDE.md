@@ -113,3 +113,6 @@ Choose **RFQ Technical Support** to present the Representative request, one-time
 # Sales visit scenarios
 
 `Sales Representative Client Visit` demonstrates the Clients page, monthly coverage, appointment, fabricated geofence, customer/QR confirmation, verification score and Sales Manager update. `Missed Client Visit` demonstrates expiry, immutable missed event, warning, manager drill-down and rescheduling without overwriting the original appointment.
+# Simplified Laboratory launch demonstration
+
+Use the fabricated Laboratory Manager preview. Show a SANAS/Traceable order in Active, open the unit recipient snapshot, upload a fabricated PDF per physical unit, confirm the task remains active until every unit is complete, then open Completed Certificates. Switch to the fabricated customer to show the safe notification and company-scoped download. Do not demonstrate technician worksheets or calculations as launch functionality.

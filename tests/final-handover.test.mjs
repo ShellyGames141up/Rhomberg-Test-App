@@ -4,7 +4,7 @@ import { createMockServices } from '../src/services/mock/createMockServices.js';
 import {
   ADMINISTRATOR_ACCOUNT,
   DEMO_ACCOUNT,
-  LAB_ACCOUNT,
+  LAB_MANAGER_ACCOUNT,
   STORE_KEYS,
 } from '../src/services/mock/seedData.js';
 import {
@@ -37,11 +37,7 @@ for (const role of [
   USER_ROLES.TECHNICAL_DIRECTOR,
   USER_ROLES.COMPANY_OWNER,
   USER_ROLES.PLANNING,
-  USER_ROLES.LABORATORY_USER,
-  USER_ROLES.LABORATORY_TECHNICIAN,
   USER_ROLES.LABORATORY_MANAGER,
-  USER_ROLES.TECHNICAL_SIGNATORY,
-  USER_ROLES.LABORATORY_ADMINISTRATOR,
   USER_ROLES.EXPEDITOR,
   USER_ROLES.QUALITY_ASSURANCE,
   USER_ROLES.DISPATCH,
@@ -64,14 +60,14 @@ assert.equal((await reopened.executiveDemo.getState()).devicePreview, 'tablet', 
 const switchedCustomer = await reopened.executiveDemo.switchRole(USER_ROLES.CUSTOMER);
 assert.equal(switchedCustomer.id, DEMO_ACCOUNT.id);
 assert.equal(defaultViewForRole(switchedCustomer.role), 'home');
-const switchedLab = await reopened.executiveDemo.switchRole(USER_ROLES.LABORATORY_USER);
-assert.equal(switchedLab.id, LAB_ACCOUNT.id);
+const switchedLab = await reopened.executiveDemo.switchRole(USER_ROLES.LABORATORY_MANAGER);
+assert.equal(switchedLab.id, LAB_MANAGER_ACCOUNT.id);
 assert.equal(defaultViewForRole(switchedLab.role), 'expeditor');
 const switchedAdmin = await reopened.executiveDemo.switchRole(USER_ROLES.ADMINISTRATOR);
 assert.equal(switchedAdmin.id, ADMINISTRATOR_ACCOUNT.id);
 assert.equal(defaultViewForRole(switchedAdmin.role), 'administration');
 assert.equal(normaliseViewForRole(USER_ROLES.CUSTOMER, 'administration'), 'home');
-assert.equal(normaliseViewForRole(USER_ROLES.LABORATORY_USER, 'administration'), 'expeditor');
+assert.equal(normaliseViewForRole(USER_ROLES.LABORATORY_MANAGER, 'administration'), 'expeditor');
 
 const overview = await reopened.administration.getOverview();
 assert.ok(overview.summary.users >= EXECUTIVE_DEMO_ROLES.length);
@@ -90,11 +86,11 @@ await assert.rejects(
 
 await reopened.auth.signOut();
 await reopened.auth.signIn({ email: ADMINISTRATOR_ACCOUNT.email, password: ADMINISTRATOR_ACCOUNT.password });
-const target = overview.users.find(user => user.role === USER_ROLES.LABORATORY_USER);
+const target = overview.users.find(user => user.role === USER_ROLES.LABORATORY_MANAGER);
 await reopened.administration.setAccountStatus(target.id, { status: 'suspended', reason: 'Approved fabricated suspension test.', verification: ADMINISTRATOR_ACCOUNT.password });
 await reopened.auth.signOut();
 await assert.rejects(
-  () => reopened.auth.signIn({ email: LAB_ACCOUNT.email, password: LAB_ACCOUNT.password }),
+  () => reopened.auth.signIn({ email: LAB_MANAGER_ACCOUNT.email, password: LAB_MANAGER_ACCOUNT.password }),
   error => error instanceof ServiceError && error.status === 401,
   'a suspended fabricated account must not sign in',
 );

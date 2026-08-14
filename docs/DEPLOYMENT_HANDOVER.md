@@ -155,3 +155,8 @@ Do not approve production until:
 # Laboratory production gates
 
 The Laboratory workspace remains mock-only until Rhomberg and IT approve method/formula validation, golden datasets, controlled certificate templates, accreditation wording, reference-standard migration, branch/staff scope, external signing verification, protected object storage, malware scanning, sequential-number allocation, backup/restore, retention, monitoring and incident procedures. No supplied customer workbook or certificate may be copied into public fixtures or GitHub history.
+# Laboratory launch deployment note
+
+The initial production scope uses a simplified Laboratory certificate-upload workflow. Detailed technician calibration worksheets and calculation functionality are deferred to a future Laboratory phase.
+
+IT must create the two owner-approved manager identities in the private identity provider, assign Pressure and/or Temperature manager scopes, and keep credentials outside source control. Certificate PDFs require authenticated private object storage, server-side PDF signature/type/size validation, malware scanning, short-lived downloads, company/role authorisation, backups and immutable audit events.

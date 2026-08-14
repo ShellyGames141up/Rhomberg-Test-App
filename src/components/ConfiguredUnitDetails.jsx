@@ -7,6 +7,7 @@ const configurationFieldIsProtected = key => /^(?:private|internal)|(?:price|pri
 export function ConfiguredUnitDetails({ unit, context = 'RFQ', extra = null }) {
   const [open, setOpen] = useState(false);
   const configuration = Object.entries(unit.configuration || {}).filter(([key, value]) => !configurationFieldIsProtected(key) && value !== '' && value !== null && value !== undefined);
+  const recipient = unit.certificateRecipientSnapshot;
   return <article className="configured-unit-details">
     <button className="configured-unit-summary" type="button" onClick={() => setOpen(value => !value)} aria-expanded={open}>
       <span className="configured-unit-image">{unit.image ? <img src={unit.image} alt="" /> : unit.code?.slice(0, 2)}</span>
@@ -19,6 +20,7 @@ export function ConfiguredUnitDetails({ unit, context = 'RFQ', extra = null }) {
         <div><dt>Product code</dt><dd>{unit.code || unit.productCode || 'Not specified'}</dd></div>
         <div><dt>Quantity</dt><dd>{unit.quantity || 1}</dd></div>
         {configuration.map(([key, value]) => <div key={key}><dt>{label(key)}</dt><dd>{display(value)}</dd></div>)}
+        {recipient && <><div><dt>Certificate recipient type</dt><dd>{recipient.recipientType === 'customer_company' ? 'My Company' : 'My Client'}</dd></div><div><dt>Certificate customer name</dt><dd>{recipient.recipientName}</dd></div><div><dt>Certificate address</dt><dd>{recipient.recipientAddress}</dd></div></>}
         {extra && Object.entries(extra).filter(([, value]) => value !== '' && value !== null && value !== undefined).map(([key, value]) => <div key={key}><dt>{label(key)}</dt><dd>{display(value)}</dd></div>)}
       </dl>
     </div>}

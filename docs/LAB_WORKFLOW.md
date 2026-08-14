@@ -1,28 +1,32 @@
-# Laboratory calibration workflow
+# Laboratory launch workflow
 
-Only Cape Town and Johannesburg are valid Laboratory destinations. Pressure technicians can receive, inspect, stabilise, book in, capture raw readings, complete calibration and labelling, and transfer units, but cannot approve certificates. Temperature technicians receive the equivalent Temperature worksheet path. Pressure and Temperature Manager assignments are separate data roles; one account may hold both when authorised.
+> The initial production scope uses a simplified Laboratory certificate-upload workflow. Detailed technician calibration worksheets and calculation functionality are deferred to a future Laboratory phase.
 
-This local mock implements one controlled, unit-level workflow for the Cape Town and Johannesburg laboratories. It supports Pressure and Temperature work without merging their methods, templates or uncertainty models. Every customer line quantity becomes that number of physical calibration units; each unit receives its own job number, immutable worksheet revisions, certificate number and certificate versions.
+## Launch scope
 
-## Controlled journey
+Only Laboratory Managers are active. The owner-approved private roster contains one combined Pressure/Temperature manager and one Pressure manager; identities and credentials stay outside the public repository. Fabricated preview access uses the single Laboratory Manager demo identity. Laboratory User, Technician, Temperature Technician, Technical Signatory and Laboratory Administrator workspaces are `future_inactive`.
 
-1. Planning routes a qualifying unit to its authorised laboratory branch.
-2. Laboratory receipt records condition, packaging, customer documents, actor and time.
-3. Thermal stabilisation records its start, ambient temperature and confirmed equilibrium.
-4. Inspection records the controlled outcome and routes rejected or quote-required units safely.
-5. Booking captures instrument identity, range, resolution, method, certification type and urgency; the service allocates branch-aware job and certificate references.
-6. A permitted technician selects a valid, in-calibration reference standard and records structured raw readings.
-7. Named calculation functions create rounded derived values and a versioned uncertainty budget. Raw inputs lock after calculation; corrections create a new revision.
-8. Laboratory Management records a review of unresolved formula/template warnings. The mock acknowledgement is not technical approval.
-9. The technician completes calibration, labels the instrument and signs off physical transfer to Dispatch or Expediting.
-10. Management generates an internal review PDF, draft certificate and final unsigned certificate, then uses the approved external signing process.
-11. A permitted manager uploads the signed PDF. The service validates PDF metadata, hashes it, preserves superseded versions, and requires an explicit recipient rule before release.
-12. Authorised recipients receive scoped notifications. Downloads and releases create immutable audit events.
+The launch path is:
 
-## Separation and access
+1. A configured product requests **Yes — SANAS** or **Yes — Traceable**.
+2. The customer selects **My Company** or **My Client** for that configured unit.
+3. RFQ submission freezes the recipient name/address as a unit-level snapshot.
+4. The order appears in the permitted manager's certificate queue.
+5. The manager opens the order and uploads one final PDF for each physical unit, with certificate number, date, serial number and association confirmation.
+6. A unit becomes **Certificate Uploaded**. The task remains active until all physical units are complete.
+7. The completed task moves to **Completed Certificates** and remains searchable.
+8. Authorised customers and internal users download the current certificate through the service layer; every upload, replacement and download is audited.
 
-Technicians can enter raw data only for their assigned/authorised branch. Managers review but do not overwrite raw readings. Technical signatories approve certificate progression. Administrators may maintain approved configuration but cannot alter audit history or signed files. Customers see only safe progress and explicitly released certificates belonging to their own company; raw readings, internal notes, calculations, management comments and audit metadata are never included in customer projections.
+## Discipline scope
 
-The browser stores fabricated mock data only. Production requires backend transactions, row-level company and branch scope, protected object storage, malware scanning, immutable event storage, server-side reference allocation and approved identity controls.
+- Pressure manager: Pressure SANAS units only.
+- Combined manager: Pressure SANAS and Temperature Traceable units.
+- Managers with an explicit Temperature manager role: Temperature Traceable units.
 
-> Software implementation completed against supplied reference templates; technical validation and formal approval remain required from authorised Rhomberg Laboratory Management and Technical Signatories.
+## Replacement and privacy
+
+Replacing a certificate requires a new PDF and reason. The prior version is marked `superseded`; it is not silently overwritten. Customers receive only the current customer-visible version for their own company/order. Production must use authenticated private object storage, backend MIME/signature/size validation, malware scanning, row-level company isolation and immutable audit storage.
+
+## Deferred functionality
+
+Receipt/stabilisation, inspection, booking-in, technician assignment, raw worksheets, calibration points, uncertainty calculations, method selection, technician sign-off, management raw-data review, draft compilation and external-signature orchestration are not exposed at launch. Historical domain material is retained only for future review and is not a production claim.

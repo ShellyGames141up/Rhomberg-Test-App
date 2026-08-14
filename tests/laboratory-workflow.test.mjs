@@ -2,71 +2,43 @@ import assert from 'node:assert/strict';
 import { createMockServices } from '../src/services/mock/createMockServices.js';
 import { DEMO_ACCOUNT, LAB_ACCOUNT, LAB_MANAGER_ACCOUNT } from '../src/services/mock/seedData.js';
 import { ServiceError } from '../src/services/contracts.js';
-import { PRESSURE_POINT_SEQUENCE } from '../src/domain/laboratoryCalibration.js';
+import { products } from '../src/data/catalogue.js';
+import { certificateRecipientSnapshot, LABORATORY_LAUNCH } from '../src/domain/laboratoryLaunch.js';
 
 class TestStorage { constructor() { this.values = new Map(); } getItem(key) { return this.values.get(key) ?? null; } setItem(key, value) { this.values.set(key, String(value)); } removeItem(key) { this.values.delete(key); } }
-const services = createMockServices({ storage: new TestStorage(), now: () => new Date('2026-08-03T10:00:00.000Z') });
+const services = createMockServices({ storage: new TestStorage(), now: () => new Date('2026-08-14T10:00:00.000Z') });
 await services.initialize();
 const signIn = async account => { await services.auth.signOut(); return services.auth.signIn({ email: account.email, password: account.password }); };
+const pdf = name => ({ name, type: 'application/pdf', size: 256, arrayBuffer: async () => new TextEncoder().encode('%PDF-1.4 fabricated').buffer });
 
-await signIn(LAB_ACCOUNT);
-let order = (await services.laboratory.listOrders()).find(item => item.laboratory?.units?.length);
-assert.ok(order, 'fabricated seed must include a Laboratory order');
-let unit = order.laboratory.units[0];
-unit = await services.laboratory.receive(order.id, unit.id, { branchId: 'cape_town', conditionOnReceipt: 'Satisfactory fabricated condition', packageCondition: 'Satisfactory', numberOfUnits: 1, customerDocumentsReceived: true });
-assert.equal(unit.labWork.status, 'received_in_lab');
-unit = (await services.laboratory.listOrders()).find(item => item.id === order.id).laboratory.units.find(item => item.id === unit.id);
-assert.equal(unit.labWork.status, 'received_in_lab');
-await services.laboratory.startStabilisation(order.id, unit.id, { ambientTemperature: 21 });
-await services.laboratory.completeStabilisation(order.id, unit.id, { ambientTemperature: 21, equilibriumConfirmed: true });
-await services.laboratory.inspect(order.id, unit.id, { outcome: 'no_visible_defect' });
-await services.laboratory.bookIn(order.id, unit.id, { instrumentDescription: 'Fabricated pressure indicator', manufacturer: 'Fabricated manufacturer', serialNumber: 'DEMO-LAB-001', rangeMinimum: 0, rangeMaximum: 700, unit: 'bar', resolution: 0.01, methodId: 'pressure_dwt_700_bar', sanasOrTraceable: 'sanas' });
-await services.laboratory.saveWorksheet(order.id, unit.id, {
-  methodId: 'pressure_dwt_700_bar', standardIds: ['std-ct-dwt-700'], coverageFactor: 2, decimals: 5,
-  testPoints: PRESSURE_POINT_SEQUENCE.map((point, index) => ({ ...point, applied: point.direction === 'repeatability' ? 350 : index * 40, readings: [point.direction === 'repeatability' ? 350 + index / 100 : index * 40] })),
-  uncertaintyContributions: [{ source: 'Fabricated standard', uncertainty: 0.04, divisor: 2, sensitivity: 1, degreesOfFreedom: 200 }],
-  environmental: { temperature: 21, humidity: 50 },
-});
-await services.laboratory.startCalibration(order.id, unit.id, { note: 'Fabricated integration run' });
-await services.laboratory.holdCalibration(order.id, unit.id, { reason: 'Fabricated controlled equipment check.' });
-await services.laboratory.startCalibration(order.id, unit.id, { note: 'Fabricated controlled resume' });
-unit = await services.laboratory.calculate(order.id, unit.id);
-assert.equal(unit.labWork.status, 'calculation_review_required');
-assert.equal(unit.labWork.worksheet.locked, true);
+assert.equal(LABORATORY_LAUNCH.technicianWorkflowEnabled, false);
+await assert.rejects(() => signIn(LAB_ACCOUNT), error => error instanceof ServiceError && error.code === 'INVALID_CREDENTIALS');
+const manager = await signIn(LAB_MANAGER_ACCOUNT);
+assert.ok(manager.permissions.includes('manage_certificates'));
+assert.ok(!manager.permissions.includes('enter_raw_calibration_data'));
+const orders = await services.laboratory.listOrders();
+const order = orders.find(item => item.laboratory?.units?.length >= 2);
+assert.ok(order, 'a fabricated multi-unit certificate task must exist');
+const [first, second] = order.laboratory.units;
+await assert.rejects(() => services.laboratory.uploadCertificate(order.id, first.id, { file: { ...pdf('bad.txt'), type: 'text/plain' }, certificateNumber: 'CERT-1', issueDate: '2026-08-14', serialNumber: 'SN-1', confirmAssociation: true }), error => error.code === 'CERTIFICATE_FILE_INVALID');
+await services.laboratory.uploadCertificate(order.id, first.id, { file: pdf('unit-1.pdf'), certificateNumber: 'CERT-LAUNCH-1', issueDate: '2026-08-14', serialNumber: 'SN-LAUNCH-1', certificationType: first.certificationType, confirmAssociation: true });
+let active = (await services.laboratory.listOrders()).find(item => item.id === order.id);
+assert.equal(active.laboratory.status, 'awaiting_certificate', 'task remains active until every physical unit has a certificate');
+await services.laboratory.uploadCertificate(order.id, second.id, { file: pdf('unit-2.pdf'), certificateNumber: 'CERT-LAUNCH-2', issueDate: '2026-08-14', serialNumber: 'SN-LAUNCH-2', certificationType: second.certificationType, confirmAssociation: true });
+active = (await services.laboratory.listOrders()).find(item => item.id === order.id);
+assert.equal(active.laboratory.status, 'completed');
+const oldId = active.laboratory.units[0].certificateId;
+await services.laboratory.replaceCertificate(order.id, first.id, { file: pdf('unit-1-replacement.pdf'), certificateNumber: 'CERT-LAUNCH-1-R1', issueDate: '2026-08-14', serialNumber: 'SN-LAUNCH-1', certificationType: first.certificationType, confirmAssociation: true, reason: 'Corrected fabricated certificate document.' });
+active = (await services.laboratory.listOrders()).find(item => item.id === order.id);
+assert.notEqual(active.laboratory.units[0].certificateId, oldId);
+assert.equal(active.laboratory.units[0].certificateVersions[0].status, 'superseded');
 
-await signIn(LAB_MANAGER_ACCOUNT);
-await assert.rejects(
-  () => services.laboratory.saveWorksheet(order.id, unit.id, {}),
-  error => error instanceof ServiceError && error.status === 409 && error.code === 'LAB_WORKSHEET_STAGE_INVALID',
-  'calculated raw data must remain immutable even for Laboratory management',
-);
-await services.laboratory.approveFormulaValidation(order.id, unit.id, { confirmed: true, reason: 'Fabricated management review evidence.' });
-await signIn(LAB_ACCOUNT);
-await services.laboratory.completeCalibration(order.id, unit.id, { technicianConfirmed: true, resultSummary: 'Fabricated completed result' });
-await services.laboratory.completeLabelling(order.id, unit.id, { calibrationLabelApplied: true, identificationChecked: true, calibrationDate: '2026-08-03', checkedBy: 'Fabricated checker' });
-await services.laboratory.releaseUnitToDispatch(order.id, unit.id, { bomSignedOff: true, destination: 'dispatch', numberOfPackages: 1, internalNote: 'Internal fabricated transfer note' });
+const pressure = products.find(product => product.category === 'pressure' && product.configurations.some(field => field.key === 'sanas'));
+const temperature = products.find(product => product.category === 'temperature' && product.configurations.some(field => field.key === 'traceability'));
+assert.deepEqual(pressure.configurations.find(field => field.key === 'sanas').options, ['Yes — SANAS', 'No SANAS']);
+assert.deepEqual(temperature.configurations.find(field => field.key === 'traceability').options, ['Yes — Traceable', 'No Traceable Certificate']);
+const clientSnapshot = certificateRecipientSnapshot({ configuration: { certificateRecipientType: 'My Client', certificateClientName: 'Fabricated Client', certificateAddressLine1: '1 Test Road', certificateCity: 'Cape Town', certificateProvince: 'Western Cape', certificatePostalCode: '8000', certificateCountry: 'South Africa' } }, DEMO_ACCOUNT, '2026-08-14T10:00:00.000Z');
+assert.equal(clientSnapshot.recipientType, 'customer_client');
+assert.equal(clientSnapshot.recipientName, 'Fabricated Client');
 
-await signIn(LAB_MANAGER_ACCOUNT);
-const review = await services.laboratory.generateReviewPdf(order.id, unit.id);
-assert.match(review.dataUrl, /^data:application\/pdf;base64,/);
-await services.laboratory.generateDraftCertificate(order.id, unit.id);
-await services.laboratory.submitCertificateForReview(order.id, unit.id, { comment: 'Fabricated review submission' });
-await services.laboratory.approveForSignature(order.id, unit.id, { confirmed: true, signatoryName: 'Fabricated signatory', issue: 'Issue 1' });
-await services.laboratory.generateUnsignedCertificate(order.id, unit.id);
-const pdfFile = { name: 'fabricated-signed.pdf', type: 'application/pdf', size: 128, arrayBuffer: async () => new TextEncoder().encode('%PDF-1.4 fabricated signed certificate').buffer };
-const signed = await services.laboratory.uploadSignedCertificate(order.id, unit.id, { file: pdfFile, issueDate: '2026-08-03' });
-assert.match(signed.sha256, /^[a-f0-9]{64}$/);
-
-await signIn(DEMO_ACCOUNT);
-await assert.rejects(() => services.laboratory.downloadCertificate(signed.id), error => error instanceof ServiceError && error.code === 'CERTIFICATE_NOT_FOUND');
-await signIn(LAB_MANAGER_ACCOUNT);
-await services.laboratory.releaseCertificate(order.id, unit.id, { recipientRule: 'customer_and_representative' });
-await signIn(DEMO_ACCOUNT);
-const customerOrder = (await services.orders.list()).find(item => item.id === order.id);
-const customerUnit = customerOrder.laboratory.units.find(item => item.id === unit.id);
-assert.equal(customerUnit.labWork, undefined);
-assert.equal(customerUnit.certificate, undefined);
-assert.equal(customerUnit.certificateStatus, 'verified');
-assert.match((await services.laboratory.downloadCertificate(signed.id)).dataUrl, /^data:application\/pdf;base64,/);
-
-console.log('Controlled Laboratory service workflow, role separation, PDF release and customer privacy tests passed.');
+console.log('Launch Laboratory access, certificate upload, multi-unit completion, replacement and recipient tests passed.');

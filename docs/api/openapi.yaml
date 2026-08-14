@@ -5366,3 +5366,13 @@ components:
             message: { type: string }
             fieldErrors: { type: object, additionalProperties: { type: string } }
             correlationId: { type: string }
+
+x-laboratory-launch-contract:
+  note: Simplified manager-only certificate upload. Technician calibration endpoints are future/inactive.
+  endpoints:
+    - { method: GET, path: /laboratory/certificate-tasks, auth: laboratory_manager }
+    - { method: GET, path: /laboratory/certificate-tasks/{taskId}, auth: laboratory_manager }
+    - { method: POST, path: /laboratory/units/{unitId}/certificate, contentType: multipart/form-data, idempotencyRequired: true }
+    - { method: POST, path: /laboratory/certificates/{certificateId}/replace, contentType: multipart/form-data, idempotencyRequired: true }
+    - { method: GET, path: /orders/{orderId}/certificates, auth: authorised_internal }
+    - { method: GET, path: /customers/orders/{orderId}/certificates, auth: own_company_customer }

@@ -214,19 +214,16 @@ See `docs/FINAL_COMPLETION_REPORT.md` for the detailed final UI/UX report and `d
 - Duplicate matching and idempotency protect repeat submissions. Customer, Planning and internal notifications are generated, and source-document uploads, replacements and downloads are audited.
 - The GitHub Pages mock stores document metadata only. Production file bytes require private storage, backend validation and malware scanning.
 
-### Controlled Laboratory calibration
+### Laboratory launch workflow
 
-- Cape Town and Johannesburg Laboratory queues are separated by branch, staff assignment and role permissions.
-- Every physical calibration unit receives its own controlled workflow record, job number, worksheet revisions, certificate requirement and audit history.
-- The workflow covers receipt, thermal stabilisation, inspection, booking, technician assignment, calibration, management review, labelling and transfer to Dispatch or Expediting.
-- Pressure and Temperature work remain separate. The mock includes Pressure master-gauge, 700 bar dead-weight-tester, 250 MPa dead-weight-tester and Temperature comparison methods.
-- Structured readings feed named calculation functions and versioned uncertainty budgets. Raw inputs lock after calculation, and corrections create traceable revisions instead of overwriting evidence.
-- Laboratory document handling includes internal-review PDFs, draft and final unsigned certificates, approved external-signature hand-off, signed-PDF re-upload, SHA-256 evidence, superseded-version preservation and explicit certificate release.
-- The Laboratory interface now shows a seven-stage progress path, the responsible next role and numbered signing/re-upload instructions. Secondary Laboratory roles are recognised correctly, preventing the workflow from stalling after thermal stabilisation.
-- Automated end-to-end journeys verify both Pressure SANAS and Temperature Traceable work from receipt through calibration, management review, Dispatch transfer, unsigned certificate download, signed-PDF re-upload and final certificate release.
-- Customer projections expose only safe progress and explicitly released certificates belonging to the authorised company. Raw readings, calculations, internal notes, management comments and audit metadata remain internal.
-- Laboratory notifications, unit history, the document centre, certificate register, monthly measures, future API contracts, PostgreSQL proposals and automated tests are included.
-- Laboratory features are implemented for controlled review only. Formal technical validation and approval remain required from authorised Rhomberg Laboratory Management and Technical Signatories before production use.
+- The launch interface is a manager-only certificate dashboard for qualifying Pressure SANAS and Temperature Traceable units.
+- Unfinished technician receipt, stabilisation, inspection, worksheet, calculation, sign-off, draft-generation and method-selection controls are disabled and excluded from live navigation.
+- Each physical unit requires its own final PDF, certificate number, date and serial number. Multi-unit work stays active until every required certificate is present.
+- Completed work moves out of the active queue into searchable **Completed Certificates** history. Replacements preserve the superseded version, actor, time and reason.
+- Customers select **My Company** or **My Client** for each certified configured unit. An immutable certificate-recipient snapshot follows that unit through RFQ, Order, Planning, Expediting and Laboratory views.
+- Customer downloads remain company-scoped and audited. Mock files are browser-only; production requires private authenticated object storage, malware scanning and server-side authorisation.
+
+> The initial production scope uses a simplified Laboratory certificate-upload workflow. Detailed technician calibration worksheets and calculation functionality are deferred to a future Laboratory phase.
 
 GitHub Pages is demonstration-only. Browser storage, browser-side permissions and fabricated passwords are not production security controls.
 
@@ -242,11 +239,9 @@ Role-aware internal interfaces for Sales, Planning, Laboratory, Expediting, Qual
 
 Both products use the same domain rules, validation, notifications, audit model, product data and replaceable service contracts.
 
-### Controlled Laboratory calibration workspace
+### Laboratory certificate workspace
 
-The current `main` branch includes the complete fabricated unit-level Laboratory journey for Cape Town and Johannesburg. Reference registers and test records are fabricated, while supplied customer workbooks, certificates and other private source material are excluded from the repository.
-
-This feature is an implementation for review, not a metrology or accreditation approval. Legacy external workbook links and a Temperature repeatability-count discrepancy require formal resolution before production.
+The current `main` branch includes the fabricated manager-only PDF certificate journey. Historical calibration-engine code and technical documents remain isolated for a later approved phase and are not launch functionality.
 
 ## Internal User Account Matrix
 
@@ -270,9 +265,7 @@ These accounts exist only in public mock builds. They use reserved `.invalid` or
 | Technical Director | `technical.director@example.invalid` | `TechnicalDirector123!` | Operations desktop; Executive Demo |
 | Planning | `planning.workflow@example.invalid` | `Planning123!` | Operations desktop; Executive Demo |
 | Expeditor | `expeditor.workflow@example.invalid` | `Expedite123!` | Operations mobile/desktop; Executive Demo |
-| Laboratory User | `laboratory.workflow@example.invalid` | `Lab12345!` | Operations desktop; Executive Demo |
-| Laboratory Manager | `laboratory.manager@example.invalid` | `LabManager123!` | Operations desktop; Executive Demo |
-| Laboratory End-to-End Demo | `laboratory.endtoend@example.invalid` | `LabJourney123!` | Operations desktop; complete Pressure and Temperature workflow |
+| Laboratory Manager (fabricated preview) | `laboratory.manager@example.invalid` | `LabManager123!` | Operations desktop; certificate upload demo |
 | Quality Assurance | `quality.workflow@example.invalid` | `Quality123!` | Operations desktop; Executive Demo |
 | Quality Manager | `quality.manager@example.invalid` | `QualityManager123!` | Operations desktop |
 | Dispatch | `dispatch.workflow@example.invalid` | `Dispatch123!` | Operations desktop; Executive Demo |

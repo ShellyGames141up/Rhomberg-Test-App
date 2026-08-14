@@ -48,10 +48,10 @@ await services.administration.uploadEmployeeProfileImage(created.account.id, ima
 await services.auth.signOut();
 const firstLogin = await services.auth.signIn({ email: 'lab.amina', password: created.temporaryPassword, realm: 'internal' });
 assert.equal(firstLogin.forcePasswordChange, true);
-assert.ok(firstLogin.permissions.includes(PERMISSIONS.ENTER_RAW_CALIBRATION_DATA));
-assert.ok(firstLogin.permissions.includes(PERMISSIONS.REVIEW_RAW_LAB_DATA));
+assert.ok(!firstLogin.permissions.includes(PERMISSIONS.ENTER_RAW_CALIBRATION_DATA), 'launch Lab accounts must not expose technician worksheets');
 const switched = await services.auth.switchWorkspace(USER_ROLES.LABORATORY_MANAGER_PRESSURE);
 assert.equal(switched.role, USER_ROLES.LABORATORY_MANAGER_PRESSURE);
+assert.ok(switched.permissions.includes(PERMISSIONS.MANAGE_CERTIFICATES));
 await assert.rejects(() => services.auth.switchWorkspace(USER_ROLES.ADMINISTRATOR), error => error instanceof ServiceError && error.status === 403);
 
 const challenge = await services.credentials.requestVerification({ changeType: 'password' });

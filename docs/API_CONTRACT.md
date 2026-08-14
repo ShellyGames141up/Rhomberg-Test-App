@@ -21,3 +21,16 @@ This supplements the canonical `docs/api/openapi.yaml`. Production endpoints mus
 - `GET/PUT /admin/visit-policy`
 
 Location requests carry an explicit permission status and a single timestamped coordinate sample. QR tokens are stored hashed, expire quickly, are one-time use and are bound to customer and appointment. No endpoint exposes continuous breadcrumbs.
+# Laboratory launch API amendment
+
+The production service will expose manager-scoped, company-aware endpoints:
+
+- `GET /laboratory/certificate-tasks?status=active|completed&query=`
+- `GET /laboratory/certificate-tasks/{taskId}`
+- `POST /laboratory/units/{unitId}/certificate` (multipart PDF + certificate number/date/type/serial/association confirmation/note; idempotency key required)
+- `POST /laboratory/certificates/{certificateId}/replace` (multipart PDF + mandatory reason; preserves superseded version)
+- `GET /orders/{orderId}/certificates`
+- `GET /customers/orders/{orderId}/certificates`
+- `GET /certificates/{certificateId}/download` (short-lived authenticated response, audited)
+
+Customer product payloads use `sanas: Yes — SANAS | No SANAS` or `traceability: Yes — Traceable | No Traceable Certificate`. A certified line requires `certificateRecipientType`; `My Client` additionally requires name and structured address. The server creates the immutable `certificate_recipient_snapshot`. All authorisation, discipline scope, company isolation, PDF validation, malware scanning, duplicate checks and audit writes are server-side requirements.

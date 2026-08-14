@@ -68,7 +68,7 @@ assert.deepEqual(
   new Set((await services.auth.getDemoLogins()).map(login => login.id)),
   new Set([
     'customer', 'cape_customer', 'sales_representative', 'technical_support', 'planning', 'expeditor',
-    'laboratory_user', 'laboratory_manager', 'quality_assurance', 'quality_manager',
+    'laboratory_manager', 'quality_assurance', 'quality_manager',
     'dispatch', 'buyer', 'sales_manager', 'company_owner', 'manager', 'administrator',
   ]),
   'mock mode must provide fabricated logins for every active role and the prepared Buyer role',

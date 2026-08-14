@@ -57,6 +57,14 @@ export const createCalibrationUnits = order => {
       const unitNumber = index + 1;
       const lineItemId = item.lineId || item.id || `line-${lineIndex + 1}`;
       const existing = existingByKey.get(`${lineItemId}:${unitNumber}`);
+      const config = item.configuration || {};
+      const recipient = item.certificateRecipientSnapshot || {
+        recipientType: config.certificateRecipientType === 'My Client' ? 'customer_client' : 'customer_company',
+        recipientName: config.certificateRecipientType === 'My Client' ? config.certificateClientName : order.company,
+        recipientAddress: config.certificateRecipientType === 'My Client' ? [config.certificateAddressLine1, config.certificateAddressLine2, config.certificateCity, config.certificateProvince, config.certificatePostalCode, config.certificateCountry].filter(Boolean).join(', ') : (order.companySnapshot?.certificateAddress || order.deliveryAddress || `${order.area || 'Company'} — approved demo account address`),
+        source: config.certificateRecipientType === 'My Client' ? 'configured_unit' : 'legacy_authorised_company_account',
+        createdAt: order.createdAt || '', createdBy: order.submittingCustomerId || order.accountId || '',
+      };
       const created = {
         id: `lab-unit-${order.id}-${lineIndex + 1}-${unitNumber}`,
         orderId: order.id,
@@ -68,6 +76,7 @@ export const createCalibrationUnits = order => {
         unitNumber,
         quantityInLine: quantity,
         certificationType,
+        certificateRecipientSnapshot: recipient,
         status: 'awaiting_lab',
         certificateStatus: 'pending',
         certificateId: '',

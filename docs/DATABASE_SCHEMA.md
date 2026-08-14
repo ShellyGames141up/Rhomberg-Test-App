@@ -38,3 +38,6 @@ The proposal adds company-scoped requests, assignments, append-only messages, at
 # Client visit and location extension
 
 The proposed backend adds `client_visit_requirements`, `client_appointments`, `client_visits`, `visit_verification_events`, `visit_geofence_checks`, `visit_customer_confirmations`, `visit_qr_tokens`, `representative_location_events`, `representative_workday_summaries`, `office_locations`, `customer_locations`, `working_hour_policies`, `visit_compliance_metrics` and `missed_visit_events`. Verification/audit rows are append-only. Location retention is configurable; routine location events outside approved working hours are rejected server-side.
+# Laboratory launch schema amendment
+
+The launch schema uses `lab_certificate_tasks`, `calibration_units`, `certificate_recipient_snapshots`, `certificates`, `certificate_versions`, `certificate_upload_events` and `certificate_download_events`. All records carry company scope; unit recipients are immutable snapshots; current certificate version is explicit; versions and events are append-only. Historical technician worksheet tables remain future/inactive and are not required for launch deployment.

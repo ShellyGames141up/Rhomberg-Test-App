@@ -25,6 +25,7 @@ import {
   validateCertificateUpload,
   validateLaboratoryUnitUpdate,
 } from '../../domain/certification.js';
+import { laboratoryManagerCanHandle, snapshotCertificateRecipients } from '../../domain/laboratoryLaunch.js';
 import {
   assertLabTransition,
   calculateLaboratoryWorksheet,
@@ -1410,6 +1411,13 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       .filter(account => ![
         'staff-technical-manager-demo',
         'staff-laboratory-end-to-end-preview',
+        'staff-laboratory-preview',
+        'staff-lab-cape-demo-2',
+        'staff-lab-manager-demo-2',
+        'staff-lab-jhb-demo-2',
+        'staff-lab-jhb-demo-1',
+        'staff-lab-signatory-demo',
+        'staff-lab-administrator-demo',
       ].includes(account.id) && ![
         'technical.manager@example.invalid',
         'laboratory.endtoend@example.invalid',
@@ -1420,7 +1428,6 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       SALES_ACCOUNT,
       PLANNING_ACCOUNT,
       EXPEDITOR_ACCOUNT,
-      LAB_ACCOUNT,
       LAB_MANAGER_ACCOUNT,
       QA_ACCOUNT,
       QA_MANAGER_ACCOUNT,
@@ -1430,7 +1437,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       COMPANY_OWNER_ACCOUNT,
       MANAGER_ACCOUNT,
       ADMINISTRATOR_ACCOUNT,
-      ...EXTRA_DEMO_ACCOUNTS,
+      ...EXTRA_DEMO_ACCOUNTS.filter(account => !String(account.role).startsWith('laboratory_') && account.role !== 'technical_signatory'),
     ]) {
       const index = accounts.findIndex(account => account.id === seed.id || account.email?.toLowerCase() === seed.email.toLowerCase());
       if (index >= 0) accounts[index] = normaliseAccount({
@@ -2001,7 +2008,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         customerNotes: serialisableDetails.notes || '',
         priority: 'standard',
         documents: documentMetadata,
-        items: clone(lines),
+        items: clone(snapshotCertificateRecipients(lines, account, createdAt)),
         workflowType: 'rfq',
         trackingStatus: 'draft',
         status: 'Draft',
@@ -3948,25 +3955,8 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         ],
         maxCertificateBytes: MAX_CERTIFICATE_BYTES,
         certificateMimeTypes: ['application/pdf'],
-        releaseDestinations: [
-          { id: 'expediting', label: 'Expediting' },
-          { id: 'dispatch', label: 'Dispatch' },
-        ],
-        branches: LABORATORY_BRANCHES,
-        staff: LABORATORY_STAFF,
-        laboratoryRoles: LABORATORY_ROLES,
-        methods: LAB_METHODS,
-        referenceStandards: FABRICATED_REFERENCE_STANDARDS,
-        workflowStatuses: LAB_WORKFLOW_STATUSES,
-        inspectionOutcomes: [
-          'no_visible_defect', 'calibration_may_continue', 'calibration_may_continue_with_limitation',
-          'customer_or_representative_approval_required', 'repair_required', 'calibration_cannot_proceed',
-        ],
-        documentTypes: [
-          'booking_in_form', 'customer_supporting_document', 'raw_data_worksheet', 'calculation_review',
-          'uncertainty_budget', 'draft_certificate', 'unsigned_final_certificate', 'signed_final_certificate',
-          'reference_standard_certificate', 'inspection_image', 'bom_signoff_document', 'labelling_evidence', 'other_internal_document',
-        ],
+        launchMode: 'certificate_upload_only',
+        technicianWorkflowEnabled: false,
       });
     },
 
@@ -3979,6 +3969,8 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       return clone(readAllOrders()
         .filter(order => orderRequiresLaboratory(order) && canReadRecord(account, order))
         .filter(order => !allowedBranches.length || !order.laboratory?.branchId || allowedBranches.includes(order.laboratory.branchId))
+        .map(ensureLaboratoryRecord)
+        .filter(order => order.laboratory.units.some(unit => laboratoryManagerCanHandle(account, unit.certificationType)))
         .map(order => ({ ...order, allowedWorkflowActions: getAllowedWorkflowActions(order, createWorkflowActor(account)) })));
     },
 
@@ -4396,12 +4388,10 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       const index = prepared.laboratory.units.findIndex(unit => unit.id === unitId);
       if (index < 0) throw new ServiceError('The physical unit task was not found.', { code: 'LAB_UNIT_NOT_FOUND', status: 404 });
       const unit = prepared.laboratory.units[index];
-      if (
-        !unit.completedAt
-        && !['calibration_completed', 'certificate_uploaded', 'released'].includes(unit.status)
-      ) {
-        throw new ServiceError('Complete this physical unit before uploading its certificate.', { code: 'LAB_UNIT_NOT_COMPLETE', status: 409 });
-      }
+      if (!laboratoryManagerCanHandle(account, unit.certificationType)) throw new ServiceError('This certificate type is outside your Laboratory Manager discipline.', { code: 'FORBIDDEN', status: 403 });
+      if (String(input.serialNumber || '').trim().length < 1) throw new ServiceError('Enter the unit serial number.', { code: 'SERIAL_NUMBER_REQUIRED', status: 422, fieldErrors: { serialNumber: 'Enter the physical unit serial number.' } });
+      if (input.confirmAssociation !== true) throw new ServiceError('Confirm that the certificate belongs to this order and unit.', { code: 'CERTIFICATE_ASSOCIATION_REQUIRED', status: 422, fieldErrors: { confirmAssociation: 'Confirmation is required.' } });
+      if (input.certificationType && input.certificationType !== unit.certificationType) throw new ServiceError('The certificate type must match the configured unit.', { code: 'CERTIFICATE_TYPE_MISMATCH', status: 422 });
       if (unit.certificateId) {
         throw new ServiceError('This physical unit already has its required certificate.', {
           code: 'DUPLICATE_UNIT_CERTIFICATE',
@@ -4435,6 +4425,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         certificateStatus: 'uploaded',
         certificateId,
         certificateNumber: certificate.certificateNumber,
+        serialNumber: String(input.serialNumber).trim(),
         certificate: {
           id: certificateId,
           ...certificate,
@@ -4450,11 +4441,12 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         certificateUploadedAt: occurredAt,
         updatedAt: occurredAt,
       };
+      const completed = units.every(item => ['uploaded', 'verified', 'archived'].includes(item.certificateStatus));
       const updated = saveOrder({
         ...prepared,
         version: Number(prepared.version || 0) + 1,
         updatedAt: occurredAt,
-        laboratory: { ...prepared.laboratory, units, lastUpdatedAt: occurredAt },
+        laboratory: { ...prepared.laboratory, status: completed ? 'completed' : 'awaiting_certificate', completedAt: completed ? occurredAt : '', units, lastUpdatedAt: occurredAt },
       });
       appendAuditEvent({
         id: makeId('audit'),
@@ -4479,6 +4471,36 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
           customerMessage: `Certificate ${certificate.certificateNumber} is ready for ${unit.productCode} unit ${unit.unitNumber}.`,
         },
       });
+      if (completed) {
+        appendAuditEvent({ id: makeId('audit'), action: 'laboratory.certificate_task_completed', outcome: 'success', entityType: 'laboratory_task', entityId: updated.id, companyId: updated.companyId, reference: updated.reference, actorId: account.id, actorRole: account.role, fieldsChanged: ['laboratory.status'], details: { certificateCount: units.length }, immutable: true, createdAt: occurredAt });
+        publishWorkflowNotifications({ action: 'certificate_uploaded', record: updated, actor: createWorkflowActor(account), input: { customerMessage: 'All calibration certificates for this order are now available.' } });
+      }
+      return clone(units[index].certificate);
+    },
+
+    async replaceCertificate(orderId, unitId, input = {}) {
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.MANAGE_CERTIFICATES)) throw new ServiceError('Your account cannot replace certificates.', { code: 'FORBIDDEN', status: 403 });
+      const order = readAllOrders().find(item => item.id === orderId);
+      if (!order || !canReadRecord(account, order)) throw new ServiceError('The Laboratory order was not found.', { code: 'LAB_ORDER_NOT_FOUND', status: 404 });
+      const prepared = ensureLaboratoryRecord(order);
+      const index = prepared.laboratory.units.findIndex(unit => unit.id === unitId);
+      const unit = prepared.laboratory.units[index];
+      if (!unit?.certificateId) throw new ServiceError('Upload the first certificate before replacing it.', { code: 'CERTIFICATE_NOT_FOUND', status: 404 });
+      const reason = String(input.reason || '').trim();
+      if (reason.length < 5) throw new ServiceError('Enter a reason for replacing the certificate.', { code: 'REPLACEMENT_REASON_REQUIRED', status: 422, fieldErrors: { reason: 'A clear replacement reason is required.' } });
+      const previous = unit.certificate;
+      const certificate = validateCertificateUpload({ ...input, id: previous.id }, certificateQueueForOrders(readAllOrders()).filter(item => item.certificateId).map(item => ({ id: item.certificateId, certificateNumber: item.certificateNumber })));
+      const occurredAt = now().toISOString();
+      const certificateId = makeId('certificate');
+      const files = readCertificateFiles();
+      files[certificateId] = { id: certificateId, orderId, unitId, companyId: order.companyId, dataUrl: await fileToDataUrl(input.file), createdAt: occurredAt };
+      writeCertificateFiles(files);
+      const versions = [...(unit.certificateVersions || []), { ...previous, status: 'superseded', supersededAt: occurredAt, supersededBy: certificateId, replacementReason: reason }];
+      const units = [...prepared.laboratory.units];
+      units[index] = { ...unit, certificateId, certificateNumber: certificate.certificateNumber, certificateVersions: versions, certificate: { id: certificateId, ...certificate, certificationType: unit.certificationType, unitId, orderId, companyId: order.companyId, uploadedAt: occurredAt, uploadedBy: actorSnapshot(account), storageStatus: 'browser_mock', customerVisible: true, version: versions.length + 1 }, certificateUploadedAt: occurredAt, updatedAt: occurredAt };
+      const updated = saveOrder({ ...prepared, version: Number(prepared.version || 0) + 1, updatedAt: occurredAt, laboratory: { ...prepared.laboratory, units, lastUpdatedAt: occurredAt } });
+      appendAuditEvent({ id: makeId('audit'), action: 'laboratory.certificate_replaced', outcome: 'success', entityType: 'certificate', entityId: certificateId, companyId: updated.companyId, reference: updated.reference, actorId: account.id, actorRole: account.role, fieldsChanged: ['laboratory.units.certificate'], details: { previousCertificateId: previous.id, reason }, immutable: true, createdAt: occurredAt });
       return clone(units[index].certificate);
     },
 
@@ -4515,7 +4537,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
 
     async archiveCertificates(orderId) {
       const account = requireAccount();
-      if (!accountCan(account, PERMISSIONS.RELEASE_LAB_ORDER)) {
+      if (!accountCan(account, PERMISSIONS.ARCHIVE_LAB_JOB)) {
         throw new ServiceError('Only authorised managers can archive Laboratory certificates.', { code: 'FORBIDDEN', status: 403 });
       }
       const order = readAllOrders().find(item => item.id === orderId);
