@@ -4478,6 +4478,34 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       return clone(units[index].certificate);
     },
 
+    async uploadCertificatesBatch(orderId, entries = []) {
+      if (!Array.isArray(entries) || entries.length < 1) {
+        throw new ServiceError('Select at least one certificate to upload.', { code: 'CERTIFICATE_BATCH_EMPTY', status: 422 });
+      }
+      const unitIds = entries.map(entry => entry.unitId);
+      if (new Set(unitIds).size !== unitIds.length) {
+        throw new ServiceError('Each physical unit may only appear once in a certificate batch.', { code: 'CERTIFICATE_BATCH_DUPLICATE_UNIT', status: 422 });
+      }
+      const account = requireAccount();
+      if (!accountCan(account, PERMISSIONS.MANAGE_CERTIFICATES)) throw new ServiceError('Your account cannot upload certificates.', { code: 'FORBIDDEN', status: 403 });
+      const order = readAllOrders().find(item => item.id === orderId);
+      if (!order || !canReadRecord(account, order) || !orderRequiresLaboratory(order)) throw new ServiceError('The Laboratory order was not found.', { code: 'LAB_ORDER_NOT_FOUND', status: 404 });
+      const prepared = ensureLaboratoryRecord(order);
+      const existingCertificates = certificateQueueForOrders(readAllOrders()).filter(item => item.certificateId).map(item => ({ id: item.certificateId, certificateNumber: item.certificateNumber }));
+      for (const entry of entries) {
+        const unit = prepared.laboratory.units.find(item => item.id === entry.unitId);
+        if (!unit || unit.certificateId) throw new ServiceError('One of the selected physical units cannot accept a new certificate.', { code: 'DUPLICATE_UNIT_CERTIFICATE', status: 409 });
+        if (!laboratoryManagerCanHandle(account, unit.certificationType)) throw new ServiceError('A selected certificate type is outside your Laboratory Manager discipline.', { code: 'FORBIDDEN', status: 403 });
+        if (!String(entry.serialNumber || '').trim()) throw new ServiceError('Enter the unit serial number for every selected certificate.', { code: 'SERIAL_NUMBER_REQUIRED', status: 422 });
+        if (entry.confirmAssociation !== true) throw new ServiceError('Confirm every certificate belongs to its selected physical unit.', { code: 'CERTIFICATE_ASSOCIATION_REQUIRED', status: 422 });
+        validateCertificateUpload(entry, existingCertificates);
+        existingCertificates.push({ id: `pending-${entry.unitId}`, certificateNumber: entry.certificateNumber });
+      }
+      const results = [];
+      for (const entry of entries) results.push(await laboratory.uploadCertificate(orderId, entry.unitId, entry));
+      return results;
+    },
+
     async replaceCertificate(orderId, unitId, input = {}) {
       const account = requireAccount();
       if (!accountCan(account, PERMISSIONS.MANAGE_CERTIFICATES)) throw new ServiceError('Your account cannot replace certificates.', { code: 'FORBIDDEN', status: 403 });

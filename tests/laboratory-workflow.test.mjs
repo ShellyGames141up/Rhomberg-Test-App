@@ -21,10 +21,13 @@ const order = orders.find(item => item.laboratory?.units?.length >= 2);
 assert.ok(order, 'a fabricated multi-unit certificate task must exist');
 const [first, second] = order.laboratory.units;
 await assert.rejects(() => services.laboratory.uploadCertificate(order.id, first.id, { file: { ...pdf('bad.txt'), type: 'text/plain' }, certificateNumber: 'CERT-1', issueDate: '2026-08-14', serialNumber: 'SN-1', confirmAssociation: true }), error => error.code === 'CERTIFICATE_FILE_INVALID');
-await services.laboratory.uploadCertificate(order.id, first.id, { file: pdf('unit-1.pdf'), certificateNumber: 'CERT-LAUNCH-1', issueDate: '2026-08-14', serialNumber: 'SN-LAUNCH-1', certificationType: first.certificationType, confirmAssociation: true });
+await assert.rejects(() => services.laboratory.uploadCertificatesBatch(order.id, []), error => error.code === 'CERTIFICATE_BATCH_EMPTY');
+await assert.rejects(() => services.laboratory.uploadCertificatesBatch(order.id, [{ unitId: first.id }, { unitId: first.id }]), error => error.code === 'CERTIFICATE_BATCH_DUPLICATE_UNIT');
+await services.laboratory.uploadCertificatesBatch(order.id, [
+  { unitId: first.id, file: pdf('unit-1.pdf'), certificateNumber: 'CERT-LAUNCH-1', issueDate: '2026-08-14', serialNumber: 'SN-LAUNCH-1', certificationType: first.certificationType, confirmAssociation: true },
+  { unitId: second.id, file: pdf('unit-2.pdf'), certificateNumber: 'CERT-LAUNCH-2', issueDate: '2026-08-14', serialNumber: 'SN-LAUNCH-2', certificationType: second.certificationType, confirmAssociation: true },
+]);
 let active = (await services.laboratory.listOrders()).find(item => item.id === order.id);
-assert.equal(active.laboratory.status, 'awaiting_certificate', 'task remains active until every physical unit has a certificate');
-await services.laboratory.uploadCertificate(order.id, second.id, { file: pdf('unit-2.pdf'), certificateNumber: 'CERT-LAUNCH-2', issueDate: '2026-08-14', serialNumber: 'SN-LAUNCH-2', certificationType: second.certificationType, confirmAssociation: true });
 active = (await services.laboratory.listOrders()).find(item => item.id === order.id);
 assert.equal(active.laboratory.status, 'completed');
 const oldId = active.laboratory.units[0].certificateId;

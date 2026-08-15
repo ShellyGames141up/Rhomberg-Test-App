@@ -2,7 +2,7 @@
 
 ## Private-account and public-build boundary
 
-Real staff information belongs only in ignored private configuration. The tracked account template contains owner-supplied placeholders and no credentials. Initial passwords are generated with a cryptographically secure random source, are unique per account, and exist only inside an encrypted ignored administrator PDF. `Rhom123!` protects that document only and is never a shared login password.
+Real staff information belongs only in ignored private configuration. The tracked account template contains owner-supplied placeholders and no credentials. Initial passwords are generated with a cryptographically secure random source, are unique per account, and exist only inside an encrypted ignored administrator PDF. Its encryption password must be supplied separately through the private `RHOMBERG_CREDENTIAL_PDF_PASSWORD` environment secret; no document password is tracked or printed inside the PDF.
 
 The public normal routes do not expose demo login shortcuts and reject public demo identities. This is a preview safeguard, not production security. Production still requires server-side authentication, role checks, tenant isolation, forced first-login password change, secure hashing, MFA and protected session handling. Artifact scans cover HTML, JavaScript, JSON, source maps and other textual outputs, plus protected filenames and approved private-roster identity markers.
 

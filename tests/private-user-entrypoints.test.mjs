@@ -78,7 +78,8 @@ assert.ok(FABRICATED_REP_CLIENTS.some(client => client.representativeId !== SALE
 assert.equal(visibleClients.some(client => client.representativeId !== SALES_ACCOUNT.representativeId), false);
 
 const generator = readFileSync('scripts/generate-private-credentials.py', 'utf8');
-for (const marker of ['secrets.choice', 'SystemRandom().shuffle', 'length: int = 20', 'AES-256-R5', 'Rhom123!', 'temp_path.unlink']) assert.ok(generator.includes(marker));
+for (const marker of ['secrets.choice', 'SystemRandom().shuffle', 'length: int = 20', 'AES-256-R5', 'RHOMBERG_CREDENTIAL_PDF_PASSWORD', 'os.environ.get', 'temp_path.unlink']) assert.ok(generator.includes(marker));
+assert.equal(/DOCUMENT_PASSWORD\s*=\s*["']/.test(generator), false, 'the private document password must never be hard-coded');
 const gitignore = readFileSync('.gitignore', 'utf8');
 assert.ok(gitignore.includes('private/'));
 assert.ok(gitignore.includes('*RHOMBERG_CONNECT_INITIAL_USER_CREDENTIALS*.pdf'));

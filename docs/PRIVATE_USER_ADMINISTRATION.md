@@ -20,9 +20,7 @@ npm run docs:private-credentials
 
 This creates the ignored file `private/RHOMBERG_CONNECT_INITIAL_USER_CREDENTIALS.pdf`. It contains a unique 20-character cryptographically random initial password for each configured account and the Sales Representative-to-test-client matrix. The generator requires uppercase, lowercase, digits and symbols, and removes its plaintext intermediate file before returning.
 
-The PDF encryption password is `Rhom123!`.
-
-**This password unlocks the encrypted credential document only. It is not an application login password.**
+Before generation, the administrator must set `RHOMBERG_CREDENTIAL_PDF_PASSWORD` through an approved private environment or secrets mechanism. The generator rejects missing or short values. The password must be delivered separately through an IT-approved channel and must never be committed, printed inside the PDF or copied into documentation/browser configuration.
 
 The PDF must be transferred only through an IT-approved private mechanism. It must not be committed, attached to a public release, uploaded to GitHub Pages or copied into any build output. Generated initial passwords are not stored in the roster and cannot be regenerated identically.
 

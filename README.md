@@ -6,6 +6,8 @@ The Administrator desktop now includes a reusable Internal User Directory with b
 
 Functional application and workflow implementation is complete in mock mode. Production infrastructure and backend integration remain subject to IT review and staging deployment.
 
+The final pre-server audit removed the uncommitted temporary Azure/backend experiment while preserving the approved Laboratory batch-certificate work. Source checks, the full mock workflow/security suite, production/demo separation, all five preview builds, fabricated-volume benchmarks and real-browser responsive smoke checks pass. One public credential-document password was removed from source and now must be provided privately at generation time. See the [pre-server readiness report](docs/PRE_SERVER_FINAL_READINESS_REPORT.md), [audit matrix](docs/PRE_SERVER_AUDIT_MATRIX.md) and [Innovate IT connection checklist](docs/INNOVATE_IT_SERVER_CONNECTION_CHECKLIST.md). No server, cloud resource, native package or store listing was created.
+
 The latest update adds corrected Laboratory worksheets and secure Sales client-visit management. Pressure calibration now enforces 6 Increasing, 5 Repeatability and 5 Decreasing points. Temperature technicians can add, duplicate and reorder any number of calibration points, with at least six paired Reference Standard/UUT readings, actual timestamps, ambient/immersion/stabilisation evidence and controlled post-calculation corrections. The supplied Pressure/Temperature workbooks and Digital/Mechanical thermometer procedures were reviewed; unresolved external formulas remain clearly blocked for Laboratory Management and Technical Signatory approval.
 
 Sales Representatives now have a responsive **Clients** workspace with assigned-customer isolation, monthly visit health, appointment scheduling, advance reminders, overdue and missed-visit handling, consented fabricated geofence checks, customer confirmation and short-lived one-time QR verification. Sales Managers receive visit-compliance and exception reporting. Administrators can configure fabricated office locations and visit-cycle policy. Public mock mode never enables routine GPS collection, and production location processing remains disabled pending formal Rhomberg, IT, HR/legal and privacy approval.
@@ -33,9 +35,7 @@ Real staff identities belong only in the ignored `private/internal-staff.local.j
 
 The encrypted document is ignored by Git, excluded from every public/production build and must be transferred through an IT-approved private channel. It is not available from GitHub Pages or any public repository URL.
 
-Credential document password: `Rhom123!`
-
-**This password unlocks the encrypted credential document only. It is not an application login password.** Each configured account receives a unique cryptographically random temporary password of at least 16 characters and must change it at first successful login. Secure server-side hashing, MFA, expiry, recovery and session enforcement still require the production backend or identity provider. See [Private User Administration](docs/PRIVATE_USER_ADMINISTRATION.md).
+Before generation, an authorised administrator supplies `RHOMBERG_CREDENTIAL_PDF_PASSWORD` through the approved private environment/secrets mechanism. The value must never be placed in source control, documentation or browser configuration. Each configured account receives a unique cryptographically random temporary password of at least 16 characters and must change it at first successful login. Secure server-side hashing, MFA, expiry, recovery and session enforcement still require the production backend or identity provider. See [Private User Administration](docs/PRIVATE_USER_ADMINISTRATION.md).
 
 ## Application access matrix
 
@@ -88,7 +88,17 @@ The normal Desktop and Mobile links above open the shared splash and sign-in jou
 - Email and push: simulated only
 - Production deployment: not started
 - Current `main` scope: representative-loaded customer orders, controlled Laboratory calibration and RFQ Technical Support are integrated in mock mode
-- Current verification: 94 React source files compile; automated, production-leak, encrypted-PDF and rendered responsive results are recorded in the final completion report
+- Current verification: 95 React source files compile; automated workflow/security, production-leak, fabricated-volume and real-browser responsive results are recorded in the pre-server readiness report
+
+## Innovate IT handover
+
+The temporary Azure/backend experiment has been removed. Innovate IT should begin with the [server connection checklist](docs/INNOVATE_IT_SERVER_CONNECTION_CHECKLIST.md) and confirm the approved hosting/runtime, PostgreSQL, staff and customer identity, private document storage and malware scanning, DNS/TLS/networking, Microsoft 365 or SMTP delivery, secrets management, monitoring, backup/restore, deployment and support ownership.
+
+The repository is ready for technical review but not for real company/customer data. The recommended first server implementation is a deliberately small fabricated-data slice:
+
+`authenticated user → company/role authorisation → RFQ create/read → private document metadata → audit event and notification`
+
+Innovate IT must preserve the existing `/api/v1` contract, interchangeable service layer, company isolation, workflow state machine, role permissions, document visibility and immutable audit requirements. No frontend route or role-hidden control may be treated as a security boundary. See the [pre-server final readiness report](docs/PRE_SERVER_FINAL_READINESS_REPORT.md), [production deployment requirements](docs/PRODUCTION-DEPLOYMENT.md), [API contract](docs/API_CONTRACT.md), [OpenAPI proposal](docs/api/openapi.yaml) and [PostgreSQL proposal](docs/database/postgresql-schema.sql).
 
 ## Final UI/UX Delivery Ledger — 62 Steps
 
@@ -218,7 +228,7 @@ See `docs/FINAL_COMPLETION_REPORT.md` for the detailed final UI/UX report and `d
 
 - The launch interface is a manager-only certificate dashboard for qualifying Pressure SANAS and Temperature Traceable units.
 - Unfinished technician receipt, stabilisation, inspection, worksheet, calculation, sign-off, draft-generation and method-selection controls are disabled and excluded from live navigation.
-- Each physical unit requires its own final PDF, certificate number, date and serial number. Multi-unit work stays active until every required certificate is present.
+- Each physical unit requires its own final PDF, certificate number, date and serial number. The inline order panel supports selecting and uploading several physical-unit certificates in one controlled batch; multi-unit work stays active until every required certificate is present.
 - Completed work moves out of the active queue into searchable **Completed Certificates** history. Replacements preserve the superseded version, actor, time and reason.
 - Customers select **My Company** or **My Client** for each certified configured unit. An immutable certificate-recipient snapshot follows that unit through RFQ, Order, Planning, Expediting and Laboratory views.
 - Customer downloads remain company-scoped and audited. Mock files are browser-only; production requires private authenticated object storage, malware scanning and server-side authorisation.
@@ -453,6 +463,13 @@ No infrastructure values, credentials or private endpoints belong in this reposi
 - [Private User Administration](docs/PRIVATE_USER_ADMINISTRATION.md)
 - [Management analytics](docs/MANAGEMENT_ANALYTICS.md)
 - [Release notes](docs/RELEASE_NOTES_v1.0.0_IT_HANDOVER.md)
+- [Pre-server final readiness report](docs/PRE_SERVER_FINAL_READINESS_REPORT.md) and [application audit matrix](docs/PRE_SERVER_AUDIT_MATRIX.md)
+- [Innovate IT server connection checklist](docs/INNOVATE_IT_SERVER_CONNECTION_CHECKLIST.md)
+- [Mobile packaging readiness](docs/MOBILE_PACKAGING_READINESS.md)
+- [Google Play release checklist](docs/GOOGLE_PLAY_RELEASE_CHECKLIST.md)
+- [Apple App Store release checklist](docs/APPLE_APP_STORE_RELEASE_CHECKLIST.md)
+- [Windows release readiness](docs/WINDOWS_APP_RELEASE_READINESS.md)
+- [Release and update strategy](docs/RELEASE_AND_UPDATE_STRATEGY.md)
 
 ## Responsibility Split
 

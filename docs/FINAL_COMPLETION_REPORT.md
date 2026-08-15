@@ -15,7 +15,7 @@ The production-oriented authentication handover pass adds explicit normal Deskto
 
 - The tracked private roster is placeholder-only and contains no credentials.
 - `npm run docs:private-credentials` generates an ignored AES-256 encrypted PDF on an authorised administrator device.
-- The document password is `Rhom123!` and unlocks the PDF only.
+- The document password is supplied at generation time through the private `RHOMBERG_CREDENTIAL_PDF_PASSWORD` environment secret and is never tracked or printed inside the PDF.
 - Each initial account password is a unique 20-character cryptographically random value with uppercase, lowercase, numbers and symbols.
 - The generated PDF was decrypted with the correct password, rejected an incorrect password and visually reviewed across both pages. It remains outside Git, public assets, service-worker caches and build outputs.
 

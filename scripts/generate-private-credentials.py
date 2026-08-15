@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PRIVATE_ROSTER = ROOT / "private" / "internal-staff.local.json"
 PLACEHOLDER_ROSTER = ROOT / "private-config" / "internal-staff.example.json"
 OUTPUT = ROOT / "private" / "RHOMBERG_CONNECT_INITIAL_USER_CREDENTIALS.pdf"
-DOCUMENT_PASSWORD = "Rhom123!"
+DOCUMENT_PASSWORD_ENV = "RHOMBERG_CREDENTIAL_PDF_PASSWORD"
 
 MOBILE_ROLES = {"customer", "sales_representative", "expeditor", "manager"}
 PREPARED_INACTIVE_ROLES = {"buyer"}
@@ -59,7 +59,7 @@ def load_roster() -> tuple[list[dict], bool]:
     return staff, placeholder
 
 
-def build_pdf(staff: list[dict], placeholder: bool) -> None:
+def build_pdf(staff: list[dict], placeholder: bool, document_password: str) -> None:
     styles = getSampleStyleSheet()
     title = ParagraphStyle("title", parent=styles["Title"], fontName="Helvetica-Bold", fontSize=22, leading=26, textColor=colors.HexColor("#073B53"), alignment=TA_CENTER)
     heading = ParagraphStyle("heading", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=14, leading=18, textColor=colors.HexColor("#073B53"), spaceBefore=8, spaceAfter=6)
@@ -132,13 +132,13 @@ def build_pdf(staff: list[dict], placeholder: bool) -> None:
             ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#9DB2BA")), ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#EEF7F8")),
         ]))
-        story.extend([client_table, Spacer(1, 7 * mm), Paragraph("Document protection password: Rhom123!", heading), Paragraph("This password unlocks the encrypted credential document only. It is not an application login password.", warning)])
+        story.extend([client_table, Spacer(1, 7 * mm), Paragraph("Document protection", heading), Paragraph("The PDF password is supplied separately through an approved private channel. It is not stored in this document, source control or application configuration.", warning)])
         doc.build(story)
 
         reader = PdfReader(str(temp_path))
         writer = PdfWriter()
         writer.clone_document_from_reader(reader)
-        writer.encrypt(user_password=DOCUMENT_PASSWORD, owner_password=temporary_password(28), algorithm="AES-256-R5")
+        writer.encrypt(user_password=document_password, owner_password=temporary_password(28), algorithm="AES-256-R5")
         with OUTPUT.open("wb") as stream:
             writer.write(stream)
         os.chmod(OUTPUT, 0o600)
@@ -150,5 +150,8 @@ def build_pdf(staff: list[dict], placeholder: bool) -> None:
 
 
 if __name__ == "__main__":
+    document_password = os.environ.get(DOCUMENT_PASSWORD_ENV, "")
+    if len(document_password) < 16:
+        raise ValueError(f"Set {DOCUMENT_PASSWORD_ENV} to an approved secret of at least 16 characters before generating the private PDF.")
     roster, is_placeholder = load_roster()
-    build_pdf(roster, is_placeholder)
+    build_pdf(roster, is_placeholder, document_password)

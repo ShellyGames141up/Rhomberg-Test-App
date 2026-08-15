@@ -12,7 +12,7 @@ The launch path is:
 2. The customer selects **My Company** or **My Client** for that configured unit.
 3. RFQ submission freezes the recipient name/address as a unit-level snapshot.
 4. The order appears in the permitted manager's certificate queue.
-5. The manager opens the order and uploads one final PDF for each physical unit, with certificate number, date, serial number and association confirmation.
+5. The manager opens the order and expands the inline certificate panel beneath the order summary. One or several physical units can be selected in the same batch, while every unit retains its own final PDF, certificate number, date, serial number and association confirmation.
 6. A unit becomes **Certificate Uploaded**. The task remains active until all physical units are complete.
 7. The completed task moves to **Completed Certificates** and remains searchable.
 8. Authorised customers and internal users download the current certificate through the service layer; every upload, replacement and download is audited.

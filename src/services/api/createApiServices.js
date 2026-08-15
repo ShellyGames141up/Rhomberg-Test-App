@@ -486,6 +486,16 @@ export function createApiServices(config = {}) {
         { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `certificate-${Date.now()}` } },
       );
     },
+    uploadCertificatesBatch(orderId, entries = []) {
+      const form = new FormData();
+      const metadata = entries.map((entry, index) => {
+        const certificate = validateCertificateUpload(entry);
+        form.append('certificates', entry.file, `${index + 1}-${entry.file.name}`);
+        return { ...certificate, unitId: entry.unitId, serialNumber: entry.serialNumber, certificationType: entry.certificationType, confirmAssociation: entry.confirmAssociation, notes: entry.notes || '', fileName: undefined, mimeType: undefined, sizeBytes: undefined };
+      });
+      form.append('metadata', JSON.stringify(metadata));
+      return client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/certificates/batch`, form, { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `certificate-batch-${Date.now()}` } });
+    },
     replaceCertificate(orderId, unitId, input) {
       const metadata = validateCertificateUpload(input);
       const form = new FormData();

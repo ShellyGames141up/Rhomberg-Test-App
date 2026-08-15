@@ -35,3 +35,4 @@ await import('./build-routing.test.mjs');
 await import('./documentation-coverage.test.mjs');
 await import('./manual-ui-review.test.mjs');
 await import('./final-completion-report.test.mjs');
+await import('./pre-server-readiness.test.mjs');
