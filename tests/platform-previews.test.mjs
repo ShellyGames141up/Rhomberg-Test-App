@@ -67,11 +67,10 @@ for (const purpose of ['Not the normal application entry point', 'presentations'
 assert.ok(serviceWorker.includes("'./app.js?v=44'"), 'service worker must cache the same application bundle version');
 const readme = readFileSync(path.resolve('README.md'), 'utf8');
 for (const url of [
-  'https://shellygames141up.github.io/Rhomberg-Test-App/desktop/',
-  'https://shellygames141up.github.io/Rhomberg-Test-App/mobile/',
+  'https://shellygames141up.github.io/Rhomberg-Test-App/app/',
   'https://shellygames141up.github.io/Rhomberg-Test-App/',
 ]) assert.ok(readme.includes(url), `README must include the approved launch URL ${url}`);
-assert.equal((readme.match(/https:\/\/shellygames141up\.github\.io\/Rhomberg-Test-App/g) || []).length, 3, 'README must expose only Desktop, Mobile and Preview Centre launch links');
+assert.equal((readme.match(/https:\/\/shellygames141up\.github\.io\/Rhomberg-Test-App/g) || []).length, 2, 'README must expose only the Application and Preview Centre launch links');
 for (const previewName of ['Customer Mobile', 'Customer Desktop', 'Rep/Expeditor Mobile', 'Internal Desktop', 'Executive Workflow Demo']) {
   assert.ok(readme.includes(previewName), `README Preview Centre must list ${previewName}`);
 }
@@ -133,6 +132,7 @@ assert.ok(layoutSource.includes('{__PUBLIC_PREVIEW__ && showPreviewNavigation &&
 assert.equal(layoutSource.includes(': <span className="preview-status"'), false, 'normal application headers must not render a preview-status fallback');
 assert.ok(authSource.includes('{__PUBLIC_PREVIEW__ && showPreviewNavigation && <span className="preview-chip">Demo Preview'), 'the sign-in preview badge must render only in Preview Centre builds');
 assert.ok(appSource.includes('{__PUBLIC_PREVIEW__ && SHOW_PREVIEW_NAVIGATION && <span className="desktop-caption">'), 'desktop preview captions must use the central separation policy');
+assert.ok(appSource.includes('{__PUBLIC_PREVIEW__ && SHOW_PREVIEW_NAVIGATION && <div className="platform-preview-banner">'), 'the all-previews banner must be removed at compile time from production builds');
 for (const component of [
   'Home.jsx',
   'SalesRepresentativeDashboard.jsx',

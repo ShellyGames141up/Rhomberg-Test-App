@@ -65,6 +65,7 @@ const forbiddenMockMarkers = [
   'Demo Preview',
   'DEMO PREVIEW',
   'View Demo Login',
+  'All previews',
   'customer.demo@example.invalid',
   'cape.demo@client.test',
   'kzn.demo@client.test',

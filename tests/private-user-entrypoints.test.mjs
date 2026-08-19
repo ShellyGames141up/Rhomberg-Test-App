@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { APPLICATION_ACCESS_MATRIX, APPLICATION_SURFACES, applicationSurfaceAllowsRole } from '../src/shared/platform/applicationAccess.js';
 import { previewAllowsRole, previewContextForPath, PREVIEW_IDS } from '../src/shared/platform/previewConfig.js';
 import { createMockServices } from '../src/services/mock/createMockServices.js';
@@ -83,6 +84,12 @@ assert.equal(/DOCUMENT_PASSWORD\s*=\s*["']/.test(generator), false, 'the private
 const gitignore = readFileSync('.gitignore', 'utf8');
 assert.ok(gitignore.includes('private/'));
 assert.ok(gitignore.includes('*RHOMBERG_CONNECT_INITIAL_USER_CREDENTIALS*.pdf'));
-assert.equal(existsSync('private/internal-staff.local.json'), false, 'no private staff roster may be committed in this public workspace');
+let privateRosterTracked = true;
+try {
+  execFileSync('git', ['ls-files', '--error-unmatch', 'private/internal-staff.local.json'], { stdio: 'ignore' });
+} catch {
+  privateRosterTracked = false;
+}
+assert.equal(privateRosterTracked, false, 'no private staff roster may be committed in this public workspace');
 
 console.log('Private user placeholders, entry routes, access matrix, demo separation and representative client isolation passed.');

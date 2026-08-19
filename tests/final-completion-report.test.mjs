@@ -13,7 +13,8 @@ for (const required of [
 assert.ok(report.includes('No production deployment or app-store submission'));
 
 const readme = readFileSync('README.md', 'utf8');
-assert.ok(readme.includes('Steps 1–61 are implemented and committed individually'));
+assert.ok(readme.includes('All 62 steps are implemented, tested, documented, committed and pushed'));
 assert.ok(readme.includes('| 61 | Final report | Complete |'));
+assert.ok(readme.includes('| 62 | Consolidated release verification and final push | Complete |'));
 
 console.log('Detailed final completion report coverage passed.');

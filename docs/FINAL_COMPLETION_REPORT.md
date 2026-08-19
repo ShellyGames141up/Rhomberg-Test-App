@@ -40,12 +40,12 @@ The production-oriented authentication handover pass adds explicit normal Deskto
 Innovate IT must supply the production identity provider/backend, approved real roster, server-side permissions and tenant enforcement, secure password hashing and first-login change, MFA, sessions, secrets, private document storage, malware scanning, monitoring, backups and incident response. GitHub Pages remains demonstration-only.
 
 Report date: 12 August 2026  
-Specification coverage: Steps 1–61 complete; Step 62 is the final consolidated verification checkpoint  
+Specification coverage: Steps 1–62 complete
 Delivery branch: `main`
 
 ## Outcome
 
-The final UI/UX, authentication-entry, Preview Centre separation and responsive-layout specification has been implemented through Step 61. The work addressed reusable layout, semantic colour, navigation, service/access and documentation contracts rather than applying screenshot-specific patches. Each implementation step was committed and pushed separately.
+The complete UI/UX, authentication-entry, Preview Centre separation and responsive-layout specification has been implemented through Step 62. The work addressed reusable layout, semantic colour, navigation, service/access and documentation contracts rather than applying screenshot-specific patches. Steps 1–61 retain separate committed checkpoints and Step 62 records the consolidated release verification.
 
 ## UI issues fixed
 
@@ -160,15 +160,15 @@ The final UI/UX, authentication-entry, Preview Centre separation and responsive-
 
 ## Tests added and passed
 
-- 35 automated test modules now cover domain workflow, permissions, company isolation, documents/PDFs, notifications, retention, management, Administration, Technical Support, Laboratory/QA/Dispatch, responsive/accessibility contracts, platform routing, UI screen matrix, visual-regression configuration, documentation and manual-review evidence.
-- The complete suite passed after Step 56; all focused tests introduced or changed through Step 60 also passed.
-- The final complete suite is rerun in Step 62 after this report is committed.
+- 39 automated test modules cover domain workflow, permissions, company isolation, documents/PDFs, notifications, retention, management, Administration, Technical Support, Laboratory/QA/Dispatch, responsive/accessibility contracts, platform routing, UI screen matrix, visual-regression configuration, documentation, private entry points, pre-server readiness and manual-review evidence.
+- The final complete suite passed at Step 62 together with the 95-source compile/import check, CSS verification and private-staff validation.
+- Detailed commands, outputs and release boundaries are recorded in `FINAL_RELEASE_VERIFICATION.md`.
 
 ## Build results
 
 - Shared mock-preview bundle builds successfully.
-- Preview and production-candidate build families already have dedicated scripts and safety scanners.
-- Step 62 runs shared, all-preview and production builds again and records the final result.
+- All five controlled preview bundles and the staged GitHub Pages artifact build successfully.
+- The API-only production candidate builds successfully and passes its mock-data, demo-credential, real-staff-domain, pricing and source-map safety scan.
 
 ## Screens requiring further human review
 
