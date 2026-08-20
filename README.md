@@ -1,5 +1,11 @@
 ﻿# Rhomberg Connect - IT Handover Repository
 
+## Phase 1 production API foundation
+
+`apps/api` now contains the first local, server-backed `/api/v1` vertical slice for Rhomberg Connect 5.2.0. It proves fabricated-user authentication, opaque server sessions, database-derived company/role permissions, customer RFQ creation and retrieval, private document metadata, append-only audit evidence and persisted in-app notification creation. The API is intentionally local-only at this phase: it is not deployed, does not connect to company infrastructure and must not contain real data.
+
+The existing GitHub Pages and Executive Demo previews remain independent and mock-based. Production frontend builds remain API-only and continue to exclude demonstration accounts and browser-local operational persistence. Start with [Phase 1 backend foundation](docs/PHASE1_BACKEND_FOUNDATION.md) for architecture, setup, security boundaries and Windows staging expectations. The API requires Node.js 22 and pnpm 11.19.0.
+
 ## Secure employee account management
 
 The Administrator desktop now includes a reusable Internal User Directory with branch, department, role and status filters; employee creation; multi-role workspace assignments; effective-dated branch transfers; username-only Laboratory logins; one-time temporary credentials; forced first-login password changes; login and immutable audit history; profile-image validation; account disabling; and safe employee archiving. Real staff identities remain in an ignored private configuration file and never appear in GitHub Pages demo logins or the public bundle.
@@ -442,6 +448,7 @@ No infrastructure values, credentials or private endpoints belong in this reposi
 - [Role and permission matrix](docs/ROLE_PERMISSION_MATRIX.md)
 - [API contract](docs/API_CONTRACT.md) and [OpenAPI](docs/api/openapi.yaml)
 - [Database schema](docs/DATABASE_SCHEMA.md) and [PostgreSQL proposal](docs/database/postgresql-schema.sql)
+- [Phase 1 backend foundation](docs/PHASE1_BACKEND_FOUNDATION.md) and [real PostgreSQL validation](docs/PHASE1B_POSTGRESQL_VALIDATION.md)
 - [Notification architecture](docs/NOTIFICATION_ARCHITECTURE.md)
 - [PDF and email export](docs/PDF_AND_EMAIL_EXPORT.md)
 - [Retention and archiving](docs/RETENTION_AND_ARCHIVING.md)

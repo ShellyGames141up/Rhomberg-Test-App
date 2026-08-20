@@ -1,6 +1,6 @@
 # Private-cloud API contract
 
-Status: proposed contract for IT implementation. No live endpoint or database is connected.
+Status: the Phase 1 authentication/RFQ vertical slice is implemented locally in `apps/api`; all remaining routes are proposed and inactive. No staging or production endpoint is connected.
 
 Base path: `/api/v1`
 

@@ -1,5 +1,11 @@
 # Authentication and credential-change design
 
+## Phase 1 server implementation
+
+The local `apps/api` slice uses a replaceable identity boundary. Fabricated development-password identities are verified server-side with salted, memory-hard `scrypt` hashes. The implementation issues a cryptographically random opaque session token in an `HttpOnly`, `SameSite=Lax` cookie; only a peppered SHA-256 token hash is persisted. Session expiry, revocation, disabled-user checks, login throttling, session fixation resistance and CSRF tokens are enforced by the API.
+
+This development identity provider is blocked by configuration in staging and production. Microsoft Entra ID for internal users and the approved external customer identity platform still require IT and security approval. No browser permission or client-supplied company/role value is an authorisation source.
+
 ## Normal Desktop and Mobile entry points
 
 The normal routes are `/desktop/` and `/mobile/`. Both show the shared startup animation before Sign In, contain no Preview Centre navigation and use the same authentication service. Public GitHub Pages deliberately rejects fabricated `.invalid` and `.test` Preview Centre identities on these normal routes and disables public browser-local registration. Approved private accounts require the production backend or identity provider described in [Private User Administration](PRIVATE_USER_ADMINISTRATION.md).

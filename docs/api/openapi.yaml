@@ -7,6 +7,19 @@ info:
     No production service or database is connected. All examples are fabricated.
     The public API retains the established `/enquiries` resource name while the
     canonical PostgreSQL entity is `app.rfqs`; the backend adapter owns that mapping.
+x-rhomberg-implementation:
+  phase: phase-1-local-vertical-slice
+  localOnly: true
+  realDataApproved: false
+  implementedPaths:
+    - /auth/csrf-token
+    - /auth/login
+    - /auth/me
+    - /auth/logout
+    - /enquiries
+    - /enquiries/{enquiryId}
+    - /documents/{documentId}
+  note: Health endpoints are served outside the /api/v1 base path. All other contract paths remain proposed and inactive.
 servers:
   - url: /api/v1
 security:

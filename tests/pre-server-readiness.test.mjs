@@ -8,11 +8,21 @@ import { filterRepresentativeRfqs } from '../src/domain/rfqInbox.js';
 import { USER_ROLES } from '../src/services/contracts.js';
 
 for (const removedExperimentPath of [
-  'apps/api',
   'infra/azure/staging',
   'docs/AZURE_STAGING_PHASE_1.md',
   'docs/AZURE_STAGING_DEPLOYMENT_CHECKLIST.md',
 ]) assert.equal(existsSync(removedExperimentPath), false, `${removedExperimentPath} must not remain after the temporary Azure experiment`);
+
+for (const requiredPhaseOneApiPath of [
+  'apps/api/package.json',
+  'apps/api/migrations/001_phase1_vertical_slice.sql',
+  'apps/api/src/app.js',
+  'apps/api/test/authentication.test.js',
+  'docs/PHASE1_BACKEND_FOUNDATION.md',
+]) assert.equal(existsSync(requiredPhaseOneApiPath), true, `${requiredPhaseOneApiPath} must exist for the authorised local backend phase`);
+
+const productionBuildScript = readFileSync('scripts/build-production.mjs', 'utf8');
+assert.equal(productionBuildScript.includes('apps/api'), false, 'the server implementation must not be bundled into the static frontend');
 
 for (const requiredReadinessDocument of [
   'docs/INNOVATE_IT_SERVER_CONNECTION_CHECKLIST.md',

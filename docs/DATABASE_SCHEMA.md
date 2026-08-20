@@ -32,6 +32,12 @@ The API must still enforce scope; RLS is not a substitute for application author
 
 The Laboratory calibration extension adds versioned `lab_methods`, branch-controlled `lab_reference_standards`, immutable `lab_worksheet_revisions`, derived `lab_calculation_versions`, standard-usage snapshots, certificate reviews, signed-document versions and physical-unit releases. Raw input, derived output and signed files are deliberately separate. Production object storage keeps files; PostgreSQL keeps their metadata and SHA-256 digest. Server transactions must allocate job/certificate references and enforce branch, assignment, one-unit/one-certificate and release rules.
 
+## Phase 1 implemented migration
+
+`apps/api/migrations/001_phase1_vertical_slice.sql` is the reviewed minimum implementation extracted from the broader proposal. It creates only the entities required to prove authentication, company/role resolution, RFQ creation/retrieval, document metadata, audit events, notifications and idempotency. `002_protected_request_context.sql` adds a database-protected, active-session-derived transaction context so runtime callers cannot establish company scope by supplying arbitrary custom settings. The migrations enable PostgreSQL row-level security on company-scoped records and retain explicit application-layer predicates as defence in depth. Real PostgreSQL 17.10 results and the tested least-privilege grant model are recorded in `PHASE1B_POSTGRESQL_VALIDATION.md`.
+
+The broad design SQL in `docs/database/postgresql-schema.sql` remains a proposal and is not executed automatically. Later migrations must reconcile the Phase 1 tables with the full workflow deliberately; they must not replace the implemented migration by running the draft wholesale.
+
 ## Technical Support additions
 
 The proposal adds company-scoped requests, assignments, append-only messages, attachment links, immutable status events, customer information requests, quotation due-date adjustments, reasoned overrides and reporting snapshots. RFQ/company foreign keys are mandatory. `customer_visible` and `internal_only` are server-controlled. RLS combines company scope with Representative/Technical assignment and named wider permissions. Messages, statuses, adjustments, overrides and document access remain auditable and append-only.
