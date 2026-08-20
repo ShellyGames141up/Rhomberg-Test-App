@@ -56,7 +56,7 @@ export async function validateProductionArtifact(output = defaultOutput) {
   const forbidden = [
     ['demo password', /\b(?:Demo123|Sales123|Planning123|Expedite123|Dispatch123|Buyer123|Manager123|Admin123|Lab12345|Quality123|Owner12345)!?\b/i],
     ['fabricated login identity', /\b[A-Z0-9._%+-]+@(?:example\.invalid|client\.test)\b/i],
-    ['Preview Centre control', /\bPreview Centre\b|Demo Preview|DEMO PREVIEW|View Demo Login|Back to all test previews|preview-landing/i],
+    ['Preview Centre control', /\bPreview Centre\b|Demo Preview|DEMO PREVIEW|View Demo Login|Back to all test previews|All previews|preview-landing/i],
     ['Executive Demo role switching', /Executive Demo Mode|services\.executiveDemo\.switchRole|\.switchRole\(/i],
     ['mock service implementation', /createMockServices|DEMO_LOGINS|rhombergPreviewSeed/i],
     ['protected pricing marker', /RHOMBERG_PRICEBOOK|REP-ONLY PRICED RFQ|\bunitPrice\b/i],

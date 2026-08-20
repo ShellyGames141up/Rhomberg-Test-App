@@ -18,16 +18,17 @@ This repository contains the shared React implementation for **Rhomberg Connect*
 
 The official experience now includes refined responsive Rhomberg Connect logo assets, a professional startup splash, one-time customer welcome, an interactive isolated fake-RFQ tutorial, varied adjustable UI sounds/mobile haptics, restrained micro-interactions and a dedicated service-backed Settings area for every user role. Customer-defined application colours and company-logo branding have been removed; Light, Dark, System and approved accessibility options use the protected official design system. A customer's first authorised representative choice is remembered at company level and reused on later RFQs.
 
-## Normal Application
-### Desktop
+## Launch Rhomberg Connect
 
-[Open Rhomberg Connect - Desktop](https://shellygames141up.github.io/Rhomberg-Test-App/desktop/)
+### [🚀 Open Rhomberg Connect Application](https://shellygames141up.github.io/Rhomberg-Test-App/app/)
 
-### Mobile
+Opens the normal responsive Rhomberg Connect application in your browser. The desktop and mobile application surfaces share one codebase, authentication service, role model and workflow implementation.
 
-[Open Rhomberg Connect - Mobile](https://shellygames141up.github.io/Rhomberg-Test-App/mobile/)
+### [🖥 Open the Preview Centre](https://shellygames141up.github.io/Rhomberg-Test-App/)
 
-Both normal entry points share one responsive application, authentication service, role model and workflow implementation. They show the Rhomberg Connect splash, proceed directly to Sign In and contain no Preview Centre navigation or fabricated-login shortcuts. The public GitHub Pages build cannot authenticate private operational users; that requires the approved backend or identity provider.
+Opens the controlled customer, internal, mobile and executive demonstration choices. All public previews use fabricated browser-local data.
+
+The normal application shows the Rhomberg Connect splash, proceeds directly to Sign In and contains no Preview Centre navigation or fabricated-login shortcuts. The public GitHub Pages build cannot authenticate private operational users; that requires the approved backend or identity provider.
 
 ## Private User Administration
 
@@ -62,8 +63,6 @@ The test client is fabricated, assigned to exactly one representative and contai
 
 ## Preview Centre
 
-### [Open the Preview Centre](https://shellygames141up.github.io/Rhomberg-Test-App/)
-
 The Preview Centre is for authorised demonstrations and showcase presentations only. It uses fabricated `.invalid` and `.test` identities and browser-local data.
 The separate Preview Centre is for authorised project reviews, presentations, management demonstrations and IT testing. It provides:
 
@@ -75,7 +74,7 @@ The separate Preview Centre is for authorised project reviews, presentations, ma
 
 For a presentation, open the Preview Centre link above, select the device or workflow experience, and use only the fabricated account listed under **Preview Centre Demo Logins** below. Start with the Executive Workflow Demo for a guided end-to-end story, or choose a role preview for focused department review. Reset the fabricated scenario before a new audience and never enter real customer, employee, pricing or document data.
 
-The normal Desktop and Mobile links above open the shared splash and sign-in journey directly. They do not open or link back to the Preview Centre. See [Preview Centre instructions](docs/PREVIEW_CENTRE.md) for the presenter sequence and access boundaries.
+Use the normal Application link above to open the shared splash and sign-in journey directly. It does not open or link back to the Preview Centre. See [Preview Centre instructions](docs/PREVIEW_CENTRE.md) for the presenter sequence and access boundaries.
 
 ## Project Status
 
@@ -90,7 +89,7 @@ The normal Desktop and Mobile links above open the shared splash and sign-in jou
 - Email and push: simulated only
 - Production deployment: not started
 - Current `main` scope: representative-loaded customer orders, controlled Laboratory calibration and RFQ Technical Support are integrated in mock mode
-- Current verification: 95 React source files compile; automated workflow/security, production-leak, fabricated-volume and real-browser responsive results are recorded in the pre-server readiness report
+- Current verification: 96 React source files compile; 40 automated modules, the shared build, all five preview builds, the GitHub Pages artifact and the API-only production candidate pass their final checks
 
 ## Innovate IT handover
 
@@ -104,7 +103,7 @@ Innovate IT must preserve the existing `/api/v1` contract, interchangeable servi
 
 ## Final UI/UX Delivery Ledger — 62 Steps
 
-This ledger records the complete final review specification. Steps 1–61 are implemented and committed individually. Step 62 is the consolidated release-verification checkpoint and is updated when its final evidence is complete.
+This ledger records the complete final review specification. All 62 steps are implemented, tested, documented, committed and pushed. Steps 1–61 preserve their individual checkpoints; Step 62 is the consolidated release-verification checkpoint.
 
 | Step | Delivered checkpoint | Status |
 | ---: | --- | :---: |
@@ -169,11 +168,11 @@ This ledger records the complete final review specification. Steps 1–61 are im
 | 59 | Documentation | Complete |
 | 60 | Final manual review | Complete |
 | 61 | Final report | Complete |
-| 62 | Consolidated release verification and final push | Pending final evidence |
+| 62 | Consolidated release verification and final push | Complete |
 
 The detailed operating, access, responsive-layout and preview rules are maintained in `docs/`. Git history preserves the separate pushed checkpoint for every completed step.
 
-See `docs/FINAL_COMPLETION_REPORT.md` for the detailed final UI/UX report and `docs/FINAL_MANUAL_UI_REVIEW.md` for the role/theme inspection evidence.
+See `docs/FINAL_COMPLETION_REPORT.md` for the detailed final UI/UX report, `docs/FINAL_MANUAL_UI_REVIEW.md` for the role/theme inspection evidence and `docs/FINAL_RELEASE_VERIFICATION.md` for the consolidated Step 62 release evidence.
 
 ## Current Updates
 

@@ -8,16 +8,23 @@ import {
 } from '../src/shared/platform/previewConfig.js';
 
 const appSource = readFileSync('src/App.jsx', 'utf8');
+const applicationDocument = readFileSync('app/index.html', 'utf8');
 const desktopDocument = readFileSync('desktop/index.html', 'utf8');
 const mobileDocument = readFileSync('mobile/index.html', 'utf8');
 const previewCentreDocument = readFileSync('index.html', 'utf8');
 const stageScript = readFileSync('scripts/build-tools.mjs', 'utf8');
+const productionBuildScript = readFileSync('scripts/build-production.mjs', 'utf8');
+const productionPlatformConfig = readFileSync('src/shared/platform/productionPlatformConfig.js', 'utf8');
 
 const introBranch = appSource.indexOf("if (!(__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.executiveDemo) && !introComplete) return <Intro");
 const authBranch = appSource.indexOf('if (!account) return <Auth');
 assert.ok(introBranch >= 0 && authBranch > introBranch, 'normal customer and staff entries must show splash before sign in');
 
-for (const [route, document, id] of [['/Rhomberg-Test-App/desktop/', desktopDocument, PREVIEW_IDS.APPLICATION_DESKTOP], ['/Rhomberg-Test-App/mobile/', mobileDocument, PREVIEW_IDS.APPLICATION_MOBILE]]) {
+for (const [route, document, id] of [
+  ['/Rhomberg-Test-App/app/', applicationDocument, PREVIEW_IDS.APPLICATION],
+  ['/Rhomberg-Test-App/desktop/', desktopDocument, PREVIEW_IDS.APPLICATION_DESKTOP],
+  ['/Rhomberg-Test-App/mobile/', mobileDocument, PREVIEW_IDS.APPLICATION_MOBILE],
+]) {
   const application = previewContextForPath(route);
   assert.equal(application.id, id);
   assert.equal(application.unified, true);
@@ -26,8 +33,11 @@ for (const [route, document, id] of [['/Rhomberg-Test-App/desktop/', desktopDocu
   assert.ok(document.includes('<base href="../">'));
   assert.ok(document.includes('initial-scale=1.0'), 'normal application entry points must start at 100% viewport scale');
 }
+assert.ok(productionPlatformConfig.includes('previewNavigationAllowed = () => false'), 'production platform alias must export and disable Preview Centre navigation');
+assert.ok(productionBuildScript.includes('shared\\/platform\\/previewConfig\\.js$'), 'production build must replace preview configuration imports from root and nested components');
 
 for (const forbiddenRedirect of [/http-equiv=["']refresh/i, /location\.(?:assign|replace)\s*\(/, /window\.location\s*=/]) {
+  assert.doesNotMatch(applicationDocument, forbiddenRedirect, 'normal application document must not redirect to Preview Centre');
   assert.doesNotMatch(desktopDocument, forbiddenRedirect, 'normal desktop document must not redirect to Preview Centre');
   assert.doesNotMatch(mobileDocument, forbiddenRedirect, 'normal mobile document must not redirect to Preview Centre');
   assert.doesNotMatch(appSource, forbiddenRedirect, 'application shell must not force users through Preview Centre');
