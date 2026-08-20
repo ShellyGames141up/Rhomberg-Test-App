@@ -13,7 +13,7 @@ const assert = (condition, message) => {
   if (!condition) throw new Error(message);
 };
 
-const classify = assetPath => {
+export const classifyCatalogueAssetPath = assetPath => {
   if (/^assets\/images\/products\/[a-z0-9-]+\.webp$/.test(assetPath)) return 'product-image';
   if (CUSTOMER_VISIBLE_SUPPORT_IMAGES.has(assetPath)) return 'catalogue-support-image';
   if (/^assets\/datasheets\/[A-Za-z0-9-]+\.pdf$/.test(assetPath)) return 'product-document';
@@ -35,15 +35,20 @@ for (const category of categories) {
 
 for (const product of products) {
   addReference(product.image, { surface: 'product', id: product.id, label: `${product.code} ${product.name}` });
-  for (const document of product.datasheets || []) {
-    addReference(document.url, { surface: 'datasheet', id: product.id, label: `${product.code}: ${document.label}` });
+  const documentPaths = new Set();
+  for (const document of product.documents || []) {
+    assert(document.title && document.type && ['product', 'family'].includes(document.scope), `Invalid catalogue document metadata for product ${product.id}`);
+    assert(document.customerVisible === true && document.approvalStatus === 'approved_repository_source', `Unapproved catalogue document mapping for product ${product.id}`);
+    assert(!documentPaths.has(document.assetPath), `Duplicate product-document mapping for ${product.id}: ${document.assetPath}`);
+    documentPaths.add(document.assetPath);
+    addReference(document.assetPath, { surface: 'document', id: product.id, label: `${product.code}: ${document.title} (${document.scope})` });
   }
 }
 
 export const CATALOGUE_ASSET_MANIFEST = Object.freeze([...references]
   .map(([assetPath, referencedBy]) => Object.freeze({
     path: assetPath,
-    type: classify(assetPath),
+    type: classifyCatalogueAssetPath(assetPath),
     customerVisible: true,
     safePublic: true,
     referencedBy: Object.freeze([...referencedBy].sort((left, right) => `${left.surface}:${left.id}:${left.label}`.localeCompare(`${right.surface}:${right.id}:${right.label}`))),

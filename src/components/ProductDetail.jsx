@@ -3,7 +3,7 @@ import { LeadTimeNotice } from './Layout.jsx';
 
 export function ProductDetail({ product, category, onConfigure }) {
   const [tab, setTab] = useState('overview');
-  const tabs = [['overview', 'Overview'], ['specs', 'Technical specs'], ['config', 'Configurations'], ['datasheets', 'Datasheets']];
+  const tabs = [['overview', 'Overview'], ['specs', 'Technical specs'], ['config', 'Configurations'], ['documents', 'Documents']];
 
   return (
     <section className="app-screen product-detail" aria-labelledby="product-title">
@@ -26,7 +26,7 @@ export function ProductDetail({ product, category, onConfigure }) {
         {tab === 'overview' && <Overview product={product} />}
         {tab === 'specs' && <Specifications groups={product.specGroups} />}
         {tab === 'config' && <ConfigurationOverview product={product} />}
-        {tab === 'datasheets' && <Datasheets product={product} />}
+        {tab === 'documents' && <ProductDocuments product={product} />}
       </div>
 
       <div className="product-detail-lead"><LeadTimeNotice compact /></div>
@@ -82,10 +82,13 @@ function ConfigurationOverview({ product }) {
   );
 }
 
-function Datasheets({ product }) {
+const documentAction = type => type === 'ordering_guide' ? 'Download Ordering Guide' : type === 'catalogue_sheet' ? 'Download Catalogue Sheet' : 'Download Datasheet';
+
+export function ProductDocuments({ product }) {
+  const documents = [...new Map((product.documents || []).map(document => [document.assetPath, document])).values()];
   return (
     <div className="datasheet-panel"><span className="eyebrow">Technical documents</span><h2>Datasheets & guides</h2>
-      {product.datasheets.length ? <div className="datasheet-list">{product.datasheets.map(sheet => <a key={sheet.url} href={sheet.url} target="_blank" rel="noopener"><span>PDF</span><div><strong>{sheet.label}</strong><small>Open product information document</small></div><i>↗</i></a>)}</div> : <div className="datasheet-empty"><span>PDF</span><strong>Datasheet available on request</strong><p>Add the product to an enquiry and the relevant document can be supplied with the quotation.</p></div>}
+      {documents.length ? <div className="datasheet-list">{documents.map(document => <a key={document.assetPath} href={document.assetPath} download target="_blank" rel="noopener" aria-label={`${documentAction(document.type)} for ${product.code}: ${document.title}`}><span>PDF</span><div><strong>{document.title}</strong><small>{documentAction(document.type)} · {document.scope === 'family' ? 'Family document' : 'Product document'}</small></div><i>↓</i></a>)}</div> : <div className="datasheet-empty"><span>PDF</span><strong>Approved datasheet source not yet available</strong><p>Request the correct document with your enquiry. Rhomberg will not substitute an unrelated product sheet.</p></div>}
     </div>
   );
 }

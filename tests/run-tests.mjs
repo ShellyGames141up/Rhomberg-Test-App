@@ -1,5 +1,6 @@
 await import('./catalogue-rules.test.mjs');
 await import('./catalogue-asset-integrity.test.mjs');
+await import('./product-documents.test.mjs');
 await import('./laboratory-calibration.test.mjs');
 await import('./laboratory-workflow.test.mjs');
 await import('./laboratory-complete-journeys.test.mjs');

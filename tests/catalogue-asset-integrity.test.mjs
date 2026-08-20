@@ -9,7 +9,7 @@ import {
   validateCatalogueAssetFiles,
 } from '../scripts/catalogue-assets.mjs';
 import { EXCLUDED_NON_CATALOGUE_ASSETS, PRODUCTION_ASSETS } from '../scripts/production-assets.mjs';
-import { renderCatalogueAssetInventory } from '../scripts/report-catalogue-assets.mjs';
+import { renderCatalogueAssetInventory, renderProductDocumentMatrix } from '../scripts/report-catalogue-assets.mjs';
 
 const normalise = value => value.replaceAll('\\', '/');
 const walk = directory => fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
@@ -21,7 +21,7 @@ const expectedReferences = new Set();
 for (const category of categories) expectedReferences.add(category.image);
 for (const product of products) {
   expectedReferences.add(product.image);
-  for (const document of product.datasheets || []) expectedReferences.add(document.url);
+  for (const document of product.documents || []) expectedReferences.add(document.assetPath);
 }
 
 const approvedCataloguePaths = CATALOGUE_ASSET_MANIFEST.map(asset => asset.path);
@@ -73,6 +73,11 @@ assert.equal(
   fs.readFileSync('docs/PRODUCTION_CATALOGUE_ASSET_INVENTORY.md', 'utf8'),
   await renderCatalogueAssetInventory(),
   'the checked-in catalogue inventory must match the current manifest and source assets',
+);
+assert.equal(
+  fs.readFileSync('docs/PRODUCT_DOCUMENT_MATRIX.md', 'utf8'),
+  renderProductDocumentMatrix(),
+  'the checked-in product-document matrix must match every live product and approved mapping',
 );
 
 console.log(`Catalogue asset integrity passed: ${CATALOGUE_ASSET_MANIFEST.length} approved, ${STALE_CATALOGUE_ASSETS.length} stale catalogue and ${EXCLUDED_NON_CATALOGUE_ASSETS.length} unrelated assets reported.`);

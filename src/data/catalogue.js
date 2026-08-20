@@ -1,6 +1,24 @@
 const image = name => `assets/images/${name}`;
 const productImage = name => `products/${name}.webp`;
-const datasheet = name => `assets/datasheets/${name}`;
+const documentAsset = name => `assets/datasheets/${name}`;
+
+export const catalogueDocumentTypes = Object.freeze({
+  DATASHEET: 'datasheet',
+  PRODUCT_SHEET: 'product_sheet',
+  ORDERING_GUIDE: 'ordering_guide',
+  CATALOGUE_SHEET: 'catalogue_sheet',
+  TECHNICAL_DATASHEET: 'technical_datasheet',
+});
+
+const approvedDocument = ({ type, title, fileName, scope, applicability }) => Object.freeze({
+  type,
+  title,
+  assetPath: documentAsset(fileName),
+  scope,
+  applicability,
+  customerVisible: true,
+  approvalStatus: 'approved_repository_source',
+});
 
 export const categories = [
   { id: 'pressure', number: '01', name: 'Pressure', short: 'Pressure instruments', icon: 'P', image: image(productImage('pbg')), description: 'Mechanical gauges, digital gauges and transmitters for pressure, vacuum and differential pressure.' },
@@ -393,14 +411,44 @@ const resolveConfig = product => {
   return certificateField ? [...fields, ...certificateRecipientFields(certificateField.key)] : fields;
 };
 
-const defaultDatasheets = product => {
-  const sheets = [];
-  if (product.code === 'PBB') sheets.push({ label: 'PBB product sheet', url: datasheet('PBB-product-sheet.pdf') });
-  if (['PBG', 'PBJ', 'PBK', 'PBU', 'PBN'].includes(product.code)) sheets.push({ label: 'Utility gauge overview', url: datasheet('Utility-gauge-overview.pdf') });
-  if (product.category === 'pressure' && product.variant === 'gauge') sheets.push({ label: 'Pressure gauge ordering guide', url: datasheet('Pressure-gauge-ordering-guide.pdf') });
-  if (product.category === 'temperature') sheets.push({ label: 'Temperature ordering guide', url: datasheet('Temperature-ordering-guide.pdf') });
-  if (product.code === 'RPT106') sheets.push({ label: 'RPT106 product sheet', url: datasheet('RPT106-product-sheet.pdf') });
-  return sheets;
+const defaultDocuments = product => {
+  const documents = [];
+  if (product.code === 'PBB') documents.push(approvedDocument({
+    type: catalogueDocumentTypes.PRODUCT_SHEET,
+    title: 'PBB Product Sheet',
+    fileName: 'PBB-product-sheet.pdf',
+    scope: 'product',
+    applicability: 'Approved specifically for the PBB pressure gauge.',
+  }));
+  if (['PBG', 'PBJ', 'PBK', 'PBU', 'PBN'].includes(product.code)) documents.push(approvedDocument({
+    type: catalogueDocumentTypes.CATALOGUE_SHEET,
+    title: 'Utility Gauge Overview',
+    fileName: 'Utility-gauge-overview.pdf',
+    scope: 'family',
+    applicability: 'Approved for the PBG, PBJ, PBK, PBU and PBN utility gauge family.',
+  }));
+  if (product.category === 'pressure' && product.variant === 'gauge') documents.push(approvedDocument({
+    type: catalogueDocumentTypes.ORDERING_GUIDE,
+    title: 'Pressure Gauge Ordering Guide',
+    fileName: 'Pressure-gauge-ordering-guide.pdf',
+    scope: 'family',
+    applicability: 'Approved for live mechanical pressure gauge models configured through the pressure-gauge workflow.',
+  }));
+  if (product.category === 'temperature') documents.push(approvedDocument({
+    type: catalogueDocumentTypes.ORDERING_GUIDE,
+    title: 'Temperature Ordering Guide',
+    fileName: 'Temperature-ordering-guide.pdf',
+    scope: 'family',
+    applicability: 'Approved for all live Temperature category products configured through the temperature workflow.',
+  }));
+  if (product.code === 'RPT106') documents.push(approvedDocument({
+    type: catalogueDocumentTypes.PRODUCT_SHEET,
+    title: 'RPT106 Product Sheet',
+    fileName: 'RPT106-product-sheet.pdf',
+    scope: 'product',
+    applicability: 'Approved specifically for the RPT106 pressure transmitter.',
+  }));
+  return Object.freeze(documents);
 };
 
 const defineProduct = input => {
@@ -412,11 +460,13 @@ const defineProduct = input => {
     pressureRange: 'Not applicable',
     ...input,
   };
+  const documents = input.documents || defaultDocuments(product);
   return {
     ...product,
     specGroups: input.specGroups || baseSpecs(product),
     configurations: resolveConfig(product),
-    datasheets: input.datasheets || defaultDatasheets(product),
+    documents,
+    documentSourceStatus: documents.length ? 'approved_documents_available' : 'missing_approved_datasheet_source',
     rules: {
       sanas: product.category === 'pressure',
       traceability: product.category === 'temperature',
