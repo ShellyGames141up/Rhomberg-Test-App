@@ -1,15 +1,15 @@
 import { allRequiredCertificatesPresent, orderRequiresLaboratory } from './certification.js';
 
 export const DEFAULT_RETENTION_POLICY = Object.freeze({
-  id: 'demo-retention-v1',
-  name: 'Demonstration retention policy',
+  id: 'unapproved-default-retention-v1',
+  name: 'Unapproved default retention policy',
   archive_completed_orders_after_days: 90,
   retain_archived_orders_for_days: 2555,
   allow_permanent_deletion: false,
   deletion_requires_manager_approval: true,
   deletion_requires_administrator_approval: true,
   approvedForProduction: false,
-  policyNotice: 'Demonstration defaults only. Rhomberg and IT must approve the production retention policy.',
+  policyNotice: 'These defaults are not approved for production. Rhomberg and IT must approve the retention policy.',
 });
 
 const DAY_MS = 24 * 60 * 60 * 1000;

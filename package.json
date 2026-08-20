@@ -1,8 +1,13 @@
 {
   "name": "rhomberg-instruments-app-preview",
-  "version": "5.0.0",
+  "version": "5.2.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=22.0.0 <23",
+    "pnpm": ">=11.19.0 <12"
+  },
   "scripts": {
     "build": "node ./scripts/build-app.mjs",
     "dev:customer-desktop": "node ./scripts/dev-preview.mjs customer-desktop",
@@ -17,6 +22,8 @@
     "build:executive-demo": "node ./scripts/build-preview.mjs executive-demo",
     "build:previews": "node ./scripts/build-previews.mjs",
     "build:production": "node ./scripts/build-production.mjs",
+    "check:production-artifact": "node ./scripts/check-production-artifact.mjs",
+    "release:metadata": "node ./scripts/generate-release-metadata.mjs",
     "build:netlify": "npm run build && node ./scripts/stage-static.mjs",
     "check": "node ./scripts/check-app.mjs",
     "check:css": "node ./scripts/check-css.mjs",

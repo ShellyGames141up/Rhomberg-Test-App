@@ -15,7 +15,7 @@ export const certificateRecipientSnapshot = (line, account, createdAt = new Date
   if (!configuration.certificateRecipientType) return null;
   const ownCompany = configuration.certificateRecipientType === 'My Company';
   const address = ownCompany
-    ? String(account?.certificateAddress || account?.address || (account?.area ? `${account.area} — approved demo account address` : '')).trim()
+    ? String(account?.certificateAddress || account?.address || (account?.area ? `${account.area} — approved account address` : '')).trim()
     : [configuration.certificateAddressLine1, configuration.certificateAddressLine2, configuration.certificateCity, configuration.certificateProvince, configuration.certificatePostalCode, configuration.certificateCountry].filter(Boolean).join(', ');
   const name = ownCompany ? String(account?.company || '').trim() : String(configuration.certificateClientName || '').trim();
   if (!name || !address) {

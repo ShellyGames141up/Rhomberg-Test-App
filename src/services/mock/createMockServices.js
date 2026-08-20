@@ -29,11 +29,9 @@ import { laboratoryManagerCanHandle, snapshotCertificateRecipients } from '../..
 import {
   assertLabTransition,
   calculateLaboratoryWorksheet,
-  FABRICATED_REFERENCE_STANDARDS,
   LAB_METHODS,
   LABORATORY_BRANCHES,
   LABORATORY_ROLES,
-  LABORATORY_STAFF,
   LAB_WORKFLOW_STATUSES,
   methodById,
   validStandardsForWorksheet,
@@ -43,6 +41,7 @@ import {
   validateReceipt,
   validateStabilisation,
 } from '../../domain/laboratoryCalibration.js';
+import { FABRICATED_REFERENCE_STANDARDS, LABORATORY_STAFF } from './laboratorySeedData.js';
 import {
   generateLaboratoryPdf,
   LAB_DOCUMENT_KINDS,
@@ -4078,7 +4077,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       }));
       if (!testPoints.length || testPoints.some(point => !Number.isFinite(point.applied) || !point.readings.length || point.readings.some(value => !Number.isFinite(value)))) throw new ServiceError('Enter valid calibration points and numeric readings.', { code: 'LAB_WORKSHEET_READINGS_INVALID', status: 422 });
       validateLaboratoryPointStructure(method, testPoints);
-      const validStandards = validStandardsForWorksheet({ branchId: unit.labWork.branchId, methodId: method.id, minimum: unit.labWork.booking?.rangeMinimum, maximum: unit.labWork.booking?.rangeMaximum, asOf: now().toISOString().slice(0, 10) });
+      const validStandards = validStandardsForWorksheet({ standards: FABRICATED_REFERENCE_STANDARDS, branchId: unit.labWork.branchId, methodId: method.id, minimum: unit.labWork.booking?.rangeMinimum, maximum: unit.labWork.booking?.rangeMaximum, asOf: now().toISOString().slice(0, 10) });
       const standardIds = [...new Set(input.standardIds || [])];
       if (!standardIds.length || standardIds.some(id => !validStandards.some(standard => standard.id === id))) throw new ServiceError('Select an active, in-range reference standard approved for this method.', { code: 'LAB_REFERENCE_STANDARD_INVALID', status: 422, fieldErrors: { standardIds: 'Select a valid reference standard.' } });
       const uncertaintyContributions = (input.uncertaintyContributions || []).map(item => ({ ...item, source: String(item.source || '').trim().slice(0, 160), uncertainty: Number(item.uncertainty), divisor: item.divisor === '' ? undefined : Number(item.divisor), sensitivity: item.sensitivity === '' ? 1 : Number(item.sensitivity), degreesOfFreedom: item.degreesOfFreedom === '' ? null : Number(item.degreesOfFreedom) }));

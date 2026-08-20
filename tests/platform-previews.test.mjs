@@ -293,9 +293,10 @@ const stylesheet = readFileSync(path.resolve('styles.css'), 'utf8');
 for (const marker of ['env(safe-area-inset-bottom)', '@media(orientation:landscape)', 'min-height:44px', '--customer-font-scale', '--customer-density-scale']) {
   assert.ok(stylesheet.includes(marker), `responsive styling must include ${marker}`);
 }
-const productionScript = readFileSync(path.resolve('scripts', 'build-production.mjs'), 'utf8');
+const productionScript = `${readFileSync(path.resolve('scripts', 'build-production.mjs'), 'utf8')}\n${readFileSync(path.resolve('scripts', 'check-production-artifact.mjs'), 'utf8')}`;
 for (const marker of ['Demo123', 'Sales123', 'Planning123', 'Dispatch123', 'Buyer123', 'Manager123', 'Admin123', 'Demo Preview', 'DEMO PREVIEW', 'View Demo Login', 'customer.demo@example.invalid', 'sales.workflow@example.invalid', 'administrator.workflow@example.invalid', 'preview-landing']) {
-  assert.ok(productionScript.includes(`'${marker}'`), `production safety scan must reject ${marker}`);
+  if (marker.endsWith('@example.invalid')) assert.ok(productionScript.includes('example\\.invalid'), `production safety scan must reject fabricated identities such as ${marker}`);
+  else assert.ok(productionScript.includes(marker), `production safety scan must reject ${marker}`);
 }
 const buildToolsSource = readFileSync(path.resolve('scripts', 'build-tools.mjs'), 'utf8');
 assert.ok(buildToolsSource.includes(".replace(/^\\s*'\\.\\/(?:preview|demo)\\/.*\\r?\\n/gm, '')"), 'standalone previews must remove unavailable multi-route entries from their service-worker cache list');

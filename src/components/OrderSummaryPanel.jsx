@@ -150,7 +150,7 @@ export function OrderSummaryPanel({ order, onGenerate, onEmail, onGetOptions, se
               <label className="order-summary-confirm"><input type="checkbox" checked={confirmedExternal} onChange={event => setConfirmedExternal(event.target.checked)} /><span><strong>Confirm external recipient</strong>I have checked this address and confirm that this document is approved for external sharing.</span></label>
             )}
             <button className="order-summary-send" type="button" onClick={send} disabled={Boolean(busyAction) || !document}>{busyAction === 'email' ? 'Recording simulated delivery...' : serviceMode === 'mock' ? 'Simulate email send' : 'Send through secure email service'}</button>
-            <p className="order-summary-mock-note">{serviceMode === 'mock' ? 'Demonstration only: no email will be sent.' : 'Confirm the recipient before sending this document.'}</p>
+            <p className="order-summary-mock-note">{__PUBLIC_PREVIEW__ && serviceMode === 'mock' ? 'Demonstration only: no email will be sent.' : 'Confirm the recipient before sending this document.'}</p>
           </div>
         </details>
       )}

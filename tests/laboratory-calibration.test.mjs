@@ -14,6 +14,7 @@ import {
   labTurnaround,
   validStandardsForWorksheet,
 } from '../src/domain/laboratoryCalibration.js';
+import { FABRICATED_REFERENCE_STANDARDS } from '../src/services/mock/laboratorySeedData.js';
 
 assert.equal(calculateMeanReading([1, 2, 3]), 2);
 assert.equal(calculateIndicationError({ measured: 10.02, applied: 10 }), 0.019999999999999574);
@@ -44,8 +45,8 @@ assert.equal(worksheet.points.length, 16);
 assert.equal(worksheet.points[0].mean, 5.00667);
 assert.ok(worksheet.warnings.length > 0, 'unapproved legacy dependencies must remain visible as warnings');
 
-assert.ok(validStandardsForWorksheet({ branchId: 'cape_town', methodId: LAB_METHOD_IDS.PRESSURE_MASTER_GAUGE, minimum: 0, maximum: 10, asOf: '2026-08-03' }).length > 0);
-assert.equal(validStandardsForWorksheet({ branchId: 'johannesburg', methodId: LAB_METHOD_IDS.TEMPERATURE_COMPARISON, minimum: -20, maximum: 100, asOf: '2026-08-03' }).length, 0);
+assert.ok(validStandardsForWorksheet({ standards: FABRICATED_REFERENCE_STANDARDS, branchId: 'cape_town', methodId: LAB_METHOD_IDS.PRESSURE_MASTER_GAUGE, minimum: 0, maximum: 10, asOf: '2026-08-03' }).length > 0);
+assert.equal(validStandardsForWorksheet({ standards: FABRICATED_REFERENCE_STANDARDS, branchId: 'johannesburg', methodId: LAB_METHOD_IDS.TEMPERATURE_COMPARISON, minimum: -20, maximum: 100, asOf: '2026-08-03' }).length, 0);
 assert.equal(assertLabTransition('awaiting_lab_receipt', 'receive'), 'received_in_lab');
 assert.throws(() => assertLabTransition('awaiting_lab_receipt', 'calculate'), /current stage/i);
 assert.equal(createLaboratoryWorkflow().status, 'awaiting_lab_receipt');

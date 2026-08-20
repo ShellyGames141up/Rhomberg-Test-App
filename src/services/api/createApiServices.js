@@ -382,29 +382,12 @@ export function createApiServices(config = {}) {
       headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `administration-correction-${Date.now()}` },
     }),
     resetDemoData: () => {
-      throw new ServiceError('Fabricated-data reset controls are not available in the private-cloud application.', {
+      throw new ServiceError('Data reset controls are not available in the private-cloud application.', {
         code: 'PREVIEW_ONLY_OPERATION',
         status: 404,
       });
     },
   };
-
-  const executiveDemo = Object.freeze({
-    getState: async () => null,
-    getCatalogue: async () => ({ scenarios: [], roles: [], current: null }),
-    selectScenario: async () => null,
-    setStep: async () => null,
-    setPresentationMode: async () => null,
-    setLayoutMode: async () => null,
-    setDevicePreview: async () => null,
-    resetScenario: async () => null,
-    switchRole: async () => {
-      throw new ServiceError('Guided role switching is not available in the private-cloud application.', {
-        code: 'PREVIEW_ONLY_OPERATION',
-        status: 404,
-      });
-    },
-  });
 
   const notifications = {
     list: filters => client.get('/notifications', { query: filters }),
@@ -633,7 +616,6 @@ export function createApiServices(config = {}) {
     archive,
     management,
     administration,
-    executiveDemo,
     notifications,
     planning,
     expediting,

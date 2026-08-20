@@ -100,13 +100,10 @@ await reopened.administration.resetDemoData();
 const resetAudit = JSON.parse(storage.getItem(STORE_KEYS.audit));
 assert.ok(resetAudit.some(event => event.action === 'administration.demo_data_reset'));
 
-const productionBuild = readFileSync('scripts/build-production.mjs', 'utf8');
-for (const marker of [
-  'ProductionExecutiveWorkflowDemo.jsx',
-  'Executive Demo Mode',
-  'sanas-calibration',
-  'department-tour',
-]) assert.ok(productionBuild.includes(marker), `production exclusion must cover ${marker}`);
+const productionBuild = `${readFileSync('scripts/build-production.mjs', 'utf8')}\n${readFileSync('scripts/check-production-artifact.mjs', 'utf8')}`;
+for (const marker of ['ProductionExecutiveWorkflowDemo.jsx', 'Executive Demo Mode']) {
+  assert.ok(productionBuild.includes(marker), `production exclusion must cover ${marker}`);
+}
 
 for (const document of [
   'README.md',

@@ -1,0 +1,18 @@
+import { LAB_METHOD_IDS, LABORATORY_ROLES } from '../../domain/laboratoryCalibration.js';
+
+export const LABORATORY_STAFF = Object.freeze([
+  Object.freeze({ id: 'lab-staff-manager-demo', name: 'Fabricated Laboratory Manager', branchId: 'cape_town', roles: Object.freeze([LABORATORY_ROLES.MANAGER, LABORATORY_ROLES.TEMPERATURE_TECHNICIAN, LABORATORY_ROLES.TECHNICAL_SIGNATORY]) }),
+  Object.freeze({ id: 'lab-staff-manager-demo-2', name: 'Fabricated Laboratory Manager 2', branchId: 'cape_town', roles: Object.freeze([LABORATORY_ROLES.MANAGER, LABORATORY_ROLES.TECHNICAL_SIGNATORY]) }),
+  Object.freeze({ id: 'lab-staff-cape-demo-1', name: 'Fabricated Cape Laboratory User 1', branchId: 'cape_town', roles: Object.freeze([LABORATORY_ROLES.TECHNICIAN]) }),
+  Object.freeze({ id: 'lab-staff-cape-demo-2', name: 'Fabricated Cape Laboratory User 2', branchId: 'cape_town', roles: Object.freeze([LABORATORY_ROLES.TECHNICIAN]) }),
+  Object.freeze({ id: 'lab-staff-jhb-demo-2', name: 'Fabricated Johannesburg Laboratory User 2', branchId: 'johannesburg', roles: Object.freeze([LABORATORY_ROLES.TECHNICIAN]) }),
+  Object.freeze({ id: 'lab-staff-jhb-demo-1', name: 'Fabricated Johannesburg Laboratory User 1', branchId: 'johannesburg', roles: Object.freeze([LABORATORY_ROLES.TECHNICIAN]) }),
+]);
+
+export const FABRICATED_REFERENCE_STANDARDS = Object.freeze([
+  Object.freeze({ id: 'std-ct-master-low', branchId: 'cape_town', type: 'digital_pressure_master', label: 'Fabricated CT digital pressure master', serialNumber: 'DEMO-CT-P-001', certificateNumber: 'DEMO-REF-001', rangeMinimum: 0, rangeMaximum: 1000, unit: 'kPa', resolution: 0.1, uncertainty: 0.16, drift: 0.02, status: 'active', calibrationDate: '2026-01-15', expiryDate: '2027-01-14', approvedMethods: Object.freeze([LAB_METHOD_IDS.PRESSURE_MASTER_GAUGE]) }),
+  Object.freeze({ id: 'std-ct-dwt-700', branchId: 'cape_town', type: 'dead_weight_tester', label: 'Fabricated CT 700 bar DWT', serialNumber: 'DEMO-CT-DWT-700', certificateNumber: 'DEMO-REF-002', rangeMinimum: 0, rangeMaximum: 700, unit: 'bar', resolution: 0.01, uncertainty: 0.04, drift: 0, status: 'active', calibrationDate: '2026-02-02', expiryDate: '2027-02-01', approvedMethods: Object.freeze([LAB_METHOD_IDS.PRESSURE_DWT_700_BAR]) }),
+  Object.freeze({ id: 'std-ct-dwt-250', branchId: 'cape_town', type: 'primary_dead_weight_tester', label: 'Fabricated CT 250 MPa primary DWT', serialNumber: 'DEMO-CT-DWT-250', certificateNumber: 'DEMO-REF-003', rangeMinimum: 0, rangeMaximum: 250, unit: 'MPa', resolution: 0.001, uncertainty: 0.05, drift: 0, status: 'active', calibrationDate: '2026-03-01', expiryDate: '2027-02-28', approvedMethods: Object.freeze([LAB_METHOD_IDS.PRESSURE_DWT_250_MPA]) }),
+  Object.freeze({ id: 'std-ct-temperature', branchId: 'cape_town', type: 'reference_thermometer', label: 'Fabricated CT reference thermometer', serialNumber: 'DEMO-CT-T-001', certificateNumber: 'DEMO-REF-004', rangeMinimum: -50, rangeMaximum: 600, unit: '°C', resolution: 0.01, uncertainty: 0.1, drift: 0.05, status: 'active', calibrationDate: '2026-01-20', expiryDate: '2027-01-19', approvedMethods: Object.freeze([LAB_METHOD_IDS.TEMPERATURE_COMPARISON]) }),
+  Object.freeze({ id: 'std-jhb-pressure', branchId: 'johannesburg', type: 'dead_weight_tester', label: 'Fabricated JHB pressure standard', serialNumber: 'DEMO-JHB-P-001', certificateNumber: 'DEMO-REF-005', rangeMinimum: 0, rangeMaximum: 700, unit: 'bar', resolution: 0.01, uncertainty: 0.05, drift: 0, status: 'active', calibrationDate: '2026-04-01', expiryDate: '2027-03-31', approvedMethods: Object.freeze([LAB_METHOD_IDS.PRESSURE_DWT_700_BAR]) }),
+]);

@@ -68,7 +68,7 @@ export function ArchivedOrders({ account, archiveActions, serviceMode, onRecords
 
   const savePolicy = event => {
     event.preventDefault();
-    run('policy', () => archiveActions.savePolicy(policy), 'Demonstration retention settings saved and audited.');
+    run('policy', () => archiveActions.savePolicy(policy), 'Retention settings saved and audited.');
   };
 
   const exportRecord = async order => {

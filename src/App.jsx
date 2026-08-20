@@ -67,12 +67,12 @@ const EMPTY_QA_OPTIONS = { problemCategories: [], severities: [], reworkDestinat
 const EMPTY_EXECUTIVE_DEMO = { scenarios: [], roles: [], current: null, currentScenario: null };
 const PUBLIC_PREVIEW = __PUBLIC_PREVIEW__;
 const DOCUMENT_PREVIEW_ID = globalThis.document?.querySelector?.('meta[name="rhomberg-preview"]')?.content || '';
-const PREVIEW_CONTEXT = PUBLIC_PREVIEW
+const PREVIEW_CONTEXT = __PUBLIC_PREVIEW__
   ? (PREVIEW_BY_ID[DOCUMENT_PREVIEW_ID] || previewContextForPath(globalThis.location?.pathname || '/'))
   : previewContextForPath(globalThis.location?.pathname || '/');
-const SHOW_PREVIEW_NAVIGATION = previewNavigationAllowed({ publicPreview: PUBLIC_PREVIEW, preview: PREVIEW_CONTEXT });
+const SHOW_PREVIEW_NAVIGATION = previewNavigationAllowed({ publicPreview: __PUBLIC_PREVIEW__, preview: PREVIEW_CONTEXT });
 const isFabricatedPreviewIdentity = account => /\.(?:invalid|test)$/i.test(String(account?.email || account?.username || ''));
-const normalPublicRouteRejectsDemoIdentity = account => PUBLIC_PREVIEW && PREVIEW_CONTEXT.unified && isFabricatedPreviewIdentity(account);
+const normalPublicRouteRejectsDemoIdentity = account => __PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.unified && isFabricatedPreviewIdentity(account);
 const listEnquiriesForAccount = signedInAccount => (
   usesRepresentativeInbox(signedInAccount)
     ? services.enquiries.listRepresentativeInbox()
@@ -144,7 +144,7 @@ export default function App() {
           services.accounts.getRegistrationOptions(),
           services.auth.getDemoLogins(),
           services.auth.getSession(),
-          PREVIEW_CONTEXT.executiveDemo
+          __PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.executiveDemo
             ? services.executiveDemo.getCatalogue()
             : Promise.resolve(EMPTY_EXECUTIVE_DEMO),
         ]);
@@ -154,13 +154,17 @@ export default function App() {
         let previewAccessError = '';
         if (session && normalPublicRouteRejectsDemoIdentity(session)) {
           await services.auth.signOut();
-          previewAccessError = 'Fabricated demonstration accounts are available only in the separate Preview Centre. The normal application requires an approved private account and production identity service.';
+          previewAccessError = __PUBLIC_PREVIEW__
+            ? 'Fabricated demonstration accounts are available only in the separate Preview Centre. The normal application requires an approved private account and production identity service.'
+            : 'This account is not authorised for this application. Contact your administrator.';
           session = null;
         } else if (session && !previewAllowsRole(PREVIEW_CONTEXT, session.role)) {
           await services.auth.signOut();
           previewAccessError = PREVIEW_CONTEXT.unified
             ? `This account is not authorised for the ${PREVIEW_CONTEXT.platform}. Use an approved application surface or contact your administrator.`
-            : `${session.role.replaceAll('_', ' ')} accounts cannot enter ${PREVIEW_CONTEXT.displayName}. Choose a compatible demonstration preview.`;
+            : __PUBLIC_PREVIEW__
+              ? `${session.role.replaceAll('_', ' ')} accounts cannot enter ${PREVIEW_CONTEXT.displayName}. Choose a compatible demonstration preview.`
+              : 'This account is not authorised for this application. Contact your administrator.';
           session = null;
         }
         let loadedDraft = [];
@@ -389,7 +393,9 @@ export default function App() {
         await services.auth.signOut();
         return {
           ok: false,
-          message: 'Fabricated demonstration accounts are available only in the separate Preview Centre. The normal application requires an approved private account and production identity service.',
+          message: __PUBLIC_PREVIEW__
+            ? 'Fabricated demonstration accounts are available only in the separate Preview Centre. The normal application requires an approved private account and production identity service.'
+            : 'This account is not authorised for this application. Contact your administrator.',
           fieldErrors: {},
         };
       }
@@ -399,7 +405,9 @@ export default function App() {
           ok: false,
           message: PREVIEW_CONTEXT.unified
             ? `This account is not authorised for the ${PREVIEW_CONTEXT.platform}. Use an approved application surface or contact your administrator.`
-            : `${signedInAccount.role.replaceAll('_', ' ')} accounts cannot enter ${PREVIEW_CONTEXT.displayName}. Return to the Preview Centre and choose a compatible demonstration interface.`,
+            : __PUBLIC_PREVIEW__
+              ? `${signedInAccount.role.replaceAll('_', ' ')} accounts cannot enter ${PREVIEW_CONTEXT.displayName}. Return to the Preview Centre and choose a compatible demonstration interface.`
+              : 'This account is not authorised for this application. Contact your administrator.',
           fieldErrors: {},
         };
       }
@@ -414,7 +422,7 @@ export default function App() {
 
   const register = async data => {
     try {
-      if (PUBLIC_PREVIEW && PREVIEW_CONTEXT.unified) {
+      if (__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.unified) {
         return { ok: false, message: 'Public account creation is disabled on the normal application route. Account activation will be provided by the approved production identity service.', fieldErrors: {} };
       }
       if (!PREVIEW_CONTEXT.customer && !PREVIEW_CONTEXT.unified) {
@@ -715,7 +723,7 @@ export default function App() {
     notify('Tutorial skipped. You can replay it from Settings.');
   };
 
-  const runExecutiveDemoAction = async (key, operation) => {
+  const runExecutiveDemoAction = __PUBLIC_PREVIEW__ ? async (key, operation) => {
     setExecutiveDemoBusy(key);
     setExecutiveDemoError('');
     try {
@@ -726,51 +734,51 @@ export default function App() {
     } finally {
       setExecutiveDemoBusy('');
     }
-  };
+  } : null;
 
-  const selectExecutiveScenario = scenarioId => runExecutiveDemoAction('scenario', async () => {
+  const selectExecutiveScenario = __PUBLIC_PREVIEW__ ? scenarioId => runExecutiveDemoAction('scenario', async () => {
     const updated = await services.executiveDemo.selectScenario(scenarioId);
     setExecutiveDemoState(updated);
     return updated;
-  });
+  }) : null;
 
-  const setExecutiveStep = stepIndex => runExecutiveDemoAction('step', async () => {
+  const setExecutiveStep = __PUBLIC_PREVIEW__ ? stepIndex => runExecutiveDemoAction('step', async () => {
     const updated = await services.executiveDemo.setStep(stepIndex);
     setExecutiveDemoState(updated);
     return updated;
-  });
+  }) : null;
 
-  const setExecutivePresentationMode = enabled => runExecutiveDemoAction('presentation', async () => {
+  const setExecutivePresentationMode = __PUBLIC_PREVIEW__ ? enabled => runExecutiveDemoAction('presentation', async () => {
     const updated = await services.executiveDemo.setPresentationMode(enabled);
     setExecutiveDemoState(updated);
     return updated;
-  });
+  }) : null;
 
-  const setExecutiveLayoutMode = layoutMode => runExecutiveDemoAction('layout', async () => {
+  const setExecutiveLayoutMode = __PUBLIC_PREVIEW__ ? layoutMode => runExecutiveDemoAction('layout', async () => {
     const updated = await services.executiveDemo.setLayoutMode(layoutMode);
     setExecutiveDemoState(updated);
     return updated;
-  });
+  }) : null;
 
-  const setExecutiveDevicePreview = devicePreview => runExecutiveDemoAction('device', async () => {
+  const setExecutiveDevicePreview = __PUBLIC_PREVIEW__ ? devicePreview => runExecutiveDemoAction('device', async () => {
     const updated = await services.executiveDemo.setDevicePreview(devicePreview);
     setExecutiveDemoState(updated);
     return updated;
-  });
+  }) : null;
 
-  const resetExecutiveScenario = () => runExecutiveDemoAction('reset', async () => {
+  const resetExecutiveScenario = __PUBLIC_PREVIEW__ ? () => runExecutiveDemoAction('reset', async () => {
     const updated = await services.executiveDemo.resetScenario();
     setExecutiveDemoState(updated);
     return updated;
-  });
+  }) : null;
 
-  const switchExecutiveRole = role => runExecutiveDemoAction(`role-${role}`, async () => {
+  const switchExecutiveRole = __PUBLIC_PREVIEW__ ? role => runExecutiveDemoAction(`role-${role}`, async () => {
     const signedInAccount = await services.executiveDemo.switchRole(role);
     await loadAccountWorkspace(signedInAccount);
     setExecutiveDemoState(await services.executiveDemo.getState());
     setAccessError('');
     return signedInAccount;
-  });
+  }) : null;
 
   const signOut = async () => {
     try {
@@ -802,9 +810,9 @@ export default function App() {
 
   if (appStatus === 'loading') return <AppLoading theme={theme} onToggleTheme={toggleTheme} />;
   if (appStatus === 'error') return <AppLoadError message={appError} onRetry={() => setRetryToken(value => value + 1)} />;
-  if (PREVIEW_CONTEXT.landing) return <PreviewLanding demoLogins={demoLogins} serviceMode={services.mode} theme={theme} onToggleTheme={toggleTheme} />;
-  if (PREVIEW_CONTEXT.unsupported) return <UnsupportedPreview />;
-  if (PREVIEW_CONTEXT.executiveDemo && !account) {
+  if (__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.landing) return <PreviewLanding demoLogins={demoLogins} serviceMode={services.mode} theme={theme} onToggleTheme={toggleTheme} />;
+  if (__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.unsupported) return <UnsupportedPreview />;
+  if (__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.executiveDemo && !account) {
     return (
       <ExecutiveDemoLauncher
         catalogue={executiveDemoCatalogue}
@@ -816,9 +824,9 @@ export default function App() {
       />
     );
   }
-  if (!PREVIEW_CONTEXT.executiveDemo && !introComplete) return <Intro onComplete={() => setIntroComplete(true)} />;
-  if (!account) return <Auth onSignIn={login} onCreateAccount={register} theme={theme} onToggleTheme={toggleTheme} registrationOptions={registrationOptions} serviceMode={services.mode} preview={PREVIEW_CONTEXT} allowRegistration={Boolean((PREVIEW_CONTEXT.customer || PREVIEW_CONTEXT.unified) && !(PUBLIC_PREVIEW && PREVIEW_CONTEXT.unified))} accessError={accessError} />;
-  if (isCustomerExperience && !PREVIEW_CONTEXT.executiveDemo && welcomeVisible) return <FirstCustomerWelcome account={account} reduceMotion={userSettings.accessibility.reduceMotion} onComplete={completeWelcome} />;
+  if (!(__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.executiveDemo) && !introComplete) return <Intro onComplete={() => setIntroComplete(true)} />;
+  if (!account) return <Auth onSignIn={login} onCreateAccount={register} theme={theme} onToggleTheme={toggleTheme} registrationOptions={registrationOptions} serviceMode={services.mode} preview={PREVIEW_CONTEXT} allowRegistration={Boolean((PREVIEW_CONTEXT.customer || PREVIEW_CONTEXT.unified) && !(__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.unified))} accessError={accessError} />;
+  if (isCustomerExperience && !(__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.executiveDemo) && welcomeVisible) return <FirstCustomerWelcome account={account} reduceMotion={userSettings.accessibility.reduceMotion} onComplete={completeWelcome} />;
 
   const backFromDetail = () => {
     if (view === 'settings') {
@@ -835,17 +843,17 @@ export default function App() {
 
   return (
     <div
-      className={`app-canvas platform-preview preview-${PREVIEW_CONTEXT.id} ${isCustomerExperience ? 'preview-connect' : 'preview-operations'} ${executiveDemoState?.presentationMode ? 'executive-presentation-mode' : ''} ${PREVIEW_CONTEXT.executiveDemo ? `executive-layout-${executiveDemoState?.layoutMode || 'full'} executive-device-${executiveDemoState?.devicePreview || 'desktop'}` : ''}`}
+      className={`app-canvas platform-preview preview-${PREVIEW_CONTEXT.id} ${isCustomerExperience ? 'preview-connect' : 'preview-operations'} ${__PUBLIC_PREVIEW__ && executiveDemoState?.presentationMode ? 'executive-presentation-mode' : ''} ${__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.executiveDemo ? `executive-layout-${executiveDemoState?.layoutMode || 'full'} executive-device-${executiveDemoState?.devicePreview || 'desktop'}` : ''}`}
       data-font-size={userSettings.appearance.increasedText ? 'large' : 'medium'}
       data-reduce-motion={userSettings.accessibility.reduceMotion ? 'true' : 'false'}
       data-decorative-animations={userSettings.accessibility.decorativeAnimations ? 'true' : 'false'}
       data-high-contrast={userSettings.appearance.highContrast ? 'true' : 'false'}
       data-reduced-transparency={userSettings.appearance.reducedTransparency ? 'true' : 'false'}
       data-screen-reader={userSettings.accessibility.screenReaderOptimisation ? 'optimised' : undefined}
-      data-executive-layout={PREVIEW_CONTEXT.executiveDemo ? executiveDemoState?.layoutMode || 'full' : undefined}
-      data-executive-device={PREVIEW_CONTEXT.executiveDemo ? executiveDemoState?.devicePreview || 'desktop' : undefined}
+      data-executive-layout={__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.executiveDemo ? executiveDemoState?.layoutMode || 'full' : undefined}
+      data-executive-device={__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.executiveDemo ? executiveDemoState?.devicePreview || 'desktop' : undefined}
     >
-      {PREVIEW_CONTEXT.executiveDemo && (
+      {__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.executiveDemo && (
         <ExecutiveDemoControls
           catalogue={executiveDemoCatalogue}
           state={executiveDemoState}

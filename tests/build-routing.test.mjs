@@ -13,7 +13,7 @@ const mobileDocument = readFileSync('mobile/index.html', 'utf8');
 const previewCentreDocument = readFileSync('index.html', 'utf8');
 const stageScript = readFileSync('scripts/build-tools.mjs', 'utf8');
 
-const introBranch = appSource.indexOf("if (!PREVIEW_CONTEXT.executiveDemo && !introComplete) return <Intro");
+const introBranch = appSource.indexOf("if (!(__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.executiveDemo) && !introComplete) return <Intro");
 const authBranch = appSource.indexOf('if (!account) return <Auth');
 assert.ok(introBranch >= 0 && authBranch > introBranch, 'normal customer and staff entries must show splash before sign in');
 

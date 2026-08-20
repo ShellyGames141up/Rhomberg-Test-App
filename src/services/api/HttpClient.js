@@ -7,6 +7,7 @@ export class HttpClient {
     this.baseUrl = String(baseUrl || '/api/v1').replace(/\/$/, '');
     this.timeoutMs = timeoutMs;
     this.fetch = fetchImplementation;
+    this.hasInjectedTransport = fetchImplementation !== globalThis.fetch;
     this.csrfToken = '';
   }
 
@@ -33,7 +34,19 @@ export class HttpClient {
   }
 
   async requestOnce(path, { method = 'GET', body, query, signal, headers = {} } = {}) {
-    const url = new URL(`${this.baseUrl}${path}`, globalThis.location?.origin || 'http://localhost');
+    const requestUrl = `${this.baseUrl}${path}`;
+    const browserOrigin = globalThis.location?.origin;
+    if (!browserOrigin && !/^https:\/\//i.test(requestUrl) && !this.hasInjectedTransport) {
+      throw new ServiceError('The application API address is not configured for this environment.', {
+        code: 'INVALID_API_CONFIGURATION',
+        status: 500,
+      });
+    }
+    const url = browserOrigin
+      ? new URL(requestUrl, browserOrigin)
+      : /^https:\/\//i.test(requestUrl)
+        ? new URL(requestUrl)
+        : new URL(requestUrl, 'https://injected-transport.invalid');
     for (const [key, value] of Object.entries(query || {})) if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
     const controller = new AbortController();
     const timeout = globalThis.setTimeout(() => controller.abort(), this.timeoutMs);

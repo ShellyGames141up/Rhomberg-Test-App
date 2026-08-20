@@ -74,7 +74,7 @@ export function Auth({
             <PasswordField name="password" label="Password" show={showPassword} onToggle={() => setShowPassword(value => !value)} error={fieldErrors.password} />
             {(error || accessError) && <p className="form-error" role="alert">{error || accessError}</p>}
             <button className="primary-button full" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Sign in'} <span>{isSubmitting ? '•••' : '→'}</span></button>
-            <div className="auth-help-actions"><button type="button" onClick={() => { resetErrors(); setError(serviceMode === 'mock' ? 'Demo password recovery is not connected. Use the fabricated credentials shown only in the Preview Centre.' : 'Contact your authorised Rhomberg administrator to recover or activate your account.'); }}>Forgot password?</button>{allowRegistration && <button type="button" onClick={() => { setTab('register'); resetErrors(); }}>Activate or create customer account</button>}</div>
+            <div className="auth-help-actions"><button type="button" onClick={() => { resetErrors(); setError(__PUBLIC_PREVIEW__ && serviceMode === 'mock' ? 'Demo password recovery is not connected. Use the fabricated credentials shown only in the Preview Centre.' : 'Contact your authorised Rhomberg administrator to recover or activate your account.'); }}>Forgot password?</button>{allowRegistration && <button type="button" onClick={() => { setTab('register'); resetErrors(); }}>Activate or create customer account</button>}</div>
           </form>
         ) : allowRegistration ? (
           <form className="auth-form register-grid" onSubmit={submitRegister} noValidate>

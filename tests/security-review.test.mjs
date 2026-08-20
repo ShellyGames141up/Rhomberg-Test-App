@@ -85,7 +85,7 @@ assert.match(privatePricingSource, /RHOMBERG_PRICEBOOK_GZIP_BASE64/);
 assert.doesNotMatch(privatePricingSource, /\bbaseRules\s*:\s*\[/, 'the repository must not embed the private price book');
 assert.doesNotMatch(privatePricingSource, /\bunitPrice\s*:\s*\d/, 'the repository must not embed unit price values');
 
-const productionBuildSource = read('scripts/build-production.mjs');
+const productionBuildSource = `${read('scripts/build-production.mjs')}\n${read('scripts/check-production-artifact.mjs')}`;
 for (const marker of [
   'src/services/apiEntry.js',
   'createMockServices',
