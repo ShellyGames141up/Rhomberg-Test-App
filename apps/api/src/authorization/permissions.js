@@ -4,6 +4,7 @@ export const PERMISSIONS = Object.freeze({
   VIEW_ASSIGNED_RFQS: 'view_assigned_rfqs',
   VIEW_ALL_RFQS: 'view_all_rfqs',
   READ_DOCUMENT_METADATA: 'read_document_metadata',
+  ADMINISTER_USERS: 'administer_users',
 });
 
 export function hasPermission(actor, permission) {

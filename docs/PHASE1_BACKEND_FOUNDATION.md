@@ -24,7 +24,7 @@ The React service adapter already targets these `/api/v1` routes. GitHub Pages c
 - Domain orchestration: authentication and enquiry services validate commands and invoke repositories.
 - Authorisation: permissions and company scope come from server/database state. Ownership, roles, statuses and priority values supplied by customers are rejected.
 - Persistence: pooled `pg` connections, parameterised queries, transactions and forward-only SQL migrations.
-- Identity: replaceable fabricated development-password provider using salted `scrypt`; prohibited in staging/production.
+- Identity: server-authoritative local-password staging provider using salted `scrypt`, with a replaceable external-identity boundary for the later approved Entra/customer identity solution.
 - Sessions: random opaque token, peppered token hash at rest, `HttpOnly` cookie, configurable `Secure`, `SameSite=Lax`, expiry and revocation.
 - Documents: private storage interface. Local development writes random, non-public keys outside the public app. Responses expose metadata but never storage paths or public URLs.
 - Audit: append-only table protected by a mutation-rejecting database trigger.
@@ -40,11 +40,13 @@ Copy `.env.example` to an untracked `.env` and provide local values through the 
 ```text
 pnpm install --frozen-lockfile
 pnpm run api:migrate
-pnpm --filter @rhomberg/connect-api seed:fabricated
+pnpm run api:bootstrap-admin
 pnpm run api:start
 ```
 
-Fabricated seeding requires `RHOMBERG_API_ENV=development`, `RHOMBERG_API_DEV_IDENTITY_ENABLED=true`, and a runtime-only `RHOMBERG_API_DEV_SEED_PASSWORD`. The script prints fabricated IDs and `.example.invalid` identities but never prints or stores the supplied password in source.
+Staging and production have no operational seed command. A fresh migrated database contains reference roles and permissions only; it contains no users, companies, customers, RFQs, orders, documents, certificates, notifications, or test-client records. The separate public preview keeps fabricated data in its preview-only build and is compile-time excluded from the staging artifact.
+
+The first Administrator is created through the one-time server-side procedure in [Initial Administrator bootstrap](INITIAL_ADMINISTRATOR_BOOTSTRAP.md). Additional internal staff are created through authenticated Administrator user management.
 
 ## Implemented endpoints
 
@@ -59,6 +61,8 @@ Fabricated seeding requires `RHOMBERG_API_ENV=development`, `RHOMBERG_API_DEV_ID
 - `POST /api/v1/enquiries`
 - `GET /api/v1/enquiries/{id}`
 - `GET /api/v1/documents/{id}` (metadata only; no download route)
+- `GET /api/v1/admin/overview` (authenticated Administrator internal-user directory only)
+- `POST /api/v1/admin/users` (authenticated Administrator internal-user creation only)
 
 All other OpenAPI routes remain proposed and unavailable.
 
@@ -79,8 +83,9 @@ All other OpenAPI routes remain proposed and unavailable.
 - `RHOMBERG_API_STORAGE_ADAPTER`
 - `RHOMBERG_API_LOCAL_STORAGE_ROOT`
 - `RHOMBERG_API_MAX_UPLOAD_BYTES`
-- `RHOMBERG_API_DEV_IDENTITY_ENABLED`
-- `RHOMBERG_API_DEV_SEED_PASSWORD`
+- `RHOMBERG_API_IDENTITY_MODE`
+- `RHOMBERG_API_BOOTSTRAP_USERNAME` (bootstrap process only)
+- `RHOMBERG_API_BOOTSTRAP_PASSWORD` (bootstrap process only)
 - `RHOMBERG_API_ALLOWED_ORIGIN`
 - `RHOMBERG_API_SHUTDOWN_TIMEOUT_MS`
 
@@ -118,7 +123,7 @@ The PostgreSQL deployment uses two identities. The migration identity owns or is
 
 - The slice has not been deployed and has not been exercised against the Rhomberg VM.
 - The test suite uses an in-memory repository and PGlite for deterministic security/migration coverage; staging must repeat migration and concurrency tests on the approved PostgreSQL version.
-- Development password login is not the production identity solution.
+- Local-password staging login is not the production identity solution; Entra ID and the approved external customer identity integration remain outstanding.
 - Local storage is not Azure Blob Storage or approved Windows private storage.
 - No malware scanner, document download, email, push, registration, catalogue API, drafts or later workflow endpoints exist yet.
 - PostgreSQL migration/runtime identities and grants require Innovate IT approval and provisioning.

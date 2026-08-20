@@ -9,7 +9,9 @@ import { ApiError, unauthenticated, validationError } from './errors.js';
 import { secureHashEquals } from './security/crypto.js';
 import { createAuthService } from './services/authService.js';
 import { createEnquiryService } from './services/enquiryService.js';
-import { createDevelopmentIdentityProvider, createUnconfiguredProductionIdentityProvider } from './identity/developmentIdentityProvider.js';
+import { createAdministrationService } from './services/administrationService.js';
+import { createLocalPasswordIdentityProvider, createUnconfiguredExternalIdentityProvider } from './identity/localPasswordIdentityProvider.js';
+import { PERMISSIONS, requirePermission } from './authorization/permissions.js';
 
 const packageFile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../package.json');
 const packageMetadata = JSON.parse(await fs.readFile(packageFile, 'utf8'));
@@ -19,7 +21,7 @@ const approvedDocumentExtension = /\.(?:pdf|docx?|png|jpe?g)$/i;
 
 const publicActor = actor => ({
   id: actor.id, companyId: actor.companyId, company: actor.company, contact: actor.contact,
-  email: actor.email, role: actor.role, roles: actor.roles, permissions: actor.permissions,
+  username: actor.username, email: actor.email, role: actor.role, roles: actor.roles, permissions: actor.permissions,
 });
 
 async function parseEnquiryRequest(request, maxBytes) {
@@ -51,6 +53,7 @@ async function parseEnquiryRequest(request, maxBytes) {
 
 export async function buildApp({ config, repository, storage, identityProvider, logger = true, logStream } = {}) {
   const app = Fastify({
+    ajv: { customOptions: { removeAdditional: false } },
     logger: logger ? {
       level: config.logLevel,
       redact: {
@@ -64,11 +67,12 @@ export async function buildApp({ config, repository, storage, identityProvider, 
     requestIdHeader: 'x-request-id',
     genReqId: request => /^[a-zA-Z0-9._:-]{8,128}$/.test(String(request.headers['x-request-id'] || '')) ? request.headers['x-request-id'] : crypto.randomUUID(),
   });
-  const resolvedIdentityProvider = identityProvider || (config.devIdentityEnabled
-    ? createDevelopmentIdentityProvider({ repository })
-    : createUnconfiguredProductionIdentityProvider());
+  const resolvedIdentityProvider = identityProvider || (config.identityMode === 'local_password'
+    ? createLocalPasswordIdentityProvider({ repository })
+    : createUnconfiguredExternalIdentityProvider());
   const authService = createAuthService({ repository, identityProvider: resolvedIdentityProvider, config });
   const enquiryService = createEnquiryService({ repository, storage });
+  const administrationService = createAdministrationService({ repository });
 
   await app.register(cookie);
   await app.register(multipart, { limits: { files: 1, fileSize: config.maxUploadBytes, fields: 4, parts: 5 } });
@@ -117,7 +121,7 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   }));
   app.post('/api/v1/auth/login', {
     config: { rateLimit: { max: 5, timeWindow: '1 minute', ban: 2 } },
-      schema: { body: { type: 'object', additionalProperties: false, required: ['email', 'password'], properties: { email: { type: 'string', minLength: 3, maxLength: 254 }, password: { type: 'string', minLength: 1, maxLength: 256 } } } },
+      schema: { body: { type: 'object', additionalProperties: false, required: ['password'], anyOf: [{ required: ['identifier'] }, { required: ['email'] }], properties: { identifier: { type: 'string', minLength: 3, maxLength: 254 }, email: { type: 'string', minLength: 3, maxLength: 254 }, password: { type: 'string', minLength: 1, maxLength: 256 } } } },
   }, async (request, reply) => {
     const result = await authService.login({ ...request.body, correlationId: request.id, ipAddress: request.ip, userAgent: request.headers['user-agent'] || '' });
     reply.setCookie(config.cookieName, result.token, { path: '/', httpOnly: true, secure: config.cookieSecure, sameSite: 'lax', maxAge: config.sessionTtlSeconds });
@@ -138,6 +142,24 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   });
   app.get('/api/v1/enquiries/:id', { preHandler: requireAuthentication, schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } } } }, async request => ({ data: await enquiryService.get(request.actor, request.params.id), meta: { requestId: request.id } }));
   app.get('/api/v1/documents/:id', { preHandler: requireAuthentication, schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } } } }, async request => ({ data: await enquiryService.getDocument(request.actor, request.params.id, request.id), meta: { requestId: request.id } }));
+
+  app.get('/api/v1/admin/overview', { preHandler: requireAuthentication }, async request => {
+    requirePermission(request.actor, PERMISSIONS.ADMINISTER_USERS);
+    return { data: await repository.getAdministrationOverview(request.actor), meta: { requestId: request.id } };
+  });
+  app.post('/api/v1/admin/users', {
+    preHandler: requireCsrf,
+    schema: { body: { type: 'object', additionalProperties: false, required: ['displayName', 'username', 'password', 'role'], properties: {
+      displayName: { type: 'string', minLength: 2, maxLength: 160 }, username: { type: 'string', minLength: 3, maxLength: 40 },
+      email: { type: 'string', maxLength: 254 }, password: { type: 'string', minLength: 16, maxLength: 256 },
+      role: { type: 'string', minLength: 3, maxLength: 80 }, reason: { type: 'string', maxLength: 1000 },
+    } } },
+  }, async (request, reply) => {
+    requirePermission(request.actor, PERMISSIONS.ADMINISTER_USERS);
+    const result = await administrationService.createInternalUser(request.actor, request.body, request.id);
+    reply.code(201);
+    return { data: result, meta: { requestId: request.id } };
+  });
 
   app.setNotFoundHandler((request, reply) => reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'The requested endpoint was not found.', correlationId: request.id } }));
   app.setErrorHandler(async (error, request, reply) => {

@@ -25,6 +25,7 @@
     "api:dev": "pnpm --filter @rhomberg/connect-api dev",
     "api:start": "pnpm --filter @rhomberg/connect-api start",
     "api:migrate": "pnpm --filter @rhomberg/connect-api migrate",
+    "api:bootstrap-admin": "pnpm --filter @rhomberg/connect-api bootstrap:admin",
     "api:test": "node --test --test-concurrency=1 apps/api/test/*.test.js",
     "check:production-artifact": "node ./scripts/check-production-artifact.mjs",
     "release:metadata": "node ./scripts/generate-release-metadata.mjs",

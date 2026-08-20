@@ -32,7 +32,7 @@ TO :"runtime_role";
 
 GRANT SELECT, INSERT ON app.sessions TO :"runtime_role";
 GRANT UPDATE (csrf_token_hash, last_seen_at, revoked_at) ON app.sessions TO :"runtime_role";
-GRANT SELECT (id, email, display_name, password_hash, identity_provider, status, disabled_at, deleted_at)
+GRANT SELECT (id, username, email, display_name, password_hash, identity_provider, status, disabled_at, deleted_at)
   ON app.users TO :"runtime_role";
 GRANT UPDATE (last_login_at) ON app.users TO :"runtime_role";
 
@@ -52,5 +52,7 @@ GRANT EXECUTE ON FUNCTION
   app.current_user_id(),
   app.current_company_ids(),
   app.current_context_can_read_audit(),
-  app.current_context_can_view_all_rfqs()
+  app.current_context_can_view_all_rfqs(),
+  app.create_internal_user(uuid, text, text, text, text, text, text),
+  app.list_internal_users()
 TO :"runtime_role";

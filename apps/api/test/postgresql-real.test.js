@@ -25,7 +25,7 @@ const ids = Object.freeze({
 const config = Object.freeze({
   environment: 'test', host: '127.0.0.1', port: 0, logLevel: 'silent', trustProxy: false,
   cookieSecure: false, cookieName: 'rhomberg_pg_test_session', sessionTtlSeconds: 3600,
-  sessionPepper: PEPPER, maxUploadBytes: 4 * 1024 * 1024, allowedOrigin: '', devIdentityEnabled: true,
+  sessionPepper: PEPPER, maxUploadBytes: 4 * 1024 * 1024, allowedOrigin: '', identityMode: 'local_password',
   shutdownTimeoutMs: 1000,
 });
 

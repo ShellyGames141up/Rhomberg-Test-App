@@ -28,7 +28,7 @@ export async function createFixture() {
     products: [{ id: 'fabricated-pressure-gauge', code: 'DEMO-PG', name: 'Fabricated pressure gauge' }, { id: 'fabricated-temperature-gauge', code: 'DEMO-TG', name: 'Fabricated temperature gauge' }],
   });
   const storage = createMemoryPrivateStorage();
-  const config = Object.freeze({ environment: 'test', host: '127.0.0.1', port: 0, logLevel: 'silent', trustProxy: false, cookieSecure: false, cookieName: 'rhomberg_test_session', sessionTtlSeconds: 3600, sessionPepper: 'fabricated-test-pepper-at-least-32-characters', maxUploadBytes: 4 * 1024 * 1024, allowedOrigin: '', devIdentityEnabled: true, shutdownTimeoutMs: 1000 });
+  const config = Object.freeze({ environment: 'test', host: '127.0.0.1', port: 0, logLevel: 'silent', trustProxy: false, cookieSecure: false, cookieName: 'rhomberg_test_session', sessionTtlSeconds: 3600, sessionPepper: 'fabricated-test-pepper-at-least-32-characters', maxUploadBytes: 4 * 1024 * 1024, allowedOrigin: '', identityMode: 'local_password', shutdownTimeoutMs: 1000 });
   const app = await buildApp({ config, repository, storage, logger: false });
   return { app, repository, storage, config };
 }

@@ -4,16 +4,16 @@ import { hashSessionToken, randomToken, sha256 } from '../security/crypto.js';
 
 const safeUser = actor => ({
   id: actor.id, companyId: actor.companyId, company: actor.company, contact: actor.contact,
-  email: actor.email, role: actor.role, roles: actor.roles, permissions: actor.permissions,
+  username: actor.username, email: actor.email, role: actor.role, roles: actor.roles, permissions: actor.permissions,
 });
 
 export function createAuthService({ repository, identityProvider, config, now = () => new Date() }) {
   return {
-    async login({ email, password, correlationId, ipAddress = '', userAgent = '' }) {
-      const user = await identityProvider.authenticate({ email, password });
+    async login({ identifier, email, password, correlationId, ipAddress = '', userAgent = '' }) {
+      const user = await identityProvider.authenticate({ identifier: identifier || email, password });
       if (!user) {
         await repository.appendAudit({ eventType: 'auth.login_failed', actorUserId: null, actorRole: null, companyId: null, action: 'login', entityType: 'session', entityId: null, outcome: 'failed', correlationId, details: { reason: 'invalid_credentials' } });
-        throw new ApiError('INVALID_CREDENTIALS', 'The email address or password is incorrect.', 401);
+        throw new ApiError('INVALID_CREDENTIALS', 'The sign-in name or password is incorrect.', 401);
       }
       const token = randomToken(); const csrfToken = randomToken();
       const expiresAt = new Date(now().getTime() + config.sessionTtlSeconds * 1000).toISOString();

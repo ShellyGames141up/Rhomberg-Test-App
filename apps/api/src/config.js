@@ -25,7 +25,7 @@ export function loadConfig(env = process.env) {
     storageAdapter: env.RHOMBERG_API_STORAGE_ADAPTER || 'local',
     localStorageRoot: path.resolve(env.RHOMBERG_API_LOCAL_STORAGE_ROOT || './private/api-documents'),
     maxUploadBytes: integerValue(env.RHOMBERG_API_MAX_UPLOAD_BYTES, 4 * 1024 * 1024),
-    devIdentityEnabled: booleanValue(env.RHOMBERG_API_DEV_IDENTITY_ENABLED),
+    identityMode: env.RHOMBERG_API_IDENTITY_MODE || 'external',
     allowedOrigin: env.RHOMBERG_API_ALLOWED_ORIGIN || '',
     shutdownTimeoutMs: integerValue(env.RHOMBERG_API_SHUTDOWN_TIMEOUT_MS, 10000),
   };
@@ -45,8 +45,8 @@ export function loadConfig(env = process.env) {
   if (['staging', 'production'].includes(config.environment) && !config.cookieSecure) {
     throw new ApiError('INVALID_CONFIGURATION', 'Secure session cookies are required outside local development.', 500);
   }
-  if (['staging', 'production'].includes(config.environment) && config.devIdentityEnabled) {
-    throw new ApiError('INVALID_CONFIGURATION', 'The fabricated development identity provider cannot run in staging or production.', 500);
+  if (!['local_password', 'external'].includes(config.identityMode)) {
+    throw new ApiError('INVALID_CONFIGURATION', 'RHOMBERG_API_IDENTITY_MODE must be local_password or external.', 500);
   }
   if (config.storageAdapter !== 'local') {
     throw new ApiError('INVALID_CONFIGURATION', 'Only the local private-storage adapter is available in Phase 1.', 500);

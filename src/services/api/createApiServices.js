@@ -352,7 +352,14 @@ export function createApiServices(config = {}) {
 
   const administration = {
     getOverview: () => client.get('/administration/overview'),
-    createEmployee: input => client.post('/admin/users', input),
+    createEmployee: input => client.post('/admin/users', {
+      displayName: input.values?.displayName,
+      username: input.values?.username,
+      email: input.values?.email || '',
+      password: input.values?.password || '',
+      role: input.values?.primaryRole,
+      reason: input.reason || '',
+    }),
     assignAccountRoles: (accountId, input) => client.post(`/admin/users/${encodeURIComponent(accountId)}/roles`, input),
     assignAccountBranch: (accountId, input) => client.post(`/admin/users/${encodeURIComponent(accountId)}/branch`, input),
     resetUserLogin: (accountId, input) => client.post(`/admin/users/${encodeURIComponent(accountId)}/temporary-password`, input),

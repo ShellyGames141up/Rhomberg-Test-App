@@ -2,9 +2,9 @@
 
 ## Phase 1 production API foundation
 
-`apps/api` now contains the first local, server-backed `/api/v1` vertical slice for Rhomberg Connect 5.2.0. It proves fabricated-user authentication, opaque server sessions, database-derived company/role permissions, customer RFQ creation and retrieval, private document metadata, append-only audit evidence and persisted in-app notification creation. The API is intentionally local-only at this phase: it is not deployed, does not connect to company infrastructure and must not contain real data.
+`apps/api` now contains the first local, server-backed `/api/v1` vertical slice for Rhomberg Connect 5.2.0. It proves server-side local-password authentication, opaque server sessions, database-derived company/role permissions, customer RFQ creation and retrieval, private document metadata, append-only audit evidence and persisted in-app notification creation. The API is intentionally local-only at this phase: it is not deployed, does not connect to company infrastructure and must not contain real data.
 
-The existing GitHub Pages and Executive Demo previews remain independent and mock-based. Production frontend builds remain API-only and continue to exclude demonstration accounts and browser-local operational persistence. Start with [Phase 1 backend foundation](docs/PHASE1_BACKEND_FOUNDATION.md) for architecture, setup, security boundaries and Windows staging expectations. The API requires Node.js 22 and pnpm 11.19.0.
+The existing GitHub Pages and Executive Demo previews remain independent and mock-based. Production frontend builds remain API-only and continue to exclude demonstration accounts, passwords, Preview Centre/Executive Demo controls, mock services and browser-local operational persistence. A fresh staging database contains no operational records. The initial Administrator is created once through a server-only, database-authoritative bootstrap; additional staff must be created through authenticated Administrator user management. Start with [Phase 1 backend foundation](docs/PHASE1_BACKEND_FOUNDATION.md) and [Initial Administrator bootstrap](docs/INITIAL_ADMINISTRATOR_BOOTSTRAP.md). The API requires Node.js 22 and pnpm 11.19.0.
 
 ## Secure employee account management
 
@@ -89,13 +89,13 @@ Use the normal Application link above to open the shared splash and sign-in jour
 - Front end: React 19 and shared CSS
 - Current public service: browser-local mock adapter
 - Future service: private backend API through the interchangeable API adapter
-- Database: proposed PostgreSQL schema only; no database is connected
-- Authentication: fabricated mock identities only; production identity is not connected
+- Database: versioned PostgreSQL migrations and tested Phase 1 repository; no company database is connected
+- Authentication: server-side local-password staging foundation and one-time Administrator bootstrap; production identity providers are not connected
 - Documents: generated or simulated in the browser; production private storage is not connected
 - Email and push: simulated only
 - Production deployment: not started
 - Current `main` scope: representative-loaded customer orders, controlled Laboratory calibration and RFQ Technical Support are integrated in mock mode
-- Current verification: 96 React source files compile; 40 automated modules, the shared build, all five preview builds, the GitHub Pages artifact and the API-only production candidate pass their final checks
+- Current verification: 96 React source files compile; 41 application test modules plus the backend suite, the shared build, all five preview builds, the GitHub Pages artifact and the API-only production candidate pass their final checks
 
 ## Innovate IT handover
 

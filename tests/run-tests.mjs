@@ -38,3 +38,4 @@ await import('./final-completion-report.test.mjs');
 await import('./pre-server-readiness.test.mjs');
 await import('./windows-staging-packaging.test.mjs');
 await import('./final-release-verification.test.mjs');
+await import('./staging-identity-boundary.test.mjs');

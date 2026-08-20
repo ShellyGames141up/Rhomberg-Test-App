@@ -17,6 +17,7 @@ function assertConfiguration(product, configuration) {
 
 const actorFromRows = (user, roles, permissions, companies, representative) => ({
   id: user.id,
+  username: user.username || null,
   email: user.email,
   contact: user.display_name,
   displayName: user.display_name,
@@ -147,10 +148,11 @@ export function createPostgresRepository(pool) {
       return result.rows[0]?.ok === 1;
     },
     async close() { await pool.end(); },
-    async findUserByEmail(email) {
+    async findUserByIdentifier(identifier) {
       return inTransaction(async client => {
-        const result = await client.query(`SELECT id, email, display_name, password_hash, identity_provider,
-          status, disabled_at, deleted_at FROM app.users WHERE email = lower($1) AND deleted_at IS NULL`, [email]);
+        const result = await client.query(`SELECT id, username, email, display_name, password_hash, identity_provider,
+          status, disabled_at, deleted_at FROM app.users
+          WHERE (lower(username) = lower($1) OR email = lower($1)) AND deleted_at IS NULL`, [identifier]);
         return result.rows[0] || null;
       }, { authLookup: true });
     },
@@ -163,7 +165,7 @@ export function createPostgresRepository(pool) {
     async getSessionActor(tokenHash) {
       return inTransaction(async client => {
         const result = await client.query(`SELECT s.id AS session_id, s.user_id AS id, s.csrf_token_hash,
-          s.expires_at, u.email, u.display_name, u.identity_provider, u.status
+          s.expires_at, u.username, u.email, u.display_name, u.identity_provider, u.status
           FROM app.sessions s JOIN app.users u ON u.id = s.user_id
           WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now() AND u.deleted_at IS NULL`, [tokenHash]);
         const row = result.rows[0];
@@ -190,6 +192,49 @@ export function createPostgresRepository(pool) {
         event.eventType, event.actorUserId, event.actorRole, event.companyId, event.action,
         event.entityType, event.entityId, event.outcome, event.correlationId, json(event.details),
       ]), { authLookup: true });
+    },
+    async getAdministrationOverview(actor) {
+      return inTransaction(async client => {
+        const [users, roles, permissions, rolePermissions] = await Promise.all([
+          client.query('SELECT * FROM app.list_internal_users()'),
+          client.query("SELECT code, name FROM app.roles WHERE is_internal AND is_active AND code <> 'administrator' ORDER BY name"),
+          client.query('SELECT code FROM app.permissions WHERE is_active ORDER BY code'),
+          client.query('SELECT role_code, permission_code FROM app.role_permissions ORDER BY role_code, permission_code'),
+        ]);
+        const mappedUsers = users.rows.map(user => ({
+          id: user.id, contact: user.display_name, displayName: user.display_name,
+          email: user.email, signInName: user.username, username: user.username,
+          role: user.role_codes[0], roles: user.role_codes, permissions: [], company: 'Internal',
+          category: 'internal', department: '', branchId: '', status: user.status,
+          lastLoginAt: user.last_login_at, createdAt: user.created_at, loginHistoryCount: 0,
+          notificationPreferences: {},
+        }));
+        return {
+          summary: { users: mappedUsers.length, customerCompanies: 0, internalAccounts: mappedUsers.length, auditEvents: 0 },
+          users: mappedUsers, companies: [], representatives: [], branches: [], departments: [],
+          accountStatuses: ['active', 'disabled', 'archived'], authenticationTypes: ['password'],
+          activationMethods: ['administrator_temporary_password'], correctionRecords: [], archivedRecords: [],
+          roles: roles.rows.map(role => ({ id: role.code, label: role.name, permissions: rolePermissions.rows.filter(item => item.role_code === role.code).map(item => item.permission_code) })),
+          permissions: permissions.rows.map(item => item.code), catalogue: { categories: [], products: [] }, configurations: {},
+        };
+      }, { actor });
+    },
+    async createInternalUser(actor, command) {
+      try {
+        return await inTransaction(async client => {
+          const result = await client.query(`SELECT * FROM app.create_internal_user($1,$2,$3,$4,$5,$6,$7)`, [
+            command.id, command.username, command.email, command.displayName, command.passwordHash,
+            command.role, command.correlationId,
+          ]);
+          const row = result.rows[0];
+          return { id: row.id, username: row.username, email: row.email, displayName: row.display_name, role: row.role_code, status: row.status, createdAt: row.created_at };
+        }, { actor });
+      } catch (error) {
+        if (error.code === '23505') {
+          error.code = 'CONFLICT'; error.statusCode = 409; error.message = 'That sign-in name or email is already in use.';
+        }
+        throw error;
+      }
     },
     async listEnquiries(actor) {
       return inTransaction(async client => {

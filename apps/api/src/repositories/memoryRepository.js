@@ -13,8 +13,8 @@ export function createMemoryRepository(seed = {}) {
   };
 
   const actorForUser = user => ({
-    id: user.id, email: user.email, contact: user.displayName, displayName: user.displayName,
-    status: user.status, identityProvider: user.identityProvider || 'development_password',
+    id: user.id, username: user.username || null, email: user.email, contact: user.displayName, displayName: user.displayName,
+    status: user.status, identityProvider: user.identityProvider || 'local_password',
     role: user.roles[0], roles: [...user.roles], permissions: [...user.permissions],
     companyIds: [...user.companyIds], companyId: user.companyIds[0] || null,
     company: state.companies.find(company => company.id === user.companyIds[0])?.name || '',
@@ -28,7 +28,10 @@ export function createMemoryRepository(seed = {}) {
     _state: state,
     async health() { return true; },
     async close() {},
-    async findUserByEmail(email) { return clone(state.users.find(user => user.email === email.toLowerCase()) || null); },
+    async findUserByIdentifier(identifier) {
+      const normalised = String(identifier || '').toLowerCase();
+      return clone(state.users.find(user => String(user.username || '').toLowerCase() === normalised || String(user.email || '').toLowerCase() === normalised) || null);
+    },
     async createSession(session) { state.sessions.push(clone({ ...session, revokedAt: null })); },
     async getSessionActor(tokenHash) {
       const session = state.sessions.find(item => item.tokenHash === tokenHash && !item.revokedAt && new Date(item.expiresAt) > new Date());
@@ -50,6 +53,40 @@ export function createMemoryRepository(seed = {}) {
       if (user) user.lastLoginAt = new Date().toISOString();
     },
     async appendAudit(event) { state.audits.push(clone({ id: state.audits.length + 1, ...event, createdAt: new Date().toISOString() })); },
+    async getAdministrationOverview(actor) {
+      if (!actor.permissions.includes('administer_users')) {
+        const error = new Error('You are not authorised to perform this action.'); error.code = 'FORBIDDEN'; error.statusCode = 403; throw error;
+      }
+      const users = state.users.filter(user => user.roles.some(role => role !== 'customer')).map(user => ({
+        id: user.id, contact: user.displayName, displayName: user.displayName, email: user.email,
+        signInName: user.username, username: user.username, role: user.roles[0], roles: [...user.roles],
+        permissions: [...user.permissions], company: 'Internal', category: 'internal', department: '', branchId: '',
+        status: user.status, lastLoginAt: user.lastLoginAt || null, createdAt: user.createdAt || null,
+        loginHistoryCount: 0, notificationPreferences: {},
+      }));
+      return clone({
+        summary: { users: users.length, customerCompanies: 0, internalAccounts: users.length, auditEvents: state.audits.length },
+        users, companies: [], representatives: [], branches: [], departments: [], accountStatuses: ['active', 'disabled', 'archived'],
+        authenticationTypes: ['password'], activationMethods: ['administrator_temporary_password'], correctionRecords: [], archivedRecords: [],
+        roles: [{ id: 'sales_representative', label: 'Sales representative', permissions: ['view_assigned_rfqs'] }, { id: 'manager', label: 'Manager', permissions: ['view_all_rfqs'] }],
+        permissions: [], catalogue: { categories: [], products: [] }, configurations: {},
+      });
+    },
+    async createInternalUser(actor, command) {
+      if (!actor.permissions.includes('administer_users')) {
+        const error = new Error('You are not authorised to perform this action.'); error.code = 'FORBIDDEN'; error.statusCode = 403; throw error;
+      }
+      if (command.role === 'administrator' || command.role === 'customer') {
+        const error = new Error('Select an approved internal employee role.'); error.code = 'VALIDATION_ERROR'; error.statusCode = 422; throw error;
+      }
+      if (state.users.some(user => String(user.username || '').toLowerCase() === command.username.toLowerCase() || (command.email && user.email === command.email))) {
+        const error = new Error('That sign-in name or email is already in use.'); error.code = 'CONFLICT'; error.statusCode = 409; throw error;
+      }
+      const createdAt = new Date().toISOString();
+      state.users.push({ id: command.id, username: command.username, email: command.email, displayName: command.displayName, passwordHash: command.passwordHash, status: 'active', identityProvider: 'local_password', roles: [command.role], permissions: [], companyIds: [] });
+      state.audits.push({ id: state.audits.length + 1, eventType: 'administrator.internal_user_created', actorUserId: actor.id, actorRole: actor.role, companyId: null, action: 'create_internal_user', entityType: 'user', entityId: command.id, outcome: 'success', correlationId: command.correlationId, details: { role: command.role }, createdAt });
+      return clone({ id: command.id, username: command.username, email: command.email, displayName: command.displayName, role: command.role, status: 'active', createdAt });
+    },
     async listEnquiries(actor) { return clone(state.enquiries.filter(item => canRead(actor, item))); },
     async getEnquiry(actor, id) {
       const enquiry = state.enquiries.find(item => item.id === id);
