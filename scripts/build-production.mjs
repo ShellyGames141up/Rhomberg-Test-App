@@ -7,6 +7,7 @@ import {
   PRODUCTION_ASSETS,
   PRODUCTION_PRECACHE_FILES,
 } from './production-assets.mjs';
+import { validateCatalogueAssetFiles } from './catalogue-assets.mjs';
 
 const root = process.cwd();
 const output = path.resolve(root, 'dist-production');
@@ -16,6 +17,8 @@ if (output !== expectedOutput || path.dirname(output) !== root) throw new Error(
 const packageMetadata = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
 const commitSha = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
 const cacheName = `rhomberg-connect-staging-v${packageMetadata.version}-${commitSha}`;
+
+validateCatalogueAssetFiles(root);
 
 await fs.rm(output, { recursive: true, force: true });
 await fs.mkdir(output, { recursive: true });

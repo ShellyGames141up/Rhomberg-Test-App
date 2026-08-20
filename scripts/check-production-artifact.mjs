@@ -7,6 +7,7 @@ import {
   PRODUCTION_PRECACHE_FILES,
   PRODUCTION_ROOT_FILES,
 } from './production-assets.mjs';
+import { validateCatalogueAssetFiles } from './catalogue-assets.mjs';
 
 const root = process.cwd();
 const defaultOutput = path.resolve(root, 'dist-production');
@@ -37,6 +38,7 @@ const parsePrecache = source => {
 export async function validateProductionArtifact(output = defaultOutput) {
   const resolvedOutput = path.resolve(output);
   assert(resolvedOutput === defaultOutput, `Refusing to inspect unexpected production path: ${resolvedOutput}`);
+  validateCatalogueAssetFiles(root);
   const files = await collectFiles(resolvedOutput);
   const relativeFiles = files.map(file => normalise(path.relative(resolvedOutput, file))).sort();
   const allowedFiles = new Set([...PRODUCTION_ROOT_FILES, ...PRODUCTION_ASSETS, ...releaseMetadataFiles]);
@@ -120,6 +122,7 @@ export async function validateProductionArtifact(output = defaultOutput) {
     precacheTargets: precache.length,
     validations: [
       'approved-file allowlist',
+      'catalogue reference integrity',
       'public artifact privacy scan',
       'demo/mock/secret/path scan',
       'runtime configuration',

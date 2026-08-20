@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { validateProductionArtifact } from '../scripts/check-production-artifact.mjs';
-import { PRODUCTION_ASSETS, PRODUCTION_PRECACHE_FILES, PUBLIC_CATALOGUE_PDFS } from '../scripts/production-assets.mjs';
+import { CATALOGUE_ASSET_MANIFEST, PRODUCTION_ASSETS, PRODUCTION_PRECACHE_FILES, PRODUCTION_ROOT_FILES, PUBLIC_CATALOGUE_PDFS } from '../scripts/production-assets.mjs';
 
 const packageMetadata = JSON.parse(readFileSync('package.json', 'utf8'));
 assert.equal(packageMetadata.version, '5.2.0', 'Windows staging uses the approved 5.2.0 baseline');
@@ -17,7 +17,8 @@ assert.deepEqual(PUBLIC_CATALOGUE_PDFS.map(item => path.basename(item.path)).sor
   'RPT106-product-sheet.pdf',
   'Temperature-ordering-guide.pdf',
   'Utility-gauge-overview.pdf',
-].sort(), 'the five staging-approved catalogue PDFs must remain in the production allowlist');
+].sort(), 'the complete repository-backed customer PDF set must remain in the catalogue manifest');
+assert.equal(CATALOGUE_ASSET_MANIFEST.length, 68, 'all product images, catalogue support images and documents currently referenced by the application must be approved');
 
 execFileSync(process.execPath, ['scripts/build-production.mjs'], { stdio: 'pipe' });
 const result = await validateProductionArtifact();
@@ -49,14 +50,15 @@ const releaseManifest = JSON.parse(readFileSync('dist-production/release-manifes
 assert.equal(releaseManifest.applicationVersion, packageMetadata.version);
 assert.equal(releaseManifest.buildCommand, 'pnpm run build:production');
 assert.equal(releaseManifest.backendCompatibility.status, 'not-included');
-assert.equal(releaseManifest.artifactCount, 96);
-assert.equal(releaseManifest.artifacts.length, 96);
+const expectedPayloadFiles = PRODUCTION_ROOT_FILES.length + PRODUCTION_ASSETS.length;
+assert.equal(releaseManifest.artifactCount, expectedPayloadFiles);
+assert.equal(releaseManifest.artifacts.length, expectedPayloadFiles);
 assert.deepEqual(
   releaseManifest.artifacts.map(entry => entry.path),
   [...releaseManifest.artifacts.map(entry => entry.path)].sort((left, right) => left.localeCompare(right)),
   'release manifest files must be deterministically ordered',
 );
-assert.equal(readFileSync('dist-production/CHECKSUMS.sha256', 'utf8').trim().split('\n').length, 96);
+assert.equal(readFileSync('dist-production/CHECKSUMS.sha256', 'utf8').trim().split('\n').length, expectedPayloadFiles);
 assert.match(readFileSync('dist-production/VALIDATION.txt', 'utf8'), /PASS: service-worker precache existence/);
 
 console.log('Windows static staging packaging, allowlist, metadata and IIS safeguards passed.');
