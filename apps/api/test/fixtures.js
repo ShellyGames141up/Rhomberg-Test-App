@@ -11,7 +11,7 @@ export const ids = Object.freeze({
   representativeA: '30000000-0000-4000-8000-000000000001', representativeB: '30000000-0000-4000-8000-000000000002',
 });
 
-export async function createFixture() {
+export async function createFixture({ configOverrides = {}, logger = false, logStream } = {}) {
   const passwordHash = await hashPassword(FABRICATED_PASSWORD);
   const repository = createMemoryRepository({
     companies: [{ id: ids.companyA, name: 'Fabricated Company A' }, { id: ids.companyB, name: 'Fabricated Company B' }],
@@ -28,13 +28,13 @@ export async function createFixture() {
     products: [{ id: 'fabricated-pressure-gauge', code: 'DEMO-PG', name: 'Fabricated pressure gauge' }, { id: 'fabricated-temperature-gauge', code: 'DEMO-TG', name: 'Fabricated temperature gauge' }],
   });
   const storage = createMemoryPrivateStorage();
-  const config = Object.freeze({ environment: 'test', host: '127.0.0.1', port: 0, logLevel: 'silent', trustProxy: false, cookieSecure: false, cookieName: 'rhomberg_test_session', sessionTtlSeconds: 3600, sessionPepper: 'fabricated-test-pepper-at-least-32-characters', maxUploadBytes: 4 * 1024 * 1024, allowedOrigin: '', identityMode: 'local_password', shutdownTimeoutMs: 1000 });
-  const app = await buildApp({ config, repository, storage, logger: false });
+  const config = Object.freeze({ environment: 'test', host: '127.0.0.1', port: 0, logLevel: 'silent', trustProxy: false, cookieSecure: false, cookieName: 'rhomberg_test_session', sessionTtlSeconds: 3600, sessionPepper: 'fabricated-test-pepper-at-least-32-characters', maxUploadBytes: 4 * 1024 * 1024, allowedOrigins: [], identityMode: 'local_password', shutdownTimeoutMs: 1000, ...configOverrides });
+  const app = await buildApp({ config, repository, storage, logger, logStream });
   return { app, repository, storage, config };
 }
 
-export async function login(app, email = 'customer.a@example.invalid', password = FABRICATED_PASSWORD) {
-  const response = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email, password } });
+export async function login(app, email = 'customer.a@example.invalid', password = FABRICATED_PASSWORD, origin) {
+  const response = await app.inject({ method: 'POST', url: '/api/v1/auth/login', headers: origin ? { origin } : undefined, payload: { email, password } });
   const body = response.json();
   const cookie = response.headers['set-cookie']?.split(';')[0] || '';
   return { response, body, cookie, csrf: body.data?.csrfToken };
@@ -45,6 +45,6 @@ export const validRfq = (representativeId = ids.representativeA) => ({
   items: [{ lineId: randomUUID(), productId: 'fabricated-pressure-gauge', quantity: 2, configuration: { dialSize: '100 mm', range: '0 to 10 bar' } }],
 });
 
-export async function createRfq(app, auth, payload = validRfq(), key = `fabricated-${randomUUID()}`) {
-  return app.inject({ method: 'POST', url: '/api/v1/enquiries', headers: { cookie: auth.cookie, 'x-csrf-token': auth.csrf, 'idempotency-key': key }, payload });
+export async function createRfq(app, auth, payload = validRfq(), key = `fabricated-${randomUUID()}`, origin) {
+  return app.inject({ method: 'POST', url: '/api/v1/enquiries', headers: { ...(origin ? { origin } : {}), cookie: auth.cookie, 'x-csrf-token': auth.csrf, 'idempotency-key': key }, payload });
 }

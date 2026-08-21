@@ -16,6 +16,14 @@ import { PERMISSIONS, requirePermission } from './authorization/permissions.js';
 const packageFile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../package.json');
 const packageMetadata = JSON.parse(await fs.readFile(packageFile, 'utf8'));
 const unsafeMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const corsMethods = new Set(['GET', 'POST', 'OPTIONS']);
+const corsHeaders = new Map([
+  ['accept', 'Accept'],
+  ['content-type', 'Content-Type'],
+  ['idempotency-key', 'Idempotency-Key'],
+  ['x-csrf-token', 'X-CSRF-Token'],
+  ['x-request-id', 'X-Request-ID'],
+]);
 const approvedDocumentTypes = new Set(['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/png', 'image/jpeg']);
 const approvedDocumentExtension = /\.(?:pdf|docx?|png|jpe?g)$/i;
 
@@ -73,6 +81,8 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   const authService = createAuthService({ repository, identityProvider: resolvedIdentityProvider, config });
   const enquiryService = createEnquiryService({ repository, storage });
   const administrationService = createAdministrationService({ repository });
+  const approvedOrigins = new Set(config.allowedOrigins || (config.allowedOrigin ? [config.allowedOrigin] : []));
+  const requiresApprovedMutationOrigin = ['staging', 'production'].includes(config.environment);
 
   await app.register(cookie);
   await app.register(multipart, { limits: { files: 1, fileSize: config.maxUploadBytes, fields: 4, parts: 5 } });
@@ -85,8 +95,28 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   app.addHook('onRequest', async (request, reply) => {
     reply.header('X-Request-ID', request.id);
     if (request.url.startsWith('/api/')) reply.header('Cache-Control', 'no-store');
-    if (unsafeMethods.has(request.method) && request.headers.origin && config.allowedOrigin && request.headers.origin !== config.allowedOrigin) {
-      throw new ApiError('INVALID_ORIGIN', 'The request origin is not authorised.', 403);
+    const isApiRequest = request.url.startsWith('/api/');
+    const origin = String(request.headers.origin || '');
+    if (isApiRequest && origin) {
+      if (!approvedOrigins.has(origin)) throw new ApiError('INVALID_ORIGIN', 'The request origin is not authorised.', 403);
+      reply.header('Access-Control-Allow-Origin', origin);
+      reply.header('Access-Control-Allow-Credentials', 'true');
+      reply.header('Vary', 'Origin');
+    }
+    if (isApiRequest && request.method === 'OPTIONS') {
+      if (!origin) throw new ApiError('INVALID_ORIGIN', 'An approved request origin is required.', 403);
+      const requestedMethod = String(request.headers['access-control-request-method'] || '').toUpperCase();
+      if (!corsMethods.has(requestedMethod) || requestedMethod === 'OPTIONS') throw new ApiError('CORS_METHOD_REJECTED', 'The requested cross-origin method is not permitted.', 403);
+      const requestedHeaders = String(request.headers['access-control-request-headers'] || '')
+        .split(',').map(header => header.trim().toLowerCase()).filter(Boolean);
+      if (requestedHeaders.some(header => !corsHeaders.has(header))) throw new ApiError('CORS_HEADERS_REJECTED', 'The requested cross-origin headers are not permitted.', 403);
+      reply.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      reply.header('Access-Control-Allow-Headers', [...corsHeaders.values()].join(', '));
+      reply.header('Access-Control-Max-Age', '600');
+      return reply.code(204).send();
+    }
+    if (isApiRequest && unsafeMethods.has(request.method) && requiresApprovedMutationOrigin && !origin) {
+      throw new ApiError('INVALID_ORIGIN', 'An approved request origin is required.', 403);
     }
     const token = request.cookies[config.cookieName];
     if (token) {

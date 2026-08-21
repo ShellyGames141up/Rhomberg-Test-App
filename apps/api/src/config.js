@@ -7,8 +7,41 @@ const integerValue = (value, fallback) => {
   return Number.isInteger(parsed) ? parsed : fallback;
 };
 
+const stagingOrigins = new Set([
+  'https://connect.rhomberg.co.za:8443',
+  'https://app.connect.rhomberg.co.za',
+]);
+
+export function parseApprovedOrigins(value, environment) {
+  const entries = String(value || '').split(',').map(entry => entry.trim());
+  if (!entries.some(Boolean)) return Object.freeze([]);
+  if (entries.some(entry => !entry)) throw new ApiError('INVALID_CONFIGURATION', 'Approved origins must not contain empty entries.', 500);
+  const origins = entries.map(entry => {
+    if (entry.includes('*')) throw new ApiError('INVALID_CONFIGURATION', 'Wildcard origins are not permitted.', 500);
+    let parsed;
+    try { parsed = new URL(entry); } catch { throw new ApiError('INVALID_CONFIGURATION', 'An approved origin is malformed.', 500); }
+    if (parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) {
+      throw new ApiError('INVALID_CONFIGURATION', 'Approved origins must be origins only and cannot contain credentials, paths, queries or fragments.', 500);
+    }
+    if (['staging', 'production'].includes(environment)) {
+      if (parsed.protocol !== 'https:' || !stagingOrigins.has(parsed.origin)) {
+        throw new ApiError('INVALID_CONFIGURATION', 'Only reviewed Rhomberg HTTPS application origins are permitted outside local development.', 500);
+      }
+    } else if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new ApiError('INVALID_CONFIGURATION', 'Approved origins must use HTTP or HTTPS.', 500);
+    }
+    return parsed.origin;
+  });
+  if (new Set(origins).size !== origins.length) throw new ApiError('INVALID_CONFIGURATION', 'Approved origins must be unique.', 500);
+  return Object.freeze(origins);
+}
+
 export function loadConfig(env = process.env) {
   const environment = env.RHOMBERG_API_ENV || 'development';
+  if (env.RHOMBERG_API_ALLOWED_ORIGINS && env.RHOMBERG_API_ALLOWED_ORIGIN) {
+    throw new ApiError('INVALID_CONFIGURATION', 'Use RHOMBERG_API_ALLOWED_ORIGINS only; do not configure both origin variables.', 500);
+  }
+  const allowedOrigins = parseApprovedOrigins(env.RHOMBERG_API_ALLOWED_ORIGINS ?? env.RHOMBERG_API_ALLOWED_ORIGIN, environment);
   const config = {
     environment,
     host: env.RHOMBERG_API_HOST || '127.0.0.1',
@@ -26,7 +59,7 @@ export function loadConfig(env = process.env) {
     localStorageRoot: path.resolve(env.RHOMBERG_API_LOCAL_STORAGE_ROOT || './private/api-documents'),
     maxUploadBytes: integerValue(env.RHOMBERG_API_MAX_UPLOAD_BYTES, 4 * 1024 * 1024),
     identityMode: env.RHOMBERG_API_IDENTITY_MODE || 'external',
-    allowedOrigin: env.RHOMBERG_API_ALLOWED_ORIGIN || '',
+    allowedOrigins,
     shutdownTimeoutMs: integerValue(env.RHOMBERG_API_SHUTDOWN_TIMEOUT_MS, 10000),
   };
 
@@ -51,8 +84,8 @@ export function loadConfig(env = process.env) {
   if (config.storageAdapter !== 'local') {
     throw new ApiError('INVALID_CONFIGURATION', 'Only the local private-storage adapter is available in Phase 1.', 500);
   }
-  if (['staging', 'production'].includes(config.environment) && (!config.allowedOrigin.startsWith('https://'))) {
-    throw new ApiError('INVALID_CONFIGURATION', 'An approved HTTPS RHOMBERG_API_ALLOWED_ORIGIN is required outside local development.', 500);
+  if (['staging', 'production'].includes(config.environment) && config.allowedOrigins.length === 0) {
+    throw new ApiError('INVALID_CONFIGURATION', 'RHOMBERG_API_ALLOWED_ORIGINS must contain at least one approved HTTPS origin outside local development.', 500);
   }
   return Object.freeze(config);
 }

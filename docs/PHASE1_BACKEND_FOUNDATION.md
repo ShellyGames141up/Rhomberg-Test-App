@@ -86,8 +86,16 @@ All other OpenAPI routes remain proposed and unavailable.
 - `RHOMBERG_API_IDENTITY_MODE`
 - `RHOMBERG_API_BOOTSTRAP_USERNAME` (bootstrap process only)
 - `RHOMBERG_API_BOOTSTRAP_PASSWORD` (bootstrap process only)
-- `RHOMBERG_API_ALLOWED_ORIGIN`
+- `RHOMBERG_API_ALLOWED_ORIGINS`
 - `RHOMBERG_API_SHUTDOWN_TIMEOUT_MS`
+
+For controlled staging, `RHOMBERG_API_ALLOWED_ORIGINS` is a comma-separated,
+exact-origin allowlist. The reviewed origins are
+`https://connect.rhomberg.co.za:8443` and
+`https://app.connect.rhomberg.co.za`. Wildcards, HTTP origins, URL credentials,
+paths, queries, fragments, and unreviewed hosts or ports fail configuration.
+Credentialed CORS does not replace the existing secure session-cookie and CSRF
+checks; both remain mandatory for authenticated mutations.
 
 ## Windows Server staging expectations
 
