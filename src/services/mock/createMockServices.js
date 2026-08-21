@@ -2213,7 +2213,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         }
       }
 
-      const validated = validateRepresentativeLoadedOrder(input);
+      const validated = validateRepresentativeLoadedOrder(input, { today: now().toISOString().slice(0, 10) });
       const candidate = validated.order;
       validateConfiguredProducts(candidate.items);
       const customerAccounts = representativeOrderCustomersFor(account);
