@@ -90,7 +90,7 @@ assert.equal(manifest.start_url, './app/');
 assert.ok(manifest.shortcuts.some(shortcut => shortcut.url === './preview/customer-mobile/'));
 assert.ok(manifest.shortcuts.some(shortcut => shortcut.url === './preview/internal-desktop/'));
 const capacitorConfig = JSON.parse(readFileSync(path.resolve('capacitor.config.json'), 'utf8'));
-assert.equal(capacitorConfig.webDir, 'dist-production');
+assert.equal(capacitorConfig.webDir, 'dist-internal-staging');
 assert.match(capacitorConfig.appId, /^[a-z][a-z0-9]*(\.[a-z0-9]+)+$/);
 const deliveryStrategy = readFileSync(path.resolve('docs', 'DELIVERY_STRATEGY.md'), 'utf8');
 for (const requirement of ['Capacitor', 'Offline', 'APNs/FCM', 'Windows', 'signing', 'GitHub Pages']) {

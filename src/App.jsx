@@ -940,7 +940,7 @@ function AppLoading({ theme, onToggleTheme }) {
 function AppLoadError({ message, onRetry }) {
   return (
     <main className="app-state-view">
-      <section className="app-state-card is-error"><span className="state-error-mark">!</span><h1>The preview could not start</h1><p role="alert">{message}</p><button className="primary-button" type="button" onClick={onRetry}>Try again <span>→</span></button></section>
+      <section className="app-state-card is-error"><span className="state-error-mark">!</span><h1>{__PUBLIC_PREVIEW__ ? 'The preview could not start' : 'Rhomberg Connect staging services are currently unavailable'}</h1><p role="alert">{message}</p><button className="primary-button" type="button" onClick={onRetry}>Try again <span>→</span></button></section>
     </main>
   );
 }

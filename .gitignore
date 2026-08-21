@@ -14,4 +14,11 @@ docs/private/
 dist/
 dist-previews/
 dist-production/
+dist-internal-staging/
 tmp/
+
+# Native signing material must remain outside source control.
+*.jks
+*.keystore
+android/keystore.properties
+deployment/signing/

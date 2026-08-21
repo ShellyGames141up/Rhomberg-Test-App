@@ -1,0 +1,10 @@
+{
+  "name": "Rhomberg Connect",
+  "version": "5.2.0-internal.1",
+  "delivery": "installed-pwa",
+  "startUrl": "https://connect.rhomberg.co.za:8443/",
+  "apiPath": "/api/v1",
+  "publisher": "REQUIRES_RHOMBERG_APPROVAL",
+  "minimumClient": "Windows 10 with a current Chromium-based Microsoft Edge",
+  "environment": "internal-staging"
+}

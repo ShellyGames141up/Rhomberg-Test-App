@@ -11,6 +11,7 @@ import {
   showsDefaultLandingPageForRole,
 } from '../domain/userSettings.js';
 import { CredentialChangePanel } from './Account.jsx';
+import { runtimeConfig } from '../services/runtimeConfig.js';
 
 const SECTION_META = Object.freeze({
   home: ['Settings', 'Choose a category for your Rhomberg Connect experience.', '⌘'],
@@ -145,5 +146,5 @@ function TutorialSettings({ account, serviceMode, onReplay }) {
 }
 
 function PrivacySettings({ serviceMode }) { return <SettingsPanel title="Privacy and data"><p>Customer and internal identities remain in separate authentication realms. Company-isolation and role permissions are enforced by the service boundary.</p><p>{__PUBLIC_PREVIEW__ && serviceMode === 'mock' ? 'This demonstration stores fabricated data on this device. Do not enter real customer, pricing, credential or infrastructure information.' : 'Production data rights, retention and access requests must use the approved backend process.'}</p><p>Operational records, audit history and signed documents cannot be erased from this settings page.</p></SettingsPanel>; }
-function AboutSettings({ serviceMode }) { return <SettingsPanel title="Rhomberg Connect"><img className="settings-about-logo" src="assets/images/rhomberg-connect-logo-full-dark.png" alt="Rhomberg Connect" /><dl className="settings-session"><div><dt>Version</dt><dd>5.2.0</dd></div><div><dt>Environment</dt><dd>{__PUBLIC_PREVIEW__ && serviceMode === 'mock' ? 'Fabricated demonstration' : 'Private company service'}</dd></div><div><dt>Shared platform</dt><dd>Customer, Sales, Technical and Operations</dd></div></dl></SettingsPanel>; }
+function AboutSettings({ serviceMode }) { const environment = __PUBLIC_PREVIEW__ && serviceMode === 'mock' ? 'Fabricated demonstration' : runtimeConfig.environmentName === 'internal-staging' ? 'Internal Staging' : 'Private company service'; return <SettingsPanel title="Rhomberg Connect"><img className="settings-about-logo" src="assets/images/rhomberg-connect-logo-full-dark.png" alt="Rhomberg Connect" /><dl className="settings-session"><div><dt>Version</dt><dd>{runtimeConfig.applicationVersion}</dd></div><div><dt>Environment</dt><dd>{environment}</dd></div><div><dt>Shared platform</dt><dd>Customer, Sales, Technical and Operations</dd></div></dl></SettingsPanel>; }
 function SettingsPanel({ title, children }) { return <section className="settings-panel"><h2>{title}</h2>{children}</section>; }

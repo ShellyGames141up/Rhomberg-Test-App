@@ -2,15 +2,17 @@
 
 ## Decision
 
-Use the responsive production web build as the shared application and evaluate Capacitor as the Android/iOS shell. Capacitor is appropriate for a web-first React application and can add approved native file, camera, haptic, deep-link and push capabilities without duplicating workflows. Native packages and platform projects are intentionally not installed yet.
+Use the responsive production web build as the shared application and Capacitor 8.5.0 as the Android shell. The Android project is prepared for controlled internal testing; it does not imply store approval or production readiness.
 
 Current evidence:
 
-- `capacitor.config.json` exists and points to `dist-production`;
+- `capacitor.config.json` points to the production-derived `dist-internal-staging` client artifact and fixes the bundled origin to `https://app.connect.rhomberg.co.za`;
 - responsive Customer Mobile and authorised internal mobile profiles exist;
 - manifest, service worker, safe-area styling, reduced motion, sounds/haptics settings and production/demo build separation exist;
-- no `android/` or `ios/` native project, native dependency, signing identity, push project or registered package ID exists;
-- the current single `za.co.rhomberg.platform` ID and “Rhomberg Platform” name are placeholders and must not be registered as final.
+- the generated `android/` project uses API 36, only Internet and vibration permissions, disabled cleartext traffic and disabled Android backup;
+- `za.co.rhomberg.connect` and “Rhomberg Connect” are the proposed internal-test identity and require Rhomberg approval before Play registration;
+- exact-origin credentialed CORS preserves Secure/HttpOnly/SameSite=Lax sessions and CSRF for the `:8443` API without a native HTTP override;
+- no release signing identity, push project, iOS project or store listing exists.
 
 Official reference: [Capacitor documentation](https://capacitorjs.com/docs).
 
@@ -18,10 +20,9 @@ Official reference: [Capacitor documentation](https://capacitorjs.com/docs).
 
 | Product | Display name | Package/bundle placeholder | Intended users |
 | --- | --- | --- | --- |
-| Customer | Rhomberg Connect | `za.co.rhomberg.connect` | authorised customer-company contacts |
-| Internal | Rhomberg Operations | `za.co.rhomberg.operations` | Sales, Expediting and other approved internal mobile roles |
+| Shared internal test | Rhomberg Connect | `za.co.rhomberg.connect` | customers and already-supported internal mobile roles |
 
-Rhomberg/Innovate IT must approve and register final IDs. Customer and internal binaries should be separate even though they share source, because identity, store audience, permissions, support and release cadence differ.
+Rhomberg/Innovate IT must approve and register the final ID. A later review may still split customer and internal binaries; this phase does not fabricate missing mobile role interfaces. See [internal-test packaging](./INTERNAL_TEST_PACKAGING.md).
 
 ## Packaging gates
 
@@ -39,4 +40,3 @@ Rhomberg/Innovate IT must approve and register final IDs. Customer and internal 
 ## Current blockers
 
 The server, production authentication, private storage, push services, registered IDs, signing ownership, privacy policy/disclosures and physical-device UAT do not exist. Therefore the repository is ready for packaging design, not for a native release.
-

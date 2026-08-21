@@ -24,5 +24,4 @@ Use the installed PWA first. It is the lowest-complexity fit for this React appl
 - Windows keyboard, Narrator, 125–200% text/display scaling, high contrast, 1366/1920/2560/ultrawide and managed browser policy tested.
 - If MSIX/native is chosen: package identity, publisher, code signing, capabilities, privacy, installer coexistence and auto-update ownership approved.
 
-No Windows binary or Store listing should be created before these gates pass.
-
+For controlled internal staging, install the PWA from the approved HTTPS endpoint once DNS/TLS are available. See [internal-test packaging](./INTERNAL_TEST_PACKAGING.md). No Windows binary or Store listing has been created.

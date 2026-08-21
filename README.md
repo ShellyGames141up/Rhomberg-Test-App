@@ -1,5 +1,7 @@
 ﻿# Rhomberg Connect - IT Handover Repository
 
+Internal Windows PWA and Android/Capacitor packaging preparation is documented in [docs/INTERNAL_TEST_PACKAGING.md](docs/INTERNAL_TEST_PACKAGING.md). These packages use the production-safe API boundary and never fall back to demonstration data.
+
 ## Phase 1 production API foundation
 
 `apps/api` now contains the first local, server-backed `/api/v1` vertical slice for Rhomberg Connect 5.2.0. It proves server-side local-password authentication, opaque server sessions, database-derived company/role permissions, customer RFQ creation and retrieval, private document metadata, append-only audit evidence and persisted in-app notification creation. The API is intentionally local-only at this phase: it is not deployed, does not connect to company infrastructure and must not contain real data.

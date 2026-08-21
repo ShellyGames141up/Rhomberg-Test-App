@@ -1,0 +1,6 @@
+Rhomberg Connect 5.2.0 — Internal Staging
+
+- Internal installation and compatibility testing only.
+- Includes authorised sign-in, responsive workspaces, catalogue and product-document access.
+- Operational services require the approved Rhomberg staging HTTPS endpoint.
+- Use fabricated business records only. Report defects through the approved internal testing channel.

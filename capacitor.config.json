@@ -1,12 +1,14 @@
 {
-  "appId": "za.co.rhomberg.platform",
-  "appName": "Rhomberg Platform",
-  "webDir": "dist-production",
+  "appId": "za.co.rhomberg.connect",
+  "appName": "Rhomberg Connect",
+  "webDir": "dist-internal-staging",
   "bundledWebRuntime": false,
   "backgroundColor": "#f4f7f8",
   "server": {
+    "hostname": "app.connect.rhomberg.co.za",
     "androidScheme": "https",
-    "iosScheme": "https"
+    "iosScheme": "https",
+    "cleartext": false
   },
   "plugins": {
     "SplashScreen": {

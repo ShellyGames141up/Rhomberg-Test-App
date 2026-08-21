@@ -5,11 +5,11 @@ Status: planning only. Do not create a listing or upload a bundle yet. Recheck a
 ## Ownership and build
 
 - [ ] Rhomberg-owned Play Console organisation and named Account Owner/Admins.
-- [ ] Final application IDs approved separately for Connect and Operations.
-- [ ] Capacitor Android project generated only after the production server/security design is approved.
+- [ ] Application ID `za.co.rhomberg.connect` approved and registered to Rhomberg.
+- [x] Capacitor 8 Android project generated for internal packaging review (not signed or published).
 - [ ] Release AAB built from the production-safe bundle; `versionCode` increments and `versionName` matches release notes.
 - [ ] Play App Signing/upload-key custody, backup and recovery approved.
-- [ ] Target SDK verified on release day. Google’s current schedule states new apps and updates must target Android 16/API 36 from 31 August 2026; this is time-sensitive and must be rechecked: [Target API requirements](https://support.google.com/googleplay/android-developer/answer/11926878?hl=en-AU).
+- [x] Project currently compiles/targets API 36. Recheck Google’s time-sensitive requirement on upload day: [Target API requirements](https://support.google.com/googleplay/android-developer/answer/11926878?hl=en-GB_ALL).
 
 ## Listing and policy
 
@@ -26,4 +26,3 @@ Status: planning only. Do not create a listing or upload a bundle yet. Recheck a
 - [ ] Exercise sign-in, uploads, deep links, notifications, offline/session recovery and every customer-visible workflow on supported Android devices.
 - [ ] Validate crash/ANR, accessibility, security scan, dependency inventory and rollback.
 - [ ] Obtain business, Innovate IT, security/privacy and release-owner approval.
-
