@@ -22,7 +22,8 @@ test('Capacitor configuration is production-branded and cleartext-disabled', () 
   assert.equal(config.webDir, 'dist-internal-staging');
   assert.equal(config.server.cleartext, false);
   assert.equal(config.server.androidScheme, 'https');
-  assert.equal(config.server.hostname, 'app.connect.rhomberg.co.za');
+  assert.equal(config.server.hostname, 'connect.rhomberg.co.za');
+  assert.equal(config.server.url, undefined);
   assert.equal(config.plugins?.CapacitorHttp?.enabled, undefined);
 });
 

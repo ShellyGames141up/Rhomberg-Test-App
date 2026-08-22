@@ -22,7 +22,8 @@ assert(build.includes('applicationId "za.co.rhomberg.connect"'), 'Android applic
 assert(build.includes('versionCode 5020001') && build.includes('versionName "5.2.0-internal.1"'), 'Android internal-test version is incorrect.');
 assert(variables.includes('compileSdkVersion = 36') && variables.includes('targetSdkVersion = 36'), 'Android must compile and target API 36.');
 assert(strings.includes('<string name="app_name">Rhomberg Connect</string>'), 'Android display name is incorrect.');
-assert.equal(`${capacitor.server.androidScheme}://${capacitor.server.hostname}`, 'https://app.connect.rhomberg.co.za', 'Android WebView origin is not the approved same-site origin.');
+assert.equal(`${capacitor.server.androidScheme}://${capacitor.server.hostname}`, 'https://connect.rhomberg.co.za', 'Android WebView origin is not the approved single-domain same-site origin.');
+assert.equal(capacitor.server.url, undefined, 'Android must keep bundled web assets and must not remotely load the staging site.');
 assert.equal(capacitor.plugins?.CapacitorHttp?.enabled, undefined, 'Native HTTP override must remain disabled for standards-based authentication.');
 
 const hash = buffer => createHash('sha256').update(buffer).digest('hex');

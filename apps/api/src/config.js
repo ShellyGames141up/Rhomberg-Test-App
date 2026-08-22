@@ -8,8 +8,8 @@ const integerValue = (value, fallback) => {
 };
 
 const stagingOrigins = new Set([
+  'https://connect.rhomberg.co.za',
   'https://connect.rhomberg.co.za:8443',
-  'https://app.connect.rhomberg.co.za',
 ]);
 
 export function parseApprovedOrigins(value, environment) {

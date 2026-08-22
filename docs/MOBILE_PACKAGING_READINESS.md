@@ -6,12 +6,12 @@ Use the responsive production web build as the shared application and Capacitor 
 
 Current evidence:
 
-- `capacitor.config.json` points to the production-derived `dist-internal-staging` client artifact and fixes the bundled origin to `https://app.connect.rhomberg.co.za`;
+- `capacitor.config.json` points to the production-derived `dist-internal-staging` client artifact and fixes the bundled origin to `https://connect.rhomberg.co.za`;
 - responsive Customer Mobile and authorised internal mobile profiles exist;
 - manifest, service worker, safe-area styling, reduced motion, sounds/haptics settings and production/demo build separation exist;
 - the generated `android/` project uses API 36, only Internet and vibration permissions, disabled cleartext traffic and disabled Android backup;
 - `za.co.rhomberg.connect` and “Rhomberg Connect” are the proposed internal-test identity and require Rhomberg approval before Play registration;
-- exact-origin credentialed CORS preserves Secure/HttpOnly/SameSite=Lax sessions and CSRF for the `:8443` API without a native HTTP override;
+- exact-origin credentialed CORS preserves Secure/HttpOnly/SameSite=Lax sessions and CSRF between the bundled standard-HTTPS origin and the `:8443` API on the same host, without a native HTTP override;
 - no release signing identity, push project, iOS project or store listing exists.
 
 Official reference: [Capacitor documentation](https://capacitorjs.com/docs).

@@ -5,7 +5,7 @@
   "bundledWebRuntime": false,
   "backgroundColor": "#f4f7f8",
   "server": {
-    "hostname": "app.connect.rhomberg.co.za",
+    "hostname": "connect.rhomberg.co.za",
     "androidScheme": "https",
     "iosScheme": "https",
     "cleartext": false

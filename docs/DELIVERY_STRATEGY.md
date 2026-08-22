@@ -26,7 +26,7 @@ The service worker caches public application shell assets only. It bypasses `/ap
 
 ## Native mobile preparation
 
-Capacitor is the Android wrapper because it packages the production-derived internal-staging web artifact without duplicating application workflows. `capacitor.config.json` identifies `dist-internal-staging` and the controlled same-site `https://app.connect.rhomberg.co.za` WebView origin; the build validates the `https://connect.rhomberg.co.za:8443/api/v1` endpoint and never enables mock fallback or native HTTP transport. The backend uses an exact origin allowlist, credentialed CORS and unchanged cookie/CSRF protections. See [INTERNAL_TEST_PACKAGING.md](INTERNAL_TEST_PACKAGING.md).
+Capacitor is the Android wrapper because it packages the production-derived internal-staging web artifact without duplicating application workflows. `capacitor.config.json` identifies `dist-internal-staging` and the controlled single-domain `https://connect.rhomberg.co.za` WebView origin; the build validates the `https://connect.rhomberg.co.za:8443/api/v1` endpoint and never enables mock fallback, remote web loading or native HTTP transport. The differing ports require exact-origin credentialed CORS, while the common HTTPS host keeps the session same-site and preserves the existing cookie/CSRF protections. See [INTERNAL_TEST_PACKAGING.md](INTERNAL_TEST_PACKAGING.md).
 
 Production mobile delivery requires:
 

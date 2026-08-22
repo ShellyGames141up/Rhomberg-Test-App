@@ -5,7 +5,7 @@ import { loadConfig } from '../src/config.js';
 import { createFixture, createRfq, FABRICATED_PASSWORD, login } from './fixtures.js';
 
 const WINDOWS_ORIGIN = 'https://connect.rhomberg.co.za:8443';
-const ANDROID_ORIGIN = 'https://app.connect.rhomberg.co.za';
+const ANDROID_ORIGIN = 'https://connect.rhomberg.co.za';
 const ATTACKER_ORIGIN = 'https://attacker.example.invalid';
 
 const stagingEnvironment = overrides => ({
@@ -32,13 +32,14 @@ const originHeaders = (origin, headers = {}) => ({ origin, ...headers });
 test('staging configuration accepts only reviewed exact HTTPS origins', () => {
   const config = loadConfig(stagingEnvironment());
   assert.deepEqual(config.allowedOrigins, [WINDOWS_ORIGIN, ANDROID_ORIGIN]);
+  assert.deepEqual(loadConfig(stagingEnvironment({ RHOMBERG_API_ALLOWED_ORIGINS: 'https://connect.rhomberg.co.za:443' })).allowedOrigins, [ANDROID_ORIGIN]);
   for (const value of [
-    'http://app.connect.rhomberg.co.za',
-    'https://connect.rhomberg.co.za',
-    'https://connect.rhomberg.co.za:443',
+    'http://connect.rhomberg.co.za',
+    'https://connect.rhomberg.co.za:9443',
+    'https://app.connect.rhomberg.co.za',
     'https://app.connect.rhomberg.co.za:8443',
-    'https://user:secret@app.connect.rhomberg.co.za',
-    'https://app.connect.rhomberg.co.za/path',
+    'https://user:secret@connect.rhomberg.co.za',
+    'https://connect.rhomberg.co.za/path',
     '*',
   ]) assert.throws(() => loadConfig(stagingEnvironment({ RHOMBERG_API_ALLOWED_ORIGINS: value })), /origin/i);
   assert.throws(() => loadConfig(stagingEnvironment({ RHOMBERG_API_ALLOWED_ORIGIN: WINDOWS_ORIGIN })), /both origin variables/i);
@@ -66,7 +67,7 @@ test('invalid origin, method and headers are rejected before authentication', as
   assert.equal((await preflight(originHeaders(ANDROID_ORIGIN, { 'access-control-request-method': 'POST', 'access-control-request-headers': 'authorization' }))).statusCode, 403);
 });
 
-test('approved Android origin completes login, session, CSRF mutation and logout', async t => {
+test('approved single-domain Android origin completes login, persistent session, CSRF mutation and logout', async t => {
   const { app } = await stagingFixture(); t.after(() => app.close());
   const authenticated = await app.inject({ method: 'POST', url: '/api/v1/auth/login', headers: originHeaders(ANDROID_ORIGIN), payload: { email: 'customer.a@example.invalid', password: FABRICATED_PASSWORD } });
   assert.equal(authenticated.statusCode, 200);
@@ -85,6 +86,9 @@ test('approved Android origin completes login, session, CSRF mutation and logout
 
   const created = await createRfq(app, auth, undefined, 'android-auth-flow-key', ANDROID_ORIGIN);
   assert.equal(created.statusCode, 201);
+  const resumed = await app.inject({ url: '/api/v1/auth/me', headers: originHeaders(ANDROID_ORIGIN, { cookie: auth.cookie }) });
+  assert.equal(resumed.statusCode, 200);
+  assert.equal(resumed.json().data.email, 'customer.a@example.invalid');
   const missingCsrf = await app.inject({ method: 'POST', url: '/api/v1/auth/logout', headers: originHeaders(ANDROID_ORIGIN, { cookie: auth.cookie }) });
   assert.equal(missingCsrf.statusCode, 403);
   const attacker = await app.inject({ method: 'POST', url: '/api/v1/auth/logout', headers: originHeaders(ATTACKER_ORIGIN, { cookie: auth.cookie, 'x-csrf-token': auth.csrf }) });

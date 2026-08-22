@@ -23,7 +23,7 @@ After IT enables the endpoint:
 
 ### Android
 
-The production-safe React bundle is packaged in the generated Capacitor 8 project. The application loads local UI assets from the controlled `https://app.connect.rhomberg.co.za` WebView origin when the service is unavailable and calls only the build-time-approved HTTPS API URL. It never connects to PostgreSQL and has no mock fallback.
+The production-safe React bundle is packaged in the generated Capacitor 8 project. The application loads local UI assets from the controlled `https://connect.rhomberg.co.za` WebView origin when the service is unavailable and calls only the build-time-approved `https://connect.rhomberg.co.za:8443/api/v1` API. The two origins differ only by port, so they are cross-origin but remain same-site under HTTPS. Exact credentialed CORS is therefore required, while `Secure`, `HttpOnly`, `SameSite=Lax` host cookies and CSRF validation remain unchanged. The application never connects to PostgreSQL and has no mock fallback.
 
 - Application ID: `za.co.rhomberg.connect`
 - Display name: `Rhomberg Connect`
@@ -45,7 +45,21 @@ One public build input controls native API access: `RHOMBERG_PUBLIC_API_URL`. Th
 
 It rejects HTTP, embedded credentials, other hosts, other ports and other paths. Windows can update `runtime-config.js` during a controlled server release without recompiling React. Android bundles that file, so changing the port requires rebuilding/syncing and incrementing `versionCode`.
 
-The API allowlist must contain exactly the reviewed Windows and Android origins. Credentialed CORS reflects only an allowlisted origin, preflight is handled before authentication, and mutations still require both an approved Origin and the per-session CSRF token. Session cookies remain `Secure`, `HttpOnly` and `SameSite=Lax`; credentials are never stored in browser storage. Until IT enables the endpoint, the app shows its safe service-unavailable/retry state and never loads fabricated operational records.
+The API allowlist must contain exactly `https://connect.rhomberg.co.za:8443` for Windows/PWA and `https://connect.rhomberg.co.za` for the bundled Android WebView. Credentialed CORS reflects only an allowlisted origin, preflight is handled before authentication, and mutations still require both an approved Origin and the per-session CSRF token. Session cookies remain `Secure`, `HttpOnly` and `SameSite=Lax`; credentials are never stored in browser storage. Until IT enables the endpoint, the app shows its safe service-unavailable/retry state and never loads fabricated operational records.
+
+### Single-domain Android decision
+
+The bundled standard-HTTPS origin is the smallest secure design under IT's one-domain constraint:
+
+| Option | Result |
+| --- | --- |
+| Bundled assets at `https://connect.rhomberg.co.za` | Selected. Starts without the server, stays same-site with the `:8443` API, and requires only exact credentialed CORS because the port differs. |
+| Put a port in `server.hostname` | Rejected. Capacitor defines this field as a hostname, and using it as an authority is not a supported production contract. |
+| `server.url` remote loading from `:8443` | Rejected. It would be exact same-origin, but Capacitor documents remote URL loading as a live-reload facility not intended for production; startup and UI availability would depend entirely on the server. |
+| Custom scheme | Rejected. It would not be HTTPS same-site, complicates cookies/routing, and offers no advantage over the supported HTTPS virtual host. |
+| Native HTTP/cookie plugins | Rejected. Standards-based WebView fetch works; a native override would add a second cookie/transport security boundary unnecessarily. |
+
+Automated API tests prove login, secure cookie issuance, repeated `/auth/me`, CSRF-protected mutation and logout from the Android origin. The standard WebView cookie store is expected to retain the session while the app is backgrounded; final persistence across background/resume and process recreation must still be verified on the physical test phone after Dylan enables routing and Ashmah binds the trusted certificate.
 
 ## Build commands
 
