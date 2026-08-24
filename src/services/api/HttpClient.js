@@ -6,8 +6,10 @@ export class HttpClient {
   constructor({ baseUrl, timeoutMs = 15000, fetchImplementation = globalThis.fetch } = {}) {
     this.baseUrl = String(baseUrl || '/api/v1').replace(/\/$/, '');
     this.timeoutMs = timeoutMs;
-    this.fetch = fetchImplementation;
     this.hasInjectedTransport = fetchImplementation !== globalThis.fetch;
+    this.fetch = this.hasInjectedTransport
+      ? fetchImplementation
+      : fetchImplementation?.bind(globalThis);
     this.csrfToken = '';
   }
 

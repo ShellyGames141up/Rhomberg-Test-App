@@ -69,7 +69,6 @@ export async function validateProductionArtifact(output = defaultOutput) {
     ['API key or client secret assignment', /\b(?:api[_-]?key|client[_-]?secret|signing[_-]?key)\s*[:=]\s*['"][^'"]+['"]/i],
     ['credential-bearing database URL', /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^:\s/]+:[^@\s/]+@/i],
     ['absolute local path', /\b[A-Z]:\\Users\\/i],
-    ['localhost production endpoint', /https?:\/\/(?:localhost|127\.0\.0\.1|\[?::1\]?)(?::\d+)?/i],
   ];
   const executableSurface = `${appBundle}\n${await fs.readFile(path.join(resolvedOutput, 'index.html'), 'utf8')}\n${await fs.readFile(path.join(resolvedOutput, 'runtime-config.js'), 'utf8')}`;
   const executableOnlyLabels = new Set([
@@ -114,7 +113,12 @@ export async function validateProductionArtifact(output = defaultOutput) {
     assert(webConfig.includes(marker), `IIS web.config is missing ${marker}.`);
   }
   assert(!/Strict-Transport-Security/i.test(webConfig), 'HSTS must not be enabled until Innovate IT confirms HTTPS for the staging hostname.');
-  assert(!/reverseProxy|localhost:\d+|127\.0\.0\.1:\d+/i.test(webConfig), 'IIS web.config must not pretend that the API reverse proxy exists.');
+  assert(!/https?:\/\/(?:localhost|127\.0\.0\.1|\[?::1\]?)(?::\d+)?/i.test(executableSurface), 'Production browser code contains a loopback endpoint.');
+  assert(webConfig.includes('<rule name="Rhomberg Connect API reverse proxy" stopProcessing="true">'), 'IIS web.config is missing the approved API reverse proxy rule.');
+  assert(webConfig.includes('<match url="^api/v1(.*)$" />'), 'IIS reverse proxy must match only the approved /api/v1 path.');
+  assert(webConfig.includes('<action type="Rewrite" url="http://127.0.0.1:3000/api/v1{R:1}" appendQueryString="true" />'), 'IIS reverse proxy must preserve the API path and query string while targeting the loopback-only Node service.');
+  assert(!/API unavailable until backend approval|type="CustomResponse"[^>]+statusCode="503"/i.test(webConfig), 'IIS web.config still contains the obsolete API-unavailable response.');
+  assert(webConfig.indexOf('Rhomberg Connect API reverse proxy') < webConfig.indexOf('Rhomberg Connect SPA fallback'), 'IIS API routing must run before the SPA fallback.');
 
   return {
     filesScanned: relativeFiles.length,

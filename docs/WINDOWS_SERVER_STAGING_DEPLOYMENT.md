@@ -54,7 +54,7 @@ Innovate IT must approve and install IIS with Static Content, Default Document, 
 - no-cache rules for `index.html` and `runtime-config.js`;
 - bounded caching for other static content.
 
-HSTS is deliberately absent until Innovate IT confirms a valid HTTPS hostname, certificate and redirect policy. No reverse proxy is configured because the real API does not exist.
+HSTS is deliberately absent until Innovate IT confirms the final HTTPS and redirect policy. The site `web.config` contains the approved ARR rewrite from `/api/v1/...` to the loopback-only Node service at `http://127.0.0.1:3000/api/v1/...`; ARR proxying must be enabled at server level, and Node must not be exposed directly to the network.
 
 ## Later manual release procedure
 

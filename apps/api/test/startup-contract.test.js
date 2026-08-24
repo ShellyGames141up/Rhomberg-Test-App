@@ -28,6 +28,14 @@ function createInjectFetch(app) {
   };
 }
 
+function createBrowserNativeFetch(app) {
+  const injectedFetch = createInjectFetch(app);
+  return function browserNativeFetch(url, options) {
+    if (this !== globalThis) throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+    return injectedFetch(url, options);
+  };
+}
+
 const containsSensitiveProductKey = value => {
   if (Array.isArray(value)) return value.some(containsSensitiveProductKey);
   if (!value || typeof value !== 'object') return false;
@@ -63,6 +71,34 @@ test('signed-out API startup loads approved catalogue/reference data and treats 
   assert.ok(registration.branches.length > 0);
   assert.ok(Object.values(registration.areaDirectory).every(entry => entry.representatives.length === 0));
   assert.doesNotMatch(JSON.stringify(registration), /fabricated|example\.invalid/i);
+});
+
+test('browser-native fetch keeps its Window receiver through the complete signed-out startup sequence', async t => {
+  const { app } = await createFixture();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = createBrowserNativeFetch(app);
+  t.after(async () => {
+    globalThis.fetch = originalFetch;
+    await app.close();
+  });
+
+  const services = createApiServices({
+    apiBaseUrl: 'https://connect.rhom.co.za:8443/api/v1',
+    requestTimeoutMs: 5000,
+  });
+
+  await services.initialize();
+  const [catalogue, registration, session] = await Promise.all([
+    services.products.getCatalogue(),
+    services.accounts.getRegistrationOptions(),
+    services.auth.getSession(),
+  ]);
+
+  assert.equal(session, null, 'signed-out auth/me must lead to sign-in rather than service-unavailable');
+  assert.equal(catalogue.categories.length, 8);
+  assert.equal(catalogue.products.length, 84);
+  assert.ok(Object.keys(catalogue.recommendedCategories).length > 0);
+  assert.ok(registration.areas.length > 0);
 });
 
 test('fabricated Administrator completes the first authenticated application bootstrap', async t => {

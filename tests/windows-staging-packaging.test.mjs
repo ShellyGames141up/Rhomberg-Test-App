@@ -43,7 +43,11 @@ const webConfig = readFileSync('dist-production/web.config', 'utf8');
 assert.match(webConfig, /Rhomberg Connect SPA fallback/);
 assert.match(webConfig, /Content-Security-Policy/);
 assert.doesNotMatch(webConfig, /Strict-Transport-Security/i);
-assert.doesNotMatch(webConfig, /reverseProxy|localhost:\d+|127\.0\.0\.1:\d+/i);
+assert.match(webConfig, /<rule name="Rhomberg Connect API reverse proxy" stopProcessing="true">/);
+assert.match(webConfig, /<match url="\^api\/v1\(\.\*\)\$" \/>/);
+assert.match(webConfig, /<action type="Rewrite" url="http:\/\/127\.0\.0\.1:3000\/api\/v1\{R:1\}" appendQueryString="true" \/>/);
+assert.doesNotMatch(webConfig, /API unavailable until backend approval|type="CustomResponse"[^>]+statusCode="503"/i);
+assert.ok(webConfig.indexOf('Rhomberg Connect API reverse proxy') < webConfig.indexOf('Rhomberg Connect SPA fallback'));
 
 execFileSync(process.execPath, ['scripts/generate-release-metadata.mjs'], { stdio: 'pipe' });
 const releaseManifest = JSON.parse(readFileSync('dist-production/release-manifest.json', 'utf8'));
