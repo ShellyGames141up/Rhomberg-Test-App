@@ -91,8 +91,8 @@ All other OpenAPI routes remain proposed and unavailable.
 
 For controlled staging, `RHOMBERG_API_ALLOWED_ORIGINS` is a comma-separated,
 exact-origin allowlist. The reviewed origins are
-`https://connect.rhomberg.co.za:8443` and
-`https://connect.rhomberg.co.za`. Wildcards, HTTP origins, URL credentials,
+`https://connect.rhom.co.za:8443` and
+`https://connect.rhom.co.za`. Wildcards, HTTP origins, URL credentials,
 paths, queries, fragments, and unreviewed hosts or ports fail configuration.
 Credentialed CORS does not replace the existing secure session-cookie and CSRF
 checks; both remain mandatory for authenticated mutations.

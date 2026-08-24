@@ -4,8 +4,8 @@ import test from 'node:test';
 import { loadConfig } from '../src/config.js';
 import { createFixture, createRfq, FABRICATED_PASSWORD, login } from './fixtures.js';
 
-const WINDOWS_ORIGIN = 'https://connect.rhomberg.co.za:8443';
-const ANDROID_ORIGIN = 'https://connect.rhomberg.co.za';
+const WINDOWS_ORIGIN = 'https://connect.rhom.co.za:8443';
+const ANDROID_ORIGIN = 'https://connect.rhom.co.za';
 const ATTACKER_ORIGIN = 'https://attacker.example.invalid';
 
 const stagingEnvironment = overrides => ({
@@ -32,14 +32,16 @@ const originHeaders = (origin, headers = {}) => ({ origin, ...headers });
 test('staging configuration accepts only reviewed exact HTTPS origins', () => {
   const config = loadConfig(stagingEnvironment());
   assert.deepEqual(config.allowedOrigins, [WINDOWS_ORIGIN, ANDROID_ORIGIN]);
-  assert.deepEqual(loadConfig(stagingEnvironment({ RHOMBERG_API_ALLOWED_ORIGINS: 'https://connect.rhomberg.co.za:443' })).allowedOrigins, [ANDROID_ORIGIN]);
+  assert.deepEqual(loadConfig(stagingEnvironment({ RHOMBERG_API_ALLOWED_ORIGINS: 'https://connect.rhom.co.za:443' })).allowedOrigins, [ANDROID_ORIGIN]);
   for (const value of [
-    'http://connect.rhomberg.co.za',
-    'https://connect.rhomberg.co.za:9443',
+    'http://connect.rhom.co.za',
+    'https://connect.rhom.co.za:9443',
+    'https://connect.rhomberg.co.za',
     'https://app.connect.rhomberg.co.za',
     'https://app.connect.rhomberg.co.za:8443',
-    'https://user:secret@connect.rhomberg.co.za',
-    'https://connect.rhomberg.co.za/path',
+    'https://evil.example',
+    'https://user:secret@connect.rhom.co.za',
+    'https://connect.rhom.co.za/path',
     '*',
   ]) assert.throws(() => loadConfig(stagingEnvironment({ RHOMBERG_API_ALLOWED_ORIGINS: value })), /origin/i);
   assert.throws(() => loadConfig(stagingEnvironment({ RHOMBERG_API_ALLOWED_ORIGIN: WINDOWS_ORIGIN })), /both origin variables/i);

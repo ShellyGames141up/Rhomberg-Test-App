@@ -6,7 +6,7 @@ Use the responsive production web build as the shared application and Capacitor 
 
 Current evidence:
 
-- `capacitor.config.json` points to the production-derived `dist-internal-staging` client artifact and fixes the bundled origin to `https://connect.rhomberg.co.za`;
+- `capacitor.config.json` points to the production-derived `dist-internal-staging` client artifact and fixes the bundled origin to `https://connect.rhom.co.za`;
 - responsive Customer Mobile and authorised internal mobile profiles exist;
 - manifest, service worker, safe-area styling, reduced motion, sounds/haptics settings and production/demo build separation exist;
 - the generated `android/` project uses API 36, only Internet and vibration permissions, disabled cleartext traffic and disabled Android backup;
