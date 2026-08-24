@@ -8,6 +8,7 @@ export const FABRICATED_PASSWORD = 'Fabricated-Phase1-Password!';
 export const ids = Object.freeze({
   companyA: '10000000-0000-4000-8000-000000000001', companyB: '10000000-0000-4000-8000-000000000002',
   customerA: '20000000-0000-4000-8000-000000000001', customerB: '20000000-0000-4000-8000-000000000002', disabled: '20000000-0000-4000-8000-000000000003', representativeUser: '20000000-0000-4000-8000-000000000004',
+  administrator: '20000000-0000-4000-8000-000000000005',
   representativeA: '30000000-0000-4000-8000-000000000001', representativeB: '30000000-0000-4000-8000-000000000002',
 });
 
@@ -20,6 +21,7 @@ export async function createFixture({ configOverrides = {}, logger = false, logS
       { id: ids.customerB, email: 'customer.b@example.invalid', displayName: 'Fabricated Customer B', passwordHash, status: 'active', roles: ['customer'], permissions: ['create_rfq', 'view_own_company_rfqs', 'read_document_metadata'], companyIds: [ids.companyB] },
       { id: ids.disabled, email: 'disabled@example.invalid', displayName: 'Fabricated Disabled User', passwordHash, status: 'disabled', roles: ['customer'], permissions: ['create_rfq'], companyIds: [ids.companyA] },
       { id: ids.representativeUser, email: 'representative@example.invalid', displayName: 'Fabricated Representative', passwordHash, status: 'active', roles: ['sales_representative'], permissions: ['view_assigned_rfqs', 'read_document_metadata'], companyIds: [ids.companyA, ids.companyB], representativeId: ids.representativeA },
+      { id: ids.administrator, username: 'fabricated-admin', email: 'fabricated.admin@example.invalid', displayName: 'Fabricated Administrator', passwordHash, status: 'active', roles: ['administrator'], permissions: ['view_all_rfqs', 'read_document_metadata', 'administer_users'], companyIds: [] },
     ],
     representatives: [
       { id: ids.representativeA, userId: ids.representativeUser, displayName: 'Fabricated Representative A', branchName: 'Fabricated Branch A', companyIds: [ids.companyA] },

@@ -10,6 +10,8 @@ import { secureHashEquals } from './security/crypto.js';
 import { createAuthService } from './services/authService.js';
 import { createEnquiryService } from './services/enquiryService.js';
 import { createAdministrationService } from './services/administrationService.js';
+import { createPublicReferenceService } from './services/publicReferenceService.js';
+import { createPhase1WorkspaceService } from './services/phase1WorkspaceService.js';
 import { createLocalPasswordIdentityProvider, createUnconfiguredExternalIdentityProvider } from './identity/localPasswordIdentityProvider.js';
 import { PERMISSIONS, requirePermission } from './authorization/permissions.js';
 
@@ -81,6 +83,8 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   const authService = createAuthService({ repository, identityProvider: resolvedIdentityProvider, config });
   const enquiryService = createEnquiryService({ repository, storage });
   const administrationService = createAdministrationService({ repository });
+  const publicReferenceService = createPublicReferenceService();
+  const phase1WorkspaceService = createPhase1WorkspaceService({ maxUploadBytes: config.maxUploadBytes });
   const approvedOrigins = new Set(config.allowedOrigins || (config.allowedOrigin ? [config.allowedOrigin] : []));
   const requiresApprovedMutationOrigin = ['staging', 'production'].includes(config.environment);
 
@@ -163,6 +167,18 @@ export async function buildApp({ config, repository, storage, identityProvider, 
     reply.clearCookie(config.cookieName, { path: '/', httpOnly: true, secure: config.cookieSecure, sameSite: 'lax' }).code(204).send();
   });
 
+  // Approved product and registration reference data is required before sign-in.
+  // These endpoints expose no identities, customer records, pricing or private data.
+  app.get('/api/v1/products/categories', async request => ({ data: publicReferenceService.listCategories(), meta: { requestId: request.id } }));
+  app.get('/api/v1/products/recommendations', async request => ({ data: publicReferenceService.getRecommendations(), meta: { requestId: request.id } }));
+  app.get('/api/v1/products', {
+    schema: { querystring: { type: 'object', additionalProperties: false, properties: { categoryId: { type: 'string', maxLength: 80 }, query: { type: 'string', maxLength: 160 } } } },
+  }, async request => ({ data: publicReferenceService.listProducts(request.query), meta: { requestId: request.id } }));
+  app.get('/api/v1/products/:id', {
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string', minLength: 1, maxLength: 160 } } } },
+  }, async request => ({ data: publicReferenceService.getProduct(request.params.id), meta: { requestId: request.id } }));
+  app.get('/api/v1/reference-data/registration', async request => ({ data: publicReferenceService.getRegistrationReference(), meta: { requestId: request.id } }));
+
   app.get('/api/v1/enquiries', { preHandler: requireAuthentication }, async request => ({ data: await enquiryService.list(request.actor), meta: { page: 1, pageSize: 100, requestId: request.id } }));
   app.post('/api/v1/enquiries', { preHandler: requireCsrf }, async (request, reply) => {
     const { payload, documentFile } = await parseEnquiryRequest(request, config.maxUploadBytes);
@@ -173,7 +189,28 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   app.get('/api/v1/enquiries/:id', { preHandler: requireAuthentication, schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } } } }, async request => ({ data: await enquiryService.get(request.actor, request.params.id), meta: { requestId: request.id } }));
   app.get('/api/v1/documents/:id', { preHandler: requireAuthentication, schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } } } }, async request => ({ data: await enquiryService.getDocument(request.actor, request.params.id, request.id), meta: { requestId: request.id } }));
 
+  // Authenticated Phase 1 bootstrap resources. Empty collections are truthful for
+  // a fresh staging database; they do not seed or emulate later workflow domains.
+  app.get('/api/v1/enquiry-drafts/current', { preHandler: requireAuthentication }, async request => ({ data: phase1WorkspaceService.getCurrentDraft(), meta: { requestId: request.id } }));
+  app.get('/api/v1/orders', { preHandler: requireAuthentication }, async request => ({ data: phase1WorkspaceService.listOrders(), meta: { requestId: request.id } }));
+  app.get('/api/v1/notifications', { preHandler: requireAuthentication }, async request => ({ data: phase1WorkspaceService.listNotifications(), meta: { requestId: request.id } }));
+  app.get('/api/v1/audit-events', { preHandler: requireAuthentication }, async request => {
+    requirePermission(request.actor, PERMISSIONS.ADMINISTER_USERS);
+    return { data: phase1WorkspaceService.listAuditEvents(), meta: { requestId: request.id } };
+  });
+  app.get('/api/v1/users/me/notification-preferences', { preHandler: requireAuthentication }, async request => ({ data: phase1WorkspaceService.getNotificationPreferences(), meta: { requestId: request.id } }));
+  app.get('/api/v1/users/me/settings', { preHandler: requireAuthentication }, async request => ({ data: phase1WorkspaceService.getUserSettings(), meta: { requestId: request.id } }));
+  app.get('/api/v1/planning/workspace-options', { preHandler: requireAuthentication }, async request => ({ data: phase1WorkspaceService.getPlanningOptions(), meta: { requestId: request.id } }));
+  app.get('/api/v1/expediting/workspace-options', { preHandler: requireAuthentication }, async request => ({ data: phase1WorkspaceService.getExpeditingOptions(), meta: { requestId: request.id } }));
+  app.get('/api/v1/dispatch/workspace-options', { preHandler: requireAuthentication }, async request => ({ data: phase1WorkspaceService.getDispatchOptions(), meta: { requestId: request.id } }));
+  app.get('/api/v1/laboratory/workspace-options', { preHandler: requireAuthentication }, async request => ({ data: phase1WorkspaceService.getLaboratoryOptions(), meta: { requestId: request.id } }));
+  app.get('/api/v1/quality-assurance/workspace-options', { preHandler: requireAuthentication }, async request => ({ data: phase1WorkspaceService.getQualityOptions(), meta: { requestId: request.id } }));
+
   app.get('/api/v1/admin/overview', { preHandler: requireAuthentication }, async request => {
+    requirePermission(request.actor, PERMISSIONS.ADMINISTER_USERS);
+    return { data: await repository.getAdministrationOverview(request.actor), meta: { requestId: request.id } };
+  });
+  app.get('/api/v1/administration/overview', { preHandler: requireAuthentication }, async request => {
     requirePermission(request.actor, PERMISSIONS.ADMINISTER_USERS);
     return { data: await repository.getAdministrationOverview(request.actor), meta: { requestId: request.id } };
   });
