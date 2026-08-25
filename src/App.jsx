@@ -42,6 +42,7 @@ import {
 import {
   accountCan,
   accountCanPerformWorkflow,
+  canListRfqs,
   defaultViewForRole,
   friendlyServiceError,
   isCustomerAccount,
@@ -73,11 +74,12 @@ const PREVIEW_CONTEXT = __PUBLIC_PREVIEW__
 const SHOW_PREVIEW_NAVIGATION = previewNavigationAllowed({ publicPreview: __PUBLIC_PREVIEW__, preview: PREVIEW_CONTEXT });
 const isFabricatedPreviewIdentity = account => /\.(?:invalid|test)$/i.test(String(account?.email || account?.username || ''));
 const normalPublicRouteRejectsDemoIdentity = account => __PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.unified && isFabricatedPreviewIdentity(account);
-const listEnquiriesForAccount = signedInAccount => (
-  usesRepresentativeInbox(signedInAccount)
+const listEnquiriesForAccount = signedInAccount => {
+  if (!canListRfqs(signedInAccount)) return Promise.resolve([]);
+  return usesRepresentativeInbox(signedInAccount)
     ? services.enquiries.listRepresentativeInbox()
-    : services.enquiries.list()
-);
+    : services.enquiries.list();
+};
 const canLoadExpeditingOptions = signedInAccount => (
   accountCan(signedInAccount, PERMISSIONS.VIEW_EXPEDITING_QUEUE)
   || accountCan(signedInAccount, PERMISSIONS.UPDATE_ORDER_PROGRESS)

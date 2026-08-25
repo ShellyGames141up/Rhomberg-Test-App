@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import {
+  canListRfqs,
   canAccessNotification,
   canAccessRecord,
   defaultViewForRole,
@@ -67,6 +68,11 @@ assert.equal(roleCan(USER_ROLES.CUSTOMER, PERMISSIONS.VIEW_ALL_ORDERS), false);
 assert.ok(roleCan(USER_ROLES.SALES_REPRESENTATIVE, PERMISSIONS.VIEW_ASSIGNED_RFQS));
 assert.ok(roleCan(USER_ROLES.SALES_REPRESENTATIVE, PERMISSIONS.MARK_RFQ_QUOTED));
 assert.equal(roleCan(USER_ROLES.SALES_REPRESENTATIVE, PERMISSIONS.VIEW_ALL_RFQS), false);
+assert.equal(canListRfqs({ role: USER_ROLES.SALES_REPRESENTATIVE, representativeId: 'rep-test' }), true);
+
+for (const technicalRole of [USER_ROLES.TECHNICAL_SUPPORT, USER_ROLES.TECHNICAL_MANAGER, USER_ROLES.TECHNICAL_DIRECTOR]) {
+  assert.equal(canListRfqs({ role: technicalRole }), false, `${technicalRole} must use the scoped technical queue instead of the general RFQ endpoint`);
+}
 
 assert.ok(roleCan(USER_ROLES.PLANNING, PERMISSIONS.VIEW_PLANNING_QUEUE));
 assert.ok(roleCan(USER_ROLES.PLANNING, PERMISSIONS.SUBMIT_TO_EXPEDITING));

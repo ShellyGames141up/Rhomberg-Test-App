@@ -388,6 +388,11 @@ export const usesRepresentativeInbox = account => (
   && !accountCan(account, PERMISSIONS.VIEW_ALL_RFQS)
   && Boolean(account?.representativeId)
 );
+export const canListRfqs = account => (
+  accountCan(account, PERMISSIONS.VIEW_OWN_COMPANY_RFQS)
+  || accountCan(account, PERMISSIONS.VIEW_ASSIGNED_RFQS)
+  || accountCan(account, PERMISSIONS.VIEW_ALL_RFQS)
+);
 export const usesPlanningWorkspace = account => (
   accountCan(account, PERMISSIONS.VIEW_PLANNING_QUEUE)
   && !accountCan(account, PERMISSIONS.VIEW_ALL_ORDERS)
