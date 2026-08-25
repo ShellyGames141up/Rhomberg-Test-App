@@ -296,6 +296,20 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   app.get('/api/v1/reference-data/registration', async request => ({ data: publicReferenceService.getRegistrationReference(), meta: { requestId: request.id } }));
 
   app.get('/api/v1/enquiries', { preHandler: requireAuthentication }, async request => ({ data: await enquiryService.list(request.actor), meta: { page: 1, pageSize: 100, requestId: request.id } }));
+  app.get('/api/v1/enquiries/options', { preHandler: requireAuthentication }, async request => {
+    requirePermission(request.actor, PERMISSIONS.CREATE_RFQ);
+    const reference = publicReferenceService.getRegistrationReference();
+    const representatives = await repository.getEnquiryRepresentativeOptions(request.actor);
+    const preferredRepresentative = representatives[0] || null;
+    return {
+      data: {
+        ...reference,
+        areaDirectory: Object.fromEntries(Object.entries(reference.areaDirectory).map(([area, entry]) => [area, { ...entry, representatives }])),
+        preferredRepresentative,
+      },
+      meta: { requestId: request.id },
+    };
+  });
   app.post('/api/v1/enquiries', { preHandler: requireCsrf }, async (request, reply) => {
     const { payload, documentFile } = await parseEnquiryRequest(request, config.maxUploadBytes);
     const result = await enquiryService.create(request.actor, payload, { idempotencyKey: String(request.headers['idempotency-key'] || ''), correlationId: request.id, documentFile });

@@ -186,6 +186,11 @@ export function createMemoryRepository(seed = {}) {
       return clone(state.companies.filter(company => canViewAll || actor.companyIds.includes(company.id)));
     },
     async listRepresentatives() { return clone(state.representatives.map(item => ({ id: item.id, name: item.displayName, displayName: item.displayName, branch: item.branchName, branchName: item.branchName, userId: item.userId, active: true }))); },
+    async getEnquiryRepresentativeOptions(actor) {
+      return clone(state.representatives
+        .filter(item => (item.companyIds || []).includes(actor.companyId))
+        .map(item => ({ id: item.id, name: item.displayName, displayName: item.displayName, branch: item.branchName, branchName: item.branchName, branchId: item.branchId || '', userId: item.userId })));
+    },
     async listTechnicalUsers() { return clone(state.users.filter(user=>user.status==='active' && user.roles.some(role=>['technical_support','technical_manager','technical_director'].includes(role))).map(user=>({id:user.id,name:user.displayName,role:user.roles.find(role=>role.startsWith('technical_'))}))); },
     async getCurrentCompany(actor) { return clone(state.companies.find(company => company.id === actor.companyId) || null); },
     async getRepresentativeOrderOptions(actor) {

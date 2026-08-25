@@ -1642,6 +1642,10 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       };
     },
 
+    async getEnquiryOptions() {
+      return this.getRegistrationOptions();
+    },
+
     async listCompanies() {
       const account = requireAccount();
       if (roleCan(account.role, PERMISSIONS.VIEW_ALL_COMPANIES)) {

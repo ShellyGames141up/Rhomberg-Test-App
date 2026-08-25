@@ -92,6 +92,7 @@ export function createApiServices(config = {}) {
   const accounts = {
     getCurrent: () => client.get('/companies/me'),
     getRegistrationOptions: () => client.get('/reference-data/registration'),
+    getEnquiryOptions: () => client.get('/enquiries/options'),
     listCompanies: () => client.get('/companies'),
   };
 

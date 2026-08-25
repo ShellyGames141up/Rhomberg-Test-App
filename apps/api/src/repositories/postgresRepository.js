@@ -445,6 +445,17 @@ export function createPostgresRepository(pool) {
         return result.rows.map(row => ({ id: row.id, name: row.display_name, displayName: row.display_name, branch: row.branch_name, branchName: row.branch_name, branchId: row.branch_id || '', code: row.code || '', userId: row.user_id, active: row.is_active }));
       }, { actor });
     },
+    async getEnquiryRepresentativeOptions(actor) {
+      if (!actor.companyId) return [];
+      return inTransaction(async client => {
+        const result = await client.query(`SELECT rep.id,rep.display_name,rep.branch_name,rep.branch_id,rep.user_id
+          FROM app.representative_company_assignments assignment
+          JOIN app.representatives rep ON rep.id=assignment.representative_id AND rep.is_active
+          WHERE assignment.company_id=$1 AND assignment.ended_at IS NULL
+          ORDER BY rep.display_name`, [actor.companyId]);
+        return result.rows.map(row => ({ id:row.id,name:row.display_name,displayName:row.display_name,branch:row.branch_name,branchName:row.branch_name,branchId:row.branch_id || '',userId:row.user_id }));
+      }, { actor });
+    },
     async listTechnicalUsers(actor) {
       return inTransaction(async client => (await client.query(`SELECT DISTINCT users.id,users.display_name AS name,roles.role_code AS role
         FROM app.users users JOIN app.user_roles roles ON roles.user_id=users.id AND roles.revoked_at IS NULL

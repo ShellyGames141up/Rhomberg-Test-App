@@ -146,7 +146,7 @@ export default function App() {
     (async () => {
       try {
         await services.initialize();
-        const [savedTheme, loadedCatalogue, loadedRegistration, loadedDemoLogins, savedSession, loadedExecutiveDemo] = await Promise.all([
+        let [savedTheme, loadedCatalogue, loadedRegistration, loadedDemoLogins, savedSession, loadedExecutiveDemo] = await Promise.all([
           services.preferences.getTheme(),
           services.products.getCatalogue(),
           services.accounts.getRegistrationOptions(),
@@ -189,6 +189,7 @@ export default function App() {
         let loadedPersonalisation = createDefaultCustomerPersonalisation();
         let loadedUserSettings = createDefaultUserSettings();
         if (session && !session.forcePasswordChange) {
+          if (accountCan(session, PERMISSIONS.CREATE_RFQ)) loadedRegistration = await services.accounts.getEnquiryOptions();
           [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedAuditEvents, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedLaboratoryOptions, loadedQualityOptions, loadedPersonalisation, loadedUserSettings] = await Promise.all([
             accountCan(session, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
             listEnquiriesForAccount(session),
@@ -372,7 +373,9 @@ export default function App() {
         ? services.personalisation.get()
         : Promise.resolve(createDefaultCustomerPersonalisation()),
       services.userSettings.get(),
-      services.accounts.getRegistrationOptions(),
+      accountCan(signedInAccount, PERMISSIONS.CREATE_RFQ)
+        ? services.accounts.getEnquiryOptions()
+        : services.accounts.getRegistrationOptions(),
     ]);
     setAccount(signedInAccount);
     setDraft(loadedDraft);
@@ -512,7 +515,9 @@ export default function App() {
       const [updatedEnquiries, updatedNotifications, updatedRegistrationOptions] = await Promise.all([
         listEnquiriesForAccount(account),
         services.notifications.list(),
-        services.accounts.getRegistrationOptions(),
+        accountCan(account, PERMISSIONS.CREATE_RFQ)
+          ? services.accounts.getEnquiryOptions()
+          : services.accounts.getRegistrationOptions(),
       ]);
       setEnquiries(updatedEnquiries);
       setNotifications(updatedNotifications);

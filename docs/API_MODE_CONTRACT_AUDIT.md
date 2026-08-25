@@ -2,10 +2,10 @@
 
 Generated from `src/services/api/createApiServices.js` and `apps/api/src/app.js`.
 
-- Unique frontend API contracts: **130**
-- Registered backend API routes: **138**
-- Registered backend routes including health endpoints: **141**
-- Frontend contracts currently implemented: **130**
+- Unique frontend API contracts: **132**
+- Registered backend API routes: **140**
+- Registered backend routes including health endpoints: **143**
+- Frontend contracts currently implemented: **132**
 - Frontend contracts still missing: **0**
 - Frontend contracts currently incompatible: **0**
 
@@ -47,6 +47,7 @@ Every active API-mode adapter contract has a matching backend route. Contract pa
 | /appointments/:appointmentId/start | POST | authenticated session | required | implemented | P2 |
 | /archived-orders | GET | authenticated session | not required | implemented | P1 |
 | /audit-events | GET | authenticated session | not required | implemented | P1 |
+| /auth/change-password | POST | authenticated session | required | implemented | P2 |
 | /auth/csrf-token | GET | public approved reference/auth route | not required | implemented | P0 |
 | /auth/login | POST | public approved reference/auth route | not required | implemented | P0 |
 | /auth/logout | POST | authenticated session | required | implemented | P2 |
@@ -62,6 +63,7 @@ Every active API-mode adapter contract has a matching backend route. Contract pa
 | /enquiries/:recordId/workflow-actions | GET | authenticated session | not required | implemented | P1 |
 | /enquiries/:recordId/workflow-actions | POST | authenticated session | required | implemented | P2 |
 | /enquiries/inbox | GET | authenticated session | not required | implemented | P1 |
+| /enquiries/options | GET | authenticated session | not required | implemented | P1 |
 | /enquiry-drafts/current | GET | authenticated session | not required | implemented | P1 |
 | /enquiry-drafts/current | PUT | authenticated session | required | implemented | P2 |
 | /expediting/workspace-options | GET | authenticated session | not required | implemented | P1 |

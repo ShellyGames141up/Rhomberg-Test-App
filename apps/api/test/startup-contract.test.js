@@ -142,8 +142,26 @@ test('authenticated bootstrap resources remain protected before login', async t 
     '/api/v1/users/me/notification-preferences',
     '/api/v1/users/me/settings',
     '/api/v1/administration/overview',
+    '/api/v1/enquiries/options',
   ]) {
     const response = await app.inject({ method: 'GET', url });
     assert.equal(response.statusCode, 401, url);
   }
+});
+
+test('customer RFQ options expose only the company-assigned representative after authentication', async t => {
+  const { app } = await createFixture();
+  t.after(() => app.close());
+  const services = createApiServices({ apiBaseUrl: '/api/v1', requestTimeoutMs: 5000, fetchImplementation: createInjectFetch(app) });
+
+  await services.initialize();
+  const publicOptions = await services.accounts.getRegistrationOptions();
+  assert.ok(Object.values(publicOptions.areaDirectory).every(entry => entry.representatives.length === 0));
+
+  await services.auth.signIn({ email: 'customer.a@example.invalid', password: FABRICATED_PASSWORD });
+  const enquiryOptions = await services.accounts.getEnquiryOptions();
+  assert.equal(enquiryOptions.preferredRepresentative.id, '30000000-0000-4000-8000-000000000001');
+  assert.ok(Object.values(enquiryOptions.areaDirectory).every(entry => entry.representatives.length === 1));
+  assert.ok(Object.values(enquiryOptions.areaDirectory).every(entry => entry.representatives[0].id === enquiryOptions.preferredRepresentative.id));
+  assert.doesNotMatch(JSON.stringify(enquiryOptions), /30000000-0000-4000-8000-000000000002/);
 });

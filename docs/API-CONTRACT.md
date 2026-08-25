@@ -226,6 +226,8 @@ Revokes the session and clears cookies. Response `204`.
 
 #### `GET /reference-data/registration`
 
+Public, non-sensitive registration reference data. Operational employee identities are deliberately omitted, so every `areaDirectory.*.representatives` collection is empty and `preferredRepresentative` is `null`.
+
 Response `200`:
 
 ```json
@@ -237,12 +239,16 @@ Response `200`:
     "areaDirectory": {
       "Gauteng": {
         "branch": { "id": "uuid", "name": "Johannesburg", "phone": "...", "address": "..." },
-        "representatives": [{ "id": "uuid", "code": "20", "name": "Assigned Representative", "branchId": "uuid" }]
+        "representatives": []
       }
     }
   }
 }
 ```
+
+#### `GET /enquiries/options`
+
+Authenticated customer RFQ options. Returns the same approved areas, industries and branch details plus only the active representative authoritatively assigned to the caller's company. That representative is returned as `preferredRepresentative` and in each area entry so changing the application area cannot silently change the responsible salesperson. A customer cannot enumerate other companies' representatives.
 
 #### `GET /companies/me`
 
@@ -252,11 +258,7 @@ Returns the caller’s current company context. Customer response is limited to 
 
 Manager/administrator only unless a narrower assigned-company route is implemented. Returns company summaries without credentials.
 
-#### `GET /representatives?area=Gauteng`
-
-Returns active representatives eligible for the selected area/branch. The server validates that the selected representative remains valid when the RFQ is submitted.
-
-After a customer's first authorised representative choice, the company assignment is stored server-side. Authenticated `GET /reference-data/registration` responses include that `preferredRepresentative`; later RFQ forms preselect it and do not ask the customer to choose again. The RFQ submit endpoint always reloads the authoritative company assignment and ignores a conflicting browser value. Reassignment remains an audited Manager/Administrator action.
+The RFQ submit endpoint reloads the authoritative company assignment and rejects a conflicting browser value. Reassignment remains an audited Manager/Administrator action.
 
 ### Products
 

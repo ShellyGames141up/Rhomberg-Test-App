@@ -135,11 +135,25 @@ paths:
       operationId: getRegistrationReferenceData
       responses:
         '200':
-          description: Registration, branch and representative options. An authenticated customer also receives the authoritative remembered company representative.
+          description: Public registration and branch reference data. Operational representative identities are always omitted.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/RegistrationOptionsResponse'
+  /enquiries/options:
+    get:
+      operationId: getCustomerEnquiryOptions
+      responses:
+        '200':
+          description: Company-scoped RFQ options containing only the active representative assigned to the authenticated customer's company.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationOptionsResponse'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '403':
+          $ref: '#/components/responses/ApiError'
   /companies/me:
     get:
       operationId: getCurrentCompany
