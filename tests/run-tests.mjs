@@ -18,6 +18,7 @@ await import('./management.test.mjs');
 await import('./management-commercial.test.mjs');
 await import('./administration-management.test.mjs');
 await import('./employee-account-management.test.mjs');
+await import('./customer-login-reset-ui.test.mjs');
 await import('./client-visits-and-lab-update.test.mjs');
 await import('./validation-errors.test.mjs');
 await import('./representative-loaded-orders.test.mjs');
