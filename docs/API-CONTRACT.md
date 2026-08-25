@@ -4,6 +4,10 @@ Status: the Phase 1 authentication/RFQ vertical slice is implemented locally in 
 
 Base path: `/api/v1`
 
+## First-login password replacement
+
+`POST /api/v1/auth/change-password` is implemented for authenticated local-password accounts. It requires the secure session cookie, `X-CSRF-Token`, `currentPassword` and `newPassword`. The new password must be 16–256 characters and contain upper-case, lower-case, numeric and symbol characters. Success returns `204`, clears the browser cookie, revokes all server sessions and records `authentication.password_changed` without credential material. Until the database-backed `must_change_password` flag is cleared, protected operational API calls fail with `403 PASSWORD_CHANGE_REQUIRED`; `/auth/me`, CSRF rotation, logout, password replacement and public product/reference data remain available.
+
 ## Client visits and location verification
 
 Proposed version `0.9.0` adds assigned Representative clients, activity summaries, appointments, consented one-off geofence checks, customer confirmation, short-lived one-time QR verification, completion scoring, missed-visit reasons, Sales Manager compliance, Administrator locations/policy and own approximate work-location summaries. Production scope is always enforced server-side. No contract provides uncontrolled continuous GPS breadcrumbs.

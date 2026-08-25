@@ -17,6 +17,7 @@ export function createMemoryRepository(seed = {}) {
   const actorForUser = user => ({
     id: user.id, username: user.username || null, email: user.email, contact: user.displayName, displayName: user.displayName,
     status: user.status, identityProvider: user.identityProvider || 'local_password',
+    forcePasswordChange: Boolean(user.mustChangePassword),
     role: user.roles[0], roles: [...user.roles], permissions: [...user.permissions],
     companyIds: [...user.companyIds], companyId: user.companyIds[0] || null,
     company: state.companies.find(company => company.id === user.companyIds[0])?.name || '',
@@ -56,6 +57,19 @@ export function createMemoryRepository(seed = {}) {
       const user = state.users.find(item => item.id === userId);
       if (user) user.lastLoginAt = new Date().toISOString();
     },
+    async changeOwnPassword(actor, passwordHash, correlationId) {
+      const user = state.users.find(item => item.id === actor.id);
+      if (!user) throw notFound('The account was not found.');
+      user.passwordHash = passwordHash;
+      user.mustChangePassword = false;
+      state.sessions.filter(session => session.userId === actor.id && !session.revokedAt).forEach(session => { session.revokedAt = new Date().toISOString(); });
+      state.audits.push(clone({
+        id: state.audits.length + 1,
+        eventType: 'authentication.password_changed', actorUserId: actor.id, actorRole: actor.role,
+        companyId: actor.companyId || null, action: 'change_password', entityType: 'user', entityId: actor.id,
+        outcome: 'success', correlationId, details: { sessionsRevoked: true, firstLoginCompleted: true }, createdAt: new Date().toISOString(),
+      }));
+    },
     async appendAudit(event) { state.audits.push(clone({ id: state.audits.length + 1, ...event, createdAt: new Date().toISOString() })); },
     async getAdministrationOverview(actor) {
       if (!actor.permissions.includes('administer_users')) {
@@ -87,7 +101,7 @@ export function createMemoryRepository(seed = {}) {
         const error = new Error('That sign-in name or email is already in use.'); error.code = 'CONFLICT'; error.statusCode = 409; throw error;
       }
       const createdAt = new Date().toISOString();
-      state.users.push({ id: command.id, username: command.username, email: command.email, displayName: command.displayName, passwordHash: command.passwordHash, status: 'active', identityProvider: 'local_password', roles: [command.role], permissions: [], companyIds: [] });
+      state.users.push({ id: command.id, username: command.username, email: command.email, displayName: command.displayName, passwordHash: command.passwordHash, mustChangePassword: true, status: 'active', identityProvider: 'local_password', roles: [command.role], permissions: [], companyIds: [] });
       state.audits.push({ id: state.audits.length + 1, eventType: 'administrator.internal_user_created', actorUserId: actor.id, actorRole: actor.role, companyId: null, action: 'create_internal_user', entityType: 'user', entityId: command.id, outcome: 'success', correlationId: command.correlationId, details: { role: command.role }, createdAt });
       return clone({ id: command.id, username: command.username, email: command.email, displayName: command.displayName, role: command.role, status: 'active', createdAt });
     },
@@ -95,7 +109,7 @@ export function createMemoryRepository(seed = {}) {
       if (!actor.permissions.includes('administer_users')) { const error=new Error('You are not authorised to perform this action.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }
       if (state.users.some(user => user.email === command.email)) { const error=new Error('That company account or email already exists.'); error.code='CONFLICT'; error.statusCode=409; throw error; }
       state.companies.push({ id: command.companyId, name: command.companyName, area: command.area, industry: command.industry, branchId: command.branchId, status: 'active' });
-      state.users.push({ id: command.userId, email: command.email, displayName: command.contactName, passwordHash: command.passwordHash, phone: command.phone, status: 'active', identityProvider: 'local_password', roles: ['customer'], permissions: ['access_customer_workspace','read_catalogue','view_own_company_account','create_rfq','view_own_company_rfqs','view_own_company_orders'], companyIds: [command.companyId] });
+      state.users.push({ id: command.userId, email: command.email, displayName: command.contactName, passwordHash: command.passwordHash, mustChangePassword: true, phone: command.phone, status: 'active', identityProvider: 'local_password', roles: ['customer'], permissions: ['access_customer_workspace','read_catalogue','view_own_company_account','create_rfq','view_own_company_rfqs','view_own_company_orders'], companyIds: [command.companyId] });
       if (command.representativeId) state.representatives.find(rep => rep.id === command.representativeId)?.companyIds.push(command.companyId);
       state.audits.push({ id: state.audits.length+1,eventType:'administrator.customer_account_created',actorUserId:actor.id,actorRole:actor.role,companyId:command.companyId,action:'create_customer_account',entityType:'company',entityId:command.companyId,outcome:'success',correlationId:command.correlationId,details:{ customerUserId:command.userId },createdAt:new Date().toISOString() });
       return clone({ company: { id:command.companyId,name:command.companyName,area:command.area,industry:command.industry,branchId:command.branchId,representativeId:command.representativeId||'',status:'active' }, account:{ id:command.userId,contact:command.contactName,email:command.email,role:'customer',roles:['customer'],companyId:command.companyId,company:command.companyName,status:'active' } });

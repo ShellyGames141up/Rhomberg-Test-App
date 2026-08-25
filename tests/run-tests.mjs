@@ -42,5 +42,6 @@ await import('./pre-server-readiness.test.mjs');
 await import('./windows-staging-packaging.test.mjs');
 await import('./final-release-verification.test.mjs');
 await import('./staging-identity-boundary.test.mjs');
+await import('./forced-password-onboarding.test.mjs');
 await import('./internal-staging-packaging.test.mjs');
 await import('./api-contract-audit.test.mjs');

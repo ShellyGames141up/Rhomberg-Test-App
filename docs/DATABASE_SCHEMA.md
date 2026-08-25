@@ -1,5 +1,9 @@
 # Phase 21 database schema guide
 
+## First-login credential boundary
+
+Migration `013_first_login_password_change.sql` adds no seed data. It creates `app.change_own_password(text,text)`, a `SECURITY DEFINER` function that resolves the authenticated database context, validates the approved scrypt hash shape, updates only the current active local account, clears `must_change_password`, appends a safe audit event and revokes all sessions. The runtime role receives execute permission on this self-scoped function but retains no direct password or role update grant.
+
 The reusable employee model adds `internal_staff_profiles`, `departments`, `user_branch_assignments`, `user_department_assignments`, `authentication_methods`, `account_activation_tokens`, `password_reset_requests`, `user_preferences`, `user_profile_images`, `account_status_history` and immutable `user_audit_events`. Existing `users`, `branches`, `roles`, `permissions`, `user_roles` and `role_permissions` remain the identity and authorisation core. Email is nullable only when an approved username exists. Real staff seed records are private import data and do not belong in this tracked schema or a public static artifact.
 
 The secure Administrator extension adds usernames and branch assignments to identities, customer-company branch assignment, short-lived step-up verification sessions, generic administrative change evidence, explicit previous/new audit values and append-only approved RFQ/order correction rows. See [ADMINISTRATOR_MANAGEMENT.md](ADMINISTRATOR_MANAGEMENT.md).

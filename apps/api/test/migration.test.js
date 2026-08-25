@@ -8,7 +8,7 @@ test('Phase 1 migration applies to an empty PostgreSQL-compatible database with 
   await runMigrations(db);
   await runMigrations(db);
   const migrationRecords = await db.query('SELECT version FROM public.rhomberg_schema_migrations');
-  assert.deepEqual(migrationRecords.rows.map(row => row.version).sort(), ['001_phase1_vertical_slice.sql', '002_protected_request_context.sql', '003_initial_administrator_bootstrap.sql', '004_internal_test_operational_foundation.sql', '005_approved_product_catalogue.sql', '006_account_directory_fields.sql', '007_simplified_laboratory_access.sql', '008_administration_lifecycle.sql', '009_document_and_governance_fields.sql', '010_client_visits.sql', '011_workspace_and_record_controls.sql', '012_administration_directory_scope.sql']);
+  assert.deepEqual(migrationRecords.rows.map(row => row.version).sort(), ['001_phase1_vertical_slice.sql', '002_protected_request_context.sql', '003_initial_administrator_bootstrap.sql', '004_internal_test_operational_foundation.sql', '005_approved_product_catalogue.sql', '006_account_directory_fields.sql', '007_simplified_laboratory_access.sql', '008_administration_lifecycle.sql', '009_document_and_governance_fields.sql', '010_client_visits.sql', '011_workspace_and_record_controls.sql', '012_administration_directory_scope.sql', '013_first_login_password_change.sql']);
   const tables = await db.query("SELECT tablename FROM pg_tables WHERE schemaname = 'app'");
   const names = new Set(tables.rows.map(row => row.tablename));
   for (const required of ['companies', 'users', 'roles', 'permissions', 'user_roles', 'company_users', 'sessions', 'rfqs', 'rfq_items', 'document_metadata', 'audit_events', 'notifications', 'idempotency_records', 'request_security_contexts', 'platform_bootstrap_state', 'user_settings', 'notification_preferences', 'enquiry_drafts', 'orders', 'order_items', 'workflow_events', 'technical_support_requests', 'technical_support_messages', 'locations', 'platform_policies', 'user_permission_grants', 'user_profile_images', 'client_appointments', 'catalogue_overrides']) assert.equal(names.has(required), true, `missing ${required}`);
@@ -29,7 +29,35 @@ test('Phase 1 migration applies to an empty PostgreSQL-compatible database with 
   assert.deepEqual(operationalCounts.rows[0], { users: 0, companies: 0, rfqs: 0, items: 0, documents: 0, notifications: 0, audits: 0, bootstrap_records: 0 });
   const permission = await db.query("SELECT 1 FROM app.role_permissions WHERE role_code = 'administrator' AND permission_code = 'administer_users'");
   assert.equal(permission.rows.length, 1);
+  const passwordFunction = await db.query("SELECT 1 FROM pg_proc JOIN pg_namespace ON pg_namespace.oid=pg_proc.pronamespace WHERE nspname='app' AND proname='change_own_password'");
+  assert.equal(passwordFunction.rows.length, 1);
   const catalogue = await db.query('SELECT count(*)::integer AS count FROM app.products WHERE is_active');
   assert.equal(catalogue.rows[0].count, 84);
+  await db.close();
+});
+
+test('first-login database function clears only the authenticated user flag, audits safely and revokes sessions', async () => {
+  const db = new PGlite();
+  await runMigrations(db);
+  const userId = '20000000-0000-4000-8000-000000000077';
+  const tokenHash = '7'.repeat(64);
+  const csrfHash = '8'.repeat(64);
+  const passwordHash = `scrypt$32768$8$1$${'a'.repeat(22)}$${'b'.repeat(86)}`;
+  await db.query(`INSERT INTO app.users(id,username,email,display_name,password_hash,identity_provider,status,must_change_password)
+    VALUES($1,'fabricated-migration-user','migration.user@example.invalid','Fabricated Migration User',$2,'local_password','active',true)`, [userId, passwordHash]);
+  await db.query("INSERT INTO app.user_roles(user_id,role_code) VALUES($1,'planning')", [userId]);
+  await db.query(`INSERT INTO app.sessions(id,user_id,token_hash,csrf_token_hash,expires_at)
+    VALUES('30000000-0000-4000-8000-000000000077',$1,$2,$3,now()+interval '1 day')`, [userId, tokenHash, csrfHash]);
+  await db.exec('BEGIN');
+  await db.query('SELECT app.establish_request_context($1)', [tokenHash]);
+  await db.query('SELECT app.change_own_password($1,$2)', [passwordHash, 'fabricated-correlation']);
+  await db.exec('COMMIT');
+  const user = await db.query('SELECT must_change_password FROM app.users WHERE id=$1', [userId]);
+  assert.equal(user.rows[0].must_change_password, false);
+  const session = await db.query('SELECT revoked_at IS NOT NULL AS revoked FROM app.sessions WHERE user_id=$1', [userId]);
+  assert.equal(session.rows[0].revoked, true);
+  const audit = await db.query("SELECT event_type,details::text AS details FROM app.audit_events WHERE actor_user_id=$1", [userId]);
+  assert.equal(audit.rows[0].event_type, 'authentication.password_changed');
+  assert.equal(audit.rows[0].details.includes(passwordHash), false);
   await db.close();
 });

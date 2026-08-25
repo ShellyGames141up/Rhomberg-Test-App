@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { ApiError } from '../errors.js';
-import { hashSessionToken, randomToken, sha256 } from '../security/crypto.js';
+import { hashPassword, hashSessionToken, randomToken, sha256, verifyPassword } from '../security/crypto.js';
 
 const safeUser = actor => ({
   id: actor.id, companyId: actor.companyId, company: actor.company, contact: actor.contact,
   username: actor.username, email: actor.email, role: actor.role, roles: actor.roles, permissions: actor.permissions,
+  forcePasswordChange: Boolean(actor.forcePasswordChange),
 });
 
 export function createAuthService({ repository, identityProvider, config, now = () => new Date() }) {
@@ -35,6 +36,20 @@ export function createAuthService({ repository, identityProvider, config, now = 
     async logout({ token, actor, session, correlationId }) {
       await repository.revokeSession(hashSessionToken(token, config.sessionPepper));
       await repository.appendAudit({ eventType: 'auth.logout', actorUserId: actor.id, actorRole: actor.role, companyId: actor.companyId, action: 'logout', entityType: 'session', entityId: session.id, outcome: 'success', correlationId, details: {} });
+    },
+    async changeOwnPassword({ actor, currentPassword, newPassword, correlationId }) {
+      const current = String(currentPassword || '');
+      const replacement = String(newPassword || '');
+      const authenticated = await identityProvider.authenticate({ identifier: actor.username || actor.email, password: current });
+      if (!authenticated || authenticated.id !== actor.id) throw new ApiError('INVALID_CURRENT_PASSWORD', 'The current password is incorrect.', 401);
+      if (replacement.length < 16 || !/[a-z]/.test(replacement) || !/[A-Z]/.test(replacement) || !/[0-9]/.test(replacement) || !/[^A-Za-z0-9]/.test(replacement)) {
+        throw new ApiError('PASSWORD_WEAK', 'Use at least 16 characters including upper-case, lower-case, numeric and symbol characters.', 422, { newPassword: 'Use a stronger password.' });
+      }
+      if (await verifyPassword(replacement, authenticated.passwordHash || authenticated.password_hash)) {
+        throw new ApiError('PASSWORD_REUSED', 'Choose a new password.', 422, { newPassword: 'Choose a different password.' });
+      }
+      await repository.changeOwnPassword(actor, await hashPassword(replacement), correlationId);
+      return { sessionEnded: true };
     },
     safeUser,
   };

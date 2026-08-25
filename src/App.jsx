@@ -180,7 +180,7 @@ export default function App() {
         let loadedQualityOptions = EMPTY_QA_OPTIONS;
         let loadedPersonalisation = createDefaultCustomerPersonalisation();
         let loadedUserSettings = createDefaultUserSettings();
-        if (session) {
+        if (session && !session.forcePasswordChange) {
           [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedAuditEvents, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedLaboratoryOptions, loadedQualityOptions, loadedPersonalisation, loadedUserSettings] = await Promise.all([
             accountCan(session, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
             listEnquiriesForAccount(session),
@@ -330,6 +330,12 @@ export default function App() {
     if (!previewAllowsRole(PREVIEW_CONTEXT, signedInAccount.role)) {
       throw new Error(`This ${signedInAccount.role.replaceAll('_', ' ')} account is not supported in ${PREVIEW_CONTEXT.displayName}.`);
     }
+    if (signedInAccount.forcePasswordChange) {
+      setAccount(signedInAccount);
+      setDraft([]); setEnquiries([]); setOrders([]); setNotifications([]); setAuditEvents([]);
+      setView('settings');
+      return userSettings;
+    }
     const [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedAuditEvents, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedLaboratoryOptions, loadedQualityOptions, loadedPersonalisation, loadedUserSettings, loadedRegistrationOptions] = await Promise.all([
       accountCan(signedInAccount, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
       listEnquiriesForAccount(signedInAccount),
@@ -438,6 +444,11 @@ export default function App() {
   };
 
   const navigate = target => {
+    if (account?.forcePasswordChange && target !== 'settings') {
+      setView('settings');
+      notify('Change the temporary password before continuing.');
+      return;
+    }
     const destination = account ? normaliseViewForRole(account.role, target) : 'home';
     if (destination === 'catalogue') setCategoryId(null);
     setNotificationTarget(null);
@@ -780,9 +791,7 @@ export default function App() {
     return signedInAccount;
   }) : null;
 
-  const signOut = async () => {
-    try {
-      await services.auth.signOut();
+  const clearSignedInState = () => {
       setAccount(null);
       setDraft([]);
       setEnquiries([]);
@@ -803,10 +812,18 @@ export default function App() {
       setCategoryId(null);
       setProductId(null);
       setView('home');
+  };
+
+  const signOut = async () => {
+    try {
+      await services.auth.signOut();
+      clearSignedInState();
     } catch (error) {
       notify(friendlyServiceError(error, 'Sign-out could not be completed. Please try again.'));
     }
   };
+
+  const finishCredentialChange = result => result.sessionEnded ? clearSignedInState() : setAccount(result.account);
 
   if (appStatus === 'loading') return <AppLoading theme={theme} onToggleTheme={toggleTheme} />;
   if (appStatus === 'error') return <AppLoadError message={appError} onRetry={() => setRetryToken(value => value + 1)} />;
@@ -903,8 +920,8 @@ export default function App() {
               {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
               {view === 'archive' && <ArchivedOrders account={account} archiveActions={services.archive} serviceMode={services.mode} onRecordsChanged={refreshAfterRetentionAction} />}
               {view === 'audit' && <AuditTrail events={auditEvents} serviceMode={services.mode} />}
-              {view === 'account' && <Account account={account} enquiries={staffRecords} onSignOut={signOut} serviceMode={services.mode} onOpenSettings={() => navigate('settings')} credentialActions={services.mode === 'mock' ? services.credentials : null} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} />}
-              {view === 'settings' && <Settings account={account} initialValue={userSettings} notificationPreferences={notificationPreferences} serviceMode={services.mode} credentialActions={services.mode === 'mock' ? services.credentials : null} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} onSwitchWorkspace={switchWorkspace} onSignOut={signOut} onSave={saveUserSettings} onSaveNotifications={saveNotificationPreferences} onReset={resetUserSettings} onReplayTutorial={replayTutorial} onTestSound={value => provideFeedback(value, 'success', 'success')} onTestHaptic={value => triggerHaptic(value, 'success')} onClose={() => navigate('account')} />}
+              {view === 'account' && <Account account={account} enquiries={staffRecords} onSignOut={signOut} serviceMode={services.mode} onOpenSettings={() => navigate('settings')} credentialActions={services.mode === 'mock' ? services.credentials : null} onCredentialChanged={finishCredentialChange} />}
+              {view === 'settings' && <Settings account={account} initialValue={userSettings} notificationPreferences={notificationPreferences} serviceMode={services.mode} credentialActions={services.mode === 'mock' ? services.credentials : null} onChangeTemporaryPassword={services.mode === 'api' ? services.auth.changePassword : null} onCredentialChanged={finishCredentialChange} onSwitchWorkspace={switchWorkspace} onSignOut={signOut} onSave={saveUserSettings} onSaveNotifications={saveNotificationPreferences} onReset={resetUserSettings} onReplayTutorial={replayTutorial} onTestSound={value => provideFeedback(value, 'success', 'success')} onTestHaptic={value => triggerHaptic(value, 'success')} onClose={() => navigate('account')} />}
             </>
           ) : (
             <>
@@ -915,8 +932,8 @@ export default function App() {
               {view === 'enquiry' && <Enquiry account={account} lines={draft} registrationOptions={registrationOptions} deliverySettings={services.preview} onAddProducts={() => navigate('catalogue')} onEdit={line => startConfigurator(line, 'enquiry')} onRemove={removeLine} onQuantity={updateQuantity} onSubmit={submitEnquiry} success={success} onCloseSuccess={() => { setSuccess(null); navigate('tracking'); }} />}
               {view === 'tracking' && <OrderTracking account={account} enquiries={accountRecords} onStartEnquiry={() => navigate('enquiry')} onAction={performWorkflowAction} serviceMode={services.mode} certificateActions={services.laboratory} sourceDocumentActions={services.representativeOrders} technicalSupportActions={services.technicalSupport} onRecordsChanged={refreshTechnicalRecords} focusRecordId={notificationTarget?.entityId} />}
               {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
-              {view === 'account' && <Account account={account} enquiries={accountRecords} onSignOut={signOut} serviceMode={services.mode} onOpenSettings={() => navigate('settings')} personalisation={customerPersonalisation} credentialActions={services.mode === 'mock' ? services.credentials : null} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} />}
-              {view === 'settings' && <Settings account={account} initialValue={userSettings} notificationPreferences={notificationPreferences} serviceMode={services.mode} credentialActions={services.mode === 'mock' ? services.credentials : null} onCredentialChanged={result => result.sessionEnded ? signOut() : setAccount(result.account)} onSwitchWorkspace={switchWorkspace} onSignOut={signOut} onSave={saveUserSettings} onSaveNotifications={saveNotificationPreferences} onReset={resetUserSettings} onReplayTutorial={replayTutorial} onTestSound={value => provideFeedback(value, 'success', 'success')} onTestHaptic={value => triggerHaptic(value, 'success')} onClose={() => navigate('account')} />}
+              {view === 'account' && <Account account={account} enquiries={accountRecords} onSignOut={signOut} serviceMode={services.mode} onOpenSettings={() => navigate('settings')} personalisation={customerPersonalisation} credentialActions={services.mode === 'mock' ? services.credentials : null} onCredentialChanged={finishCredentialChange} />}
+              {view === 'settings' && <Settings account={account} initialValue={userSettings} notificationPreferences={notificationPreferences} serviceMode={services.mode} credentialActions={services.mode === 'mock' ? services.credentials : null} onChangeTemporaryPassword={services.mode === 'api' ? services.auth.changePassword : null} onCredentialChanged={finishCredentialChange} onSwitchWorkspace={switchWorkspace} onSignOut={signOut} onSave={saveUserSettings} onSaveNotifications={saveNotificationPreferences} onReset={resetUserSettings} onReplayTutorial={replayTutorial} onTestSound={value => provideFeedback(value, 'success', 'success')} onTestHaptic={value => triggerHaptic(value, 'success')} onClose={() => navigate('account')} />}
             </>
           )}
         </main>

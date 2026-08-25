@@ -23,6 +23,7 @@ const actorFromRows = (user, roles, permissions, companies, representative) => (
   displayName: user.display_name,
   status: user.status,
   identityProvider: user.identity_provider,
+  forcePasswordChange: Boolean(user.must_change_password),
   roles: roles.map(row => row.role_code),
   role: roles[0]?.role_code || null,
   permissions: [...new Set(permissions.map(row => row.permission_code))],
@@ -173,7 +174,7 @@ export function createPostgresRepository(pool) {
     async findUserByIdentifier(identifier) {
       return inTransaction(async client => {
         const result = await client.query(`SELECT id, username, email, display_name, password_hash, identity_provider,
-          status, disabled_at, deleted_at FROM app.users
+          status, must_change_password, disabled_at, deleted_at FROM app.users
           WHERE (lower(username) = lower($1) OR email = lower($1)) AND deleted_at IS NULL`, [identifier]);
         return result.rows[0] || null;
       }, { authLookup: true });
@@ -187,7 +188,7 @@ export function createPostgresRepository(pool) {
     async getSessionActor(tokenHash) {
       return inTransaction(async client => {
         const result = await client.query(`SELECT s.id AS session_id, s.user_id AS id, s.csrf_token_hash, s.selected_role,
-          s.expires_at, u.username, u.email, u.display_name, u.identity_provider, u.status
+          s.expires_at, u.username, u.email, u.display_name, u.identity_provider, u.status, u.must_change_password
           FROM app.sessions s JOIN app.users u ON u.id = s.user_id
           WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now() AND u.deleted_at IS NULL`, [tokenHash]);
         const row = result.rows[0];
@@ -208,6 +209,11 @@ export function createPostgresRepository(pool) {
     async setSessionRole(actor,sessionId,role){return inTransaction(async client=>{if(!actor.roles.includes(role)){const error=new Error('That workspace is not assigned to this account.');error.code='FORBIDDEN';error.statusCode=403;throw error;}await client.query('UPDATE app.sessions SET selected_role=$2,last_seen_at=now() WHERE id=$1',[sessionId,role]);return{...actor,role};},{actor});},
     async updateLastLogin(userId) {
       return inTransaction(client => client.query('UPDATE app.users SET last_login_at = now() WHERE id = $1', [userId]), { authLookup: true });
+    },
+    async changeOwnPassword(actor, passwordHash, correlationId) {
+      return inTransaction(async client => {
+        await client.query('SELECT app.change_own_password($1,$2)', [passwordHash, correlationId]);
+      }, { actor });
     },
     async appendAudit(event) {
       return inTransaction(client => client.query(`INSERT INTO app.audit_events

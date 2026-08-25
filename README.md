@@ -186,6 +186,14 @@ See `docs/FINAL_COMPLETION_REPORT.md` for the detailed final UI/UX report, `docs
 
 ## Current Updates
 
+### Pre-UAT first-login security enforcement
+
+- Administrator-created employee and customer accounts are now marked for mandatory password replacement on first sign-in.
+- The server carries that state through authenticated sessions and blocks operational API access until the user changes the temporary password.
+- The application presents only the Security workspace during this restricted session, validates the current and replacement passwords through the API, revokes the temporary session after success and requires a fresh sign-in.
+- PostgreSQL migration `013_first_login_password_change.sql` adds the audited, self-scoped database operation. No password, password hash or temporary credential is returned or written to audit history.
+- Existing public demonstration builds remain separately generated and production/internal-staging builds remain API-only.
+
 ### Final workflow and interface refinement — Steps 20–27
 
 - The Sales Representative **Load Customer Order** workflow no longer displays a redundant public-preview banner.

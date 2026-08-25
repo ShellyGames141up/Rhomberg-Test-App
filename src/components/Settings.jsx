@@ -35,6 +35,7 @@ export function Settings({
   notificationPreferences,
   serviceMode,
   credentialActions,
+  onChangeTemporaryPassword,
   onCredentialChanged,
   onSwitchWorkspace,
   onSignOut,
@@ -52,7 +53,7 @@ export function Settings({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const sections = useMemo(() => settingsSectionsForRole(account.role), [account.role]);
+  const sections = useMemo(() => account.forcePasswordChange ? ['security'] : settingsSectionsForRole(account.role), [account.forcePasswordChange, account.role]);
   const notificationGroups = useMemo(() => notificationGroupsForRole(account.role), [account.role]);
 
   useEffect(() => setDraft(normaliseUserSettings(initialValue)), [initialValue]);
@@ -93,7 +94,7 @@ export function Settings({
         {section === 'notifications' && <NotificationSettings groups={notificationGroups} settings={draft} onSettings={setDraft} value={notificationDraft} onChange={setNotificationDraft} serviceMode={serviceMode} />}
         {section === 'appearance' && <AppearanceSettings value={draft.appearance} onChange={values => patch('appearance', values)} />}
         {section === 'accessibility' && <AccessibilitySettings value={draft} onPatch={patch} />}
-        {section === 'security' && <SecuritySettings account={account} actions={credentialActions} serviceMode={serviceMode} onChanged={onCredentialChanged} onSwitchWorkspace={onSwitchWorkspace} onSignOut={onSignOut} />}
+        {section === 'security' && <SecuritySettings account={account} actions={credentialActions} onChangeTemporaryPassword={onChangeTemporaryPassword} serviceMode={serviceMode} onChanged={onCredentialChanged} onSwitchWorkspace={onSwitchWorkspace} onSignOut={onSignOut} />}
         {section === 'tutorials' && <TutorialSettings account={account} serviceMode={serviceMode} onReplay={onReplayTutorial} />}
         {section === 'privacy' && <PrivacySettings serviceMode={serviceMode} />}
         {section === 'about' && <AboutSettings serviceMode={serviceMode} />}
@@ -133,9 +134,26 @@ function AccessibilitySettings({ value, onPatch }) {
   return <SettingsPanel title="Accessibility preferences"><SettingToggle label="Reduce Motion" help="Replaces movement with simple fades and disables the gauge sweep." checked={value.accessibility.reduceMotion} onChange={reduceMotion => onPatch('accessibility', { reduceMotion })} /><SettingToggle label="Disable Decorative Animations" checked={!value.accessibility.decorativeAnimations} onChange={disabled => onPatch('accessibility', { decorativeAnimations: !disabled })} /><SettingToggle label="Increase Text Size" checked={value.appearance.increasedText} onChange={increasedText => onPatch('appearance', { increasedText })} /><SettingToggle label="High Contrast" checked={value.appearance.highContrast} onChange={highContrast => onPatch('appearance', { highContrast })} /><SettingToggle label="Reduce Transparency" checked={value.appearance.reducedTransparency} onChange={reducedTransparency => onPatch('appearance', { reducedTransparency })} /><SettingToggle label="Disable UI Sounds" checked={!value.sounds.enabled} onChange={disabled => onPatch('sounds', { enabled: !disabled })} /><SettingToggle label="Disable Haptic Feedback" checked={!value.haptics.enabled} onChange={disabled => onPatch('haptics', { enabled: !disabled })} /><SettingToggle label="Screen Reader Optimisation" checked={value.accessibility.screenReaderOptimisation} onChange={screenReaderOptimisation => onPatch('accessibility', { screenReaderOptimisation })} /></SettingsPanel>;
 }
 
-function SecuritySettings({ account, actions, serviceMode, onChanged, onSwitchWorkspace, onSignOut }) {
+function SecuritySettings({ account, actions, onChangeTemporaryPassword, serviceMode, onChanged, onSwitchWorkspace, onSignOut }) {
   const roles = account.roles || [account.role];
-  return <div className="settings-stack"><SettingsPanel title="Active session"><dl className="settings-session"><div><dt>Signed in as</dt><dd>{account.email || account.signInName}</dd></div><div><dt>Authentication realm</dt><dd>{account.authRealm === 'customer' ? 'Customer' : 'Internal staff'}</dd></div><div><dt>Account status</dt><dd>{humaniseStatus(account.status)}</dd></div><div><dt>First-login onboarding</dt><dd>{account.forcePasswordChange ? 'Password change required' : 'Complete'}</dd></div><div><dt>Multi-factor authentication</dt><dd>Future production integration</dd></div></dl></SettingsPanel>{roles.length > 1 && <SettingsPanel title="Switch Workspace"><p>Use one identity for every role assigned to you.</p><div className="settings-inline-actions">{roles.map(role => <button type="button" className={role === account.role ? 'primary-button' : 'secondary-button'} disabled={role === account.role} key={role} onClick={() => onSwitchWorkspace(role)}>{humaniseStatus(role)}</button>)}</div></SettingsPanel>}{actions && <CredentialChangePanel account={account} actions={actions} serviceMode={serviceMode} onChanged={onChanged} />}<button className="sign-out" type="button" onClick={onSignOut}>Sign out of Rhomberg Connect</button></div>;
+  return <div className="settings-stack"><SettingsPanel title="Active session"><dl className="settings-session"><div><dt>Signed in as</dt><dd>{account.email || account.signInName}</dd></div><div><dt>Authentication realm</dt><dd>{account.authRealm === 'customer' ? 'Customer' : 'Internal staff'}</dd></div><div><dt>Account status</dt><dd>{humaniseStatus(account.status)}</dd></div><div><dt>First-login onboarding</dt><dd>{account.forcePasswordChange ? 'Password change required' : 'Complete'}</dd></div><div><dt>Multi-factor authentication</dt><dd>Future production integration</dd></div></dl></SettingsPanel>{account.forcePasswordChange && onChangeTemporaryPassword && <TemporaryPasswordChangePanel onSubmit={onChangeTemporaryPassword} onChanged={onChanged} />}{!account.forcePasswordChange && roles.length > 1 && <SettingsPanel title="Switch Workspace"><p>Use one identity for every role assigned to you.</p><div className="settings-inline-actions">{roles.map(role => <button type="button" className={role === account.role ? 'primary-button' : 'secondary-button'} disabled={role === account.role} key={role} onClick={() => onSwitchWorkspace(role)}>{humaniseStatus(role)}</button>)}</div></SettingsPanel>}{!account.forcePasswordChange && actions && <CredentialChangePanel account={account} actions={actions} serviceMode={serviceMode} onChanged={onChanged} />}<button className="sign-out" type="button" onClick={onSignOut}>Sign out of Rhomberg Connect</button></div>;
+}
+
+function TemporaryPasswordChangePanel({ onSubmit, onChanged }) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const submit = async event => {
+    event.preventDefault(); setError('');
+    if (newPassword !== confirmation) { setError('The new passwords do not match.'); return; }
+    setBusy(true);
+    try { onChanged(await onSubmit({ currentPassword, newPassword })); }
+    catch (reason) { setError(reason?.message || 'The password could not be changed.'); }
+    finally { setBusy(false); }
+  };
+  return <SettingsPanel title="Replace temporary password"><form className="settings-stack" onSubmit={submit}><p className="settings-note">Your temporary credential cannot be used for operational work. Choose a private password now; all current sessions will be signed out.</p><label className="settings-field"><span>Current temporary password</span><input type="password" autoComplete="current-password" value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} required /></label><label className="settings-field"><span>New password</span><input type="password" autoComplete="new-password" minLength="16" value={newPassword} onChange={event => setNewPassword(event.target.value)} required /><small>At least 16 characters with upper-case, lower-case, number and symbol.</small></label><label className="settings-field"><span>Confirm new password</span><input type="password" autoComplete="new-password" minLength="16" value={confirmation} onChange={event => setConfirmation(event.target.value)} required /></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button" type="submit" disabled={busy}>{busy ? 'Changing password…' : 'Change password and sign out'}</button></form></SettingsPanel>;
 }
 
 const humaniseStatus = value => String(value || '').replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase());

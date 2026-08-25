@@ -47,7 +47,7 @@ TO :"runtime_role";
 
 GRANT SELECT, INSERT ON app.sessions TO :"runtime_role";
 GRANT UPDATE (csrf_token_hash, last_seen_at, revoked_at, selected_role) ON app.sessions TO :"runtime_role";
-GRANT SELECT (id, username, email, display_name, password_hash, identity_provider, status,
+GRANT SELECT (id, username, email, display_name, password_hash, identity_provider, status, must_change_password,
   phone, department, branch_id, last_login_at, created_at, disabled_at, deleted_at)
   ON app.users TO :"runtime_role";
 GRANT UPDATE (last_login_at) ON app.users TO :"runtime_role";
@@ -102,4 +102,5 @@ GRANT EXECUTE ON FUNCTION
   ,app.administer_user(uuid,text,jsonb,text)
   ,app.administer_company(uuid,text,jsonb,text)
   ,app.admin_user_login_history(uuid)
+  ,app.change_own_password(text,text)
 TO :"runtime_role";

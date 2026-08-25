@@ -76,6 +76,12 @@ export function createApiServices(config = {}) {
       client.setCsrfToken('');
     },
 
+    async changePassword({ currentPassword, newPassword }) {
+      await client.post('/auth/change-password', { currentPassword, newPassword });
+      client.setCsrfToken('');
+      return { sessionEnded: true };
+    },
+
     switchWorkspace: role => client.post('/auth/workspace', { role }).then(result => result.user),
 
     async getDemoLogins() {

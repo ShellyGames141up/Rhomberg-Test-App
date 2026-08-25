@@ -16,6 +16,7 @@ x-rhomberg-implementation:
     - /auth/login
     - /auth/me
     - /auth/logout
+    - /auth/change-password
     - /enquiries
     - /enquiries/{enquiryId}
     - /documents/{documentId}
@@ -95,6 +96,26 @@ paths:
       responses:
         '204':
           description: Session revoked
+  /auth/change-password:
+    post:
+      operationId: changeOwnPassword
+      description: Replaces an authenticated local account password, clears first-login enforcement and revokes every current session. Password values are never returned or audited.
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+      responses:
+        '204':
+          description: Password changed and sessions revoked
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '422':
+          $ref: '#/components/responses/ApiError'
   /auth/refresh:
     post:
       operationId: refreshSession
@@ -3947,6 +3968,13 @@ components:
       properties:
         email: { type: string, format: email }
         password: { type: string, minLength: 1, maxLength: 1024 }
+    PasswordChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, minLength: 1, maxLength: 256, writeOnly: true }
+        newPassword: { type: string, minLength: 16, maxLength: 256, writeOnly: true }
     RegisterRequest:
       type: object
       additionalProperties: false
@@ -3972,6 +4000,7 @@ components:
         area: { type: string }
         industry: { type: string }
         role: { $ref: '#/components/schemas/Role' }
+        forcePasswordChange: { type: boolean }
         permissions:
           type: array
           uniqueItems: true

@@ -40,6 +40,7 @@ const approvedDocumentExtension = /\.(?:pdf|docx?|png|jpe?g)$/i;
 const publicActor = actor => ({
   id: actor.id, companyId: actor.companyId, company: actor.company, contact: actor.contact,
   username: actor.username, email: actor.email, role: actor.role, roles: actor.roles, permissions: actor.permissions,
+  forcePasswordChange: Boolean(actor.forcePasswordChange),
 });
 
 async function parseEnquiryRequest(request, maxBytes) {
@@ -159,7 +160,7 @@ export async function buildApp({ config, repository, storage, identityProvider, 
     logger: logger ? {
       level: config.logLevel,
       redact: {
-        paths: ['req.headers.authorization', 'req.headers.cookie', 'req.headers.x-csrf-token', 'res.headers.set-cookie', 'body.password', '*.password', '*.sessionToken', '*.csrfToken', '*.databaseUrl'],
+        paths: ['req.headers.authorization', 'req.headers.cookie', 'req.headers.x-csrf-token', 'res.headers.set-cookie', 'body.password', 'body.currentPassword', 'body.newPassword', '*.password', '*.currentPassword', '*.newPassword', '*.sessionToken', '*.csrfToken', '*.databaseUrl'],
         censor: '[REDACTED]',
       },
       ...(logStream ? { stream: logStream } : {}),
@@ -230,6 +231,14 @@ export async function buildApp({ config, repository, storage, identityProvider, 
         request.sessionToken = token;
       }
     }
+    const requestPath = request.url.split('?')[0];
+    const firstLoginAllowed = new Set([
+      '/api/v1/auth/csrf-token', '/api/v1/auth/me', '/api/v1/auth/logout', '/api/v1/auth/change-password',
+    ]);
+    const publicReferenceRequest = requestPath.startsWith('/api/v1/products') || requestPath.startsWith('/api/v1/reference-data/');
+    if (request.actor?.forcePasswordChange && requestPath.startsWith('/api/v1/') && !firstLoginAllowed.has(requestPath) && !publicReferenceRequest) {
+      throw new ApiError('PASSWORD_CHANGE_REQUIRED', 'Change the temporary password before continuing.', 403);
+    }
   });
 
   const requireAuthentication = async request => {
@@ -263,6 +272,13 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   app.get('/api/v1/auth/me', { preHandler: requireAuthentication }, async request => ({ data: publicActor(request.actor), meta: { requestId: request.id } }));
   app.post('/api/v1/auth/logout', { preHandler: requireCsrf }, async (request, reply) => {
     await authService.logout({ token: request.sessionToken, actor: request.actor, session: request.session, correlationId: request.id });
+    reply.clearCookie(config.cookieName, { path: '/', httpOnly: true, secure: config.cookieSecure, sameSite: 'lax' }).code(204).send();
+  });
+  app.post('/api/v1/auth/change-password', {
+    preHandler: requireCsrf,
+    schema: { body: { type: 'object', additionalProperties: false, required: ['currentPassword', 'newPassword'], properties: { currentPassword: { type: 'string', minLength: 1, maxLength: 256 }, newPassword: { type: 'string', minLength: 16, maxLength: 256 } } } },
+  }, async (request, reply) => {
+    await authService.changeOwnPassword({ actor: request.actor, currentPassword: request.body.currentPassword, newPassword: request.body.newPassword, correlationId: request.id });
     reply.clearCookie(config.cookieName, { path: '/', httpOnly: true, secure: config.cookieSecure, sameSite: 'lax' }).code(204).send();
   });
   app.post('/api/v1/auth/workspace', { preHandler: requireCsrf }, async request=>({data:publicActor(await repository.setSessionRole(request.actor,request.session.id,String(request.body?.role||''))),meta:{requestId:request.id}}));

@@ -6,7 +6,10 @@ Rhomberg Connect's public mock mode contains fabricated credentials only. Real p
 
 - An authorised Administrator may create or reset an internal account and generate a cryptographically random temporary password.
 - The temporary password is returned once for controlled handover. It is not stored in directory responses or audit metadata.
-- The account remains `pending_activation` and must change its password on first login.
+- The account is marked with the authoritative `must_change_password` flag and cannot enter operational work until the first-login replacement succeeds.
+- Staging stores the authoritative first-login state in `app.users.must_change_password`. The authenticated actor exposes only the boolean `forcePasswordChange`; it never exposes a hash or credential.
+- While that flag is set, the frontend loads no operational workspace data and the API rejects protected operational routes with `PASSWORD_CHANGE_REQUIRED`.
+- Password replacement verifies the current password, enforces the 16-character complexity policy, writes through the scoped database function, audits safe metadata, revokes all sessions and requires a fresh login.
 - Password changes end the current session. Reset and activation actions create immutable audit events without recording the secret.
 - High-risk Administrator actions require step-up verification and a reason.
 
