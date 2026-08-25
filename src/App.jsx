@@ -843,7 +843,7 @@ export default function App() {
 
   return (
     <div
-      className={`app-canvas platform-preview preview-${PREVIEW_CONTEXT.id} ${isCustomerExperience ? 'preview-connect' : 'preview-operations'} ${__PUBLIC_PREVIEW__ && executiveDemoState?.presentationMode ? 'executive-presentation-mode' : ''} ${__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.executiveDemo ? `executive-layout-${executiveDemoState?.layoutMode || 'full'} executive-device-${executiveDemoState?.devicePreview || 'desktop'}` : ''}`}
+      className={`app-canvas platform-preview preview-${PREVIEW_CONTEXT.id} ${!__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.desktop ? 'production-desktop-surface' : ''} ${!__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.mobile ? 'production-mobile-surface' : ''} ${isCustomerExperience ? 'preview-connect' : 'preview-operations'} ${__PUBLIC_PREVIEW__ && executiveDemoState?.presentationMode ? 'executive-presentation-mode' : ''} ${__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.executiveDemo ? `executive-layout-${executiveDemoState?.layoutMode || 'full'} executive-device-${executiveDemoState?.devicePreview || 'desktop'}` : ''}`}
       data-font-size={userSettings.appearance.increasedText ? 'large' : 'medium'}
       data-reduce-motion={userSettings.accessibility.reduceMotion ? 'true' : 'false'}
       data-decorative-animations={userSettings.accessibility.decorativeAnimations ? 'true' : 'false'}

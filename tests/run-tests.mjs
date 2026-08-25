@@ -30,6 +30,7 @@ await import('./platform-previews.test.mjs');
 await import('./private-user-entrypoints.test.mjs');
 await import('./final-handover.test.mjs');
 await import('./accessibility-responsive.test.mjs');
+await import('./production-desktop-responsive.test.mjs');
 await import('./user-experience.test.mjs');
 await import('./ui-screen-matrix.test.mjs');
 await import('./visual-regression.test.mjs');
