@@ -219,29 +219,30 @@ export function createPostgresRepository(pool) {
     },
     async getAdministrationOverview(actor) {
       return inTransaction(async client => {
-        const [users, customerUsers, roles, permissions, rolePermissions, companies, representatives, auditCount] = await Promise.all([
-          client.query('SELECT * FROM app.list_internal_users()'),
-          client.query(`SELECT user_record.id,user_record.username,user_record.email,user_record.display_name,user_record.phone,
+        // A pg Client represents one PostgreSQL connection. Keep all statements on
+        // this transaction sequential; concurrent client.query calls can leave the
+        // protocol queue blocked and eventually exhaust the pool under retries.
+        const users = await client.query('SELECT * FROM app.list_internal_users()');
+        const customerUsers = await client.query(`SELECT user_record.id,user_record.username,user_record.email,user_record.display_name,user_record.phone,
             user_record.status,user_record.last_login_at,user_record.created_at,company.id AS company_id,company.name AS company_name,
             company.area,company.branch_id
             FROM app.users user_record JOIN app.company_users membership ON membership.user_id=user_record.id AND membership.revoked_at IS NULL
             JOIN app.companies company ON company.id=membership.company_id AND company.deleted_at IS NULL
             JOIN app.user_roles role ON role.user_id=user_record.id AND role.role_code='customer' AND role.revoked_at IS NULL
-            WHERE user_record.deleted_at IS NULL ORDER BY company.name,user_record.display_name`),
-          client.query("SELECT code, name FROM app.roles WHERE is_internal AND is_active AND code <> 'administrator' ORDER BY name"),
-          client.query('SELECT code FROM app.permissions WHERE is_active ORDER BY code'),
-          client.query('SELECT role_code, permission_code FROM app.role_permissions ORDER BY role_code, permission_code'),
-          client.query(`SELECT company.id,company.name,company.status,company.area,company.industry,company.branch_id,
+            WHERE user_record.deleted_at IS NULL ORDER BY company.name,user_record.display_name`);
+        const roles = await client.query("SELECT code, name FROM app.roles WHERE is_internal AND is_active AND code <> 'administrator' ORDER BY name");
+        const permissions = await client.query('SELECT code FROM app.permissions WHERE is_active ORDER BY code');
+        const rolePermissions = await client.query('SELECT role_code, permission_code FROM app.role_permissions ORDER BY role_code, permission_code');
+        const companies = await client.query(`SELECT company.id,company.name,company.status,company.area,company.industry,company.branch_id,
             company.created_at,company.updated_at,count(DISTINCT member.user_id)::integer AS contacts,
             assignment.representative_id
             FROM app.companies company
             LEFT JOIN app.company_users member ON member.company_id=company.id AND member.revoked_at IS NULL
             LEFT JOIN app.representative_company_assignments assignment ON assignment.company_id=company.id AND assignment.ended_at IS NULL
             WHERE company.deleted_at IS NULL
-            GROUP BY company.id,assignment.representative_id ORDER BY company.name`),
-          client.query('SELECT id,user_id,display_name,branch_name,is_active FROM app.representatives ORDER BY display_name'),
-          client.query('SELECT count(*)::integer AS count FROM app.audit_events'),
-        ]);
+            GROUP BY company.id,assignment.representative_id ORDER BY company.name`);
+        const representatives = await client.query('SELECT id,user_id,display_name,branch_name,is_active FROM app.representatives ORDER BY display_name');
+        const auditCount = await client.query('SELECT count(*)::integer AS count FROM app.audit_events');
         const mappedInternalUsers = users.rows.map(user => ({
           id: user.id, contact: user.display_name, displayName: user.display_name,
           email: user.email, signInName: user.username, username: user.username,
@@ -453,13 +454,11 @@ export function createPostgresRepository(pool) {
     },
     async getRepresentativeOrderOptions(actor) {
       return inTransaction(async client => {
-        const [companies,contacts,representatives] = await Promise.all([
-          client.query("SELECT id,name,area,industry,branch_id FROM app.companies WHERE status='active' AND deleted_at IS NULL ORDER BY name"),
-          client.query(`SELECT user_record.id,user_record.display_name AS name,user_record.email,user_record.phone,membership.company_id
+        const companies = await client.query("SELECT id,name,area,industry,branch_id FROM app.companies WHERE status='active' AND deleted_at IS NULL ORDER BY name");
+        const contacts = await client.query(`SELECT user_record.id,user_record.display_name AS name,user_record.email,user_record.phone,membership.company_id
             FROM app.company_users membership JOIN app.users user_record ON user_record.id=membership.user_id
-            WHERE membership.revoked_at IS NULL AND user_record.status='active' AND user_record.deleted_at IS NULL ORDER BY user_record.display_name`),
-          client.query('SELECT id,display_name,branch_name,branch_id,user_id FROM app.representatives WHERE is_active ORDER BY display_name'),
-        ]);
+            WHERE membership.revoked_at IS NULL AND user_record.status='active' AND user_record.deleted_at IS NULL ORDER BY user_record.display_name`);
+        const representatives = await client.query('SELECT id,display_name,branch_name,branch_id,user_id FROM app.representatives WHERE is_active ORDER BY display_name');
         return {
           companies:companies.rows.map(row=>({id:row.id,name:row.name,area:row.area || '',industry:row.industry || '',branchId:row.branch_id || ''})),
           contacts:contacts.rows.map(row=>({id:row.id,name:row.name,contact:row.name,email:row.email,phone:row.phone || '',companyId:row.company_id})),
@@ -542,10 +541,8 @@ export function createPostgresRepository(pool) {
           WHERE ${predicate} AND o.deleted_at IS NULL ORDER BY o.updated_at DESC LIMIT 200`, values);
         const records = [];
         for (const row of result.rows) {
-          const [items, history] = await Promise.all([
-            client.query('SELECT * FROM app.order_items WHERE order_id = $1 ORDER BY line_number', [row.id]),
-            client.query("SELECT * FROM app.workflow_events WHERE entity_type = 'order' AND entity_id = $1 ORDER BY created_at", [row.id]),
-          ]);
+          const items = await client.query('SELECT * FROM app.order_items WHERE order_id = $1 ORDER BY line_number', [row.id]);
+          const history = await client.query("SELECT * FROM app.workflow_events WHERE entity_type = 'order' AND entity_id = $1 ORDER BY created_at", [row.id]);
           records.push({
             id: row.id, reference: row.reference, workflowType: 'order', trackingStatus: row.status,
             status: row.status, companyId: row.company_id, company: row.company_name,
@@ -818,7 +815,7 @@ export function createPostgresRepository(pool) {
     async getWorkLocationSummary(actor){return {representativeId:actor.representativeId,privacyStatus:'disabled_pending_approval',clientVisitHours:0,officeHours:0,unclassifiedHours:0};},
     async manageRecord(actor,recordId,operation,payload,correlationId){return inTransaction(async client=>{let entityType='rfq',record=(await client.query('SELECT id,company_id,representative_id,row_version,details FROM app.rfqs WHERE id=$1 FOR UPDATE',[recordId])).rows[0];if(!record){entityType='order';record=(await client.query('SELECT id,company_id,representative_id,row_version,details FROM app.orders WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[recordId])).rows[0];}if(!record)throw notFound('The workflow record was not found.');if(payload.expectedVersion&&Number(payload.expectedVersion)!==record.row_version){const error=new Error('This record changed since it was opened. Refresh and try again.');error.code='VERSION_CONFLICT';error.statusCode=409;throw error;}let details={...(record.details||{})};if(operation==='reassign'){const rep=(await client.query('SELECT id FROM app.representatives WHERE id=$1 AND is_active',[payload.representativeId])).rows[0];if(!rep)throw notFound('The representative was not found.');await client.query(`UPDATE app.${entityType==='rfq'?'rfqs':'orders'} SET representative_id=$2,row_version=row_version+1,updated_at=now() WHERE id=$1`,[recordId,payload.representativeId]);}if(operation==='override_approval'){details.workflowOverrideApproval={targetStatus:payload.targetStatus,reason:payload.reason,approvedBy:actor.id,approvedAt:new Date().toISOString()};await client.query(`UPDATE app.${entityType==='rfq'?'rfqs':'orders'} SET details=$2::jsonb,row_version=row_version+1,updated_at=now() WHERE id=$1`,[recordId,json(details)]);}if(operation==='correction'){const values=payload.values||{};if(entityType==='rfq'){if(values.contact){const error=new Error('Customer contact corrections must be made through authorised account administration.');error.code='VALIDATION_ERROR';error.statusCode=422;throw error;}}else{details={...details,planning:{...(details.planning||{}),internalJobNumber:values.internalJobNumber||details.planning?.internalJobNumber,salesOrderNumber:values.salesOrderNumber||details.planning?.salesOrderNumber},customerPoNumber:values.customerPoNumber||details.customerPoNumber};await client.query('UPDATE app.orders SET details=$2::jsonb,purchase_order_number=COALESCE(NULLIF($3,\'\'),purchase_order_number),row_version=row_version+1,updated_at=now() WHERE id=$1',[recordId,json(details),values.customerPoNumber||'']);}}await client.query(`INSERT INTO app.audit_events(event_type,actor_user_id,actor_role,company_id,action,entity_type,entity_id,outcome,correlation_id,details) VALUES($1,$2,$3,$4,$5,$6,$7,'success',$8,$9::jsonb)`,[`management.${operation}`,actor.id,actor.role,record.company_id,operation,entityType,recordId,correlationId,json({reason:payload.reason||'',values:operation==='correction'?payload.values:undefined})]);return{recordId,entityType,operation};},{actor});},
     async saveCatalogueOverride(actor,kind,itemId,payload,correlationId){return inTransaction(async client=>{const row=(await client.query(`INSERT INTO app.catalogue_overrides(kind,item_id,values,updated_by_user_id) VALUES($1,$2,$3::jsonb,$4) ON CONFLICT(kind,item_id) DO UPDATE SET values=EXCLUDED.values,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now() RETURNING *`,[kind,itemId,json(payload.values||{}),actor.id])).rows[0];await client.query(`INSERT INTO app.audit_events(event_type,actor_user_id,actor_role,action,entity_type,entity_id,outcome,correlation_id,details) VALUES('catalogue.override_saved',$1,$2,'save_catalogue_override',$3,$4,'success',$5,$6::jsonb)`,[actor.id,actor.role,kind,itemId,correlationId,json({reason:payload.reason||''})]);return row;},{actor});},
-    async listCatalogueOverrides(actor){return withActor(actor,async client=>(await client.query('SELECT kind,item_id AS "itemId",values,updated_at AS "updatedAt" FROM app.catalogue_overrides ORDER BY kind,item_id')).rows);},
+    async listCatalogueOverrides(actor){return inTransaction(async client=>(await client.query('SELECT kind,item_id AS "itemId",values,updated_at AS "updatedAt" FROM app.catalogue_overrides ORDER BY kind,item_id')).rows,{actor});},
     async createEnquiry(actor, command) {
       return inTransaction(async client => {
         await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`${actor.id}:create_enquiry:${command.idempotencyKey}`]);

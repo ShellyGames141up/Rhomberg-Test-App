@@ -48,7 +48,7 @@ The proposed backend adds `client_visit_requirements`, `client_appointments`, `c
 
 The launch schema uses `lab_certificate_tasks`, `calibration_units`, `certificate_recipient_snapshots`, `certificates`, `certificate_versions`, `certificate_upload_events` and `certificate_download_events`. All records carry company scope; unit recipients are immutable snapshots; current certificate version is explicit; versions and events are append-only. Historical technician worksheet tables remain future/inactive and are not required for launch deployment.
 
-## Implemented completion migrations 004–011
+## Implemented completion migrations 004–012
 
 The executable migration chain now extends the Phase 1 baseline with:
 
@@ -60,5 +60,10 @@ The executable migration chain now extends the Phase 1 baseline with:
 - `009_document_and_governance_fields.sql`: document versioning, archive/legal-hold/retention and delivery metadata;
 - `010_client_visits.sql`: company-scoped appointments and visit verification;
 - `011_workspace_and_record_controls.sql`: selected workspace and audited catalogue overrides.
+- `012_administration_directory_scope.sql`: qualified user-directory RLS correlations and the explicit `administer_users` scope required for authorised account administration.
 
 `phase1-runtime-grants.sql` grants only the application operations required by this chain. Real PostgreSQL 17 validation must apply migrations as the migration identity and execute the API as the restricted runtime identity; RLS remains defence in depth and never replaces server-side authorization.
+
+### PostgreSQL client-serialization audit
+
+The PostgreSQL repository was audited for `Promise.all`, `Promise.allSettled`, parallel array mapping and equivalent patterns around checked-out clients. All statements inside one `inTransaction` callback are sequential. The three service-layer `Promise.all` calls operate through independent repository methods, each of which checks out its own pool connection, so those independent operations remain safely parallel. A serial-only client regression test fails immediately if a repository method again attempts concurrent queries on one transaction client.

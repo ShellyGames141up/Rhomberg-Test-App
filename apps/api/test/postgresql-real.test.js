@@ -22,7 +22,7 @@ const ids = Object.freeze({
   repB: '73000000-0000-4000-8000-000000000002',
   planning: '72000000-0000-4000-8000-000000000006', expeditor: '72000000-0000-4000-8000-000000000007',
   quality: '72000000-0000-4000-8000-000000000008', dispatch: '72000000-0000-4000-8000-000000000009',
-  manager: '72000000-0000-4000-8000-000000000010',
+  manager: '72000000-0000-4000-8000-000000000010', administrator: '72000000-0000-4000-8000-000000000011',
 });
 
 const config = Object.freeze({
@@ -42,21 +42,22 @@ async function seed(client) {
     ($1,'Fabricated PostgreSQL Company A','Test A','Fabricated'),
     ($2,'Fabricated PostgreSQL Company B','Test B','Fabricated')`, [ids.companyA, ids.companyB]);
   await client.query(`INSERT INTO app.users (id,email,display_name,password_hash,status,disabled_at) VALUES
-    ($1,'pg.customer.a@example.invalid','Fabricated PostgreSQL Customer A',$11,'active',NULL),
-    ($2,'pg.customer.b@example.invalid','Fabricated PostgreSQL Customer B',$11,'active',NULL),
-    ($3,'pg.disabled@example.invalid','Fabricated Disabled Customer',$11,'disabled',now()),
-    ($4,'pg.rep.a@example.invalid','Fabricated Representative A',$11,'active',NULL),
-    ($5,'pg.rep.b@example.invalid','Fabricated Representative B',$11,'active',NULL),
-    ($6,'pg.planning@example.invalid','Fabricated Planning User',$11,'active',NULL),
-    ($7,'pg.expeditor@example.invalid','Fabricated Expeditor User',$11,'active',NULL),
-    ($8,'pg.quality@example.invalid','Fabricated Quality User',$11,'active',NULL),
-    ($9,'pg.dispatch@example.invalid','Fabricated Dispatch User',$11,'active',NULL),
-    ($10,'pg.manager@example.invalid','Fabricated Manager User',$11,'active',NULL)`,
-  [ids.customerA, ids.customerB, ids.disabled, ids.repUserA, ids.repUserB, ids.planning, ids.expeditor, ids.quality, ids.dispatch, ids.manager, passwordHash]);
+    ($1,'pg.customer.a@example.invalid','Fabricated PostgreSQL Customer A',$12,'active',NULL),
+    ($2,'pg.customer.b@example.invalid','Fabricated PostgreSQL Customer B',$12,'active',NULL),
+    ($3,'pg.disabled@example.invalid','Fabricated Disabled Customer',$12,'disabled',now()),
+    ($4,'pg.rep.a@example.invalid','Fabricated Representative A',$12,'active',NULL),
+    ($5,'pg.rep.b@example.invalid','Fabricated Representative B',$12,'active',NULL),
+    ($6,'pg.planning@example.invalid','Fabricated Planning User',$12,'active',NULL),
+    ($7,'pg.expeditor@example.invalid','Fabricated Expeditor User',$12,'active',NULL),
+    ($8,'pg.quality@example.invalid','Fabricated Quality User',$12,'active',NULL),
+    ($9,'pg.dispatch@example.invalid','Fabricated Dispatch User',$12,'active',NULL),
+    ($10,'pg.manager@example.invalid','Fabricated Manager User',$12,'active',NULL),
+    ($11,'pg.administrator@example.invalid','Fabricated Administrator',$12,'active',NULL)`,
+  [ids.customerA, ids.customerB, ids.disabled, ids.repUserA, ids.repUserB, ids.planning, ids.expeditor, ids.quality, ids.dispatch, ids.manager, ids.administrator, passwordHash]);
   await client.query(`INSERT INTO app.user_roles (user_id,role_code) VALUES
     ($1,'customer'),($2,'customer'),($3,'customer'),($4,'sales_representative'),($5,'sales_representative'),
-    ($6,'planning'),($7,'expeditor'),($8,'quality_assurance'),($9,'dispatch'),($10,'manager')`,
-  [ids.customerA, ids.customerB, ids.disabled, ids.repUserA, ids.repUserB, ids.planning, ids.expeditor, ids.quality, ids.dispatch, ids.manager]);
+    ($6,'planning'),($7,'expeditor'),($8,'quality_assurance'),($9,'dispatch'),($10,'manager'),($11,'administrator')`,
+  [ids.customerA, ids.customerB, ids.disabled, ids.repUserA, ids.repUserB, ids.planning, ids.expeditor, ids.quality, ids.dispatch, ids.manager, ids.administrator]);
   await client.query(`INSERT INTO app.company_users (company_id,user_id,is_primary) VALUES
     ($1,$3,true),($2,$4,true),($1,$5,true)`, [ids.companyA, ids.companyB, ids.customerA, ids.customerB, ids.disabled]);
   await client.query(`INSERT INTO app.representatives (id,user_id,display_name,branch_name) VALUES
@@ -79,7 +80,7 @@ async function login(app, email, password = PASSWORD) {
     'pg.customer.a@example.invalid': 11, 'pg.customer.b@example.invalid': 12,
     'pg.disabled@example.invalid': 13, 'pg.rep.a@example.invalid': 14, 'pg.planning@example.invalid': 16,
     'pg.expeditor@example.invalid': 17, 'pg.quality@example.invalid': 18, 'pg.dispatch@example.invalid': 19,
-    'pg.manager@example.invalid': 20,
+    'pg.manager@example.invalid': 20, 'pg.administrator@example.invalid': 21,
   })[email] || 15;
   const response = await app.inject({ method: 'POST', url: '/api/v1/auth/login', remoteAddress: `127.0.0.${lastOctet}`, payload: { email, password } });
   const body = response.json();
@@ -87,6 +88,17 @@ async function login(app, email, password = PASSWORD) {
 }
 
 const create = (app, auth, body, key) => app.inject({ method: 'POST', url: '/api/v1/enquiries', headers: { cookie: auth.cookie, 'x-csrf-token': auth.csrf, 'idempotency-key': key }, payload: body });
+async function within(promise, milliseconds, label) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} exceeded ${milliseconds} ms`)), milliseconds); }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 test('real PostgreSQL Phase 1 vertical slice and database security controls', { skip: !enabled, timeout: 120000 }, async t => {
   const migrationPool = new Pool({ connectionString: migrationUrl, max: 3 });
@@ -115,6 +127,70 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
     assert.equal((await app.inject({ method: 'POST', url: '/api/v1/auth/logout', headers: { cookie: fresh.cookie, 'x-csrf-token': fresh.csrf } })).statusCode, 204);
     assert.equal((await app.inject({ url: '/api/v1/auth/me', headers: { cookie: fresh.cookie } })).statusCode, 401);
     assert.equal((await login(app, 'pg.disabled@example.invalid')).response.statusCode, 401);
+  });
+
+  await t.test('Administrator overview and account creation remain responsive and persistent', async () => {
+    const administrator = await login(app, 'pg.administrator@example.invalid');
+    assert.equal(administrator.response.statusCode, 200, administrator.response.body);
+
+    const overview = await within(app.inject({ url: '/api/v1/administration/overview', headers: { cookie: administrator.cookie } }), 5000, 'Administration Overview');
+    assert.equal(overview.statusCode, 200, overview.body);
+    assert.ok(Array.isArray(overview.json().data.users));
+    assert.ok(Array.isArray(overview.json().data.companies));
+    assert.ok(Array.isArray(overview.json().data.catalogue.products));
+
+    const internalUser = await app.inject({
+      method: 'POST', url: '/api/v1/admin/users',
+      headers: { cookie: administrator.cookie, 'x-csrf-token': administrator.csrf },
+      payload: {
+        displayName: 'Fabricated PostgreSQL Planning Contact', username: 'pg.planning.created',
+        email: 'pg.planning.created@example.invalid', password: 'Fabricated-Planning-Password!7',
+        role: 'planning', branchId: 'fabricated-branch', department: 'Planning',
+      },
+    });
+    assert.equal(internalUser.statusCode, 201, internalUser.body);
+
+    const customerAccount = await app.inject({
+      method: 'POST', url: '/api/v1/admin/customer-accounts',
+      headers: { cookie: administrator.cookie, 'x-csrf-token': administrator.csrf },
+      payload: {
+        companyName: 'Fabricated PostgreSQL Administration Company',
+        contactName: 'Fabricated PostgreSQL Administration Contact',
+        email: 'pg.admin.customer@example.invalid', phone: '0000000000', area: 'Fabricated Area',
+        industry: 'Fabricated Industry', branchId: 'fabricated-branch', password: 'Fabricated-Customer-Password!7',
+      },
+    });
+    assert.equal(customerAccount.statusCode, 201, customerAccount.body);
+
+    const repeated = await within(Promise.all(Array.from({ length: 12 }, () => app.inject({
+      url: '/api/v1/administration/overview', headers: { cookie: administrator.cookie },
+    }))), 10000, 'Concurrent Administration Overview requests');
+    assert.ok(repeated.every(response => response.statusCode === 200), repeated.map(response => response.body).join('\n'));
+
+    const reloaded = await within(app.inject({ url: '/api/v1/administration/overview', headers: { cookie: administrator.cookie } }), 5000, 'Reloaded Administration Overview');
+    assert.equal(reloaded.statusCode, 200, reloaded.body);
+    assert.ok(reloaded.json().data.users.some(user => user.email === 'pg.planning.created@example.invalid'));
+    assert.ok(reloaded.json().data.users.some(user => user.email === 'pg.admin.customer@example.invalid'));
+    assert.ok(reloaded.json().data.companies.some(company => company.name === 'Fabricated PostgreSQL Administration Company'));
+
+    const userAudit = await app.inject({
+      url: `/api/v1/admin/users/${internalUser.json().data.account.id}/audit`,
+      headers: { cookie: administrator.cookie },
+    });
+    assert.equal(userAudit.statusCode, 200, userAudit.body);
+    assert.ok(userAudit.json().data.some(event => event.event_type === 'administrator.internal_user_created'));
+
+    const audit = await migrationPool.query("SELECT count(*)::integer AS count FROM app.audit_events WHERE event_type IN ('administrator.internal_user_created','administrator.customer_account_created')");
+    assert.ok(audit.rows[0].count >= 2);
+
+    const customer = await login(app, 'pg.customer.a@example.invalid');
+    const denied = await app.inject({ url: '/api/v1/administration/overview', headers: { cookie: customer.cookie } });
+    assert.equal(denied.statusCode, 403);
+
+    const relogged = await login(app, 'pg.administrator@example.invalid');
+    const afterRelogin = await within(app.inject({ url: '/api/v1/administration/overview', headers: { cookie: relogged.cookie } }), 5000, 'Administration Overview after re-login');
+    assert.equal(afterRelogin.statusCode, 200, afterRelogin.body);
+    assert.ok(afterRelogin.json().data.companies.some(company => company.name === 'Fabricated PostgreSQL Administration Company'));
   });
 
   const authA = await login(app, 'pg.customer.a@example.invalid');
@@ -242,6 +318,19 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
   });
 
   await t.test('runtime grants prevent DDL and audit mutation while application audit inserts work', async () => {
+    const runtimeRole = decodeURIComponent(new URL(runtimeUrl).username);
+    const role = (await migrationPool.query(`SELECT rolsuper,rolinherit,rolcreaterole,rolcreatedb,rolcanlogin,rolreplication,rolbypassrls
+      FROM pg_roles WHERE rolname=$1`, [runtimeRole])).rows[0];
+    assert.deepEqual(role, {
+      rolsuper: false, rolinherit: true, rolcreaterole: false, rolcreatedb: false,
+      rolcanlogin: true, rolreplication: false, rolbypassrls: false,
+    });
+    assert.equal((await migrationPool.query(`SELECT count(*)::integer AS count FROM pg_class relation
+      JOIN pg_namespace namespace ON namespace.oid=relation.relnamespace
+      JOIN pg_roles owner ON owner.oid=relation.relowner
+      WHERE namespace.nspname='app' AND owner.rolname=$1`, [runtimeRole])).rows[0].count, 0);
+    assert.equal((await migrationPool.query("SELECT has_schema_privilege($1,'app','CREATE') AS allowed", [runtimeRole])).rows[0].allowed, false);
+    assert.equal((await migrationPool.query("SELECT has_table_privilege($1,'app.audit_events','TRUNCATE') AS allowed", [runtimeRole])).rows[0].allowed, false);
     const client = await runtimePool.connect();
     try {
       for (const statement of ['CREATE TABLE public.runtime_forbidden(id int)', 'ALTER TABLE app.rfqs ADD COLUMN runtime_forbidden text', 'DROP TABLE app.products', 'UPDATE app.audit_events SET action=\'tampered\'', 'DELETE FROM app.audit_events']) {

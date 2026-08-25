@@ -28,6 +28,7 @@ GRANT SELECT ON
   app.rfq_items,
   app.document_metadata,
   app.notifications,
+  app.audit_events,
   app.user_settings,
   app.notification_preferences,
   app.enquiry_drafts,
@@ -46,7 +47,8 @@ TO :"runtime_role";
 
 GRANT SELECT, INSERT ON app.sessions TO :"runtime_role";
 GRANT UPDATE (csrf_token_hash, last_seen_at, revoked_at, selected_role) ON app.sessions TO :"runtime_role";
-GRANT SELECT (id, username, email, display_name, password_hash, identity_provider, status, disabled_at, deleted_at)
+GRANT SELECT (id, username, email, display_name, password_hash, identity_provider, status,
+  phone, department, branch_id, last_login_at, created_at, disabled_at, deleted_at)
   ON app.users TO :"runtime_role";
 GRANT UPDATE (last_login_at) ON app.users TO :"runtime_role";
 

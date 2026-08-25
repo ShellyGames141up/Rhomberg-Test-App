@@ -74,7 +74,7 @@ No release may be classified as ready while a visible authorised screen still de
 
 ## Completion Pass 2 checkpoint (uncommitted)
 
-The current working tree closes every active API-mode contract and adds migrations 004–011. It remains uncommitted pending final regression and review.
+The current implementation closes every active API-mode contract and includes migrations 004–012. Migration 012 repairs the Administrator directory scope while preserving ordinary company isolation.
 
 ### Current release-gate evidence
 
@@ -88,7 +88,7 @@ The current working tree closes every active API-mode contract and adds migratio
 | Client visits | Assigned-client directory, scheduling, start, location/customer/QR verification, completion, missed-visit detection, compliance and work summary persisted |
 | Management | Search/filter projections, operational counts, quantity breakdowns, authorised CSV/PDF export, reassignment and override approval derive from persisted authorised records |
 | Settings | Settings, notification preferences and personalisation use the repository/service layer and persist in PostgreSQL |
-| Real PostgreSQL 17 | PostgreSQL 17.10 disposable instance: migrations 001–011 empty/repeat PASS; runtime grants, RLS, auth/session, RFQ transaction, advisory-lock idempotency, audit immutability, settings and visits PASS |
+| Real PostgreSQL 17 | PostgreSQL 17.10 disposable instance: migrations 001–012 and repeat application PASS; runtime grants, Administrator directory workflows, RLS/company isolation, auth/session, RFQ transaction, advisory-lock idempotency, audit immutability, settings and visits PASS |
 | Automated route/view checks | Active customer and internal screen matrix, role navigation, responsive/overflow and meaningful-state tests PASS |
 | Real Chrome acceptance | Not executed: the Chrome-control connector reports `Browser is not available: chrome`; manual staging acceptance remains required and must not be represented as completed |
 
