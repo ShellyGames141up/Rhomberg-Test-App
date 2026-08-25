@@ -29,6 +29,8 @@ pnpm run release:metadata
 
 The static output is `dist-production/`. The metadata command creates frontend checksums and validation records, but does not create a ZIP. An approved combined release package adds the reviewed `apps/api` runtime and deployment documentation as separate `api/` and `deployment/` folders.
 
+Always create the final production build after the approved source commit exists. The artifact checker compares the service-worker cache identity with the current commit and fails closed when an older build is reused. This prevents an upgraded IIS site from continuing to serve a previous cached frontend.
+
 ## Intended server structure
 
 ```text

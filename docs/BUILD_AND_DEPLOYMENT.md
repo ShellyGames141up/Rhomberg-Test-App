@@ -68,6 +68,7 @@ The production build:
 - includes a static IIS `web.config` without a pretend API proxy;
 - scans for mock passwords/accounts, public-preview controls, private data, local paths, unsafe runtime endpoints and unapproved files;
 - can generate `release-manifest.json`, `CHECKSUMS.sha256` and `VALIDATION.txt` without creating a deployment ZIP.
+- validates that the production service-worker cache identity contains the exact current source commit. Commit first, then rebuild the production artifact; stale pre-commit output is rejected before metadata or packaging.
 
 Passing this build is a packaging safety check, not production approval.
 

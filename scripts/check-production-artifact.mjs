@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,6 +34,17 @@ const parsePrecache = source => {
   const match = source.match(/const APP_FILES\s*=\s*(\[[\s\S]*?\]);/);
   assert(match, 'Production service worker must declare APP_FILES.');
   return JSON.parse(match[1]);
+};
+
+export const validateServiceWorkerReleaseIdentity = (source, { version, commitSha }) => {
+  const match = source.match(/const CACHE_NAME\s*=\s*["']([^"']+)["'];/);
+  assert(match, 'Production service worker must declare a release-specific CACHE_NAME.');
+  const expected = `rhomberg-connect-staging-v${version}-${String(commitSha).slice(0, 12)}`;
+  assert(
+    match[1] === expected,
+    `Production service worker release identity is stale. Expected ${expected}, received ${match[1]}. Rebuild from the current commit before packaging.`,
+  );
+  return match[1];
 };
 
 export async function validateProductionArtifact(output = defaultOutput) {
@@ -96,6 +108,9 @@ export async function validateProductionArtifact(output = defaultOutput) {
   assert(!JSON.stringify(manifest).match(/preview|demo|\/app\/|\/desktop\/|\/mobile\//i), 'Production manifest contains a preview/demo or missing route.');
 
   const serviceWorker = await fs.readFile(path.join(resolvedOutput, 'sw.js'), 'utf8');
+  const packageMetadata = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
+  const commitSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  validateServiceWorkerReleaseIdentity(serviceWorker, { version: packageMetadata.version, commitSha });
   const precache = parsePrecache(serviceWorker);
   assert(JSON.stringify(precache) === JSON.stringify(PRODUCTION_PRECACHE_FILES), 'Production service-worker precache list differs from the approved list.');
   for (const entry of precache) {
@@ -131,6 +146,7 @@ export async function validateProductionArtifact(output = defaultOutput) {
       'demo/mock/secret/path scan',
       'runtime configuration',
       'manifest routes',
+      'service-worker release identity',
       'service-worker precache existence',
       'IIS static/security configuration',
     ],
