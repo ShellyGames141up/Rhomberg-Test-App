@@ -20,6 +20,9 @@ const ids = Object.freeze({
   disabled: '72000000-0000-4000-8000-000000000003', repUserA: '72000000-0000-4000-8000-000000000004',
   repUserB: '72000000-0000-4000-8000-000000000005', repA: '73000000-0000-4000-8000-000000000001',
   repB: '73000000-0000-4000-8000-000000000002',
+  planning: '72000000-0000-4000-8000-000000000006', expeditor: '72000000-0000-4000-8000-000000000007',
+  quality: '72000000-0000-4000-8000-000000000008', dispatch: '72000000-0000-4000-8000-000000000009',
+  manager: '72000000-0000-4000-8000-000000000010',
 });
 
 const config = Object.freeze({
@@ -39,15 +42,21 @@ async function seed(client) {
     ($1,'Fabricated PostgreSQL Company A','Test A','Fabricated'),
     ($2,'Fabricated PostgreSQL Company B','Test B','Fabricated')`, [ids.companyA, ids.companyB]);
   await client.query(`INSERT INTO app.users (id,email,display_name,password_hash,status,disabled_at) VALUES
-    ($1,'pg.customer.a@example.invalid','Fabricated PostgreSQL Customer A',$6,'active',NULL),
-    ($2,'pg.customer.b@example.invalid','Fabricated PostgreSQL Customer B',$6,'active',NULL),
-    ($3,'pg.disabled@example.invalid','Fabricated Disabled Customer',$6,'disabled',now()),
-    ($4,'pg.rep.a@example.invalid','Fabricated Representative A',$6,'active',NULL),
-    ($5,'pg.rep.b@example.invalid','Fabricated Representative B',$6,'active',NULL)`,
-  [ids.customerA, ids.customerB, ids.disabled, ids.repUserA, ids.repUserB, passwordHash]);
+    ($1,'pg.customer.a@example.invalid','Fabricated PostgreSQL Customer A',$11,'active',NULL),
+    ($2,'pg.customer.b@example.invalid','Fabricated PostgreSQL Customer B',$11,'active',NULL),
+    ($3,'pg.disabled@example.invalid','Fabricated Disabled Customer',$11,'disabled',now()),
+    ($4,'pg.rep.a@example.invalid','Fabricated Representative A',$11,'active',NULL),
+    ($5,'pg.rep.b@example.invalid','Fabricated Representative B',$11,'active',NULL),
+    ($6,'pg.planning@example.invalid','Fabricated Planning User',$11,'active',NULL),
+    ($7,'pg.expeditor@example.invalid','Fabricated Expeditor User',$11,'active',NULL),
+    ($8,'pg.quality@example.invalid','Fabricated Quality User',$11,'active',NULL),
+    ($9,'pg.dispatch@example.invalid','Fabricated Dispatch User',$11,'active',NULL),
+    ($10,'pg.manager@example.invalid','Fabricated Manager User',$11,'active',NULL)`,
+  [ids.customerA, ids.customerB, ids.disabled, ids.repUserA, ids.repUserB, ids.planning, ids.expeditor, ids.quality, ids.dispatch, ids.manager, passwordHash]);
   await client.query(`INSERT INTO app.user_roles (user_id,role_code) VALUES
-    ($1,'customer'),($2,'customer'),($3,'customer'),($4,'sales_representative'),($5,'sales_representative')`,
-  [ids.customerA, ids.customerB, ids.disabled, ids.repUserA, ids.repUserB]);
+    ($1,'customer'),($2,'customer'),($3,'customer'),($4,'sales_representative'),($5,'sales_representative'),
+    ($6,'planning'),($7,'expeditor'),($8,'quality_assurance'),($9,'dispatch'),($10,'manager')`,
+  [ids.customerA, ids.customerB, ids.disabled, ids.repUserA, ids.repUserB, ids.planning, ids.expeditor, ids.quality, ids.dispatch, ids.manager]);
   await client.query(`INSERT INTO app.company_users (company_id,user_id,is_primary) VALUES
     ($1,$3,true),($2,$4,true),($1,$5,true)`, [ids.companyA, ids.companyB, ids.customerA, ids.customerB, ids.disabled]);
   await client.query(`INSERT INTO app.representatives (id,user_id,display_name,branch_name) VALUES
@@ -68,7 +77,9 @@ const payload = representativeId => ({
 async function login(app, email, password = PASSWORD) {
   const lastOctet = ({
     'pg.customer.a@example.invalid': 11, 'pg.customer.b@example.invalid': 12,
-    'pg.disabled@example.invalid': 13, 'pg.rep.a@example.invalid': 14,
+    'pg.disabled@example.invalid': 13, 'pg.rep.a@example.invalid': 14, 'pg.planning@example.invalid': 16,
+    'pg.expeditor@example.invalid': 17, 'pg.quality@example.invalid': 18, 'pg.dispatch@example.invalid': 19,
+    'pg.manager@example.invalid': 20,
   })[email] || 15;
   const response = await app.inject({ method: 'POST', url: '/api/v1/auth/login', remoteAddress: `127.0.0.${lastOctet}`, payload: { email, password } });
   const body = response.json();
@@ -111,6 +122,19 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
   assert.equal(authA.response.statusCode, 200, authA.response.body); assert.equal(authB.response.statusCode, 200, authB.response.body);
   assert.ok(authA.body.data.user.permissions.includes('create_rfq'), JSON.stringify(authA.body.data.user));
 
+  await t.test('real PostgreSQL customer personalisation and representative visit persistence', async()=>{
+    const personalisation={schemaVersion:1,setupCompleted:true,themePreset:'rhomberg-default',fontSize:'large',density:'comfortable',appearanceMode:'dark',notificationPreferences:{rfqUpdates:true,quotationNotifications:true,orderProgress:true,delayNotifications:true,fulfilmentNotifications:true,accountSecurity:true,maintenanceNotices:true,companyAnnouncements:false},profileImage:null};
+    const saved=await app.inject({method:'PUT',url:'/api/v1/users/me/personalisation',headers:{cookie:authA.cookie,'x-csrf-token':authA.csrf},payload:personalisation});assert.equal(saved.statusCode,200,saved.body);
+    assert.equal((await migrationPool.query('SELECT settings->\'personalisation\'->>\'appearanceMode\' AS mode FROM app.user_settings WHERE user_id=$1',[ids.customerA])).rows[0].mode,'dark');
+    const rep=await login(app,'pg.rep.a@example.invalid');const clients=await app.inject({url:'/api/v1/representatives/clients',headers:{cookie:rep.cookie}});assert.equal(clients.statusCode,200,clients.body);assert.deepEqual(clients.json().data.map(item=>item.id),[ids.companyA]);
+    const scheduled=await app.inject({method:'POST',url:`/api/v1/clients/${ids.companyA}/appointments`,headers:{cookie:rep.cookie,'x-csrf-token':rep.csrf},payload:{scheduledAt:'2099-01-01T10:00:00.000Z',expectedDurationMinutes:60,purpose:'Fabricated PostgreSQL visit',contact:'Fabricated PostgreSQL Customer A',address:'1 Fabricated PostgreSQL Road'}});assert.equal(scheduled.statusCode,201,scheduled.body);const appointmentId=scheduled.json().data.id;
+    assert.equal((await app.inject({method:'POST',url:`/api/v1/appointments/${appointmentId}/start`,headers:{cookie:rep.cookie,'x-csrf-token':rep.csrf},payload:{}})).statusCode,200);
+    assert.equal((await app.inject({method:'POST',url:`/api/v1/appointments/${appointmentId}/customer-confirmation`,headers:{cookie:rep.cookie,'x-csrf-token':rep.csrf},payload:{}})).statusCode,200);
+    assert.equal((await app.inject({method:'POST',url:`/api/v1/appointments/${appointmentId}/complete`,headers:{cookie:rep.cookie,'x-csrf-token':rep.csrf},payload:{notes:'Fabricated completed visit'}})).statusCode,200);
+    assert.equal((await migrationPool.query("SELECT count(*)::int n FROM app.audit_events WHERE entity_id=$1 AND event_type='appointment.complete'",[appointmentId])).rows[0].n,1);
+    assert.equal((await app.inject({url:'/api/v1/representatives/clients',headers:{cookie:authA.cookie}})).statusCode,403);
+  });
+
   let enquiryA; let documentA;
   await t.test('RFQ, line item, document metadata, audit and notification commit atomically', async () => {
     const boundary = '----fabricated-postgresql-boundary';
@@ -128,6 +152,43 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
     assert.equal((await migrationPool.query('SELECT count(*)::int n FROM app.notifications WHERE rfq_id=$1', [enquiryA.id])).rows[0].n, 1);
     assert.equal((await migrationPool.query('SELECT count(*)::int n FROM app.document_metadata WHERE rfq_id=$1', [enquiryA.id])).rows[0].n, 1);
     assert.equal('storageKey' in documentA, false); assert.equal('downloadUrl' in documentA, false);
+  });
+
+  await t.test('persisted RFQ-to-completion workflow survives every authorised department transition', async () => {
+    const rep=await login(app,'pg.rep.a@example.invalid');
+    const planning=await login(app,'pg.planning@example.invalid');
+    const expeditor=await login(app,'pg.expeditor@example.invalid');
+    const quality=await login(app,'pg.quality@example.invalid');
+    const dispatch=await login(app,'pg.dispatch@example.invalid');
+    const manager=await login(app,'pg.manager@example.invalid');
+    for(const internal of [rep,planning,expeditor,quality,dispatch,manager]) assert.equal(internal.response.statusCode,200,internal.response.body);
+    assert.ok(planning.body.data.user.permissions.includes('view_planning_queue'),JSON.stringify(planning.body.data.user));
+    const action=(auth,entity,id,name,data={})=>app.inject({method:'POST',url:`/api/v1/${entity}/${id}/workflow-actions`,headers:{cookie:auth.cookie,'x-csrf-token':auth.csrf},payload:{action:name,entityType:entity==='enquiries'?'rfq':'order',data}});
+    const review=await action(rep,'enquiries',enquiryA.id,'start_rep_review');assert.equal(review.statusCode,200,review.body);
+    assert.equal((await action(rep,'enquiries',enquiryA.id,'mark_quoted',{quotation:{number:'Q-PG-FAB-001',date:'2099-01-01'}})).statusCode,200);
+    assert.equal((await action(authA,'enquiries',enquiryA.id,'acknowledge_quotation')).statusCode,200);
+    const accepted=await action(rep,'enquiries',enquiryA.id,'accept_order',{acceptance:{type:'purchase_order',date:'2099-01-02',verified:true}});
+    assert.equal(accepted.statusCode,200,accepted.body);const orderId=accepted.json().data.order.id;
+    const planningRead=await app.inject({url:`/api/v1/orders/${orderId}`,headers:{cookie:planning.cookie}});assert.equal(planningRead.statusCode,200,planningRead.body);
+    const planningStart=await action(planning,'orders',orderId,'start_planning');assert.equal(planningStart.statusCode,200,planningStart.body);
+    assert.equal((await action(planning,'orders',orderId,'complete_planning',{planning:{internalJobNumber:'JOB-PG-FAB-001',salesOrderNumber:'SO-PG-FAB-001',assignedPlanningUserId:ids.planning}})).statusCode,200);
+    assert.equal((await action(planning,'orders',orderId,'submit_to_expediting')).statusCode,200);
+    assert.equal((await action(expeditor,'orders',orderId,'start_expediting',{progressStep:'planning_received',customerMessage:'Fabricated work has started.'})).statusCode,200);
+    assert.equal((await action(expeditor,'orders',orderId,'add_expediting_update',{progressStep:'quality_check',customerMessage:'Fabricated work is ready for inspection.'})).statusCode,200);
+    assert.equal((await action(expeditor,'orders',orderId,'complete_expediting')).statusCode,200);
+    assert.equal((await action(quality,'orders',orderId,'start_qa')).statusCode,200);
+    assert.equal((await action(quality,'orders',orderId,'pass_qa')).statusCode,200);
+    assert.equal((await action(quality,'orders',orderId,'release_qa_order')).statusCode,200);
+    assert.equal((await action(dispatch,'orders',orderId,'mark_ready_for_collection')).statusCode,200);
+    assert.equal((await action(dispatch,'orders',orderId,'confirm_collection')).statusCode,200);
+    assert.equal((await action(dispatch,'orders',orderId,'complete_collection')).statusCode,200);
+    const reloaded=await app.inject({url:`/api/v1/orders/${orderId}`,headers:{cookie:authA.cookie}});
+    assert.equal(reloaded.statusCode,200);assert.equal(reloaded.json().data.trackingStatus,'completed');
+    const archive=await app.inject({method:'POST',url:`/api/v1/orders/${orderId}/archive`,headers:{cookie:manager.cookie,'x-csrf-token':manager.csrf},payload:{reason:'Fabricated completed-record retention validation'}});
+    assert.equal(archive.statusCode,200,archive.body);assert.equal(archive.json().data.status,'archived');
+    const restored=await app.inject({method:'POST',url:`/api/v1/orders/${orderId}/restore`,headers:{cookie:manager.cookie,'x-csrf-token':manager.csrf},payload:{reason:'Fabricated authorised restoration validation'}});
+    assert.equal(restored.statusCode,200,restored.body);assert.equal(restored.json().data.status,'completed');
+    assert.ok((await migrationPool.query("SELECT count(*)::int n FROM app.audit_events WHERE entity_id=$1 AND event_type='workflow.transition'",[orderId])).rows[0].n>=10);
   });
 
   let enquiryB;

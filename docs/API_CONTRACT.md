@@ -34,3 +34,9 @@ The production service will expose manager-scoped, company-aware endpoints:
 - `GET /certificates/{certificateId}/download` (short-lived authenticated response, audited)
 
 Customer product payloads use `sanas: Yes — SANAS | No SANAS` or `traceability: Yes — Traceable | No Traceable Certificate`. A certified line requires `certificateRecipientType`; `My Client` additionally requires name and structured address. The server creates the immutable `certificate_recipient_snapshot`. All authorisation, discipline scope, company isolation, PDF validation, malware scanning, duplicate checks and audit writes are server-side requirements.
+
+## Product Completion Pass 2 implemented API surface
+
+The generated authority is [API_MODE_CONTRACT_AUDIT.md](API_MODE_CONTRACT_AUDIT.md): 130 active adapter contracts match 138 registered `/api/v1` routes. The server implements the approved simplified Laboratory routes under `/laboratory/orders`, authenticated binary downloads, Administrator lifecycle/company/catalogue mutations, governance and retention actions, client visits, persisted personalisation, management projections/exports, Technical Support, notification retry and workspace selection. Public registration and browser-local credential recovery are deliberately absent; identity provisioning/recovery remain server/identity-provider responsibilities.
+
+The API must continue to enforce authentication, exact-origin CORS, CSRF on mutations, permission checks, company/assignment scope, idempotency where declared and append-only audit evidence. The local private-storage adapter is suitable only for controlled development. Production file content requires managed private object storage and an approved malware-scanning integration.

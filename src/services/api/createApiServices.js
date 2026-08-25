@@ -68,9 +68,7 @@ export function createApiServices(config = {}) {
 
     async register(data) {
       validateRegistration(data);
-      const result = await client.post('/auth/register', data);
-      if (result?.csrfToken) client.setCsrfToken(result.csrfToken);
-      return result.user;
+      throw new ServiceError('Public self-registration is unavailable. An authorised Administrator must create the company account.', { code: 'ADMINISTRATOR_PROVISIONING_REQUIRED', status: 403 });
     },
 
     async signOut() {
@@ -92,11 +90,8 @@ export function createApiServices(config = {}) {
   };
 
   const credentials = {
-    requestVerification: input => client.post('/auth/credential-changes/challenges', input),
-    confirmChange: input => client.post(
-      `/auth/credential-changes/challenges/${encodeURIComponent(input.challengeId)}/confirm`,
-      input,
-    ),
+    requestVerification: () => { throw new ServiceError('Self-service credential changes require the approved identity and email-delivery integration. Contact your Administrator.', { code: 'IDENTITY_INTEGRATION_REQUIRED', status: 501 }); },
+    confirmChange: () => { throw new ServiceError('Self-service credential changes require the approved identity integration.', { code: 'IDENTITY_INTEGRATION_REQUIRED', status: 501 }); },
   };
 
   const products = {
@@ -160,12 +155,7 @@ export function createApiServices(config = {}) {
     },
     listDocuments: orderId => client.get(`/orders/${encodeURIComponent(orderId)}/source-documents`),
     async downloadDocument(orderId, documentId) {
-      const result = await client.get(`/orders/${encodeURIComponent(orderId)}/source-documents/${encodeURIComponent(documentId)}/download`);
-      return {
-        ...(result.document || {}),
-        downloadUrl: result.signedDownloadUrl || '',
-        expiresAt: result.expiresAt,
-      };
+      return client.download(`/orders/${encodeURIComponent(orderId)}/source-documents/${encodeURIComponent(documentId)}/download`);
     },
     replaceDocument(orderId, documentId, input) {
       const replacement = validateRepresentativeDocumentReplacement(input);
@@ -352,12 +342,17 @@ export function createApiServices(config = {}) {
 
   const administration = {
     getOverview: () => client.get('/administration/overview'),
+    createCustomer: input => client.post('/admin/customer-accounts', { ...input.values, reason: input.reason || '' }),
     createEmployee: input => client.post('/admin/users', {
       displayName: input.values?.displayName,
       username: input.values?.username,
       email: input.values?.email || '',
       password: input.values?.password || '',
       role: input.values?.primaryRole,
+      additionalRoles: input.values?.additionalRoles || [],
+      branchId: input.values?.branchId || '',
+      department: input.values?.department || '',
+      phone: input.values?.phone || '',
       reason: input.reason || '',
     }),
     assignAccountRoles: (accountId, input) => client.post(`/admin/users/${encodeURIComponent(accountId)}/roles`, input),
@@ -432,43 +427,11 @@ export function createApiServices(config = {}) {
     getWorkspaceOptions: () => client.get('/laboratory/workspace-options'),
     listOrders: filters => client.get('/laboratory/orders', { query: filters }),
     getDashboard: filters => client.get('/laboratory/dashboard', { query: filters }),
-    updateUnit: (orderId, unitId, action, input) => client.post(
-      `/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/actions/${encodeURIComponent(action)}`,
-      input,
-      { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `lab-unit-${Date.now()}` } },
-    ),
-    receive: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/receive`, input),
-    startStabilisation: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/stabilisation/start`, input),
-    completeStabilisation: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/stabilisation/complete`, input),
-    inspect: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/inspection`, input),
-    bookIn: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/book-in`, input),
-    assignTechnician: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/assign-technician`, input),
-    saveWorksheet: (orderId, unitId, input) => client.put(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/worksheet`, input, { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `lab-worksheet-${Date.now()}` } }),
-    startCalibration: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/calibration/start`, input),
-    holdCalibration: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/calibration/hold`, input),
-    calculate: (orderId, unitId) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/calculate`, {}),
-    approveFormulaValidation: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/calculation-review/approval`, input),
-    completeCalibration: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/complete-calibration`, input),
-    completeLabelling: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/complete-labelling`, input),
-    releaseUnitToDispatch: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/release-to-dispatch`, input),
-    generateReviewPdf: (orderId, unitId) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/generate-review-pdf`, {}),
-    generateDraftCertificate: (orderId, unitId) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/generate-draft-certificate`, {}),
-    submitCertificateForReview: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/certificate/submit-for-review`, input),
-    returnCertificateForCorrection: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/certificate/return-for-correction`, input),
-    approveForSignature: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/certificate/approve-for-signature`, input),
-    generateUnsignedCertificate: (orderId, unitId) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/certificate/unsigned-pdf`, {}),
-    uploadSignedCertificate(orderId, unitId, input) {
-      const form = new FormData();
-      form.append('metadata', JSON.stringify({ certificateNumber: input.certificateNumber, issueDate: input.issueDate, reason: input.reason || '' }));
-      form.append('certificate', input.file, input.file.name);
-      return client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/certificate/signed-pdf`, form, { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `signed-certificate-${Date.now()}` } });
-    },
-    releaseCertificate: (orderId, unitId, input) => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/certificate/release`, input),
-    downloadLabDocument: documentId => client.get(`/laboratory/documents/${encodeURIComponent(documentId)}/download`),
+    downloadLabDocument: documentId => client.download(`/laboratory/documents/${encodeURIComponent(documentId)}/download`),
     uploadCertificate(orderId, unitId, input) {
       const metadata = validateCertificateUpload(input);
       const form = new FormData();
-      form.append('metadata', JSON.stringify({ ...metadata, fileName: undefined, mimeType: undefined, sizeBytes: undefined }));
+      form.append('metadata', JSON.stringify({ ...metadata, serialNumber: input.serialNumber, certificationType: input.certificationType, confirmAssociation: input.confirmAssociation, fileName: undefined, mimeType: undefined, sizeBytes: undefined }));
       form.append('certificate', input.file, input.file.name);
       return client.post(
         `/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/certificate`,
@@ -493,7 +456,7 @@ export function createApiServices(config = {}) {
       form.append('certificate', input.file, input.file.name);
       return client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/units/${encodeURIComponent(unitId)}/certificate/replace`, form, { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() || `certificate-replacement-${Date.now()}` } });
     },
-    downloadCertificate: certificateId => client.get(`/certificates/${encodeURIComponent(certificateId)}/download`),
+    downloadCertificate: certificateId => client.download(`/certificates/${encodeURIComponent(certificateId)}/download`),
     archiveCertificates: orderId => client.post(`/laboratory/orders/${encodeURIComponent(orderId)}/certificates/archive`, {}),
   };
 
@@ -538,7 +501,7 @@ export function createApiServices(config = {}) {
     complete: (requestId, input) => client.post(`/technical-support/${encodeURIComponent(requestId)}/complete`, input),
     override: (requestId, input) => client.post(`/technical-support/${encodeURIComponent(requestId)}/override`, input),
     downloadRfq: requestId => client.get(`/technical-support/${encodeURIComponent(requestId)}/rfq/download`),
-    downloadAttachment: (requestId, attachmentId) => client.get(`/technical-support/${encodeURIComponent(requestId)}/attachments/${encodeURIComponent(attachmentId)}/download`),
+    downloadAttachment: (requestId, attachmentId) => client.download(`/technical-support/${encodeURIComponent(requestId)}/attachments/${encodeURIComponent(attachmentId)}/download`),
     getMetrics: filters => client.get('/technical-support/metrics', { query: filters }),
   };
 

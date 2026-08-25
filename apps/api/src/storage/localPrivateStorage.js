@@ -22,6 +22,11 @@ export function createLocalPrivateStorage({ root, maxBytes }) {
       const destination = path.resolve(root, storageKey);
       if (destination.startsWith(`${path.resolve(root)}${path.sep}`)) await fs.rm(destination, { force: true });
     },
+    async get(storageKey) {
+      const storageRoot=path.resolve(root); const destination=path.resolve(storageRoot,String(storageKey || ''));
+      if (!destination.startsWith(`${storageRoot}${path.sep}`)) { const error=new Error('Unsafe storage key.'); error.code='INVALID_DOCUMENT_KEY'; error.statusCode=400; throw error; }
+      try { return await fs.readFile(destination); } catch(error) { if(error.code==='ENOENT') { const missing=new Error('The document content is unavailable.'); missing.code='DOCUMENT_CONTENT_MISSING'; missing.statusCode=404; throw missing; } throw error; }
+    },
   };
 }
 
@@ -38,5 +43,6 @@ export function createMemoryPrivateStorage({ maxBytes = 4 * 1024 * 1024 } = {}) 
       return { id, storageKey, originalName: input.originalName, mediaType: input.mediaType, sizeBytes: input.buffer.length, sha256Hex: sha256(input.buffer) };
     },
     async remove(key) { objects.delete(key); },
+    async get(key) { const value=objects.get(key); if(!value) { const error=new Error('The document content is unavailable.'); error.code='DOCUMENT_CONTENT_MISSING'; error.statusCode=404; throw error; } return Buffer.from(value); },
   };
 }

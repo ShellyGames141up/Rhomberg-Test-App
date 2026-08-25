@@ -47,3 +47,18 @@ The proposed backend adds `client_visit_requirements`, `client_appointments`, `c
 # Laboratory launch schema amendment
 
 The launch schema uses `lab_certificate_tasks`, `calibration_units`, `certificate_recipient_snapshots`, `certificates`, `certificate_versions`, `certificate_upload_events` and `certificate_download_events`. All records carry company scope; unit recipients are immutable snapshots; current certificate version is explicit; versions and events are append-only. Historical technician worksheet tables remain future/inactive and are not required for launch deployment.
+
+## Implemented completion migrations 004–011
+
+The executable migration chain now extends the Phase 1 baseline with:
+
+- `004_internal_test_operational_foundation.sql`: settings, RFQ drafts, operational orders/events, notifications and policies;
+- `005_approved_product_catalogue.sql`: the approved non-priced product catalogue;
+- `006_account_directory_fields.sql`: account/company/Representative directory fields;
+- `007_simplified_laboratory_access.sql`: the approved Laboratory Manager certificate access/versioning model;
+- `008_administration_lifecycle.sql`: account status, permission override, profile-image and security-definer lifecycle operations;
+- `009_document_and_governance_fields.sql`: document versioning, archive/legal-hold/retention and delivery metadata;
+- `010_client_visits.sql`: company-scoped appointments and visit verification;
+- `011_workspace_and_record_controls.sql`: selected workspace and audited catalogue overrides.
+
+`phase1-runtime-grants.sql` grants only the application operations required by this chain. Real PostgreSQL 17 validation must apply migrations as the migration identity and execute the API as the restricted runtime identity; RLS remains defence in depth and never replaces server-side authorization.

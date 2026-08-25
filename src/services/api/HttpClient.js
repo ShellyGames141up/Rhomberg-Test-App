@@ -17,13 +17,13 @@ export class HttpClient {
     this.csrfToken = String(token || '');
   }
 
-  async request(path, { method = 'GET', body, query, signal, headers = {} } = {}) {
+  async request(path, { method = 'GET', body, query, signal, headers = {}, responseType = 'json' } = {}) {
     const safeToRetry = ['GET', 'HEAD'].includes(method);
     const attempts = safeToRetry ? 2 : 1;
     let lastError;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
-        return await this.requestOnce(path, { method, body, query, signal, headers });
+        return await this.requestOnce(path, { method, body, query, signal, headers, responseType });
       } catch (error) {
         lastError = error;
         const retryable = error?.code === 'NETWORK_ERROR'
@@ -35,7 +35,7 @@ export class HttpClient {
     throw lastError;
   }
 
-  async requestOnce(path, { method = 'GET', body, query, signal, headers = {} } = {}) {
+  async requestOnce(path, { method = 'GET', body, query, signal, headers = {}, responseType = 'json' } = {}) {
     const requestUrl = `${this.baseUrl}${path}`;
     const browserOrigin = globalThis.location?.origin;
     if (!browserOrigin && !/^https:\/\//i.test(requestUrl) && !this.hasInjectedTransport) {
@@ -71,7 +71,7 @@ export class HttpClient {
         body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
       });
 
-      const payload = response.status === 204 ? null : await response.json().catch(() => null);
+      const payload = response.status === 204 ? null : responseType === 'blob' && response.ok ? await response.blob() : await response.json().catch(() => null);
       if (!response.ok) {
         const apiError = payload?.error || {};
         throw new ServiceError(apiError.message || 'The server could not complete this request.', {
@@ -80,6 +80,7 @@ export class HttpClient {
           fieldErrors: apiError.fieldErrors || {},
         });
       }
+      if (responseType === 'blob') return { blob: payload, contentType: response.headers.get('content-type') || '', disposition: response.headers.get('content-disposition') || '' };
       return payload?.data ?? payload;
     } catch (error) {
       if (error instanceof ServiceError) throw error;
@@ -103,7 +104,17 @@ export class HttpClient {
     return this.request(path, { ...options, method: 'PUT', body });
   }
 
+  patch(path, body, options) {
+    return this.request(path, { ...options, method: 'PATCH', body });
+  }
+
   delete(path, options) {
     return this.request(path, { ...options, method: 'DELETE' });
+  }
+
+  async download(path, options) {
+    const result = await this.request(path, { ...options, method: 'GET', responseType: 'blob' });
+    const match = /filename="?([^";]+)"?/i.exec(result.disposition || '');
+    return { downloadUrl: globalThis.URL.createObjectURL(result.blob), fileName: match?.[1] || 'download', mediaType: result.contentType };
   }
 }

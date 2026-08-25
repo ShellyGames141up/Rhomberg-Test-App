@@ -5,6 +5,15 @@ export const PERMISSIONS = Object.freeze({
   VIEW_ALL_RFQS: 'view_all_rfqs',
   READ_DOCUMENT_METADATA: 'read_document_metadata',
   ADMINISTER_USERS: 'administer_users',
+  VIEW_ALL_ORDERS: 'view_all_orders',
+  VIEW_OWN_COMPANY_ORDERS: 'view_own_company_orders',
+  VIEW_ASSIGNED_ORDERS: 'view_assigned_orders',
+  LOAD_CUSTOMER_ORDER: 'load_customer_order',
+  VIEW_TECHNICAL_QUEUE: 'view_technical_queue',
+  MANAGE_LOCATION_SETTINGS: 'manage_location_settings',
+  MANAGE_RETENTION_POLICY: 'manage_retention_policy',
+  READ_AUDIT_HISTORY: 'read_audit_history',
+  RETRY_NOTIFICATION_DELIVERY: 'retry_notification_delivery',
 });
 
 export function hasPermission(actor, permission) {

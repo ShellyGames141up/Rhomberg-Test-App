@@ -1,0 +1,64 @@
+import { validationError } from '../errors.js';
+
+const definitions=Object.freeze({
+  rfq:Object.freeze({
+    start_rep_review:{from:['assigned_to_rep'],to:'under_rep_review',permission:'mark_rfq_under_review',label:'Start Review'},
+    mark_quoted:{from:['under_rep_review'],to:'quoted',permission:'mark_rfq_quoted',label:'Mark as Quoted'},
+    acknowledge_quotation:{from:['quoted'],to:'awaiting_customer_acceptance',permission:'acknowledge_quotation',label:'I received the quotation'},
+    accept_order:{from:['awaiting_customer_acceptance'],to:'converted_to_order',permission:'accept_customer_order',label:'Accept Order'},
+    cancel_rfq:{from:['submitted','assigned_to_rep','under_rep_review','quoted','awaiting_customer_acceptance'],to:'cancelled',permission:'cancel_rfq',label:'Cancel RFQ'},
+    expire_rfq:{from:['submitted','assigned_to_rep','under_rep_review','quoted','awaiting_customer_acceptance'],to:'expired',permission:'expire_rfq',label:'Expire RFQ'},
+  }),
+  order:Object.freeze({
+    start_planning:{from:['awaiting_planning'],to:'planning_in_progress',permission:'add_planning_information',label:'Start Planning'},
+    complete_planning:{from:['planning_in_progress'],to:'planned',permission:'add_planning_information',label:'Save Planning Details'},
+    submit_to_expediting:{from:['planned'],to:'submitted_to_expediting',permission:'submit_to_expediting',label:'Submit to Expediting'},
+    start_expediting:{from:['submitted_to_expediting'],to:'expediting_in_progress',permission:'update_order_progress',label:'Start Work'},
+    add_expediting_update:{from:['expediting_in_progress'],to:'expediting_in_progress',permission:'update_order_progress',label:'Add Progress Update'},
+    place_on_hold:{from:['planning_in_progress','submitted_to_expediting','expediting_in_progress','awaiting_qa','qa_in_progress','awaiting_dispatch'],to:'on_hold',permission:'manage_order_hold',label:'Place on Hold'},
+    resume_order:{from:['on_hold'],to:'__resume__',permission:'manage_order_hold',label:'Resume Order'},
+    complete_expediting:{from:['expediting_in_progress'],to:'awaiting_qa',permission:'move_to_dispatch',label:'Complete Expediting'},
+    start_qa:{from:['awaiting_qa'],to:'qa_in_progress',permission:'inspect_order',label:'Start Quality Inspection'},
+    start_qa_reinspection:{from:['qa_reinspection_required'],to:'qa_in_progress',permission:'inspect_order',label:'Start Reinspection'},
+    pass_qa:{from:['qa_in_progress'],to:'qa_passed',permission:'release_qa_order',label:'Pass Quality Inspection'},
+    fail_qa:{from:['qa_in_progress'],to:'qa_failed',permission:'record_qa_failure',label:'Record Quality Problem'},
+    start_qa_rework:{from:['qa_failed'],to:'returned_to_expediting',permission:'manage_qa_rework',label:'Start Corrective Work'},
+    resubmit_to_qa:{from:['returned_to_expediting'],to:'qa_reinspection_required',permission:'manage_qa_rework',label:'Resubmit to QA'},
+    release_qa_order:{from:['qa_passed'],to:'awaiting_dispatch',permission:'release_qa_order',label:'Send to Dispatch'},
+    mark_ready_for_collection:{from:['awaiting_dispatch'],to:'ready_for_collection',permission:'confirm_collection',label:'Mark Ready for Collection'},
+    start_delivery:{from:['awaiting_dispatch'],to:'out_for_delivery',permission:'confirm_delivery',label:'Mark Out for Delivery'},
+    confirm_collection:{from:['ready_for_collection'],to:'collected',permission:'confirm_collection',label:'Confirm Collected'},
+    confirm_delivery:{from:['out_for_delivery'],to:'delivered',permission:'confirm_delivery',label:'Confirm Delivered'},
+    complete_collection:{from:['collected'],to:'completed',permission:'confirm_collection',label:'Mark Completed'},
+    complete_delivery:{from:['delivered'],to:'completed',permission:'confirm_delivery',label:'Mark Completed'},
+    cancel_order:{from:['awaiting_planning','planning_in_progress','planned','submitted_to_expediting','expediting_in_progress','awaiting_qa','qa_in_progress','awaiting_dispatch','on_hold'],to:'cancelled',permission:'cancel_order',label:'Cancel Order'},
+  }),
+});
+
+const has=(actor,permission)=>actor.permissions.includes(permission) || actor.permissions.includes('override_workflow') || actor.permissions.includes('administer_users');
+const requiredText=(value,field,label,errors)=>{ if (String(value || '').trim().length<2) errors[field]=`Enter ${label}.`; };
+
+function validate(action,input) {
+  const data=input?.data || {}; const errors={};
+  if (action==='mark_quoted') { const quotation=data.quotation || {}; requiredText(quotation.number,'quotationNumber','the quotation number',errors); requiredText(quotation.date,'quotationDate','the quotation date',errors); }
+  if (action==='accept_order') { const acceptance=data.acceptance || {}; requiredText(acceptance.type,'acceptanceType','the acceptance type',errors); requiredText(acceptance.date,'acceptanceDate','the acceptance date',errors); if (acceptance.verified!==true) errors.acceptanceVerified='Confirm that the acceptance evidence was checked.'; }
+  if (action==='complete_planning') { const planning=data.planning || data; requiredText(planning.internalJobNumber,'internalJobNumber','the internal job number',errors); requiredText(planning.salesOrderNumber,'salesOrderNumber','the Sales Order Number',errors); requiredText(planning.assignedPlanningUserId,'assignedPlanningUserId','the assigned Planning user',errors); }
+  if (['add_expediting_update','start_expediting'].includes(action)) { const update=data.expeditingUpdate || data; requiredText(update.progressStep,'progressStep','the progress step',errors); requiredText(update.customerMessage,'customerMessage','the customer-facing update',errors); }
+  if (['place_on_hold','cancel_order','cancel_rfq','expire_rfq'].includes(action)) requiredText(data.comment || data.reason || input.comment,'comment','a reason',errors);
+  if (Object.keys(errors).length) throw validationError(errors,'Complete the required workflow information.');
+  return data;
+}
+
+export function createWorkflowService({ repository }) {
+  return Object.freeze({
+    async allowed(actor,entityType,id) {
+      const record=entityType==='rfq' ? await repository.getEnquiry(actor,id) : await repository.getOrder(actor,id);
+      return Object.entries(definitions[entityType]).filter(([,definition])=>definition.from.includes(record.trackingStatus) && has(actor,definition.permission)).map(([action,definition])=>({action,label:definition.label,toStatus:definition.to,permission:definition.permission}));
+    },
+    async perform(actor,entityType,id,input,correlationId) {
+      const definition=definitions[entityType]?.[String(input?.action || '')];
+      if (!definition || !has(actor,definition.permission)) { const error=new Error('You are not authorised to perform this workflow action.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }
+      return repository.performWorkflowAction(actor,{entityType,id,action:input.action,definition,data:validate(input.action,input),comment:String(input.comment || input.data?.comment || input.data?.reason || '').trim(),correlationId});
+    },
+  });
+}

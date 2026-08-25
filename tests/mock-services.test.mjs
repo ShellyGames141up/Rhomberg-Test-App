@@ -992,11 +992,8 @@ const apiExpeditingOptions = await apiServices.expediting.getWorkspaceOptions();
 assert.equal(apiExpeditingOptions.progressSteps.at(-1).id, 'ready_for_dispatch');
 const apiDispatchOptions = await apiServices.dispatch.getWorkspaceOptions();
 assert.equal(apiDispatchOptions.methods.at(-1).id, 'third_party_delivery');
-await apiServices.laboratory.receive('order-lab-api', 'unit-lab-api', { branchId: 'cape_town' });
-await apiServices.laboratory.saveWorksheet('order-lab-api', 'unit-lab-api', { methodId: 'pressure_dwt_700_bar' });
-await apiServices.laboratory.holdCalibration('order-lab-api', 'unit-lab-api', { reason: 'Fabricated API hold reason.' });
 const apiSignedCertificate = new File(['%PDF-1.4 fabricated signed API certificate'], 'signed-api.pdf', { type: 'application/pdf' });
-await apiServices.laboratory.uploadSignedCertificate('order-lab-api', 'unit-lab-api', { certificateNumber: 'CAL-API-001', issueDate: '2026-08-04', file: apiSignedCertificate });
+await apiServices.laboratory.uploadCertificate('order-lab-api', 'unit-lab-api', { certificateNumber: 'CAL-API-001', issueDate: '2026-08-04', serialNumber: 'FAB-UNIT-001', certificationType: 'SANAS', confirmAssociation: true, file: apiSignedCertificate });
 await apiServices.personalisation.get();
 await apiServices.personalisation.complete({ ...createDefaultCustomerPersonalisation(), setupCompleted: true });
 const apiIdentityImage = new File([new Uint8Array([1, 2, 3])], 'api-profile.png', { type: 'image/png' });
@@ -1040,14 +1037,9 @@ assert.ok(apiRequests.some(request => request.path.endsWith('/management/records
 assert.ok(apiRequests.some(request => request.path.endsWith('/management/records/record-api-test/workflow-override-approval') && request.options.method === 'POST'), 'API override approval must use the controlled management endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/management/reports') && request.options.method === 'POST'), 'API report exports must use the audited management endpoint');
 assert.ok(apiRequests.some(request => request.path.endsWith('/orders/order-api-test/archive-approval') && request.options.method === 'POST'), 'API archival approval must use a separate approval endpoint');
-assert.ok(apiRequests.some(request => request.path.endsWith('/laboratory/orders/order-lab-api/units/unit-lab-api/receive') && request.options.method === 'POST'), 'Laboratory receipt must use the order-and-unit-scoped endpoint');
-assert.ok(apiRequests.some(request => request.path.endsWith('/laboratory/orders/order-lab-api/units/unit-lab-api/calibration/hold') && request.options.method === 'POST'), 'Laboratory holds must use the controlled unit endpoint');
-const worksheetApiRequest = apiRequests.find(request => request.path.endsWith('/laboratory/orders/order-lab-api/units/unit-lab-api/worksheet'));
-assert.equal(worksheetApiRequest.options.method, 'PUT');
-assert.ok(worksheetApiRequest.options.headers['Idempotency-Key'], 'worksheet revisions must carry an idempotency key');
-const signedCertificateApiRequest = apiRequests.find(request => request.path.endsWith('/laboratory/orders/order-lab-api/units/unit-lab-api/certificate/signed-pdf'));
-assert.ok(signedCertificateApiRequest.options.body instanceof FormData, 'signed Laboratory certificates must use multipart upload');
-assert.ok(signedCertificateApiRequest.options.headers['Idempotency-Key'], 'signed certificate uploads must carry an idempotency key');
+const certificateApiRequest = apiRequests.find(request => request.path.endsWith('/laboratory/orders/order-lab-api/units/unit-lab-api/certificate'));
+assert.ok(certificateApiRequest.options.body instanceof FormData, 'Laboratory certificates must use controlled multipart upload');
+assert.ok(certificateApiRequest.options.headers['Idempotency-Key'], 'certificate uploads must carry an idempotency key');
 const apiSubmission = await apiServices.enquiries.submit({
   submissionKey: 'api-rfq-submission-001',
   application: 'API contract test application',

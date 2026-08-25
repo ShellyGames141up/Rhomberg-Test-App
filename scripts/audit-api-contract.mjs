@@ -134,7 +134,9 @@ export function renderContractAudit(audit) {
     `- Frontend contracts still missing: **${missing}**`,
     `- Frontend contracts currently incompatible: **${incompatible}**`,
     '',
-    'A missing route remains unavailable in the Phase 1 backend; this report does not imply that later workflows are production-ready.',
+    missing || incompatible
+      ? 'Any missing or incompatible route remains unavailable in API mode and must not fall back to mock behavior.'
+      : 'Every active API-mode adapter contract has a matching backend route. Contract parity does not replace workflow, authorization, persistence or browser acceptance testing.',
     '',
     '| Frontend route | Method | Authentication | CSRF | Backend status | Priority |',
     '| --- | --- | --- | --- | --- | --- |',
@@ -142,8 +144,8 @@ export function renderContractAudit(audit) {
     '',
     '## Transport findings',
     '',
-    '- `HttpClient` currently has no `patch()` helper even though three adapter operations call it.',
-    '- Android credentialed CORS currently allows GET and POST only; future implemented PUT, PATCH and DELETE routes will require a separately reviewed minimal CORS-method expansion.',
+    '- `HttpClient` supports GET, POST, PUT, PATCH and DELETE with the shared credential, CSRF, timeout and error-handling policy.',
+    '- Credentialed CORS permits the minimal frontend method set only for exact configured HTTPS origins; wildcard and unapproved origins remain rejected.',
     '- Missing later-workflow routes must not be replaced with client-side mock fallbacks in staging.',
     '',
   ].join('\n');

@@ -57,7 +57,7 @@ test('approved Android preflight receives strict credentialed CORS headers', asy
   assert.equal(response.headers['access-control-allow-origin'], ANDROID_ORIGIN);
   assert.equal(response.headers['access-control-allow-credentials'], 'true');
   assert.match(response.headers.vary, /Origin/);
-  assert.equal(response.headers['access-control-allow-methods'], 'GET, POST, OPTIONS');
+  assert.equal(response.headers['access-control-allow-methods'], 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   assert.doesNotMatch(response.headers['access-control-allow-origin'], /\*/);
 });
 
