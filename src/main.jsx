@@ -9,5 +9,5 @@ const isLocalPreviewServer = ['127.0.0.1', 'localhost', '::1'].includes(location
 if ('serviceWorker' in navigator && isLocalPreviewServer) {
   navigator.serviceWorker.getRegistrations().then(registrations => Promise.all(registrations.map(registration => registration.unregister()))).catch(() => {});
 } else if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {}));
 }

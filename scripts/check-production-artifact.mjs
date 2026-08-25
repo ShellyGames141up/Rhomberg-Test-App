@@ -47,6 +47,14 @@ export const validateServiceWorkerReleaseIdentity = (source, { version, commitSh
   return match[1];
 };
 
+export const validateServiceWorkerFreshInstall = source => {
+  assert(
+    /APP_FILES\.map\(file\s*=>\s*new Request\(file,\s*\{\s*cache:\s*['"]reload['"]\s*\}\)\)/.test(source),
+    'Production service worker must bypass the HTTP cache while installing release assets.',
+  );
+  return true;
+};
+
 export async function validateProductionArtifact(output = defaultOutput) {
   const resolvedOutput = path.resolve(output);
   assert(resolvedOutput === defaultOutput, `Refusing to inspect unexpected production path: ${resolvedOutput}`);
@@ -111,6 +119,7 @@ export async function validateProductionArtifact(output = defaultOutput) {
   const packageMetadata = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
   const commitSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
   validateServiceWorkerReleaseIdentity(serviceWorker, { version: packageMetadata.version, commitSha });
+  validateServiceWorkerFreshInstall(serviceWorker);
   const precache = parsePrecache(serviceWorker);
   assert(JSON.stringify(precache) === JSON.stringify(PRODUCTION_PRECACHE_FILES), 'Production service-worker precache list differs from the approved list.');
   for (const entry of precache) {

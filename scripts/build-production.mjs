@@ -84,7 +84,9 @@ const serviceWorker = `const CACHE_NAME = ${JSON.stringify(cacheName)};
 const APP_FILES = ${JSON.stringify(PRODUCTION_PRECACHE_FILES, null, 2)};
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_FILES)));
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(
+    APP_FILES.map(file => new Request(file, { cache: 'reload' }))
+  )));
   self.skipWaiting();
 });
 
