@@ -2,7 +2,7 @@
 
 ## Scope and current limitation
 
-This guide covers a later manual transfer of the **static Rhomberg Connect frontend** to Windows Server 2025 and IIS. The repository does not yet contain the compatible production `/api/v1` backend. A successful static deployment will load the application shell, but authentication and operational workflows will remain unavailable until Innovate IT supplies and approves that API.
+This guide covers a later manual transfer of the Rhomberg Connect frontend and the Node.js `/api/v1` service to Windows Server 2025. IIS serves the static site and reverse-proxies `/api/v1` to the loopback-only API at `127.0.0.1:3000`. The package is for fabricated-data internal staging only; production identity, managed document storage, malware scanning and delivery integrations still require Innovate IT approval.
 
 Do not use real Rhomberg, customer, employee, pricing or document data during this packaging stage.
 
@@ -27,7 +27,7 @@ pnpm run check:production-artifact
 pnpm run release:metadata
 ```
 
-The output is `dist-production/`. The metadata command creates checksums and validation records, but does not create a ZIP.
+The static output is `dist-production/`. The metadata command creates frontend checksums and validation records, but does not create a ZIP. An approved combined release package adds the reviewed `apps/api` runtime and deployment documentation as separate `api/` and `deployment/` folders.
 
 ## Intended server structure
 
@@ -47,7 +47,7 @@ Innovate IT must approve and install IIS with Static Content, Default Document, 
 
 - `index.html` as the default document;
 - React single-page application fallback routing;
-- an explicit `503` response for `/api` while the backend is absent;
+- an ARR reverse-proxy rule from `/api/v1/...` to `http://127.0.0.1:3000/api/v1/...` before the SPA fallback;
 - disabled directory browsing and hidden configuration paths;
 - MIME types for the web manifest and WebP images;
 - CSP, clickjacking, MIME-sniffing, referrer and permissions headers;
@@ -66,8 +66,10 @@ HSTS is deliberately absent until Innovate IT confirms the final HTTPS and redir
 6. Extract into a new immutable release folder.
 7. Set the IIS site root to that release folder and apply least-privilege read permissions to the application-pool identity.
 8. Confirm the public `runtime-config.js` values. Do not put secrets in this file.
-9. Smoke-test the root route, a direct client-side route, static assets, manifest, service worker, security headers and the expected `/api` 503 response.
-10. Only after the separately approved backend exists, replace the temporary API behavior with the reviewed same-origin routing design.
+9. Install production API dependencies from the package using the pinned lockfile, supply protected environment values outside the site root, apply migrations with the migration identity and apply runtime grants.
+10. Bootstrap the first Administrator once through the server-side command, then remove the bootstrap secret from the process environment and protected deployment mechanism.
+11. Run the API as a controlled Windows service bound only to `127.0.0.1:3000`; do not expose Node directly.
+12. Smoke-test the root route, a direct client-side route, static assets, manifest, service worker, security headers, API health/readiness and the signed-out startup sequence through IIS.
 
 ## Rollback
 
