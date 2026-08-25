@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import {
+  canListOrders,
   canListRfqs,
   canAccessNotification,
   canAccessRecord,
@@ -72,6 +73,25 @@ assert.equal(canListRfqs({ role: USER_ROLES.SALES_REPRESENTATIVE, representative
 
 for (const technicalRole of [USER_ROLES.TECHNICAL_SUPPORT, USER_ROLES.TECHNICAL_MANAGER, USER_ROLES.TECHNICAL_DIRECTOR]) {
   assert.equal(canListRfqs({ role: technicalRole }), false, `${technicalRole} must use the scoped technical queue instead of the general RFQ endpoint`);
+  assert.equal(canListOrders({ role: technicalRole }), false, `${technicalRole} must not load the unrelated general order endpoint during startup`);
+}
+
+const rfqListPermissions = [PERMISSIONS.VIEW_OWN_COMPANY_RFQS, PERMISSIONS.VIEW_ASSIGNED_RFQS, PERMISSIONS.VIEW_ALL_RFQS];
+const orderListPermissions = [
+  PERMISSIONS.VIEW_OWN_COMPANY_ORDERS,
+  PERMISSIONS.VIEW_ASSIGNED_ORDERS,
+  PERMISSIONS.VIEW_PLANNING_QUEUE,
+  PERMISSIONS.VIEW_EXPEDITING_QUEUE,
+  PERMISSIONS.VIEW_LAB_QUEUE,
+  PERMISSIONS.VIEW_QA_QUEUE,
+  PERMISSIONS.VIEW_DISPATCH_QUEUE,
+  PERMISSIONS.VIEW_ALL_ORDERS,
+];
+for (const role of allRoles) {
+  const expectedRfqAccess = rfqListPermissions.some(permission => roleCan(role, permission));
+  const expectedOrderAccess = orderListPermissions.some(permission => roleCan(role, permission));
+  assert.equal(canListRfqs({ role }), expectedRfqAccess, `${role} RFQ startup access must match its authoritative permissions`);
+  assert.equal(canListOrders({ role }), expectedOrderAccess, `${role} order startup access must match its authoritative permissions`);
 }
 
 assert.ok(roleCan(USER_ROLES.PLANNING, PERMISSIONS.VIEW_PLANNING_QUEUE));

@@ -393,6 +393,16 @@ export const canListRfqs = account => (
   || accountCan(account, PERMISSIONS.VIEW_ASSIGNED_RFQS)
   || accountCan(account, PERMISSIONS.VIEW_ALL_RFQS)
 );
+export const canListOrders = account => (
+  accountCan(account, PERMISSIONS.VIEW_OWN_COMPANY_ORDERS)
+  || accountCan(account, PERMISSIONS.VIEW_ASSIGNED_ORDERS)
+  || accountCan(account, PERMISSIONS.VIEW_PLANNING_QUEUE)
+  || accountCan(account, PERMISSIONS.VIEW_EXPEDITING_QUEUE)
+  || accountCan(account, PERMISSIONS.VIEW_LAB_QUEUE)
+  || accountCan(account, PERMISSIONS.VIEW_QA_QUEUE)
+  || accountCan(account, PERMISSIONS.VIEW_DISPATCH_QUEUE)
+  || accountCan(account, PERMISSIONS.VIEW_ALL_ORDERS)
+);
 export const usesPlanningWorkspace = account => (
   accountCan(account, PERMISSIONS.VIEW_PLANNING_QUEUE)
   && !accountCan(account, PERMISSIONS.VIEW_ALL_ORDERS)

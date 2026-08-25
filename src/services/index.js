@@ -16,6 +16,7 @@ export {
   WORKFLOW_ACTION_PERMISSIONS,
 } from './contracts.js';
 export {
+  canListOrders,
   canListRfqs,
   defaultViewForRole,
   isCustomerAccount,

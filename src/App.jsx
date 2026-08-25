@@ -42,6 +42,7 @@ import {
 import {
   accountCan,
   accountCanPerformWorkflow,
+  canListOrders,
   canListRfqs,
   defaultViewForRole,
   friendlyServiceError,
@@ -80,6 +81,11 @@ const listEnquiriesForAccount = signedInAccount => {
     ? services.enquiries.listRepresentativeInbox()
     : services.enquiries.list();
 };
+const listOrdersForAccount = signedInAccount => (
+  canListOrders(signedInAccount)
+    ? services.orders.list()
+    : Promise.resolve([])
+);
 const canLoadExpeditingOptions = signedInAccount => (
   accountCan(signedInAccount, PERMISSIONS.VIEW_EXPEDITING_QUEUE)
   || accountCan(signedInAccount, PERMISSIONS.UPDATE_ORDER_PROGRESS)
@@ -186,7 +192,7 @@ export default function App() {
           [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedAuditEvents, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedLaboratoryOptions, loadedQualityOptions, loadedPersonalisation, loadedUserSettings] = await Promise.all([
             accountCan(session, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
             listEnquiriesForAccount(session),
-            services.orders.list(),
+            listOrdersForAccount(session),
             services.notifications.list(),
             accountCan(session, PERMISSIONS.READ_AUDIT_HISTORY)
               ? services.audit.list()
@@ -341,7 +347,7 @@ export default function App() {
     const [loadedDraft, loadedEnquiries, loadedOrders, loadedNotifications, loadedAuditEvents, loadedNotificationPreferences, loadedPlanningOptions, loadedExpeditingOptions, loadedDispatchOptions, loadedLaboratoryOptions, loadedQualityOptions, loadedPersonalisation, loadedUserSettings, loadedRegistrationOptions] = await Promise.all([
       accountCan(signedInAccount, PERMISSIONS.CREATE_RFQ) ? services.enquiries.getDraft() : Promise.resolve([]),
       listEnquiriesForAccount(signedInAccount),
-      services.orders.list(),
+      listOrdersForAccount(signedInAccount),
       services.notifications.list(),
       accountCan(signedInAccount, PERMISSIONS.READ_AUDIT_HISTORY)
         ? services.audit.list()
@@ -611,7 +617,7 @@ export default function App() {
 
   const refreshAfterRetentionAction = async () => {
     const [loadedOrders, loadedAuditEvents] = await Promise.all([
-      services.orders.list(),
+      listOrdersForAccount(account),
       accountCan(account, PERMISSIONS.READ_AUDIT_HISTORY) ? services.audit.list() : Promise.resolve([]),
     ]);
     setOrders(loadedOrders);
@@ -621,7 +627,7 @@ export default function App() {
   const refreshAfterManagementAction = async () => {
     const [loadedEnquiries, loadedOrders, loadedAuditEvents] = await Promise.all([
       listEnquiriesForAccount(account),
-      services.orders.list(),
+      listOrdersForAccount(account),
       accountCan(account, PERMISSIONS.READ_AUDIT_HISTORY) ? services.audit.list() : Promise.resolve([]),
     ]);
     setEnquiries(loadedEnquiries);
@@ -631,7 +637,7 @@ export default function App() {
 
   const refreshOperationalRecords = async () => {
     const [loadedOrders, loadedNotifications, loadedAuditEvents] = await Promise.all([
-      services.orders.list(),
+      listOrdersForAccount(account),
       services.notifications.list(),
       accountCan(account, PERMISSIONS.READ_AUDIT_HISTORY) ? services.audit.list() : Promise.resolve([]),
     ]);
