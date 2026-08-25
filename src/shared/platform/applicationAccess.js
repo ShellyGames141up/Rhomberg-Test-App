@@ -25,6 +25,7 @@ export const APPLICATION_ACCESS_MATRIX = Object.freeze({
   [USER_ROLES.QUALITY_ASSURANCE]: access(true, false),
   [USER_ROLES.QUALITY_MANAGER]: access(true, false),
   [USER_ROLES.TECHNICAL_SUPPORT]: access(true, false),
+  [USER_ROLES.TECHNICAL_MANAGER]: access(true, false),
   [USER_ROLES.TECHNICAL_DIRECTOR]: access(true, false),
   [USER_ROLES.SALES_MANAGER]: access(true, false),
   [USER_ROLES.COMPANY_OWNER]: access(true, false),
