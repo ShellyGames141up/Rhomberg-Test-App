@@ -8,7 +8,7 @@ test('Phase 1 migration applies to an empty PostgreSQL-compatible database with 
   await runMigrations(db);
   await runMigrations(db);
   const migrationRecords = await db.query('SELECT version FROM public.rhomberg_schema_migrations');
-  assert.deepEqual(migrationRecords.rows.map(row => row.version).sort(), ['001_phase1_vertical_slice.sql', '002_protected_request_context.sql', '003_initial_administrator_bootstrap.sql', '004_internal_test_operational_foundation.sql', '005_approved_product_catalogue.sql', '006_account_directory_fields.sql', '007_simplified_laboratory_access.sql', '008_administration_lifecycle.sql', '009_document_and_governance_fields.sql', '010_client_visits.sql', '011_workspace_and_record_controls.sql', '012_administration_directory_scope.sql', '013_first_login_password_change.sql', '014_customer_registration_and_dedicated_representative.sql', '015_administrator_account_soft_delete.sql']);
+  assert.deepEqual(migrationRecords.rows.map(row => row.version).sort(), ['001_phase1_vertical_slice.sql', '002_protected_request_context.sql', '003_initial_administrator_bootstrap.sql', '004_internal_test_operational_foundation.sql', '005_approved_product_catalogue.sql', '006_account_directory_fields.sql', '007_simplified_laboratory_access.sql', '008_administration_lifecycle.sql', '009_document_and_governance_fields.sql', '010_client_visits.sql', '011_workspace_and_record_controls.sql', '012_administration_directory_scope.sql', '013_first_login_password_change.sql', '014_customer_registration_and_dedicated_representative.sql', '015_administrator_account_soft_delete.sql', '016_conditional_product_configuration.sql']);
   const tables = await db.query("SELECT tablename FROM pg_tables WHERE schemaname = 'app'");
   const names = new Set(tables.rows.map(row => row.tablename));
   for (const required of ['companies', 'users', 'roles', 'permissions', 'user_roles', 'company_users', 'sessions', 'rfqs', 'rfq_items', 'document_metadata', 'audit_events', 'notifications', 'idempotency_records', 'request_security_contexts', 'platform_bootstrap_state', 'user_settings', 'notification_preferences', 'enquiry_drafts', 'orders', 'order_items', 'workflow_events', 'technical_support_requests', 'technical_support_messages', 'locations', 'platform_policies', 'user_permission_grants', 'user_profile_images', 'client_appointments', 'catalogue_overrides']) assert.equal(names.has(required), true, `missing ${required}`);
@@ -41,6 +41,9 @@ test('Phase 1 migration applies to an empty PostgreSQL-compatible database with 
   assert.equal(deleteFunction.rows.length, 1);
   const catalogue = await db.query('SELECT count(*)::integer AS count FROM app.products WHERE is_active');
   assert.equal(catalogue.rows[0].count, 84);
+  const pbb = await db.query("SELECT configuration_schema FROM app.products WHERE code='PBB'");
+  const customRange = pbb.rows[0].configuration_schema.find(field => field.key === 'customRange');
+  assert.deepEqual(customRange.showWhen, { key: 'range', value: 'Custom range - sales review' });
   await db.close();
 });
 

@@ -68,13 +68,13 @@ async function seed(client) {
   await client.query(`INSERT INTO app.representative_company_assignments (representative_id,company_id) VALUES
     ($1,$3),($2,$4)`, [ids.repA, ids.repB, ids.companyA, ids.companyB]);
   await client.query(`INSERT INTO app.products (id,code,name,configuration_schema) VALUES
-    ('pg-pressure-gauge','PG-DEMO','Fabricated PostgreSQL pressure gauge','[{"key":"dialSize","required":true}]'::jsonb),
+    ('pg-pressure-gauge','PG-DEMO','Fabricated PostgreSQL pressure gauge','[{"key":"dialSize","type":"choice","required":true,"options":["63 mm","100 mm"]},{"key":"range","type":"select","required":true,"options":["0 to 10 bar","Custom range - sales review"]},{"key":"customRange","type":"text","required":true,"showWhen":{"key":"range","value":"Custom range - sales review"}}]'::jsonb),
     ('pg-temperature-gauge','TG-DEMO','Fabricated PostgreSQL temperature gauge','[{"key":"stemLength","required":true}]'::jsonb)`);
 }
 
 const payload = representativeId => ({
   details: { application: 'Fabricated PostgreSQL clean-water monitoring', medium: 'Fabricated water', area: 'Fabricated Region', selectedRep: { id: representativeId }, fulfilment: 'delivery', deliveryAddress: '1 Fabricated PostgreSQL Road', notes: 'Fabricated test only.' },
-  items: [{ lineId: randomUUID(), productId: 'pg-pressure-gauge', quantity: 2, configuration: { dialSize: '100 mm' } }],
+  items: [{ lineId: randomUUID(), productId: 'pg-pressure-gauge', quantity: 2, configuration: { dialSize: '63 mm', range: '0 to 10 bar' } }],
 });
 
 async function login(app, email, password = PASSWORD) {
@@ -113,6 +113,7 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
   const app = await buildApp({ config, repository, storage, logger: false });
   t.after(async () => { await app.close(); await migrationPool.end(); });
   let registeredCompanyId;
+  let administratorCreatedCompanyId;
 
   await t.test('self-registration and concurrent first RFQs persist exactly one area-eligible Dedicated Representative', async () => {
     const registration=await app.inject({method:'POST',url:'/api/v1/auth/register',remoteAddress:'127.0.0.31',payload:{company:'Fabricated PostgreSQL Registration Company',contact:'Fabricated PostgreSQL Registration Contact',email:'pg.registration@example.invalid',phone:'+27 00 000 3131',area:'Gauteng',industry:'Manufacturing',password:PASSWORD}});
@@ -183,11 +184,12 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
       payload: {
         companyName: 'Fabricated PostgreSQL Administration Company',
         contactName: 'Fabricated PostgreSQL Administration Contact',
-        email: 'pg.admin.customer@example.invalid', phone: '0000000000', area: 'Fabricated Area',
-        industry: 'Fabricated Industry', branchId: 'fabricated-branch', password: customerTemporaryPassword,
+        email: 'pg.admin.customer@example.invalid', phone: '0000000000', area: 'Gauteng',
+        industry: 'Fabricated Industry', branchId: 'johannesburg', representativeId: ids.repA, password: customerTemporaryPassword,
       },
     });
     assert.equal(customerAccount.statusCode, 201, customerAccount.body);
+    administratorCreatedCompanyId=customerAccount.json().data.company.id;
 
     for (const createdAccount of [
       { identifier:'pg.planning.created', temporaryPassword:employeeTemporaryPassword, replacementPassword:employeeReplacementPassword, remoteAddress:'127.0.0.41' },
@@ -214,6 +216,18 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
     assert.ok(reloaded.json().data.users.some(user => user.email === 'pg.planning.created@example.invalid'));
     assert.ok(reloaded.json().data.users.some(user => user.email === 'pg.admin.customer@example.invalid'));
     assert.ok(reloaded.json().data.companies.some(company => company.name === 'Fabricated PostgreSQL Administration Company'));
+
+    const assignedCustomer = await login(app, 'pg.admin.customer@example.invalid', customerReplacementPassword);
+    assert.equal(assignedCustomer.response.statusCode, 200, assignedCustomer.response.body);
+    const enquiryOptions = await app.inject({ url:'/api/v1/enquiries/options', headers:{ cookie:assignedCustomer.cookie } });
+    assert.equal(enquiryOptions.statusCode,200,enquiryOptions.body);
+    assert.equal(enquiryOptions.json().data.representativeAssignmentStatus,'assigned');
+    assert.equal(enquiryOptions.json().data.requiresRepresentativeSelection,false);
+    assert.equal(enquiryOptions.json().data.preferredRepresentative.id,ids.repA);
+    assert.deepEqual(enquiryOptions.json().data.areaDirectory.Gauteng.representatives.map(rep=>rep.id),[ids.repA]);
+    const assignedRfq=await create(app,assignedCustomer,payload(ids.repA),'pg-administrator-assigned-customer-rfq');
+    assert.equal(assignedRfq.statusCode,201,assignedRfq.body);
+    assert.equal(assignedRfq.json().data.enquiry.representativeId,ids.repA);
 
     const userAudit = await app.inject({
       url: `/api/v1/admin/users/${internalUser.json().data.account.id}/audit`,
@@ -251,7 +265,7 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
     const personalisation={schemaVersion:1,setupCompleted:true,themePreset:'rhomberg-default',fontSize:'large',density:'comfortable',appearanceMode:'dark',notificationPreferences:{rfqUpdates:true,quotationNotifications:true,orderProgress:true,delayNotifications:true,fulfilmentNotifications:true,accountSecurity:true,maintenanceNotices:true,companyAnnouncements:false},profileImage:null};
     const saved=await app.inject({method:'PUT',url:'/api/v1/users/me/personalisation',headers:{cookie:authA.cookie,'x-csrf-token':authA.csrf},payload:personalisation});assert.equal(saved.statusCode,200,saved.body);
     assert.equal((await migrationPool.query('SELECT settings->\'personalisation\'->>\'appearanceMode\' AS mode FROM app.user_settings WHERE user_id=$1',[ids.customerA])).rows[0].mode,'dark');
-    const rep=await login(app,'pg.rep.a@example.invalid');const clients=await app.inject({url:'/api/v1/representatives/clients',headers:{cookie:rep.cookie}});assert.equal(clients.statusCode,200,clients.body);assert.deepEqual(clients.json().data.map(item=>item.id).sort(),[ids.companyA,registeredCompanyId].sort());
+    const rep=await login(app,'pg.rep.a@example.invalid');const clients=await app.inject({url:'/api/v1/representatives/clients',headers:{cookie:rep.cookie}});assert.equal(clients.statusCode,200,clients.body);assert.deepEqual(clients.json().data.map(item=>item.id).sort(),[ids.companyA,registeredCompanyId,administratorCreatedCompanyId].sort());
     const scheduled=await app.inject({method:'POST',url:`/api/v1/clients/${ids.companyA}/appointments`,headers:{cookie:rep.cookie,'x-csrf-token':rep.csrf},payload:{scheduledAt:'2099-01-01T10:00:00.000Z',expectedDurationMinutes:60,purpose:'Fabricated PostgreSQL visit',contact:'Fabricated PostgreSQL Customer A',address:'1 Fabricated PostgreSQL Road'}});assert.equal(scheduled.statusCode,201,scheduled.body);const appointmentId=scheduled.json().data.id;
     assert.equal((await app.inject({method:'POST',url:`/api/v1/appointments/${appointmentId}/start`,headers:{cookie:rep.cookie,'x-csrf-token':rep.csrf},payload:{}})).statusCode,200);
     assert.equal((await app.inject({method:'POST',url:`/api/v1/appointments/${appointmentId}/customer-confirmation`,headers:{cookie:rep.cookie,'x-csrf-token':rep.csrf},payload:{}})).statusCode,200);
@@ -324,7 +338,7 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
     assert.equal((await app.inject({ url: `/api/v1/documents/${documentA.id}`, headers: { cookie: authB.cookie } })).statusCode, 404);
     const repA = await login(app, 'pg.rep.a@example.invalid');
     const repList = await app.inject({ url: '/api/v1/enquiries', headers: { cookie: repA.cookie } });
-    assert.equal(repList.statusCode, 200); assert.deepEqual([...new Set(repList.json().data.map(row => row.companyId))].sort(), [ids.companyA,registeredCompanyId].sort());
+    assert.equal(repList.statusCode, 200); assert.deepEqual([...new Set(repList.json().data.map(row => row.companyId))].sort(), [ids.companyA,registeredCompanyId,administratorCreatedCompanyId].sort());
 
     const direct = await runtimePool.connect();
     try {

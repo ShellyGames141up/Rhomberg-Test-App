@@ -16,7 +16,9 @@ test('API staging exposes customer account creation through the service boundary
 
 test('RFQ UI distinguishes first selection from the read-only company relationship', async () => {
   const enquiry = await read('src/components/Enquiry.jsx');
-  assert.match(enquiry, /representativeAssignmentStatus/);
+assert.match(enquiry, /representativeAssignmentStatus/);
+assert.match(enquiry, /effectiveRepresentativeId = preferredRepresentative\?\.id \|\| selectedRepId/);
+assert.match(enquiry, /value=\{effectiveRepresentativeId\}/);
   assert.match(enquiry, /dedicated representative/i);
   assert.match(enquiry, /existing RFQs keep their original assigned Representative/i);
 });

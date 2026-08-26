@@ -170,7 +170,10 @@ const pressureGaugeConfig = product => {
   fields.push(product.rangeOptionsBy
     ? withOptionsBy(rangeField, product.rangeOptionsBy.key, product.rangeOptionsBy.map, product.rangeOptions || commonPressureRanges)
     : rangeField);
-  fields.push(text('customRange', 'Describe the required range', 'Example: -1 to 15 bar, dual scale bar/psi', true, 'A representative will validate non-standard ranges.'));
+  fields.push(withShowWhen(
+    text('customRange', 'Describe the required range', 'Example: -1 to 15 bar, dual scale bar/psi', true, 'A representative will validate non-standard ranges.'),
+    { key: 'range', value: 'Custom range - sales review' },
+  ));
 
   if (product.code === 'PBB') {
     fields.push(withShowWhen(

@@ -73,6 +73,37 @@ test('first RFQ atomically establishes the area-eligible dedicated Representativ
   assert.equal(future.statusCode,201); assert.equal(future.json().data.enquiry.representativeId,sameAreaRepresentative.id);
 });
 
+test('Administrator-created customer receives and uses the assigned Representative without manual RFQ selection', async t=>{
+  const {app}=await createFixture(); t.after(()=>app.close());
+  const administrator=await login(app,'fabricated-admin',FABRICATED_PASSWORD);
+  const temporaryPassword='Fabricated-Customer-Temporary!7';
+  const replacementPassword='Fabricated-Customer-Replacement!8';
+  const created=await app.inject({
+    method:'POST',url:'/api/v1/admin/customer-accounts',
+    headers:{cookie:administrator.cookie,'x-csrf-token':administrator.csrf},
+    payload:{companyName:'Fabricated Assigned Customer Company',contactName:'Fabricated Assigned Contact',email:'assigned.customer@example.invalid',phone:'0000000000',area:'Gauteng',industry:'Fabricated testing',branchId:'johannesburg',representativeId:ids.representativeA,password:temporaryPassword},
+  });
+  assert.equal(created.statusCode,201,created.body);
+
+  const firstLogin=await login(app,'assigned.customer@example.invalid',temporaryPassword);
+  assert.equal(firstLogin.response.statusCode,200,firstLogin.response.body);
+  assert.equal(firstLogin.body.data.user.forcePasswordChange,true);
+  const changed=await app.inject({method:'POST',url:'/api/v1/auth/change-password',headers:{cookie:firstLogin.cookie,'x-csrf-token':firstLogin.csrf},payload:{currentPassword:temporaryPassword,newPassword:replacementPassword}});
+  assert.equal(changed.statusCode,204,changed.body);
+
+  const customer=await login(app,'assigned.customer@example.invalid',replacementPassword);
+  const options=await app.inject({method:'GET',url:'/api/v1/enquiries/options',headers:{cookie:customer.cookie}});
+  assert.equal(options.statusCode,200,options.body);
+  assert.equal(options.json().data.representativeAssignmentStatus,'assigned');
+  assert.equal(options.json().data.requiresRepresentativeSelection,false);
+  assert.equal(options.json().data.preferredRepresentative.id,ids.representativeA);
+  assert.deepEqual(options.json().data.areaDirectory.Gauteng.representatives.map(rep=>rep.id),[ids.representativeA]);
+
+  const submitted=await createRfq(app,customer,validRfq(ids.representativeA),'administrator-assigned-representative-rfq');
+  assert.equal(submitted.statusCode,201,submitted.body);
+  assert.equal(submitted.json().data.enquiry.representativeId,ids.representativeA);
+});
+
 test('missing area, zero eligible Representatives and inactive assignments fail without creating an RFQ', async t=>{
   const {app,repository}=await createFixture(); t.after(()=>app.close());
   const customer=await login(app);

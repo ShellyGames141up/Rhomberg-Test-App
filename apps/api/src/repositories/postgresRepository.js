@@ -3,13 +3,39 @@ import { notFound } from '../errors.js';
 
 const json = value => JSON.stringify(value ?? {});
 
-function assertConfiguration(product, configuration) {
+function shouldValidateConfigurationField(field, configuration) {
+  // Older catalogue rows predate explicit showWhen metadata for custom ranges.
+  // Preserve the same rule used by both configurators while migration 016
+  // normalises those stored schemas.
+  if (field.key === 'customRange' && configuration?.range !== 'Custom range - sales review') return false;
+  if (!field.showWhen) return true;
+  const actual = configuration?.[field.showWhen.key];
+  if (Array.isArray(field.showWhen.values)) return field.showWhen.values.includes(actual);
+  if (Object.hasOwn(field.showWhen, 'notValue')) return actual !== field.showWhen.notValue;
+  return actual === field.showWhen.value;
+}
+
+function allowedConfigurationOptions(field, configuration) {
+  if (!field.optionsBy) return field.options || [];
+  const dependency = configuration?.[field.optionsBy.key];
+  return field.optionsBy.map?.[dependency] || field.optionsBy.fallback || field.options || [];
+}
+
+export function assertProductConfiguration(product, configuration) {
   for (const field of product.configuration_schema || []) {
+    if (!shouldValidateConfigurationField(field, configuration)) continue;
     const value = configuration?.[field.key];
-    if (field.required && (value === undefined || value === null || String(value).trim() === '')) {
+    const missing = value === undefined || value === null || String(value).trim() === '' || (Array.isArray(value) && value.length === 0);
+    if (field.required && missing) {
       const error = new Error(`Complete the required ${field.key} configuration.`); error.code = 'INVALID_PRODUCT_CONFIGURATION'; error.statusCode = 422; throw error;
     }
-    if (Array.isArray(field.options) && value !== undefined && !field.options.includes(value)) {
+    const options = allowedConfigurationOptions(field, configuration);
+    const invalidOption = value !== undefined && options.length && (
+      field.type === 'multiChoice'
+        ? !Array.isArray(value) || value.some(option => !options.includes(option))
+        : !options.includes(value)
+    );
+    if (invalidOption) {
       const error = new Error(`Select an approved ${field.key} option.`); error.code = 'INVALID_PRODUCT_CONFIGURATION'; error.statusCode = 422; throw error;
     }
   }
@@ -556,7 +582,7 @@ export function createPostgresRepository(pool) {
         const details={ sourceOther:command.sourceOther,quotationDate:command.quotationDate,quotationRevision:command.quotationRevision,purchaseOrderDate:command.purchaseOrderDate,confirmationNote:command.confirmationNote,sourceConfirmed:true,loadedByRepresentative:true };
         await client.query(`INSERT INTO app.orders(id,reference,company_id,customer_user_id,representative_id,origin,source,status,internal_priority,application,fulfilment,delivery_address,collection_branch,customer_notes,internal_notes,quotation_number,purchase_order_number,required_date,details,created_by_user_id)
           VALUES($1,$2,$3,$4,$5,'representative_loaded_order',$6,'awaiting_planning',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18)`,[id,reference,command.companyId,command.customerContactId,command.representativeId,command.source,command.priority,command.application,command.fulfilment,command.fulfilment==='delivery'?command.deliveryAddress:null,command.fulfilment==='collect'?command.branchId:null,command.customerNotes,command.internalNotes,command.quotationNumber,command.purchaseOrderNumber,command.requiredDate || null,json(details),actor.id]);
-        for (const [index,item] of command.items.entries()) { const product=productMap.get(item.productId); assertConfiguration(product,item.configuration); await client.query(`INSERT INTO app.order_items(id,order_id,line_number,product_id,product_code_snapshot,product_name_snapshot,quantity,configuration) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,[randomUUID(),id,index+1,item.productId,product.code,product.name,item.quantity,json(item.configuration)]); }
+        for (const [index,item] of command.items.entries()) { const product=productMap.get(item.productId); assertProductConfiguration(product,item.configuration); await client.query(`INSERT INTO app.order_items(id,order_id,line_number,product_id,product_code_snapshot,product_name_snapshot,quantity,configuration) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,[randomUUID(),id,index+1,item.productId,product.code,product.name,item.quantity,json(item.configuration)]); }
         const documents=[];
         for (const document of command.documents) { const kind=document.kind==='quotation'?'quotation':document.kind==='purchaseOrder'?'purchase_order':'supporting_document'; await client.query(`INSERT INTO app.document_metadata(id,company_id,order_id,uploaded_by_user_id,kind,original_name,storage_key,media_type,size_bytes,sha256_hex,customer_visible) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,[document.id,command.companyId,id,actor.id,kind,document.originalName,document.storageKey,document.mediaType,document.sizeBytes,document.sha256Hex,['quotation','purchase_order'].includes(kind)]); documents.push({id:document.id,documentType:kind,fileName:document.originalName,mimeType:document.mediaType,sizeBytes:document.sizeBytes,customerVisible:['quotation','purchase_order'].includes(kind)}); }
         const eventId=randomUUID(); await client.query(`INSERT INTO app.workflow_events(id,company_id,entity_type,entity_id,to_status,action,customer_note,internal_note,customer_visible,actor_user_id,actor_role,metadata) VALUES($1,$2,'order',$3,'awaiting_planning','representative_loaded_order',$4,$5,true,$6,$7,$8::jsonb)`,[eventId,command.companyId,id,'Your accepted order is waiting for Planning.',command.internalNotes,actor.id,actor.role,json({source:command.source})]);
@@ -910,7 +936,7 @@ export function createPostgresRepository(pool) {
         ]);
         for (const [index, item] of command.items.entries()) {
           const product = productMap.get(item.productId);
-          assertConfiguration(product, item.configuration);
+          assertProductConfiguration(product, item.configuration);
           await client.query(`INSERT INTO app.rfq_items
             (id, rfq_id, line_number, product_id, product_code_snapshot, product_name_snapshot, quantity, configuration)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`, [randomUUID(), id, index + 1, item.productId, product.code, product.name, item.quantity, json(item.configuration)]);
