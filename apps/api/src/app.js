@@ -311,7 +311,7 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   }, async request => ({ data: publicReferenceService.getProduct(request.params.id), meta: { requestId: request.id } }));
   app.get('/api/v1/reference-data/registration', async request => ({ data: publicReferenceService.getRegistrationReference(), meta: { requestId: request.id } }));
 
-  app.get('/api/v1/enquiries', { preHandler: requireAuthentication }, async request => ({ data: await enquiryService.list(request.actor), meta: { page: 1, pageSize: 100, requestId: request.id } }));
+  app.get('/api/v1/enquiries', { preHandler: requireAuthentication }, async request => ({ data: (await enquiryService.list(request.actor)).map(record => workflowService.enrich(request.actor, 'rfq', record)), meta: { page: 1, pageSize: 100, requestId: request.id } }));
   app.get('/api/v1/enquiries/options', { preHandler: requireAuthentication }, async request => {
     requirePermission(request.actor, PERMISSIONS.CREATE_RFQ);
     const reference = publicReferenceService.getRegistrationReference();
@@ -337,8 +337,8 @@ export async function buildApp({ config, repository, storage, identityProvider, 
     reply.code(result.idempotent ? 200 : 201);
     return { data: result, meta: { requestId: request.id, idempotent: Boolean(result.idempotent) } };
   });
-  app.get('/api/v1/enquiries/:id', { preHandler: requireAuthentication, schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } } } }, async request => ({ data: await enquiryService.get(request.actor, request.params.id), meta: { requestId: request.id } }));
-  app.get('/api/v1/enquiries/inbox', { preHandler: requireAuthentication }, async request => ({ data: await enquiryService.list(request.actor), meta: { page: 1, pageSize: 100, requestId: request.id } }));
+  app.get('/api/v1/enquiries/:id', { preHandler: requireAuthentication, schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } } } }, async request => ({ data: workflowService.enrich(request.actor, 'rfq', await enquiryService.get(request.actor, request.params.id)), meta: { requestId: request.id } }));
+  app.get('/api/v1/enquiries/inbox', { preHandler: requireAuthentication }, async request => ({ data: (await enquiryService.list(request.actor)).map(record => workflowService.enrich(request.actor, 'rfq', record)), meta: { page: 1, pageSize: 100, requestId: request.id } }));
   app.get('/api/v1/enquiries/:id/workflow-actions', { preHandler: requireAuthentication }, async request => ({ data: await workflowService.allowed(request.actor,'rfq',request.params.id), meta: { requestId: request.id } }));
   app.post('/api/v1/enquiries/:id/workflow-actions', { preHandler: requireCsrf }, async request => ({ data: await workflowService.perform(request.actor,'rfq',request.params.id,request.body || {},request.id), meta: { requestId: request.id } }));
   app.get('/api/v1/documents/:id', { preHandler: requireAuthentication, schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } } } }, async request => ({ data: await enquiryService.getDocument(request.actor, request.params.id, request.id), meta: { requestId: request.id } }));
@@ -347,8 +347,8 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   // a fresh staging database; they do not seed or emulate later workflow domains.
   app.get('/api/v1/enquiry-drafts/current', { preHandler: requireAuthentication }, async request => ({ data: await phase1WorkspaceService.getCurrentDraft(request.actor), meta: { requestId: request.id } }));
   app.put('/api/v1/enquiry-drafts/current', { preHandler: requireCsrf }, async request => ({ data: await phase1WorkspaceService.saveCurrentDraft(request.actor, request.body?.items), meta: { requestId: request.id } }));
-  app.get('/api/v1/orders', { preHandler: requireAuthentication }, async request => ({ data: await phase1WorkspaceService.listOrders(request.actor), meta: { requestId: request.id } }));
-  app.get('/api/v1/orders/:id', { preHandler: requireAuthentication }, async request => ({ data: await repository.getOrder(request.actor,request.params.id), meta: { requestId: request.id } }));
+  app.get('/api/v1/orders', { preHandler: requireAuthentication }, async request => ({ data: (await phase1WorkspaceService.listOrders(request.actor)).map(record => workflowService.enrich(request.actor, 'order', record)), meta: { requestId: request.id } }));
+  app.get('/api/v1/orders/:id', { preHandler: requireAuthentication }, async request => ({ data: workflowService.enrich(request.actor, 'order', await repository.getOrder(request.actor,request.params.id)), meta: { requestId: request.id } }));
   app.get('/api/v1/orders/:orderId/source-documents', { preHandler: requireAuthentication }, async request => ({data:await governanceService.listDocuments(request.actor,request.params.orderId),meta:{requestId:request.id}}));
   app.get('/api/v1/orders/:orderId/source-documents/:documentId/download', { preHandler: requireAuthentication }, async(request,reply)=>{const result=await governanceService.download(request.actor,request.params.orderId,request.params.documentId,request.id);reply.header('Content-Type',result.mediaType).header('Content-Disposition',`attachment; filename="${result.fileName.replace(/["\\\r\n]/g,'_')}"`).header('X-Content-Type-Options','nosniff');return reply.send(result.buffer);});
   app.post('/api/v1/orders/:orderId/source-documents/:documentId/versions', { preHandler: requireCsrf }, async request=>{const parsed=await parseReplacementDocumentRequest(request,config.maxUploadBytes);return{data:await governanceService.replaceDocument(request.actor,request.params.orderId,request.params.documentId,parsed.payload,parsed.file,request.id),meta:{requestId:request.id}};});

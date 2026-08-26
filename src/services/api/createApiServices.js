@@ -178,6 +178,12 @@ export function createApiServices(config = {}) {
     },
   };
 
+  const normaliseWorkflowResult = result => {
+    if (result?.enquiry) return { ...result.enquiry, ...(result.order ? { createdOrder: result.order } : {}) };
+    if (result?.order) return result.order;
+    return result;
+  };
+
   const workflow = {
     async list(filters) {
       const [rfqs, customerOrders] = await Promise.all([enquiries.list(filters), orders.list(filters)]);
@@ -198,9 +204,9 @@ export function createApiServices(config = {}) {
           const form = new FormData();
           form.append('payload', JSON.stringify(request));
           form.append('quotationDocument', quotationDocumentFile, quotationDocumentFile.name);
-          return client.post(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`, form, {
+          return normaliseWorkflowResult(await client.post(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`, form, {
             headers: { 'Idempotency-Key': idempotencyKey },
-          });
+          }));
         }
       }
       if (request.action === 'accept_order') {
@@ -210,9 +216,9 @@ export function createApiServices(config = {}) {
           const form = new FormData();
           form.append('payload', JSON.stringify(request));
           form.append('acceptanceDocument', acceptanceDocumentFile, acceptanceDocumentFile.name);
-          return client.post(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`, form, {
+          return normaliseWorkflowResult(await client.post(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`, form, {
             headers: { 'Idempotency-Key': idempotencyKey },
-          });
+          }));
         }
       }
       if (request.action === 'complete_planning') {
@@ -267,14 +273,15 @@ export function createApiServices(config = {}) {
           const form = new FormData();
           form.append('payload', JSON.stringify(request));
           form.append('dispatchProof', dispatchProofFile, dispatchProofFile.name);
-          return client.post(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`, form, {
+          return normaliseWorkflowResult(await client.post(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`, form, {
             headers: { 'Idempotency-Key': idempotencyKey },
-          });
+          }));
         }
       }
-      return client.post(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`, request, {
+      const result = await client.post(`/${resource}/${encodeURIComponent(recordId)}/workflow-actions`, request, {
         headers: { 'Idempotency-Key': idempotencyKey },
       });
+      return normaliseWorkflowResult(result);
     },
   };
 

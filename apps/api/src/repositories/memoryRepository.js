@@ -26,6 +26,10 @@ export function createMemoryRepository(seed = {}) {
   const canRead = (actor, record) => actor.permissions.includes('view_all_rfqs')
     || (actor.permissions.includes('view_assigned_rfqs') && record.representativeId === actor.representativeId)
     || (actor.permissions.includes('view_own_company_rfqs') && actor.companyIds.includes(record.companyId));
+  const canReadOrder = (actor, record) => actor.permissions.includes('view_all_orders')
+    || ['view_planning_queue','view_expediting_queue','view_lab_queue','view_qa_queue','view_dispatch_queue'].some(permission => actor.permissions.includes(permission))
+    || actor.companyIds.includes(record.companyId)
+    || record.representativeId === actor.representativeId;
 
   return {
     _state: state,
@@ -248,14 +252,15 @@ export function createMemoryRepository(seed = {}) {
       return clone(state.orders.filter(order => actor.permissions.includes('view_all_orders') || operationalQueue || actor.companyIds.includes(order.companyId) || order.representativeId === actor.representativeId));
     },
     async getOrder(actor,id) {
-      const operationalQueue = ['view_planning_queue','view_expediting_queue','view_lab_queue','view_qa_queue','view_dispatch_queue'].some(permission => actor.permissions.includes(permission));
-      const order=state.orders.find(item=>item.id===id && (actor.permissions.includes('view_all_orders') || operationalQueue || actor.companyIds.includes(item.companyId) || item.representativeId===actor.representativeId));
+      const order=state.orders.find(item=>item.id===id && canReadOrder(actor,item));
       if (!order) throw notFound('The order was not found or is outside your authorised scope.');
       return clone(order);
     },
     async performWorkflowAction(actor,command) {
       const collection=command.entityType==='rfq'?state.enquiries:state.orders;
-      const record=collection.find(item=>item.id===command.id && (actor.permissions.includes(command.entityType==='rfq'?'view_all_rfqs':'view_all_orders') || actor.companyIds.includes(item.companyId) || item.representativeId===actor.representativeId));
+      const record=collection.find(item=>item.id===command.id && (command.entityType==='rfq'
+        ? (actor.permissions.includes('view_all_rfqs') || actor.companyIds.includes(item.companyId) || item.representativeId===actor.representativeId)
+        : canReadOrder(actor,item)));
       if (!record) throw notFound(`The ${command.entityType==='rfq'?'RFQ':'order'} was not found or is outside your authorised scope.`);
       if (!command.definition.from.includes(record.trackingStatus)) { const error=new Error(`This action is not allowed while the record is ${record.trackingStatus}.`); error.code='INVALID_WORKFLOW_TRANSITION'; error.statusCode=409; throw error; }
       if (actor.role==='sales_representative' && record.representativeId!==actor.representativeId) { const error=new Error('This record is assigned to another representative.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }

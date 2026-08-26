@@ -974,7 +974,10 @@ const apiFetch = async (url, options) => {
     maxProofBytes: 4 * 1024 * 1024,
   });
   if (url.pathname.endsWith('/enquiries') && options.method === 'POST') return jsonResponse({ enquiry: { id: '00000000-0000-4000-8000-000000000003', reference: 'RQ-API-TEST', companyId: apiUser.companyId }, delivery: { ok: true, deliveryMode: 'queued' } }, 201);
-  if (url.pathname.endsWith('/workflow-actions') && options.method === 'POST') return jsonResponse({ id: '00000000-0000-4000-8000-000000000003', reference: 'RQ-API-TEST', workflowType: 'order', trackingStatus: 'awaiting_dispatch', version: 6 }, 201);
+  if (url.pathname.endsWith('/workflow-actions') && options.method === 'POST') {
+    const record = { id: '00000000-0000-4000-8000-000000000003', reference: url.pathname.includes('/orders/') ? 'OR-API-TEST' : 'RQ-API-TEST', workflowType: url.pathname.includes('/orders/') ? 'order' : 'rfq', trackingStatus: 'awaiting_dispatch', version: 6, allowedWorkflowActions: [] };
+    return jsonResponse(url.pathname.includes('/orders/') ? { order: record } : { enquiry: record }, 201);
+  }
   return jsonResponse([]);
 };
 
@@ -1100,7 +1103,7 @@ await apiServices.workflow.performAction(apiSubmission.enquiry.id, {
   },
   expectedVersion: 6,
 });
-await apiServices.workflow.performAction(apiSubmission.enquiry.id, {
+const normalisedPlanningResult = await apiServices.workflow.performAction(apiSubmission.enquiry.id, {
   entityType: 'order',
   action: 'complete_planning',
   comment: '',
@@ -1114,6 +1117,8 @@ await apiServices.workflow.performAction(apiSubmission.enquiry.id, {
   },
   expectedVersion: 4,
 });
+assert.equal(normalisedPlanningResult.workflowType, 'order', 'the API service must unwrap the server order envelope for the application state layer');
+assert.equal(normalisedPlanningResult.reference, 'OR-API-TEST');
 await apiServices.workflow.performAction(apiSubmission.enquiry.id, {
   entityType: 'order',
   action: 'complete_expediting',

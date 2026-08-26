@@ -50,15 +50,30 @@ function validate(action,input) {
 }
 
 export function createWorkflowService({ repository }) {
+  const actionsForRecord = (actor, entityType, record) => Object.entries(definitions[entityType])
+    .filter(([, definition]) => definition.from.includes(record.trackingStatus) && has(actor, definition.permission))
+    .map(([action, definition]) => ({ action, label: definition.label, toStatus: definition.to, permission: definition.permission }));
+
+  const enrich = (actor, entityType, record) => ({
+    ...record,
+    allowedWorkflowActions: actionsForRecord(actor, entityType, record),
+  });
+
   return Object.freeze({
+    enrich,
     async allowed(actor,entityType,id) {
       const record=entityType==='rfq' ? await repository.getEnquiry(actor,id) : await repository.getOrder(actor,id);
-      return Object.entries(definitions[entityType]).filter(([,definition])=>definition.from.includes(record.trackingStatus) && has(actor,definition.permission)).map(([action,definition])=>({action,label:definition.label,toStatus:definition.to,permission:definition.permission}));
+      return actionsForRecord(actor, entityType, record);
     },
     async perform(actor,entityType,id,input,correlationId) {
       const definition=definitions[entityType]?.[String(input?.action || '')];
       if (!definition || !has(actor,definition.permission)) { const error=new Error('You are not authorised to perform this workflow action.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }
-      return repository.performWorkflowAction(actor,{entityType,id,action:input.action,definition,data:validate(input.action,input),comment:String(input.comment || input.data?.comment || input.data?.reason || '').trim(),correlationId});
+      const result = await repository.performWorkflowAction(actor,{entityType,id,action:input.action,definition,data:validate(input.action,input),comment:String(input.comment || input.data?.comment || input.data?.reason || '').trim(),correlationId});
+      return {
+        ...result,
+        ...(result.enquiry ? { enquiry: enrich(actor, 'rfq', result.enquiry) } : {}),
+        ...(result.order ? { order: enrich(actor, 'order', result.order) } : {}),
+      };
     },
   });
 }
