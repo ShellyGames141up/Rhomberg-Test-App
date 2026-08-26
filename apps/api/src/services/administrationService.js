@@ -53,6 +53,11 @@ export function createAdministrationService({ repository, storage, passwordHashe
       if (!area) errors.area = 'Select the customer area.';
       if (!industry) errors.industry = 'Enter the customer industry.';
       if (!branchId) errors.branchId = 'Select the assigned branch.';
+      if (representativeId) {
+        const representatives = await repository.listRepresentatives(actor);
+        const representative = representatives.find(item => item.id === representativeId && item.active !== false);
+        if (!representative || representative.branchId !== branchId) errors.representativeId = 'Select an active representative assigned to the customer area.';
+      }
       if (password.length < 16 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) errors.password = 'Use at least 16 characters including upper-case, lower-case, numeric and symbol characters.';
       if (Object.keys(errors).length) throw validationError(errors);
       const passwordHash = await passwordHasher(password);
@@ -68,6 +73,7 @@ export function createAdministrationService({ repository, storage, passwordHashe
     },
     updateStatus(actor,userId,input,correlationId) { requirePermission(actor,'administer_users'); return repository.administerUser(actor,userId,'status',{status:String(input?.status || ''),reason:String(input?.reason || '')},correlationId); },
     archiveUser(actor,userId,input,correlationId) { requirePermission(actor,'administer_users'); if(String(input?.reason || '').trim().length<5) throw validationError({reason:'Record why this employee account is being archived.'}); return repository.administerUser(actor,userId,'archive',input,correlationId); },
+    deleteUser(actor,userId,input,correlationId) { requirePermission(actor,'administer_users'); if(String(input?.reason || '').trim().length<8) throw validationError({reason:'Record why this account is being deleted.'}); return repository.softDeleteUser(actor,userId,{reason:String(input.reason).trim()},correlationId); },
     assignRoles(actor,userId,input,correlationId) { requirePermission(actor,'administer_users'); return repository.administerUser(actor,userId,'roles',{roles:[...new Set(input?.roles || [])],reason:String(input?.reason || '')},correlationId); },
     assignBranch(actor,userId,input,correlationId) { requirePermission(actor,'administer_users'); if(!String(input?.branchId || '').trim()) throw validationError({branchId:'Select a branch.'}); return repository.administerUser(actor,userId,'branch',input,correlationId); },
     setPermissions(actor,userId,input,correlationId) { requirePermission(actor,'administer_users'); return repository.administerUser(actor,userId,'permissions',{permissions:[...new Set(input?.permissions || [])],reason:String(input?.reason || '')},correlationId); },
@@ -81,7 +87,7 @@ export function createAdministrationService({ repository, storage, passwordHashe
     getUserAudit(actor,userId) { requirePermission(actor,'administer_users'); return repository.getUserAudit(actor,userId); },
     getUserLoginHistory(actor,userId) { requirePermission(actor,'administer_users'); return repository.getUserLoginHistory(actor,userId); },
     updateCompany(actor,companyId,input,correlationId) { requirePermission(actor,'administer_users'); const values=input?.values || input || {}; return repository.administerCompany(actor,companyId,'update',{name:String(values.name || '').trim(),area:String(values.area || '').trim(),industry:String(values.industry || '').trim(),branchId:String(values.branchId || '').trim(),reason:String(input?.reason || '')},correlationId); },
-    assignRepresentative(actor,companyId,input,correlationId) { requirePermission(actor,'administer_users'); if(!/^[0-9a-f-]{36}$/i.test(String(input?.representativeId || ''))) throw validationError({representativeId:'Select an active representative.'}); return repository.administerCompany(actor,companyId,'representative',input,correlationId); },
+    assignRepresentative(actor,companyId,input,correlationId) { requirePermission(actor,'administer_users'); if(!/^[0-9a-f-]{36}$/i.test(String(input?.representativeId || ''))) throw validationError({representativeId:'Select an active representative.'}); if(String(input?.reason || '').trim().length<5) throw validationError({reason:'Record why the Dedicated Representative is changing.'}); return repository.administerCompany(actor,companyId,'representative',input,correlationId); },
     async saveProfileImage(actor,userId,file,correlationId) { requirePermission(actor,'administer_users'); if(!file) throw validationError({profileImage:'Choose a PNG or JPEG image.'}); const document=await storage.put(file); try { const result=await repository.saveUserProfileImage(actor,userId,document,correlationId); if(result.previousStorageKey) await storage.remove(result.previousStorageKey).catch(()=>undefined); return result; } catch(error) { await storage.remove(document.storageKey).catch(()=>undefined); throw error; } },
     async getProfileImage(actor,userId) { const image=await repository.getUserProfileImage(actor,userId); return { ...image, buffer:await storage.get(image.storage_key) }; },
   });

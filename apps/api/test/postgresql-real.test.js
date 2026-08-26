@@ -12,7 +12,7 @@ const { Pool } = pg;
 const migrationUrl = process.env.RHOMBERG_TEST_POSTGRES_MIGRATION_URL;
 const runtimeUrl = process.env.RHOMBERG_TEST_POSTGRES_RUNTIME_URL;
 const enabled = Boolean(migrationUrl && runtimeUrl);
-const PASSWORD = 'Fabricated-PostgreSQL-Test-Password!';
+const PASSWORD = 'Fabricated-PostgreSQL-Test-Password!7';
 const PEPPER = 'fabricated-real-postgresql-test-pepper-32-plus';
 const ids = Object.freeze({
   companyA: '71000000-0000-4000-8000-000000000001', companyB: '71000000-0000-4000-8000-000000000002',
@@ -20,6 +20,7 @@ const ids = Object.freeze({
   disabled: '72000000-0000-4000-8000-000000000003', repUserA: '72000000-0000-4000-8000-000000000004',
   repUserB: '72000000-0000-4000-8000-000000000005', repA: '73000000-0000-4000-8000-000000000001',
   repB: '73000000-0000-4000-8000-000000000002',
+  repC: '73000000-0000-4000-8000-000000000003',
   planning: '72000000-0000-4000-8000-000000000006', expeditor: '72000000-0000-4000-8000-000000000007',
   quality: '72000000-0000-4000-8000-000000000008', dispatch: '72000000-0000-4000-8000-000000000009',
   manager: '72000000-0000-4000-8000-000000000010', administrator: '72000000-0000-4000-8000-000000000011',
@@ -38,9 +39,9 @@ async function seed(client) {
     app.document_metadata, app.audit_events, app.rfq_items, app.rfqs, app.sessions,
     app.representative_company_assignments, app.representatives, app.company_users,
     app.user_roles, app.users, app.companies, app.products RESTART IDENTITY CASCADE`);
-  await client.query(`INSERT INTO app.companies (id,name,area,industry) VALUES
-    ($1,'Fabricated PostgreSQL Company A','Test A','Fabricated'),
-    ($2,'Fabricated PostgreSQL Company B','Test B','Fabricated')`, [ids.companyA, ids.companyB]);
+  await client.query(`INSERT INTO app.companies (id,name,area,industry,branch_id) VALUES
+    ($1,'Fabricated PostgreSQL Company A','Gauteng','Fabricated','johannesburg'),
+    ($2,'Fabricated PostgreSQL Company B','Western Cape','Fabricated','cape-town')`, [ids.companyA, ids.companyB]);
   await client.query(`INSERT INTO app.users (id,email,display_name,password_hash,status,disabled_at) VALUES
     ($1,'pg.customer.a@example.invalid','Fabricated PostgreSQL Customer A',$12,'active',NULL),
     ($2,'pg.customer.b@example.invalid','Fabricated PostgreSQL Customer B',$12,'active',NULL),
@@ -60,9 +61,10 @@ async function seed(client) {
   [ids.customerA, ids.customerB, ids.disabled, ids.repUserA, ids.repUserB, ids.planning, ids.expeditor, ids.quality, ids.dispatch, ids.manager, ids.administrator]);
   await client.query(`INSERT INTO app.company_users (company_id,user_id,is_primary) VALUES
     ($1,$3,true),($2,$4,true),($1,$5,true)`, [ids.companyA, ids.companyB, ids.customerA, ids.customerB, ids.disabled]);
-  await client.query(`INSERT INTO app.representatives (id,user_id,display_name,branch_name) VALUES
-    ($1,$3,'Fabricated Representative A','Fabricated Branch A'),
-    ($2,$4,'Fabricated Representative B','Fabricated Branch B')`, [ids.repA, ids.repB, ids.repUserA, ids.repUserB]);
+  await client.query(`INSERT INTO app.representatives (id,user_id,display_name,branch_name,branch_id) VALUES
+    ($1,$3,'Fabricated Representative A','Johannesburg','johannesburg'),
+    ($2,$4,'Fabricated Representative B','Cape Town','cape-town'),
+    ($5,NULL,'Fabricated Representative C','Johannesburg','johannesburg')`, [ids.repA, ids.repB, ids.repUserA, ids.repUserB, ids.repC]);
   await client.query(`INSERT INTO app.representative_company_assignments (representative_id,company_id) VALUES
     ($1,$3),($2,$4)`, [ids.repA, ids.repB, ids.companyA, ids.companyB]);
   await client.query(`INSERT INTO app.products (id,code,name,configuration_schema) VALUES
@@ -110,6 +112,27 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
   const storage = createMemoryPrivateStorage();
   const app = await buildApp({ config, repository, storage, logger: false });
   t.after(async () => { await app.close(); await migrationPool.end(); });
+  let registeredCompanyId;
+
+  await t.test('self-registration and concurrent first RFQs persist exactly one area-eligible Dedicated Representative', async () => {
+    const registration=await app.inject({method:'POST',url:'/api/v1/auth/register',remoteAddress:'127.0.0.31',payload:{company:'Fabricated PostgreSQL Registration Company',contact:'Fabricated PostgreSQL Registration Contact',email:'pg.registration@example.invalid',phone:'+27 00 000 3131',area:'Gauteng',industry:'Manufacturing',password:PASSWORD}});
+    assert.equal(registration.statusCode,201,registration.body);
+    const registered=registration.json().data; assert.equal(registered.user.role,'customer');
+    const cookie=registration.headers['set-cookie'].split(';')[0]; const csrf=registered.csrfToken;
+    const options=await app.inject({url:'/api/v1/enquiries/options',headers:{cookie}});
+    assert.equal(options.statusCode,200); assert.equal(options.json().data.requiresRepresentativeSelection,true);
+    assert.deepEqual(options.json().data.eligibleRepresentatives.map(rep=>rep.id).sort(),[ids.repA,ids.repC].sort());
+    const firstPayload=payload(ids.repA); const competingPayload=payload(ids.repC);
+    const [first,competing]=await Promise.all([
+      app.inject({method:'POST',url:'/api/v1/enquiries',headers:{cookie,'x-csrf-token':csrf,'idempotency-key':'pg-first-assignment-a'},payload:firstPayload}),
+      app.inject({method:'POST',url:'/api/v1/enquiries',headers:{cookie,'x-csrf-token':csrf,'idempotency-key':'pg-first-assignment-c'},payload:competingPayload}),
+    ]);
+    assert.deepEqual([first.statusCode,competing.statusCode].sort(),[201,409]);
+    const companyId=registered.user.companyId; registeredCompanyId=companyId;
+    assert.equal((await migrationPool.query('SELECT count(*)::int n FROM app.representative_company_assignments WHERE company_id=$1 AND ended_at IS NULL',[companyId])).rows[0].n,1);
+    assert.equal((await migrationPool.query('SELECT count(*)::int n FROM app.rfqs WHERE company_id=$1',[companyId])).rows[0].n,1);
+    assert.equal((await migrationPool.query("SELECT count(*)::int n FROM app.audit_events WHERE company_id=$1 AND event_type='company.dedicated_representative_assigned'",[companyId])).rows[0].n,1);
+  });
 
   await t.test('authentication, CSRF, expiry, revocation and disabled users', async () => {
     const auth = await login(app, 'pg.customer.a@example.invalid');
@@ -132,6 +155,10 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
   await t.test('Administrator overview and account creation remain responsive and persistent', async () => {
     const administrator = await login(app, 'pg.administrator@example.invalid');
     assert.equal(administrator.response.statusCode, 200, administrator.response.body);
+    const employeeTemporaryPassword = 'Fabricated-Planning-Password!7';
+    const employeeReplacementPassword = 'Fabricated-Planning-Replacement!8';
+    const customerTemporaryPassword = 'Fabricated-Customer-Password!7';
+    const customerReplacementPassword = 'Fabricated-Customer-Replacement!8';
 
     const overview = await within(app.inject({ url: '/api/v1/administration/overview', headers: { cookie: administrator.cookie } }), 5000, 'Administration Overview');
     assert.equal(overview.statusCode, 200, overview.body);
@@ -144,7 +171,7 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
       headers: { cookie: administrator.cookie, 'x-csrf-token': administrator.csrf },
       payload: {
         displayName: 'Fabricated PostgreSQL Planning Contact', username: 'pg.planning.created',
-        email: 'pg.planning.created@example.invalid', password: 'Fabricated-Planning-Password!7',
+        email: 'pg.planning.created@example.invalid', password: employeeTemporaryPassword,
         role: 'planning', branchId: 'fabricated-branch', department: 'Planning',
       },
     });
@@ -157,10 +184,25 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
         companyName: 'Fabricated PostgreSQL Administration Company',
         contactName: 'Fabricated PostgreSQL Administration Contact',
         email: 'pg.admin.customer@example.invalid', phone: '0000000000', area: 'Fabricated Area',
-        industry: 'Fabricated Industry', branchId: 'fabricated-branch', password: 'Fabricated-Customer-Password!7',
+        industry: 'Fabricated Industry', branchId: 'fabricated-branch', password: customerTemporaryPassword,
       },
     });
     assert.equal(customerAccount.statusCode, 201, customerAccount.body);
+
+    for (const createdAccount of [
+      { identifier:'pg.planning.created', temporaryPassword:employeeTemporaryPassword, replacementPassword:employeeReplacementPassword, remoteAddress:'127.0.0.41' },
+      { identifier:'pg.admin.customer@example.invalid', temporaryPassword:customerTemporaryPassword, replacementPassword:customerReplacementPassword, remoteAddress:'127.0.0.42' },
+    ]) {
+      const firstLoginResponse = await app.inject({ method:'POST', url:'/api/v1/auth/login', remoteAddress:createdAccount.remoteAddress, payload:{ email:createdAccount.identifier, password:createdAccount.temporaryPassword } });
+      assert.equal(firstLoginResponse.statusCode,200,firstLoginResponse.body);
+      const firstLoginBody=firstLoginResponse.json(); const firstLoginCookie=firstLoginResponse.headers['set-cookie'].split(';')[0];
+      assert.equal(firstLoginBody.data.user.forcePasswordChange,true);
+      const changed=await app.inject({method:'POST',url:'/api/v1/auth/change-password',headers:{cookie:firstLoginCookie,'x-csrf-token':firstLoginBody.data.csrfToken},payload:{currentPassword:createdAccount.temporaryPassword,newPassword:createdAccount.replacementPassword}});
+      assert.equal(changed.statusCode,204,changed.body);
+      const replacementLogin=await app.inject({method:'POST',url:'/api/v1/auth/login',remoteAddress:createdAccount.remoteAddress,payload:{email:createdAccount.identifier,password:createdAccount.replacementPassword}});
+      assert.equal(replacementLogin.statusCode,200,replacementLogin.body);
+      assert.equal(replacementLogin.json().data.user.forcePasswordChange,false);
+    }
 
     const repeated = await within(Promise.all(Array.from({ length: 12 }, () => app.inject({
       url: '/api/v1/administration/overview', headers: { cookie: administrator.cookie },
@@ -191,6 +233,13 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
     const afterRelogin = await within(app.inject({ url: '/api/v1/administration/overview', headers: { cookie: relogged.cookie } }), 5000, 'Administration Overview after re-login');
     assert.equal(afterRelogin.statusCode, 200, afterRelogin.body);
     assert.ok(afterRelogin.json().data.companies.some(company => company.name === 'Fabricated PostgreSQL Administration Company'));
+
+    const deleted = await app.inject({ method:'DELETE', url:`/api/v1/admin/users/${internalUser.json().data.account.id}`, headers:{cookie:administrator.cookie,'x-csrf-token':administrator.csrf}, payload:{reason:'Fabricated employee lifecycle validation completed.'} });
+    assert.equal(deleted.statusCode,200,deleted.body);
+    const deletedRow=await migrationPool.query('SELECT status,deleted_at IS NOT NULL AS deleted FROM app.users WHERE id=$1',[internalUser.json().data.account.id]);
+    assert.deepEqual(deletedRow.rows[0],{status:'archived',deleted:true});
+    assert.equal((await app.inject({method:'POST',url:'/api/v1/auth/login',remoteAddress:'127.0.0.43',payload:{email:'pg.planning.created',password:employeeReplacementPassword}})).statusCode,401);
+    assert.equal((await migrationPool.query("SELECT count(*)::integer AS count FROM app.audit_events WHERE event_type='administrator.user_soft_deleted' AND entity_id=$1",[internalUser.json().data.account.id])).rows[0].count,1);
   });
 
   const authA = await login(app, 'pg.customer.a@example.invalid');
@@ -202,7 +251,7 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
     const personalisation={schemaVersion:1,setupCompleted:true,themePreset:'rhomberg-default',fontSize:'large',density:'comfortable',appearanceMode:'dark',notificationPreferences:{rfqUpdates:true,quotationNotifications:true,orderProgress:true,delayNotifications:true,fulfilmentNotifications:true,accountSecurity:true,maintenanceNotices:true,companyAnnouncements:false},profileImage:null};
     const saved=await app.inject({method:'PUT',url:'/api/v1/users/me/personalisation',headers:{cookie:authA.cookie,'x-csrf-token':authA.csrf},payload:personalisation});assert.equal(saved.statusCode,200,saved.body);
     assert.equal((await migrationPool.query('SELECT settings->\'personalisation\'->>\'appearanceMode\' AS mode FROM app.user_settings WHERE user_id=$1',[ids.customerA])).rows[0].mode,'dark');
-    const rep=await login(app,'pg.rep.a@example.invalid');const clients=await app.inject({url:'/api/v1/representatives/clients',headers:{cookie:rep.cookie}});assert.equal(clients.statusCode,200,clients.body);assert.deepEqual(clients.json().data.map(item=>item.id),[ids.companyA]);
+    const rep=await login(app,'pg.rep.a@example.invalid');const clients=await app.inject({url:'/api/v1/representatives/clients',headers:{cookie:rep.cookie}});assert.equal(clients.statusCode,200,clients.body);assert.deepEqual(clients.json().data.map(item=>item.id).sort(),[ids.companyA,registeredCompanyId].sort());
     const scheduled=await app.inject({method:'POST',url:`/api/v1/clients/${ids.companyA}/appointments`,headers:{cookie:rep.cookie,'x-csrf-token':rep.csrf},payload:{scheduledAt:'2099-01-01T10:00:00.000Z',expectedDurationMinutes:60,purpose:'Fabricated PostgreSQL visit',contact:'Fabricated PostgreSQL Customer A',address:'1 Fabricated PostgreSQL Road'}});assert.equal(scheduled.statusCode,201,scheduled.body);const appointmentId=scheduled.json().data.id;
     assert.equal((await app.inject({method:'POST',url:`/api/v1/appointments/${appointmentId}/start`,headers:{cookie:rep.cookie,'x-csrf-token':rep.csrf},payload:{}})).statusCode,200);
     assert.equal((await app.inject({method:'POST',url:`/api/v1/appointments/${appointmentId}/customer-confirmation`,headers:{cookie:rep.cookie,'x-csrf-token':rep.csrf},payload:{}})).statusCode,200);
@@ -275,7 +324,7 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
     assert.equal((await app.inject({ url: `/api/v1/documents/${documentA.id}`, headers: { cookie: authB.cookie } })).statusCode, 404);
     const repA = await login(app, 'pg.rep.a@example.invalid');
     const repList = await app.inject({ url: '/api/v1/enquiries', headers: { cookie: repA.cookie } });
-    assert.equal(repList.statusCode, 200); assert.deepEqual(repList.json().data.map(row => row.companyId), [ids.companyA]);
+    assert.equal(repList.statusCode, 200); assert.deepEqual([...new Set(repList.json().data.map(row => row.companyId))].sort(), [ids.companyA,registeredCompanyId].sort());
 
     const direct = await runtimePool.connect();
     try {
@@ -314,7 +363,9 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
     const massAssigned = payload(ids.repA); massAssigned.details.companyId = ids.companyB; massAssigned.details.priority = 'urgent';
     assert.equal((await create(app, authA, massAssigned, 'pg-mass-assignment-key')).statusCode, 422);
     assert.equal((await app.inject({ url: '/api/v1/enquiries/not-a-uuid', headers: { cookie: authA.cookie } })).statusCode, 400);
-    assert.equal((await create(app, authA, payload('79999999-9999-4999-8999-999999999999'), 'pg-invalid-fk-key')).statusCode, 404);
+    const representativeForgery = await create(app, authA, payload('79999999-9999-4999-8999-999999999999'), 'pg-invalid-fk-key');
+    assert.equal(representativeForgery.statusCode, 409);
+    assert.equal(representativeForgery.json().error.code, 'REPRESENTATIVE_ASSIGNMENT_CONFLICT');
   });
 
   await t.test('runtime grants prevent DDL and audit mutation while application audit inserts work', async () => {

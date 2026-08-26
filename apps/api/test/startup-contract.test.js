@@ -161,7 +161,9 @@ test('customer RFQ options expose only the company-assigned representative after
   await services.auth.signIn({ email: 'customer.a@example.invalid', password: FABRICATED_PASSWORD });
   const enquiryOptions = await services.accounts.getEnquiryOptions();
   assert.equal(enquiryOptions.preferredRepresentative.id, '30000000-0000-4000-8000-000000000001');
-  assert.ok(Object.values(enquiryOptions.areaDirectory).every(entry => entry.representatives.length === 1));
-  assert.ok(Object.values(enquiryOptions.areaDirectory).every(entry => entry.representatives[0].id === enquiryOptions.preferredRepresentative.id));
+  assert.equal(enquiryOptions.representativeAssignmentStatus, 'assigned');
+  assert.equal(enquiryOptions.requiresRepresentativeSelection, false);
+  assert.equal(enquiryOptions.areaDirectory.Gauteng.representatives.length, 1);
+  assert.ok(Object.entries(enquiryOptions.areaDirectory).filter(([area]) => area !== 'Gauteng').every(([,entry]) => entry.representatives.length === 0));
   assert.doesNotMatch(JSON.stringify(enquiryOptions), /30000000-0000-4000-8000-000000000002/);
 });

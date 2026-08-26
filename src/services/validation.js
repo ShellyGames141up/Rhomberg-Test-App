@@ -69,7 +69,8 @@ export function validateRegistration(data) {
   if (present(data.phone).length < 7) errors.phone = 'Enter a valid contact number.';
   if (!present(data.area)) errors.area = 'Select the company area.';
   if (!present(data.industry)) errors.industry = 'Select the company’s industry.';
-  if (String(data.password || '').length < 8) errors.password = 'Create a password with at least eight characters.';
+  const password = String(data.password || '');
+  if (password.length < 16 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) errors.password = 'Use at least 16 characters including upper-case, lower-case, numeric and symbol characters.';
   if (Object.keys(errors).length) throwValidation(errors, 'Check the account details.');
 }
 

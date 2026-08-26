@@ -2,9 +2,11 @@
 
 ## Scope
 
-The current Administrator login opens one desktop workspace for approved application data. The browser mock uses fabricated records; production operations use the future API and PostgreSQL service. Components never read or write `localStorage` directly.
+The current Administrator login opens one desktop workspace for approved application data. The public browser preview uses fabricated records; internal staging uses the server API and PostgreSQL service. Components never read or write `localStorage` directly.
 
 The workspace separates customer identities from internal staff identities and manages customer companies and contacts, usernames, email addresses, phone numbers, branch and dedicated-representative assignments, staff roles and permissions, account status, catalogue/categories, notification preferences, archive lookup and approved RFQ/order reference corrections.
+
+An Administrator-created customer or employee account is active immediately with the supplied temporary password. Its first authenticated session is restricted to the security screen until the account holder replaces that password; the normal flow never requires an Administrator to reset the newly created login. The original credential is not returned by the API or written to audit history.
 
 ## Capability model
 
@@ -29,6 +31,8 @@ Every mutation creates an immutable event containing action, entity, company, pr
 Mock mode asks for the fabricated current Administrator password for suspension, permission changes, role changes and approved record corrections. It never stores that confirmation in audit evidence. Production exchanges password/MFA/WebAuthn confirmation for a short-lived, single-purpose step-up token; business requests must not retain a password.
 
 Important changes open a confirmation dialog. The backend rechecks permission, identity realm, company scope, current version and immutable-field rules regardless of interface state.
+
+Account deletion is an audited soft delete, not destructive erasure. It is restricted to `administer_users`, requires a reason, revokes sessions and active memberships/assignments, and prevents future authentication. Historical companies, RFQs, orders, documents and audit events remain intact. An Administrator cannot delete their own account or another active Administrator account through this workflow.
 
 ## Protected boundaries
 

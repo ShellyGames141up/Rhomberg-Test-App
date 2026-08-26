@@ -247,7 +247,7 @@ export function createPostgresRepository(pool) {
             LEFT JOIN app.representative_company_assignments assignment ON assignment.company_id=company.id AND assignment.ended_at IS NULL
             WHERE company.deleted_at IS NULL
             GROUP BY company.id,assignment.representative_id ORDER BY company.name`);
-        const representatives = await client.query('SELECT id,user_id,display_name,branch_name,is_active FROM app.representatives ORDER BY display_name');
+        const representatives = await client.query('SELECT id,user_id,display_name,branch_name,branch_id,code,is_active FROM app.representatives ORDER BY display_name');
         const auditCount = await client.query('SELECT count(*)::integer AS count FROM app.audit_events');
         const mappedInternalUsers = users.rows.map(user => ({
           id: user.id, contact: user.display_name, displayName: user.display_name,
@@ -268,7 +268,7 @@ export function createPostgresRepository(pool) {
           summary: { users: mappedUsers.length, customerCompanies: companies.rows.length, internalAccounts: mappedInternalUsers.length, auditEvents: auditCount.rows[0]?.count || 0 },
           users: mappedUsers,
           companies: companies.rows.map(company => ({ id: company.id, name: company.name, company: company.name, status: company.status, area: company.area || '', industry: company.industry || '', branchId: company.branch_id || '', contacts: Number(company.contacts || 0), representativeId: company.representative_id || '', createdAt: company.created_at, updatedAt: company.updated_at })),
-          representatives: representatives.rows.map(rep => ({ id: rep.id, userId: rep.user_id, name: rep.display_name, displayName: rep.display_name, branch: rep.branch_name, branchName: rep.branch_name, active: rep.is_active })),
+          representatives: representatives.rows.map(rep => ({ id: rep.id, userId: rep.user_id, name: rep.display_name, displayName: rep.display_name, branch: rep.branch_name, branchName: rep.branch_name, branchId: rep.branch_id || '', code: rep.code || '', active: rep.is_active })),
           branches: [], departments: [],
           accountStatuses: ['active', 'disabled', 'archived'], authenticationTypes: ['password'],
           activationMethods: ['administrator_temporary_password'], correctionRecords: [], archivedRecords: [],
@@ -312,11 +312,41 @@ export function createPostgresRepository(pool) {
         throw error;
       }
     },
+    async registerCustomerAccount(command) {
+      try {
+        return await inTransaction(async client => {
+          await client.query('SELECT * FROM app.register_customer_account($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)', [
+            command.companyId,command.userId,command.companyName,command.contactName,command.email,command.phone,
+            command.area,command.industry,command.branchId,command.passwordHash,command.correlationId,
+          ]);
+          return {company:{id:command.companyId,name:command.companyName,area:command.area,industry:command.industry,branchId:command.branchId,status:'active'},account:{id:command.userId,email:command.email,displayName:command.contactName,role:'customer',companyId:command.companyId,status:'active'},onboardingStatus:'active'};
+        }, { authLookup:true });
+      } catch(error) {
+        if(error.code==='23505') { error.code='CONFLICT'; error.statusCode=409; error.message='That company account or email already exists.'; }
+        throw error;
+      }
+    },
     async administerUser(actor,userId,operation,payload,correlationId) {
       return inTransaction(async client => (await client.query('SELECT app.administer_user($1,$2,$3::jsonb,$4) AS result',[userId,operation,json(payload),correlationId])).rows[0].result,{actor});
     },
+    async softDeleteUser(actor,userId,payload,correlationId) {
+      try {
+        return await inTransaction(async client => (await client.query('SELECT app.soft_delete_user($1,$2,$3) AS result',[userId,payload.reason,correlationId])).rows[0].result,{actor});
+      } catch(error) {
+        if(error.code==='22023') { error.code='VALIDATION_ERROR'; error.statusCode=422; }
+        if(error.code==='P0002') { error.code='NOT_FOUND'; error.statusCode=404; }
+        if(error.code==='42501') { error.code='FORBIDDEN'; error.statusCode=403; }
+        throw error;
+      }
+    },
     async administerCompany(actor,companyId,operation,payload,correlationId) {
-      return inTransaction(async client => (await client.query('SELECT app.administer_company($1,$2,$3::jsonb,$4) AS result',[companyId,operation,json(payload),correlationId])).rows[0].result,{actor});
+      try {
+        return await inTransaction(async client => (await client.query('SELECT app.administer_company($1,$2,$3::jsonb,$4) AS result',[companyId,operation,json(payload),correlationId])).rows[0].result,{actor});
+      } catch(error) {
+        if(error.code==='22023') { error.code='VALIDATION_ERROR'; error.statusCode=422; error.message='Select an active representative assigned to the customer area.'; }
+        if(error.code==='P0002') { error.code='NOT_FOUND'; error.statusCode=404; }
+        throw error;
+      }
     },
     async getUserAudit(actor,userId) {
       return inTransaction(async client => (await client.query(`SELECT id,event_type,actor_user_id,actor_role,action,entity_type,entity_id,outcome,correlation_id,details,created_at FROM app.audit_events WHERE actor_user_id=$1 OR (entity_type='user' AND entity_id=$1::text) ORDER BY created_at DESC LIMIT 200`,[userId])).rows,{actor});
@@ -446,14 +476,17 @@ export function createPostgresRepository(pool) {
       }, { actor });
     },
     async getEnquiryRepresentativeOptions(actor) {
-      if (!actor.companyId) return [];
+      if (!actor.companyId) return {customerArea:'',branchId:'',assignmentStatus:'company_unavailable',dedicatedRepresentative:null,eligibleRepresentatives:[]};
       return inTransaction(async client => {
-        const result = await client.query(`SELECT rep.id,rep.display_name,rep.branch_name,rep.branch_id,rep.user_id
-          FROM app.representative_company_assignments assignment
-          JOIN app.representatives rep ON rep.id=assignment.representative_id AND rep.is_active
-          WHERE assignment.company_id=$1 AND assignment.ended_at IS NULL
-          ORDER BY rep.display_name`, [actor.companyId]);
-        return result.rows.map(row => ({ id:row.id,name:row.display_name,displayName:row.display_name,branch:row.branch_name,branchName:row.branch_name,branchId:row.branch_id || '',userId:row.user_id }));
+        const company=(await client.query('SELECT id,area,branch_id FROM app.companies WHERE id=$1 AND status=\'active\' AND deleted_at IS NULL',[actor.companyId])).rows[0];
+        if(!company) return {customerArea:'',branchId:'',assignmentStatus:'company_unavailable',dedicatedRepresentative:null,eligibleRepresentatives:[]};
+        const assignment=(await client.query(`SELECT rep.id,rep.display_name,rep.branch_name,rep.branch_id,rep.user_id,rep.is_active
+          FROM app.representative_company_assignments assignment JOIN app.representatives rep ON rep.id=assignment.representative_id
+          WHERE assignment.company_id=$1 AND assignment.ended_at IS NULL ORDER BY assignment.assigned_at DESC LIMIT 1`,[actor.companyId])).rows[0];
+        const map=row=>({id:row.id,name:row.display_name,displayName:row.display_name,branch:row.branch_name,branchName:row.branch_name,branchId:row.branch_id || '',userId:row.user_id});
+        if(assignment) return {customerArea:company.area || '',branchId:company.branch_id || '',assignmentStatus:assignment.is_active?'assigned':'inactive',dedicatedRepresentative:assignment.is_active?map(assignment):null,eligibleRepresentatives:[]};
+        const eligible=company.branch_id ? (await client.query(`SELECT id,display_name,branch_name,branch_id,user_id FROM app.representatives WHERE is_active AND branch_id=$1 ORDER BY display_name`,[company.branch_id])).rows.map(map) : [];
+        return {customerArea:company.area || '',branchId:company.branch_id || '',assignmentStatus:company.area&&company.branch_id?'unassigned':'area_missing',dedicatedRepresentative:null,eligibleRepresentatives:eligible};
       }, { actor });
     },
     async listTechnicalUsers(actor) {
@@ -846,10 +879,18 @@ export function createPostgresRepository(pool) {
           return { ...existing.rows[0].response_body.result, idempotent: true };
         }
 
-        const representative = await client.query(`SELECT rep.* FROM app.representatives rep
-          JOIN app.representative_company_assignments a ON a.representative_id = rep.id
-          WHERE rep.id = $1 AND a.company_id = $2 AND rep.is_active AND a.ended_at IS NULL`, [command.representativeId, actor.companyId]);
-        if (!representative.rows[0]) throw notFound('The selected representative is not assigned to this company.');
+        let representative;
+        try {
+          const resolved=(await client.query('SELECT app.resolve_rfq_representative($1,$2,$3) AS representative',[actor.companyId,command.representativeId || null,command.correlationId])).rows[0].representative;
+          representative={rows:[{id:resolved.id,user_id:resolved.userId,display_name:resolved.displayName,branch_name:resolved.branchName,branch_id:resolved.branchId,is_active:resolved.isActive}]};
+        } catch(error) {
+          if(error.code==='P0002') { error.code='NOT_FOUND'; error.statusCode=404; error.message='Your company account is unavailable.'; }
+          else if(error.code==='55000') { error.code='REPRESENTATIVE_INACTIVE'; error.statusCode=409; error.message='Your dedicated representative is unavailable. Contact Rhomberg to update the assignment.'; }
+          else if(error.code==='23514') { error.code='REPRESENTATIVE_ASSIGNMENT_CONFLICT'; error.statusCode=409; error.message='Your dedicated representative cannot be changed during RFQ submission.'; }
+          else if(error.code==='22023' && /area required/i.test(error.message)) { error.code='CUSTOMER_AREA_REQUIRED'; error.statusCode=422; error.message='Your company area must be completed before an RFQ can be submitted.'; }
+          else if(error.code==='22023') { error.code='REPRESENTATIVE_NOT_ELIGIBLE'; error.statusCode=422; error.message='Select an active representative available in your area.'; }
+          throw error;
+        }
         const productIds = command.items.map(item => item.productId);
         const products = await client.query('SELECT id, code, name, configuration_schema FROM app.products WHERE id = ANY($1::text[]) AND is_active', [productIds]);
         const productMap = new Map(products.rows.map(product => [product.id, product]));
@@ -864,7 +905,7 @@ export function createPostgresRepository(pool) {
           (id, reference, company_id, requester_user_id, representative_id, application, process_medium, area,
            fulfilment, delivery_address, collection_branch, customer_notes)
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [
-          id, reference, actor.companyId, actor.id, command.representativeId, command.application, command.medium,
+          id, reference, actor.companyId, actor.id, representative.rows[0].id, command.application, command.medium,
           command.area, command.fulfilment, command.deliveryAddress, command.collectionBranch, command.notes,
         ]);
         for (const [index, item] of command.items.entries()) {

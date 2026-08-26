@@ -11,7 +11,8 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
   const areaDirectory = registrationOptions?.areaDirectory || {};
   const [poMode, setPoMode] = useState('none');
   const [poFile, setPoFile] = useState(null);
-  const [area, setArea] = useState(areas.includes(account.area) ? account.area : areas[0] || account.area);
+  const customerArea = registrationOptions?.customerArea || account.area || '';
+  const [area, setArea] = useState(areas.includes(customerArea) ? customerArea : areas[0] || customerArea);
   const [selectedRepId, setSelectedRepId] = useState('');
   const [fulfilment, setFulfilment] = useState('');
   const [error, setError] = useState('');
@@ -19,9 +20,11 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submissionKey = useRef(globalThis.crypto?.randomUUID?.() || `rfq-form-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   const totalQuantity = lines.reduce((sum, line) => sum + line.quantity, 0);
-  const repSelection = useMemo(() => areaDirectory[area] || { branch: registrationOptions?.branches?.[0] || {}, representatives: [] }, [area, areaDirectory, registrationOptions]);
+  const representativeArea = customerArea || area;
+  const repSelection = useMemo(() => areaDirectory[representativeArea] || { branch: registrationOptions?.branches?.[0] || {}, representatives: [] }, [representativeArea, areaDirectory, registrationOptions]);
   const preferredRepresentative = registrationOptions?.preferredRepresentative || null;
-  const nearestBranch = repSelection.branch;
+  const assignmentStatus = registrationOptions?.representativeAssignmentStatus || (preferredRepresentative ? 'assigned' : 'unassigned');
+  const nearestBranch = areaDirectory[area]?.branch || repSelection.branch;
 
   useEffect(() => {
     if (preferredRepresentative?.id) {
@@ -70,7 +73,10 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
       return;
     }
     if (!selectedRepId) {
-      setError(`Please select a ${repSelection.branch.name} representative for this RFQ.`);
+      if (assignmentStatus === 'inactive') setError('Your dedicated representative is currently unavailable. Please contact Rhomberg before submitting this RFQ.');
+      else if (assignmentStatus === 'area_missing') setError('Your company area is incomplete. Please contact Rhomberg before submitting this RFQ.');
+      else if (!repSelection.representatives.length) setError('No active representatives are available for your area. Please contact Rhomberg before submitting this RFQ.');
+      else setError(`Please select a ${repSelection.branch.name} representative. They will become your company’s dedicated representative.`);
       return;
     }
     if (fulfilment === 'delivery' && !data.deliveryAddress?.trim()) {
@@ -161,8 +167,8 @@ export function Enquiry({ account, lines, registrationOptions, deliverySettings,
           <label className="form-field"><span>Area</span><select name="area" required value={area} onChange={event => setArea(event.target.value)}>{areas.map(item => <option key={item}>{item}</option>)}</select></label>
           <div className="rep-selection-card">
             <span className="rep-branch-mark">R</span>
-            <div className="rep-selection-copy"><small>Representatives for your nearest branch</small><strong>{repSelection.branch.name}</strong><p>Only representatives assigned to this branch are shown.</p></div>
-            <label className="form-field rep-select"><span>{preferredRepresentative ? 'Your remembered representative' : 'Select your representative'}</span><select required value={selectedRepId} disabled={Boolean(preferredRepresentative)} onChange={event => setSelectedRepId(event.target.value)}><option value="" disabled>Choose a representative</option>{preferredRepresentative && !repSelection.representatives.some(item => item.id === preferredRepresentative.id) && <option value={preferredRepresentative.id}>{preferredRepresentative.name} · Code {preferredRepresentative.code}</option>}{repSelection.representatives.map(representative => <option key={representative.id} value={representative.id}>{representative.name} · Code {representative.code}</option>)}</select>{preferredRepresentative && <small className="remembered-representative-note">Remembered for your company. An authorised manager can change this assignment if needed.</small>}</label>
+            <div className="rep-selection-copy"><small>{preferredRepresentative ? 'Dedicated company representative' : 'Choose your Representative'}</small><strong>{repSelection.branch?.name || customerArea || 'Company area required'}</strong><p>{preferredRepresentative ? 'This relationship is used for future RFQs.' : 'Only active Representatives serving your company area are shown.'}</p></div>
+            <label className="form-field rep-select"><span>{preferredRepresentative ? 'Your dedicated representative' : 'Representative for your company'}</span><select required value={selectedRepId} disabled={Boolean(preferredRepresentative) || assignmentStatus !== 'unassigned' || !repSelection.representatives.length} onChange={event => setSelectedRepId(event.target.value)}><option value="" disabled>{assignmentStatus === 'inactive' ? 'Dedicated representative unavailable' : assignmentStatus === 'area_missing' ? 'Company area required' : repSelection.representatives.length ? 'Choose a representative' : 'No representatives available'}</option>{preferredRepresentative && !repSelection.representatives.some(item => item.id === preferredRepresentative.id) && <option value={preferredRepresentative.id}>{preferredRepresentative.name}{preferredRepresentative.code ? ` · Code ${preferredRepresentative.code}` : ''}</option>}{repSelection.representatives.map(representative => <option key={representative.id} value={representative.id}>{representative.name}{representative.code ? ` · Code ${representative.code}` : ''}</option>)}</select>{preferredRepresentative ? <small className="remembered-representative-note">An authorised Administrator can change this relationship. Existing RFQs keep their original assigned Representative.</small> : assignmentStatus === 'unassigned' && repSelection.representatives.length ? <small className="remembered-representative-note">Your choice becomes the company’s Dedicated Representative after this RFQ is submitted.</small> : <small className="field-error">Please contact Rhomberg so the company relationship can be completed.</small>}</label>
           </div>
 
           <fieldset className="rfq-choice-field fulfilment-field">

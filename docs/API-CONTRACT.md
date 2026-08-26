@@ -206,9 +206,9 @@ Request:
 }
 ```
 
-Response `201`: `{ "data": { "user": { ... }, "csrfToken": "...", "onboardingStatus": "pending_verification" } }`.
+Response `201`: `{ "data": { "user": { ... }, "csrfToken": "...", "onboardingStatus": "active" } }`.
 
-Production policy should normally require email verification and company approval before records are visible.
+The server creates only a customer role, derives the branch from the approved area directory, hashes the password, creates no representative relationship and signs the new customer into a server-authoritative session. Duplicate company names and email addresses are rejected. Email verification and company approval remain required production identity-policy decisions before real-data use.
 
 #### `GET /auth/me`
 
@@ -248,7 +248,7 @@ Response `200`:
 
 #### `GET /enquiries/options`
 
-Authenticated customer RFQ options. Returns the same approved areas, industries and branch details plus only the active representative authoritatively assigned to the caller's company. That representative is returned as `preferredRepresentative` and in each area entry so changing the application area cannot silently change the responsible salesperson. A customer cannot enumerate other companies' representatives.
+Authenticated customer RFQ options. If the company already has an active Dedicated Representative, only that representative is returned as `preferredRepresentative`; it is read-only for the customer. If no relationship exists, the response returns only active representatives eligible for the company's stored area/branch and sets `requiresRepresentativeSelection` to `true`. Missing areas, no eligible representatives and inactive assignments are reported explicitly. A customer cannot enumerate representatives outside their area or another company.
 
 #### `GET /companies/me`
 
@@ -258,7 +258,7 @@ Returns the caller’s current company context. Customer response is limited to 
 
 Manager/administrator only unless a narrower assigned-company route is implemented. Returns company summaries without credentials.
 
-The RFQ submit endpoint reloads the authoritative company assignment and rejects a conflicting browser value. Reassignment remains an audited Manager/Administrator action.
+The first RFQ submit endpoint locks the company relationship, validates the selected area-eligible representative, creates the Dedicated Representative relationship atomically and snapshots that representative onto the RFQ. Later submissions reload the relationship and reject a conflicting browser value. An audited Administrator reassignment changes only the customer relationship and future RFQs; historical RFQ representative snapshots never change.
 
 ### Products
 
@@ -1047,7 +1047,8 @@ All administrative mutations require elevated permission checks, MFA-backed staf
 The canonical reusable endpoints are:
 
 - `GET /admin/users` and `GET /admin/users/{userId}` — sanitised internal directory/detail; never returns password hashes, tokens or reset secrets.
-- `POST /admin/users` and `PATCH /admin/users/{userId}` — create/edit a reusable employee identity with either email or username.
+- `POST /admin/users` and `PATCH /admin/users/{userId}` — create/edit a reusable employee identity with either email or username. The create call accepts the authorised Administrator-supplied temporary password over the protected session, stores only its approved secure hash and marks the account for mandatory first-login change. The account can use that temporary password immediately; no reset action is required.
+- `DELETE /admin/users/{userId}` — soft-delete a non-Administrator identity with a mandatory reason, immediately revoke access and assignments, and preserve historical RFQs, orders, documents and immutable audit evidence. Self-deletion and Administrator deletion are forbidden.
 - `POST /admin/users/{userId}/activate|disable|enable|archive` — reasoned account lifecycle commands; archive preserves historical ownership.
 - `POST /admin/users/{userId}/roles` and `DELETE /admin/users/{userId}/roles/{roleId}` — audited multi-role assignments with active-work impact checks.
 - `POST /admin/users/{userId}/branch` and `/department` — effective-dated assignments that do not silently move open work.

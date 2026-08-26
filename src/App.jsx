@@ -855,7 +855,7 @@ export default function App() {
     );
   }
   if (!(__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.executiveDemo) && !introComplete) return <Intro onComplete={() => setIntroComplete(true)} />;
-  if (!account) return <Auth onSignIn={login} onCreateAccount={register} theme={theme} onToggleTheme={toggleTheme} registrationOptions={registrationOptions} serviceMode={services.mode} preview={PREVIEW_CONTEXT} allowRegistration={services.mode === 'mock' && Boolean((PREVIEW_CONTEXT.customer || PREVIEW_CONTEXT.unified) && !(__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.unified))} accessError={accessError} />;
+  if (!account) return <Auth onSignIn={login} onCreateAccount={register} theme={theme} onToggleTheme={toggleTheme} registrationOptions={registrationOptions} serviceMode={services.mode} preview={PREVIEW_CONTEXT} allowRegistration={(services.mode === 'api' && !__PUBLIC_PREVIEW__) || (services.mode === 'mock' && Boolean((PREVIEW_CONTEXT.customer || PREVIEW_CONTEXT.unified) && !(__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.unified)))} accessError={accessError} />;
   if (isCustomerExperience && !(__PUBLIC_PREVIEW__ && PREVIEW_CONTEXT.executiveDemo) && welcomeVisible) return <FirstCustomerWelcome account={account} reduceMotion={userSettings.accessibility.reduceMotion} onComplete={completeWelcome} />;
 
   const backFromDetail = () => {

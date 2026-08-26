@@ -10,6 +10,7 @@ import { secureHashEquals } from './security/crypto.js';
 import { createAuthService } from './services/authService.js';
 import { createEnquiryService } from './services/enquiryService.js';
 import { createAdministrationService } from './services/administrationService.js';
+import { createRegistrationService } from './services/registrationService.js';
 import { createPublicReferenceService } from './services/publicReferenceService.js';
 import { createPhase1WorkspaceService } from './services/phase1WorkspaceService.js';
 import { createRepresentativeOrderService } from './services/representativeOrderService.js';
@@ -177,6 +178,7 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   const enquiryService = createEnquiryService({ repository, storage });
   const administrationService = createAdministrationService({ repository, storage });
   const publicReferenceService = createPublicReferenceService();
+  const registrationService = createRegistrationService({ repository, publicReferenceService });
   const phase1WorkspaceService = createPhase1WorkspaceService({ repository, maxUploadBytes: config.maxUploadBytes });
   const representativeOrderService = createRepresentativeOrderService({ repository, storage, publicReferenceService, branches });
   const workflowService = createWorkflowService({ repository });
@@ -269,6 +271,20 @@ export async function buildApp({ config, repository, storage, identityProvider, 
     reply.setCookie(config.cookieName, result.token, { path: '/', httpOnly: true, secure: config.cookieSecure, sameSite: 'lax', maxAge: config.sessionTtlSeconds });
     return { data: { user: result.user, csrfToken: result.csrfToken }, meta: { requestId: request.id } };
   });
+  app.post('/api/v1/auth/register', {
+    config: { rateLimit: { max: 3, timeWindow: '10 minutes', ban: 2 } },
+    schema: { body: { type: 'object', additionalProperties: false, required: ['company','contact','email','phone','area','industry','password'], properties: {
+      company:{type:'string',minLength:2,maxLength:200},contact:{type:'string',minLength:2,maxLength:160},
+      email:{type:'string',minLength:3,maxLength:254},phone:{type:'string',minLength:7,maxLength:50},
+      area:{type:'string',minLength:2,maxLength:120},industry:{type:'string',minLength:2,maxLength:160},
+      password:{type:'string',minLength:16,maxLength:256},
+    } } },
+  }, async (request, reply) => {
+    await registrationService.register(request.body, request.id);
+    const result = await authService.login({ identifier: request.body.email, password: request.body.password, correlationId: request.id, ipAddress: request.ip, userAgent: request.headers['user-agent'] || '' });
+    reply.setCookie(config.cookieName, result.token, { path: '/', httpOnly: true, secure: config.cookieSecure, sameSite: 'lax', maxAge: config.sessionTtlSeconds }).code(201);
+    return { data: { user: result.user, csrfToken: result.csrfToken, onboardingStatus: 'active' }, meta: { requestId: request.id } };
+  });
   app.get('/api/v1/auth/me', { preHandler: requireAuthentication }, async request => ({ data: publicActor(request.actor), meta: { requestId: request.id } }));
   app.post('/api/v1/auth/logout', { preHandler: requireCsrf }, async (request, reply) => {
     await authService.logout({ token: request.sessionToken, actor: request.actor, session: request.session, correlationId: request.id });
@@ -299,12 +315,17 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   app.get('/api/v1/enquiries/options', { preHandler: requireAuthentication }, async request => {
     requirePermission(request.actor, PERMISSIONS.CREATE_RFQ);
     const reference = publicReferenceService.getRegistrationReference();
-    const representatives = await repository.getEnquiryRepresentativeOptions(request.actor);
-    const preferredRepresentative = representatives[0] || null;
+    const options = await repository.getEnquiryRepresentativeOptions(request.actor);
+    const representatives = options.dedicatedRepresentative ? [options.dedicatedRepresentative] : options.eligibleRepresentatives;
+    const preferredRepresentative = options.dedicatedRepresentative || null;
     return {
       data: {
         ...reference,
-        areaDirectory: Object.fromEntries(Object.entries(reference.areaDirectory).map(([area, entry]) => [area, { ...entry, representatives }])),
+        customerArea: options.customerArea,
+        representativeAssignmentStatus: options.assignmentStatus,
+        requiresRepresentativeSelection: options.assignmentStatus === 'unassigned',
+        areaDirectory: Object.fromEntries(Object.entries(reference.areaDirectory).map(([area, entry]) => [area, { ...entry, representatives: area === options.customerArea ? representatives : [] }])),
+        eligibleRepresentatives: options.eligibleRepresentatives,
         preferredRepresentative,
       },
       meta: { requestId: request.id },
@@ -524,6 +545,10 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   app.patch('/api/v1/administration/users/:accountId', { preHandler: requireCsrf }, async request => ({ data: await administrationService.updateUser(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
   app.put('/api/v1/administration/users/:accountId/status', { preHandler: requireCsrf }, async request => ({ data: await administrationService.updateStatus(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
   app.post('/api/v1/admin/users/:accountId/archive', { preHandler: requireCsrf }, async request => ({ data: await administrationService.archiveUser(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
+  app.delete('/api/v1/admin/users/:accountId', {
+    preHandler: requireCsrf,
+    schema: { body: { type:'object', additionalProperties:false, required:['reason'], properties:{ reason:{type:'string',minLength:8,maxLength:1000} } } },
+  }, async request => ({ data: await administrationService.deleteUser(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
   app.post('/api/v1/admin/users/:accountId/roles', { preHandler: requireCsrf }, async request => ({ data: await administrationService.assignRoles(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
   app.post('/api/v1/admin/users/:accountId/branch', { preHandler: requireCsrf }, async request => ({ data: await administrationService.assignBranch(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
   app.put('/api/v1/administration/users/:accountId/permissions', { preHandler: requireCsrf }, async request => ({ data: await administrationService.setPermissions(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));

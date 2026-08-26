@@ -75,7 +75,7 @@ export function createMemoryRepository(seed = {}) {
       if (!actor.permissions.includes('administer_users')) {
         const error = new Error('You are not authorised to perform this action.'); error.code = 'FORBIDDEN'; error.statusCode = 403; throw error;
       }
-      const users = state.users.filter(user => user.roles.some(role => role !== 'customer')).map(user => ({
+      const users = state.users.filter(user => !user.deletedAt && user.roles.some(role => role !== 'customer')).map(user => ({
         id: user.id, contact: user.displayName, displayName: user.displayName, email: user.email,
         signInName: user.username, username: user.username, role: user.roles[0], roles: [...user.roles],
         permissions: [...user.permissions], company: 'Internal', category: 'internal', department: '', branchId: '',
@@ -114,6 +114,16 @@ export function createMemoryRepository(seed = {}) {
       state.audits.push({ id: state.audits.length+1,eventType:'administrator.customer_account_created',actorUserId:actor.id,actorRole:actor.role,companyId:command.companyId,action:'create_customer_account',entityType:'company',entityId:command.companyId,outcome:'success',correlationId:command.correlationId,details:{ customerUserId:command.userId },createdAt:new Date().toISOString() });
       return clone({ company: { id:command.companyId,name:command.companyName,area:command.area,industry:command.industry,branchId:command.branchId,representativeId:command.representativeId||'',status:'active' }, account:{ id:command.userId,contact:command.contactName,email:command.email,role:'customer',roles:['customer'],companyId:command.companyId,company:command.companyName,status:'active' } });
     },
+    async registerCustomerAccount(command) {
+      const duplicate = state.users.some(user => String(user.email || '').toLowerCase() === command.email)
+        || state.companies.some(company => String(company.name || '').trim().toLowerCase() === command.companyName.toLowerCase());
+      if (duplicate) { const error=new Error('That company account or email already exists.'); error.code='CONFLICT'; error.statusCode=409; throw error; }
+      const createdAt = new Date().toISOString();
+      state.companies.push({ id:command.companyId,name:command.companyName,area:command.area,industry:command.industry,branchId:command.branchId,status:'active',createdAt,updatedAt:createdAt });
+      state.users.push({ id:command.userId,email:command.email,displayName:command.contactName,passwordHash:command.passwordHash,mustChangePassword:false,phone:command.phone,status:'active',identityProvider:'local_password',roles:['customer'],permissions:['access_customer_workspace','read_catalogue','view_own_company_account','create_rfq','view_own_company_rfqs','view_own_company_orders'],companyIds:[command.companyId],createdAt });
+      state.audits.push({ id:state.audits.length+1,eventType:'customer.self_registered',actorUserId:null,actorRole:'customer_registration',companyId:command.companyId,action:'register_customer_account',entityType:'company',entityId:command.companyId,outcome:'success',correlationId:command.correlationId,details:{customerUserId:command.userId,representativeAssigned:false},createdAt });
+      return clone({ company:{id:command.companyId,name:command.companyName,area:command.area,industry:command.industry,branchId:command.branchId,status:'active'},account:{id:command.userId,email:command.email,displayName:command.contactName,role:'customer',companyId:command.companyId,status:'active'},onboardingStatus:'active' });
+    },
     async administerUser(actor,userId,operation,payload,correlationId) {
       if(!actor.permissions.includes('administer_users')) { const error=new Error('You are not authorised to perform this action.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }
       const user=state.users.find(item=>item.id===userId); if(!user) throw notFound('The account was not found.');
@@ -129,12 +139,27 @@ export function createMemoryRepository(seed = {}) {
       state.audits.push({id:state.audits.length+1,eventType:'administrator.user_changed',actorUserId:actor.id,actorRole:actor.role,companyId:null,action:`admin_${operation}`,entityType:'user',entityId:userId,outcome:'success',correlationId,details:{operation,reason:payload.reason || ''},createdAt:new Date().toISOString()});
       return clone({id:userId,operation,status:user.status});
     },
+    async softDeleteUser(actor,userId,payload,correlationId) {
+      if(!actor.permissions.includes('administer_users')) { const error=new Error('You are not authorised to perform this action.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }
+      const user=state.users.find(item=>item.id===userId&&!item.deletedAt); if(!user) throw notFound('The account was not found.');
+      if(userId===actor.id || (user.roles || []).includes('administrator')) { const error=new Error('Administrator accounts cannot be deleted through account management.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }
+      const deletedAt=new Date().toISOString(); user.status='archived'; user.disabledAt=deletedAt; user.deletedAt=deletedAt;
+      state.sessions.filter(session=>session.userId===userId).forEach(session=>{session.revokedAt ||= deletedAt;});
+      for(const representative of state.representatives.filter(item=>item.userId===userId)) { representative.active=false; representative.companyIds=[]; }
+      state.audits.push({id:state.audits.length+1,eventType:'administrator.user_soft_deleted',actorUserId:actor.id,actorRole:actor.role,companyId:user.companyIds?.[0] || null,action:'delete_user_account',entityType:'user',entityId:userId,outcome:'success',correlationId,details:{reason:payload.reason,hardDeleted:false},createdAt:deletedAt});
+      return {id:userId,status:'deleted',deletedAt};
+    },
     async administerCompany(actor,companyId,operation,payload,correlationId) {
       if(!actor.permissions.includes('administer_users')) { const error=new Error('You are not authorised to perform this action.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }
       const company=state.companies.find(item=>item.id===companyId); if(!company) throw notFound('The company was not found.');
       if(operation==='update') Object.assign(company,{name:payload.name || company.name,area:payload.area ?? company.area,industry:payload.industry ?? company.industry,branchId:payload.branchId ?? company.branchId});
-      if(operation==='representative') company.representativeId=payload.representativeId;
-      state.audits.push({id:state.audits.length+1,eventType:'administrator.company_changed',actorUserId:actor.id,actorRole:actor.role,companyId,action:`admin_${operation}`,entityType:'company',entityId:companyId,outcome:'success',correlationId,details:{operation},createdAt:new Date().toISOString()}); return clone(company);
+      if(operation==='representative') {
+        const representative=state.representatives.find(item=>item.id===payload.representativeId&&item.active!==false);
+        if(!representative || (company.branchId && representative.branchId !== company.branchId)) { const error=new Error('Select an active representative assigned to the customer area.'); error.code='VALIDATION_ERROR'; error.statusCode=422; throw error; }
+        for(const item of state.representatives) item.companyIds=(item.companyIds || []).filter(id=>id!==companyId);
+        representative.companyIds ||= []; representative.companyIds.push(companyId); company.representativeId=representative.id;
+      }
+      state.audits.push({id:state.audits.length+1,eventType:'administrator.company_changed',actorUserId:actor.id,actorRole:actor.role,companyId,action:`admin_${operation}`,entityType:'company',entityId:companyId,outcome:'success',correlationId,details:{operation,representativeId:operation==='representative'?payload.representativeId:undefined,reason:payload.reason || ''},createdAt:new Date().toISOString()}); return clone(company);
     },
     async getUserAudit(actor,userId) { if(!actor.permissions.includes('administer_users')) throw notFound('The account was not found.'); return clone(state.audits.filter(event=>event.actorUserId===userId || (event.entityType==='user' && event.entityId===userId))); },
     async getUserLoginHistory(actor,userId) { if(!actor.permissions.includes('administer_users')) throw notFound('The account was not found.'); return clone(state.sessions.filter(session=>session.userId===userId).map(({tokenHash,csrfTokenHash,...session})=>session)); },
@@ -185,11 +210,15 @@ export function createMemoryRepository(seed = {}) {
       const canViewAll = actor.permissions.includes('administer_users') || actor.permissions.includes('view_all_companies');
       return clone(state.companies.filter(company => canViewAll || actor.companyIds.includes(company.id)));
     },
-    async listRepresentatives() { return clone(state.representatives.map(item => ({ id: item.id, name: item.displayName, displayName: item.displayName, branch: item.branchName, branchName: item.branchName, userId: item.userId, active: true }))); },
+    async listRepresentatives() { return clone(state.representatives.map(item => ({ id: item.id, name: item.displayName, displayName: item.displayName, branch: item.branchName, branchName: item.branchName, branchId: item.branchId || '', code: item.code || '', userId: item.userId, active: item.active !== false }))); },
     async getEnquiryRepresentativeOptions(actor) {
-      return clone(state.representatives
-        .filter(item => (item.companyIds || []).includes(actor.companyId))
-        .map(item => ({ id: item.id, name: item.displayName, displayName: item.displayName, branch: item.branchName, branchName: item.branchName, branchId: item.branchId || '', userId: item.userId })));
+      const company=state.companies.find(item=>item.id===actor.companyId);
+      if(!company) return {customerArea:'',branchId:'',assignmentStatus:'company_unavailable',dedicatedRepresentative:null,eligibleRepresentatives:[]};
+      const assigned=state.representatives.find(item=>(item.companyIds || []).includes(actor.companyId));
+      const map=item=>({id:item.id,name:item.displayName,displayName:item.displayName,branch:item.branchName,branchName:item.branchName,branchId:item.branchId || '',userId:item.userId});
+      if(assigned) return clone({customerArea:company.area || '',branchId:company.branchId || '',assignmentStatus:assigned.active===false?'inactive':'assigned',dedicatedRepresentative:assigned.active===false?null:map(assigned),eligibleRepresentatives:[]});
+      const eligible=state.representatives.filter(item=>item.active!==false && company.branchId && item.branchId===company.branchId).map(map);
+      return clone({customerArea:company.area || '',branchId:company.branchId || '',assignmentStatus:company.area&&company.branchId?'unassigned':'area_missing',dedicatedRepresentative:null,eligibleRepresentatives:eligible});
     },
     async listTechnicalUsers() { return clone(state.users.filter(user=>user.status==='active' && user.roles.some(role=>['technical_support','technical_manager','technical_director'].includes(role))).map(user=>({id:user.id,name:user.displayName,role:user.roles.find(role=>role.startsWith('technical_'))}))); },
     async getCurrentCompany(actor) { return clone(state.companies.find(company => company.id === actor.companyId) || null); },
@@ -341,8 +370,18 @@ export function createMemoryRepository(seed = {}) {
         }
         return clone({ ...replay.result, idempotent: true });
       }
-      const representative = state.representatives.find(item => item.id === command.representativeId && item.companyIds.includes(actor.companyId));
-      if (!representative) throw notFound('The selected representative is not assigned to this company.');
+      const company=state.companies.find(item=>item.id===actor.companyId);
+      if(!company) throw notFound('Your company account is unavailable.');
+      const currentAssignment=state.representatives.find(item=>(item.companyIds || []).includes(actor.companyId));
+      let representative=currentAssignment;
+      if(currentAssignment?.active===false) { const error=new Error('Your dedicated representative is unavailable. Contact Rhomberg to update the assignment.'); error.code='REPRESENTATIVE_INACTIVE'; error.statusCode=409; throw error; }
+      if(currentAssignment && command.representativeId && command.representativeId!==currentAssignment.id) { const error=new Error('Your dedicated representative cannot be changed during RFQ submission.'); error.code='REPRESENTATIVE_ASSIGNMENT_CONFLICT'; error.statusCode=409; throw error; }
+      if(!currentAssignment) {
+        representative=state.representatives.find(item=>item.id===command.representativeId&&item.active!==false&&company.branchId&&item.branchId===company.branchId);
+        if(!representative) { const error=new Error(company.area?'Select an active representative available in your area.':'Your company area must be completed before an RFQ can be submitted.'); error.code='REPRESENTATIVE_NOT_ELIGIBLE'; error.statusCode=422; throw error; }
+        representative.companyIds ||= []; representative.companyIds.push(actor.companyId); company.representativeId=representative.id;
+        state.audits.push({id:state.audits.length+1,eventType:'company.dedicated_representative_assigned',actorUserId:actor.id,actorRole:actor.role,companyId:actor.companyId,action:'assign_dedicated_representative',entityType:'company',entityId:actor.companyId,outcome:'success',correlationId:command.correlationId,details:{representativeId:representative.id,source:'first_rfq'},createdAt:new Date().toISOString()});
+      }
       const productMap = new Map(state.products.filter(product => product.active !== false).map(product => [product.id, product]));
       if (command.items.some(item => !productMap.has(item.productId))) {
         const error = new Error('One or more selected products are unavailable.'); error.code = 'INVALID_PRODUCT'; error.statusCode = 422; throw error;

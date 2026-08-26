@@ -15,7 +15,7 @@ export const ids = Object.freeze({
 export async function createFixture({ configOverrides = {}, logger = false, logStream } = {}) {
   const passwordHash = await hashPassword(FABRICATED_PASSWORD);
   const repository = createMemoryRepository({
-    companies: [{ id: ids.companyA, name: 'Fabricated Company A' }, { id: ids.companyB, name: 'Fabricated Company B' }],
+    companies: [{ id: ids.companyA, name: 'Fabricated Company A', area: 'Gauteng', branchId: 'johannesburg' }, { id: ids.companyB, name: 'Fabricated Company B', area: 'Western Cape', branchId: 'cape-town' }],
     users: [
       { id: ids.customerA, email: 'customer.a@example.invalid', displayName: 'Fabricated Customer A', passwordHash, status: 'active', roles: ['customer'], permissions: ['create_rfq', 'view_own_company_rfqs', 'read_document_metadata'], companyIds: [ids.companyA] },
       { id: ids.customerB, email: 'customer.b@example.invalid', displayName: 'Fabricated Customer B', passwordHash, status: 'active', roles: ['customer'], permissions: ['create_rfq', 'view_own_company_rfqs', 'read_document_metadata'], companyIds: [ids.companyB] },
@@ -24,8 +24,8 @@ export async function createFixture({ configOverrides = {}, logger = false, logS
       { id: ids.administrator, username: 'fabricated-admin', email: 'fabricated.admin@example.invalid', displayName: 'Fabricated Administrator', passwordHash, status: 'active', roles: ['administrator'], permissions: ['view_all_rfqs', 'read_document_metadata', 'administer_users'], companyIds: [] },
     ],
     representatives: [
-      { id: ids.representativeA, userId: ids.representativeUser, displayName: 'Fabricated Representative A', branchName: 'Fabricated Branch A', companyIds: [ids.companyA] },
-      { id: ids.representativeB, userId: ids.representativeUser, displayName: 'Fabricated Representative B', branchName: 'Fabricated Branch B', companyIds: [ids.companyB] },
+      { id: ids.representativeA, userId: ids.representativeUser, displayName: 'Fabricated Representative A', branchName: 'Johannesburg', branchId: 'johannesburg', companyIds: [ids.companyA], active: true },
+      { id: ids.representativeB, userId: ids.representativeUser, displayName: 'Fabricated Representative B', branchName: 'Cape Town', branchId: 'cape-town', companyIds: [ids.companyB], active: true },
     ],
     products: [{ id: 'fabricated-pressure-gauge', code: 'DEMO-PG', name: 'Fabricated pressure gauge' }, { id: 'fabricated-temperature-gauge', code: 'DEMO-TG', name: 'Fabricated temperature gauge' }],
   });

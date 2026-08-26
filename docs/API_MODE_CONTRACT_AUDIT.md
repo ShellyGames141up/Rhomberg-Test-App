@@ -2,10 +2,10 @@
 
 Generated from `src/services/api/createApiServices.js` and `apps/api/src/app.js`.
 
-- Unique frontend API contracts: **132**
-- Registered backend API routes: **140**
-- Registered backend routes including health endpoints: **143**
-- Frontend contracts currently implemented: **132**
+- Unique frontend API contracts: **134**
+- Registered backend API routes: **142**
+- Registered backend routes including health endpoints: **145**
+- Frontend contracts currently implemented: **134**
 - Frontend contracts still missing: **0**
 - Frontend contracts currently incompatible: **0**
 
@@ -20,6 +20,7 @@ Every active API-mode adapter contract has a matching backend route. Contract pa
 | /admin/retention-policy | GET | authenticated session | not required | implemented | P1 |
 | /admin/retention-policy | PUT | authenticated session | required | implemented | P2 |
 | /admin/users | POST | authenticated session | required | implemented | P2 |
+| /admin/users/:accountId | DELETE | authenticated session | required | implemented | P2 |
 | /admin/users/:accountId/archive | POST | authenticated session | required | implemented | P2 |
 | /admin/users/:accountId/audit | GET | authenticated session | not required | implemented | P1 |
 | /admin/users/:accountId/branch | POST | authenticated session | required | implemented | P2 |
@@ -52,6 +53,7 @@ Every active API-mode adapter contract has a matching backend route. Contract pa
 | /auth/login | POST | public approved reference/auth route | not required | implemented | P0 |
 | /auth/logout | POST | authenticated session | required | implemented | P2 |
 | /auth/me | GET | authenticated session | not required | implemented | P0 |
+| /auth/register | POST | public approved reference/auth route | not required | implemented | P0 |
 | /auth/workspace | POST | authenticated session | required | implemented | P2 |
 | /clients/:clientId/appointments | POST | authenticated session | required | implemented | P2 |
 | /companies | GET | authenticated session | not required | implemented | P1 |

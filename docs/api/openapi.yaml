@@ -68,7 +68,7 @@ paths:
               $ref: '#/components/schemas/RegisterRequest'
       responses:
         '201':
-          description: Customer account created or queued for verification
+          description: Customer account created without a representative assignment and signed into a server-authoritative session
           content:
             application/json:
               schema:
@@ -145,7 +145,7 @@ paths:
       operationId: getCustomerEnquiryOptions
       responses:
         '200':
-          description: Company-scoped RFQ options containing only the active representative assigned to the authenticated customer's company.
+          description: Company-scoped RFQ options containing the current Dedicated Representative or only active representatives eligible for the company's area when first selection is required.
           content:
             application/json:
               schema:
@@ -3171,27 +3171,26 @@ paths:
     post:
       operationId: createInternalUser
       summary: Create an auditable internal employee identity
-      description: Requires an email or username. No password, hash or token is accepted in the durable employee payload.
+      description: Requires a username and an Administrator-supplied temporary password. The server stores only the approved password hash, marks the account for mandatory first-login password change and never returns the supplied credential.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [firstName, displayName, branchId, department, primaryRole, authenticationType, activationMethod, reason]
+              additionalProperties: false
+              required: [displayName, username, password, role]
               properties:
-                firstName: { type: string, minLength: 2 }
-                surname: { type: string }
                 displayName: { type: string, minLength: 2 }
                 email: { type: string, format: email }
-                username: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$' }
-                branchId: { type: string, format: uuid }
+                username: { type: string, pattern: '^[A-Za-z][A-Za-z0-9._-]{2,39}$' }
+                password: { type: string, minLength: 16, maxLength: 256, description: Temporary credential requiring upper-case, lower-case, numeric and symbol characters. Never stored or returned in plaintext. }
+                branchId: { type: string }
                 department: { type: string }
-                primaryRole: { type: string }
+                role: { type: string }
                 additionalRoles: { type: array, items: { type: string }, uniqueItems: true }
-                authenticationType: { type: string, enum: [password, microsoft_entra_id, active_directory, approved_external_provider] }
-                activationMethod: { type: string, enum: [administrator_temporary_password, verified_email_invitation, identity_provider_provisioning] }
-                reason: { type: string, minLength: 8 }
+                phone: { type: string }
+                reason: { type: string }
       responses:
         '201': { description: Sanitised user and optional one-time display secret }
         '409': { $ref: '#/components/responses/ApiError' }
@@ -3207,6 +3206,25 @@ paths:
       summary: Update approved employee identity fields and audit before/after values
       parameters: [{ $ref: '#/components/parameters/UserId' }]
       responses: { '200': { description: Updated sanitised profile }, '422': { $ref: '#/components/responses/ApiError' } }
+    delete:
+      operationId: softDeleteUserAccount
+      summary: Revoke and soft-delete a non-Administrator account while preserving history
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 8, maxLength: 1000 }
+      responses:
+        '200': { description: Account access revoked and identity soft-deleted; historical records remain }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ApiError' }
+        '422': { $ref: '#/components/responses/ApiError' }
   /admin/users/{userId}/roles:
     post:
       operationId: assignInternalUserRoles
@@ -4000,7 +4018,12 @@ components:
         phone: { type: string, minLength: 7, maxLength: 40 }
         area: { type: string, maxLength: 100 }
         industry: { type: string, maxLength: 120 }
-        password: { type: string, minLength: 8, maxLength: 1024 }
+        password:
+          type: string
+          minLength: 16
+          maxLength: 256
+          format: password
+          description: Must contain upper-case, lower-case, numeric and symbol characters. Never returned or logged.
     User:
       type: object
       required: [id, contact, email, role, permissions]
@@ -4104,10 +4127,19 @@ components:
                   branch: { $ref: '#/components/schemas/Branch' }
                   representatives: { type: array, items: { $ref: '#/components/schemas/Representative' } }
             preferredRepresentative:
-              description: Authenticated customer-company assignment reused for later RFQs; null for anonymous registration requests.
+              description: Current Dedicated Representative relationship reused for future RFQs; null before first selection or for anonymous registration reference data.
               oneOf:
                 - $ref: '#/components/schemas/Representative'
                 - type: 'null'
+            customerArea: { type: string }
+            representativeAssignmentStatus:
+              type: string
+              enum: [assigned, unassigned, inactive, area_missing, company_unavailable]
+            requiresRepresentativeSelection: { type: boolean }
+            eligibleRepresentatives:
+              type: array
+              description: Active representatives for the authenticated customer's stored branch only; empty once a Dedicated Representative exists.
+              items: { $ref: '#/components/schemas/Representative' }
     ProductCategory:
       type: object
       required: [id, name]
@@ -4677,12 +4709,15 @@ components:
       type: object
       additionalProperties: false
       description: Customer-created RFQ payload. Urgency and priority are intentionally absent and must be rejected if supplied.
-      required: [application, area, selectedRepresentativeId, fulfilment, items]
+      required: [application, area, fulfilment, items]
       properties:
         application: { type: string, minLength: 5, maxLength: 4000 }
         medium: { type: string, maxLength: 500 }
         area: { type: string, minLength: 1, maxLength: 200 }
-        selectedRepresentativeId: { type: string }
+        selectedRepresentativeId:
+          type: string
+          format: uuid
+          description: Required only for the company's first RFQ when no Dedicated Representative relationship exists. Later RFQs use the server-authoritative relationship.
         fulfilment: { type: string, enum: [delivery, collect] }
         deliveryAddress: { type: string, maxLength: 2000 }
         collectionBranchId: { type: string }

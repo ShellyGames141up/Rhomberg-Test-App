@@ -68,7 +68,10 @@ export function createApiServices(config = {}) {
 
     async register(data) {
       validateRegistration(data);
-      throw new ServiceError('Public self-registration is unavailable. An authorised Administrator must create the company account.', { code: 'ADMINISTRATOR_PROVISIONING_REQUIRED', status: 403 });
+      const { consent: _consent, ...payload } = data;
+      const result = await client.post('/auth/register', payload);
+      if (result?.csrfToken) client.setCsrfToken(result.csrfToken);
+      return result.user;
     },
 
     async signOut() {
@@ -366,6 +369,7 @@ export function createApiServices(config = {}) {
     assignAccountBranch: (accountId, input) => client.post(`/admin/users/${encodeURIComponent(accountId)}/branch`, input),
     resetUserLogin: (accountId, input) => client.post(`/admin/users/${encodeURIComponent(accountId)}/temporary-password`, input),
     archiveEmployee: (accountId, input) => client.post(`/admin/users/${encodeURIComponent(accountId)}/archive`, input),
+    deleteAccount: (accountId, input) => client.delete(`/admin/users/${encodeURIComponent(accountId)}`, { reason: input.reason || '' }),
     uploadEmployeeProfileImage: (accountId, file, input = {}) => {
       const body = new FormData();
       body.append('file', file);

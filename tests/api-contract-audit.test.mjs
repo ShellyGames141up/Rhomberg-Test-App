@@ -9,6 +9,7 @@ test('API contract audit covers every active API-mode frontend contract', async 
     'GET /auth/csrf-token',
     'GET /auth/me',
     'POST /auth/login',
+    'POST /auth/register',
     'GET /products/categories',
     'GET /products',
     'GET /products/recommendations',
@@ -20,8 +21,9 @@ test('API contract audit covers every active API-mode frontend contract', async 
     'GET /users/me/notification-preferences',
     'GET /users/me/settings',
     'GET /administration/overview',
+    'DELETE /admin/users/:accountId',
   ]) assert.equal(status.get(route), 'implemented', route);
   assert.deepEqual(audit.matrix.filter(route => route.status !== 'implemented'), [], 'active API-mode contracts must have matching backend routes');
-  assert.equal(status.has('POST /auth/register'), false, 'public self-registration must remain Administrator-provisioned rather than advertised as a staging contract');
+  assert.equal(status.get('POST /auth/register'), 'implemented', 'customer registration must use the server-backed staging contract');
   assert.equal([...status.keys()].some(route => route.includes('/credential-changes/')), false, 'email-dependent self-service credential changes must remain hidden until the approved identity integration exists');
 });

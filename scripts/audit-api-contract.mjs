@@ -81,7 +81,7 @@ const publicRoutes = new Set([
 ]);
 
 const priorityZero = new Set([
-  'GET /auth/csrf-token', 'POST /auth/login', 'GET /auth/me',
+  'GET /auth/csrf-token', 'POST /auth/login', 'POST /auth/register', 'GET /auth/me',
   'GET /products/categories', 'GET /products', 'GET /products/recommendations',
   'GET /reference-data/registration', 'GET /enquiries', 'GET /orders',
   'GET /notifications', 'GET /users/me/notification-preferences',

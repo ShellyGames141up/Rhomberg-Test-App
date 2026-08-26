@@ -84,10 +84,10 @@ export function Auth({
             <FormField label="Telephone" error={fieldErrors.phone}><input name="phone" type="tel" autoComplete="tel" required aria-invalid={Boolean(fieldErrors.phone)} placeholder="+27 ..." /></FormField>
             <FormField label="Area" error={fieldErrors.area}><select name="area" required defaultValue="" aria-invalid={Boolean(fieldErrors.area)}><option value="" disabled>Select area</option>{areas.map(area => <option key={area}>{area}</option>)}</select></FormField>
             <FormField label="Industry / field" error={fieldErrors.industry}><select name="industry" required defaultValue="" aria-invalid={Boolean(fieldErrors.industry)}><option value="" disabled>Select your field</option>{industries.map(industry => <option key={industry}>{industry}</option>)}</select></FormField>
-            <PasswordField name="password" label="Create password" show={showPassword} onToggle={() => setShowPassword(value => !value)} placeholder="Minimum 8 characters" error={fieldErrors.password} />
-            <label className="consent-row"><input name="consent" type="checkbox" required /><span>I agree to use this test preview and understand that its account data is stored on this device.</span></label>
+            <PasswordField name="password" label="Create password" show={showPassword} onToggle={() => setShowPassword(value => !value)} placeholder="16+ characters with mixed character types" error={fieldErrors.password} />
+            <label className="consent-row"><input name="consent" type="checkbox" required /><span>I confirm these company details are correct and agree to the authorised use of Rhomberg Connect.</span></label>
             {error && <p className="form-error" role="alert">{error}</p>}
-            <button className="primary-button full" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Creating account…' : 'Create company account'} <span>{isSubmitting ? '•••' : '→'}</span></button>
+            <button className="primary-button full" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Creating account…' : 'Create customer account'} <span>{isSubmitting ? '•••' : '→'}</span></button>
           </form>
         ) : null}
 

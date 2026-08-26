@@ -99,6 +99,9 @@ GRANT EXECUTE ON FUNCTION
   app.list_internal_users(),
   app.complete_internal_user_profile(uuid,text,text,text,text[],uuid,text,text),
   app.create_customer_account(uuid,uuid,text,text,text,text,text,text,text,uuid,text,text)
+  ,app.register_customer_account(uuid,uuid,text,text,text,text,text,text,text,text,text)
+  ,app.resolve_rfq_representative(uuid,uuid,text)
+  ,app.soft_delete_user(uuid,text,text)
   ,app.administer_user(uuid,text,jsonb,text)
   ,app.administer_company(uuid,text,jsonb,text)
   ,app.admin_user_login_history(uuid)

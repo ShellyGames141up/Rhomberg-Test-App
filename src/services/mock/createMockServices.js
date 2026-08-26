@@ -5012,7 +5012,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   };
 
   const buildAdministrationOverview = actor => {
-    const allAccountRecords = readAccounts();
+    const allAccountRecords = readAccounts().filter(item => !item.deletedAt);
     const accountRecords = allAccountRecords.filter(item => canAdministerCompany(actor, item.companyId));
     const workflowRecords = readWorkflowState();
     const notificationRecords = readNotifications();
@@ -5249,6 +5249,61 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       writeAccounts(accountRecords);
       administrationAudit({ actor, action: 'administration.user_archived', entityType: 'user', entityId: accountId, companyId: current.companyId, previousValue: { status: current.status }, newValue: { status: 'archived', lastWorkingDate, replacementEmployeeId: input.replacementEmployeeId || '', responsibilities }, fieldsChanged: ['status', 'archivedAt'], reason });
       return toPublicAccount(accountRecords[index]);
+    },
+
+    async deleteAccount(accountId, input = {}) {
+      const actor = requireAdministrator(PERMISSIONS.ADMINISTER_USERS);
+      const reason = administrativeReason(input.reason);
+      if (accountId === actor.id) {
+        throw new ServiceError('You cannot delete the administrator account currently in use.', {
+          code: 'ACTIVE_ADMIN_DELETE_BLOCKED',
+          status: 409,
+        });
+      }
+      const accountRecords = readAccounts();
+      const index = accountRecords.findIndex(item => item.id === accountId && !item.deletedAt);
+      if (index < 0) throw new ServiceError('The account was not found.', { code: 'ACCOUNT_NOT_FOUND', status: 404 });
+      const current = accountRecords[index];
+      if ((current.roles || [current.role]).includes(USER_ROLES.ADMINISTRATOR)) {
+        throw new ServiceError('Administrator accounts cannot be deleted through account management.', {
+          code: 'ADMINISTRATOR_DELETE_BLOCKED',
+          status: 403,
+        });
+      }
+      if (!canAdministerCompany(actor, current.companyId)) {
+        throw new ServiceError('The account is outside your authorised company scope.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const occurredAt = now().toISOString();
+      accountRecords[index] = {
+        ...current,
+        status: 'archived',
+        disabledAt: occurredAt,
+        deletedAt: occurredAt,
+        futureNotificationsDisabled: true,
+        updatedAt: occurredAt,
+      };
+      writeAccounts(accountRecords);
+      const session = store.get(STORE_KEYS.session, null);
+      if (session?.accountId === accountId) store.remove(STORE_KEYS.session);
+      if (current.representativeId) {
+        const assignments = readCustomerRepresentativeAssignments();
+        for (const [companyId, assignment] of Object.entries(assignments)) {
+          if (assignment.representativeId === current.representativeId) delete assignments[companyId];
+        }
+        writeCustomerRepresentativeAssignments(assignments);
+      }
+      administrationAudit({
+        actor,
+        action: 'administration.user_soft_deleted',
+        entityType: 'user',
+        entityId: accountId,
+        companyId: current.companyId,
+        previousValue: { status: current.status },
+        newValue: { status: 'deleted', deletedAt: occurredAt, hardDeleted: false },
+        fieldsChanged: ['status', 'disabledAt', 'deletedAt'],
+        reason,
+      });
+      return { id: accountId, status: 'deleted', deletedAt: occurredAt };
     },
 
     async uploadEmployeeProfileImage(accountId, file, input = {}) {

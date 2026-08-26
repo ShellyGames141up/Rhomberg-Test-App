@@ -2,7 +2,15 @@
 
 ## First-login credential boundary
 
+## Customer onboarding and Dedicated Representative relationship
+
+Migration `014_customer_registration_and_dedicated_representative.sql` adds the server-only customer-registration transaction and enforces one active `representative_company_assignments` relationship per company. Registration creates an active customer company, one customer user, the company membership and a safe audit event; it creates no representative assignment and accepts no caller-supplied role or permission.
+
+The first RFQ locks the company row, validates an active representative against the company's stored branch and creates the relationship in the same transaction as the RFQ. `rfqs.representative_id` is the immutable assignment snapshot for that enquiry. A later audited Administrator reassignment ends the previous relationship and affects future RFQs only; it does not rewrite historical RFQs. Runtime access is limited to the reviewed security-definer registration operation and existing scoped application functions. Production must still add its approved external identity verification and anti-abuse controls before real customer onboarding.
+
 Migration `013_first_login_password_change.sql` adds no seed data. It creates `app.change_own_password(text,text)`, a `SECURITY DEFINER` function that resolves the authenticated database context, validates the approved scrypt hash shape, updates only the current active local account, clears `must_change_password`, appends a safe audit event and revokes all sessions. The runtime role receives execute permission on this self-scoped function but retains no direct password or role update grant.
+
+Migration `015_administrator_account_soft_delete.sql` adds the Administrator-only `app.soft_delete_user(uuid,text,text)` operation. It refuses self-deletion and deletion of active Administrator identities, requires a recorded reason, revokes sessions, company memberships, roles and representative assignments, and marks the identity deleted without removing historical foreign-key targets. Its immutable audit event retains company scope where applicable. Runtime receives execute permission only; ordinary sessions still fail the server-authoritative permission check.
 
 The reusable employee model adds `internal_staff_profiles`, `departments`, `user_branch_assignments`, `user_department_assignments`, `authentication_methods`, `account_activation_tokens`, `password_reset_requests`, `user_preferences`, `user_profile_images`, `account_status_history` and immutable `user_audit_events`. Existing `users`, `branches`, `roles`, `permissions`, `user_roles` and `role_permissions` remain the identity and authorisation core. Email is nullable only when an approved username exists. Real staff seed records are private import data and do not belong in this tracked schema or a public static artifact.
 

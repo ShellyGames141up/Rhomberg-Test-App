@@ -76,3 +76,61 @@ test('password change requires CSRF and cannot be mass-assigned', async t => {
   const injected = await app.inject({ method: 'POST', url: '/api/v1/auth/change-password', headers: { cookie: auth.cookie, 'x-csrf-token': auth.csrf }, payload: { currentPassword: TEMPORARY_PASSWORD, newPassword: REPLACEMENT_PASSWORD, role: 'administrator' } });
   assert.equal(injected.statusCode, 400);
 });
+
+test('Administrator-created employee and customer accounts can immediately use their temporary password', async t => {
+  const { app, repository } = await createFixture();
+  t.after(() => app.close());
+  const administrator = await login(app, 'fabricated-admin', 'Fabricated-Phase1-Password!');
+  const accounts = [
+    {
+      createUrl: '/api/v1/admin/users',
+      identifier: 'uat-immediate-employee',
+      temporaryPassword: 'Fabricated-Employee-Temporary1!',
+      replacementPassword: 'Fabricated-Employee-Replacement2!',
+      payload: {
+        displayName: 'Fabricated Immediate Employee', username: 'uat-immediate-employee',
+        email: 'immediate.employee@example.invalid', password: 'Fabricated-Employee-Temporary1!',
+        role: 'planning', reason: 'Verify immediate first-login onboarding.',
+      },
+    },
+    {
+      createUrl: '/api/v1/admin/customer-accounts',
+      identifier: 'immediate.customer@example.invalid',
+      temporaryPassword: 'Fabricated-Customer-Temporary1!',
+      replacementPassword: 'Fabricated-Customer-Replacement2!',
+      payload: {
+        companyName: 'Fabricated Immediate Customer Company', contactName: 'Fabricated Immediate Customer',
+        email: 'immediate.customer@example.invalid', phone: '+27 00 000 0101', area: 'Gauteng',
+        industry: 'Fabricated testing', branchId: 'johannesburg', password: 'Fabricated-Customer-Temporary1!',
+        reason: 'Verify immediate customer first-login onboarding.',
+      },
+    },
+  ];
+
+  for (const account of accounts) {
+    const created = await app.inject({ method: 'POST', url: account.createUrl, headers: { cookie: administrator.cookie, 'x-csrf-token': administrator.csrf }, payload: account.payload });
+    assert.equal(created.statusCode, 201, created.body);
+    assert.equal(created.body.includes(account.temporaryPassword), false);
+
+    const firstLogin = await login(app, account.identifier, account.temporaryPassword);
+    assert.equal(firstLogin.response.statusCode, 200, firstLogin.response.body);
+    assert.equal(firstLogin.body.data.user.forcePasswordChange, true);
+
+    const changed = await app.inject({
+      method: 'POST', url: '/api/v1/auth/change-password',
+      headers: { cookie: firstLogin.cookie, 'x-csrf-token': firstLogin.csrf },
+      payload: { currentPassword: account.temporaryPassword, newPassword: account.replacementPassword },
+    });
+    assert.equal(changed.statusCode, 204, changed.body);
+    const replacementLogin = await login(app, account.identifier, account.replacementPassword);
+    assert.equal(replacementLogin.response.statusCode, 200);
+    assert.equal(replacementLogin.body.data.user.forcePasswordChange, false);
+  }
+
+  const auditText = JSON.stringify(repository._state.audits);
+  assert.equal(auditText.includes('temporary_password'), false, 'new accounts must not require an Administrator reset before first login');
+  for (const account of accounts) {
+    assert.equal(auditText.includes(account.temporaryPassword), false);
+    assert.equal(auditText.includes(account.replacementPassword), false);
+  }
+});

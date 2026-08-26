@@ -18,7 +18,7 @@ function validate(details, items) {
   const notes = text(details.notes);
   if (application.length < 5 || application.length > 2000) errors.application = 'Describe the application in 5 to 2,000 characters.';
   if (area.length < 2) errors.area = 'Select the customer area.';
-  if (!/^[0-9a-f-]{36}$/i.test(representativeId)) errors.selectedRep = 'Select an assigned representative.';
+  if (representativeId && !/^[0-9a-f-]{36}$/i.test(representativeId)) errors.selectedRep = 'Select an eligible representative.';
   if (!['delivery', 'collect'].includes(fulfilment)) errors.fulfilment = 'Choose delivery or collection.';
   if (fulfilment === 'delivery' && deliveryAddress.length < 5) errors.deliveryAddress = 'Enter the delivery address.';
   if (fulfilment === 'collect' && collectionBranch.length < 2) errors.collectionBranch = 'Select a collection branch.';
