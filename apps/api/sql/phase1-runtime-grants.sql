@@ -6,6 +6,42 @@
 
 -- Run as the migration/schema owner after migrations. This script does not create
 -- roles or credentials and is intentionally safe to re-run.
+-- Validate the approved function surface before revoking any existing runtime
+-- privileges. This keeps deployment fail-closed without breaking a healthy API
+-- when a recorded migration and the live schema have drifted.
+DO $$
+DECLARE
+  required_signatures text[] := ARRAY[
+    'app.establish_request_context(text)',
+    'app.current_user_id()',
+    'app.current_company_ids()',
+    'app.current_context_can_read_audit()',
+    'app.current_context_can_view_all_rfqs()',
+    'app.current_context_has_permission(text)',
+    'app.create_internal_user(uuid,text,text,text,text,text,text)',
+    'app.list_internal_users()',
+    'app.complete_internal_user_profile(uuid,text,text,text,text[],uuid,text,text)',
+    'app.create_customer_account(uuid,uuid,text,text,text,text,text,text,text,uuid,text,text)',
+    'app.register_customer_account(uuid,uuid,text,text,text,text,text,text,text,text,text)',
+    'app.resolve_rfq_representative(uuid,uuid,text)',
+    'app.soft_delete_user(uuid,text,text)',
+    'app.administer_user(uuid,text,jsonb,text)',
+    'app.administer_company(uuid,text,jsonb,text)',
+    'app.admin_user_login_history(uuid)',
+    'app.change_own_password(text,text)'
+  ];
+  missing_signatures text[];
+BEGIN
+  SELECT array_agg(required_signature ORDER BY required_signature)
+  INTO missing_signatures
+  FROM unnest(required_signatures) AS required_signature
+  WHERE to_regprocedure(required_signature) IS NULL;
+  IF missing_signatures IS NOT NULL THEN
+    RAISE EXCEPTION 'Approved application functions are missing: %', array_to_string(missing_signatures, ', ');
+  END IF;
+END
+$$;
+
 REVOKE ALL ON SCHEMA app FROM :"runtime_role";
 REVOKE ALL ON ALL TABLES IN SCHEMA app FROM :"runtime_role";
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA app FROM :"runtime_role";
@@ -88,22 +124,40 @@ GRANT UPDATE (details, row_version, updated_at) ON app.orders TO :"runtime_role"
 
 GRANT USAGE, SELECT ON SEQUENCE app.rfq_reference_sequence TO :"runtime_role";
 GRANT USAGE, SELECT ON SEQUENCE app.order_reference_sequence TO :"runtime_role";
-GRANT EXECUTE ON FUNCTION
-  app.establish_request_context(text),
-  app.current_user_id(),
-  app.current_company_ids(),
-  app.current_context_can_read_audit(),
-  app.current_context_can_view_all_rfqs(),
-  app.current_context_has_permission(text),
-  app.create_internal_user(uuid, text, text, text, text, text, text),
-  app.list_internal_users(),
-  app.complete_internal_user_profile(uuid,text,text,text,text[],uuid,text,text),
-  app.create_customer_account(uuid,uuid,text,text,text,text,text,text,text,uuid,text,text)
-  ,app.register_customer_account(uuid,uuid,text,text,text,text,text,text,text,text,text)
-  ,app.resolve_rfq_representative(uuid,uuid,text)
-  ,app.soft_delete_user(uuid,text,text)
-  ,app.administer_user(uuid,text,jsonb,text)
-  ,app.administer_company(uuid,text,jsonb,text)
-  ,app.admin_user_login_history(uuid)
-  ,app.change_own_password(text,text)
-TO :"runtime_role";
+-- Resolve each exact approved signature through PostgreSQL's authoritative
+-- catalogue. Unrelated overloads sharing an approved name remain inaccessible.
+WITH approved(signature) AS (VALUES
+  ('app.establish_request_context(text)'),('app.current_user_id()'),('app.current_company_ids()'),
+  ('app.current_context_can_read_audit()'),('app.current_context_can_view_all_rfqs()'),
+  ('app.current_context_has_permission(text)'),('app.create_internal_user(uuid,text,text,text,text,text,text)'),
+  ('app.list_internal_users()'),('app.complete_internal_user_profile(uuid,text,text,text,text[],uuid,text,text)'),
+  ('app.create_customer_account(uuid,uuid,text,text,text,text,text,text,text,uuid,text,text)'),
+  ('app.register_customer_account(uuid,uuid,text,text,text,text,text,text,text,text,text)'),
+  ('app.resolve_rfq_representative(uuid,uuid,text)'),('app.soft_delete_user(uuid,text,text)'),
+  ('app.administer_user(uuid,text,jsonb,text)'),('app.administer_company(uuid,text,jsonb,text)'),
+  ('app.admin_user_login_history(uuid)'),('app.change_own_password(text,text)')
+)
+SELECT format('GRANT EXECUTE ON FUNCTION %s TO %I;',to_regprocedure(signature),:'runtime_role')
+FROM approved
+ORDER BY signature
+\gexec
+
+WITH approved(signature) AS (VALUES
+  ('app.establish_request_context(text)'),('app.current_user_id()'),('app.current_company_ids()'),
+  ('app.current_context_can_read_audit()'),('app.current_context_can_view_all_rfqs()'),
+  ('app.current_context_has_permission(text)'),('app.create_internal_user(uuid,text,text,text,text,text,text)'),
+  ('app.list_internal_users()'),('app.complete_internal_user_profile(uuid,text,text,text,text[],uuid,text,text)'),
+  ('app.create_customer_account(uuid,uuid,text,text,text,text,text,text,text,uuid,text,text)'),
+  ('app.register_customer_account(uuid,uuid,text,text,text,text,text,text,text,text,text)'),
+  ('app.resolve_rfq_representative(uuid,uuid,text)'),('app.soft_delete_user(uuid,text,text)'),
+  ('app.administer_user(uuid,text,jsonb,text)'),('app.administer_company(uuid,text,jsonb,text)'),
+  ('app.admin_user_login_history(uuid)'),('app.change_own_password(text,text)')
+)
+SELECT bool_and(has_function_privilege(:'runtime_role',to_regprocedure(signature),'EXECUTE')) AS runtime_function_grants_complete
+FROM approved
+\gset
+\if :runtime_function_grants_complete
+\else
+  \echo 'Approved runtime function grants are incomplete.'
+  \quit 3
+\endif
