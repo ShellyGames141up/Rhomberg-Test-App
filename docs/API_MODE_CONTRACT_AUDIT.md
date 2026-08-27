@@ -2,10 +2,10 @@
 
 Generated from `src/services/api/createApiServices.js` and `apps/api/src/app.js`.
 
-- Unique frontend API contracts: **134**
-- Registered backend API routes: **142**
-- Registered backend routes including health endpoints: **145**
-- Frontend contracts currently implemented: **134**
+- Unique frontend API contracts: **135**
+- Registered backend API routes: **143**
+- Registered backend routes including health endpoints: **146**
+- Frontend contracts currently implemented: **135**
 - Frontend contracts still missing: **0**
 - Frontend contracts currently incompatible: **0**
 
@@ -147,6 +147,7 @@ Every active API-mode adapter contract has a matching backend route. Contract pa
 | /users/me/settings/onboarding/tutorial/reset | POST | authenticated session | required | implemented | P2 |
 | /users/me/settings/onboarding/welcome | POST | authenticated session | required | implemented | P2 |
 | /users/me/settings/reset | POST | authenticated session | required | implemented | P2 |
+| /workspace/updates | GET | authenticated session | not required | implemented | P1 |
 
 ## Transport findings
 

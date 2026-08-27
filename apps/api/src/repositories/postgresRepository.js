@@ -1,7 +1,22 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { notFound } from '../errors.js';
 
 const json = value => JSON.stringify(value ?? {});
+
+function expeditingProjection(details = {}, actor) {
+  const customer = actor?.role === 'customer';
+  const updates = (details.expeditingUpdates || []).map((item, index) => ({
+    id: item.id || `expediting-${index}`, progressStep: item.progressStep,
+    customerMessage: item.customerMessage, createdAt: item.createdAt,
+    estimatedCompletionDate: item.estimatedCompletionDate || '', delayReason: item.delayReason || '',
+    ...(!customer ? { internalNote: item.internalNote || '', document: item.document, updatedBy: { id: item.createdBy } } : {}),
+  }));
+  const last = updates.at(-1);
+  return {
+    details: customer ? { ...details, expeditingUpdates: updates } : details,
+    expediting: { updates, currentStep: last?.progressStep || '', estimatedCompletionDate: last?.estimatedCompletionDate || details.planning?.estimatedCompletionDate || '', currentDelayReason: last?.delayReason || '' },
+  };
+}
 
 function shouldValidateConfigurationField(field, configuration) {
   // Older catalogue rows predate explicit showWhen metadata for custom ranges.
@@ -70,17 +85,17 @@ async function setActorScope(client, actor) {
 }
 
 async function loadActor(client, user, databaseSessionTokenHash = '') {
-  const roles = await client.query(`SELECT role_code FROM app.user_roles WHERE user_id = $1 AND revoked_at IS NULL ORDER BY assigned_at`, [user.id]);
+  const roles = await client.query(`SELECT ur.role_code FROM app.user_roles ur JOIN app.roles r ON r.code=ur.role_code AND r.is_active WHERE user_id = $1 AND revoked_at IS NULL ORDER BY assigned_at`, [user.id]);
   const permissions = await client.query(`SELECT DISTINCT permission_code FROM (
-      SELECT rp.permission_code
-      FROM app.user_roles ur JOIN app.role_permissions rp ON rp.role_code = ur.role_code
-      JOIN app.permissions p ON p.code = rp.permission_code AND p.is_active
-      WHERE ur.user_id = $1 AND ur.revoked_at IS NULL
-      UNION ALL
-      SELECT grant_record.permission_code FROM app.user_permission_grants grant_record
-      JOIN app.permissions p ON p.code=grant_record.permission_code AND p.is_active
-      WHERE grant_record.user_id=$1 AND grant_record.revoked_at IS NULL
-    ) effective`, [user.id]);
+      SELECT rp.permission_code FROM app.user_roles ur
+      JOIN app.roles r ON r.code=ur.role_code AND r.is_active
+      JOIN app.role_permissions rp ON rp.role_code=ur.role_code
+      WHERE ur.user_id=$1 AND ur.revoked_at IS NULL
+      UNION
+      SELECT permission_code FROM app.user_permission_grants WHERE user_id=$1 AND revoked_at IS NULL
+    ) candidate JOIN app.permissions p ON p.code=candidate.permission_code AND p.is_active
+    WHERE NOT EXISTS(SELECT 1 FROM app.user_permission_denials d
+      WHERE d.user_id=$1 AND d.permission_code=candidate.permission_code AND d.revoked_at IS NULL)`, [user.id]);
   const companies = await client.query(`SELECT cu.company_id, cu.is_primary, c.name AS company_name
       FROM app.company_users cu JOIN app.companies c ON c.id = cu.company_id
       WHERE cu.user_id = $1 AND cu.revoked_at IS NULL AND c.status = 'active' AND c.deleted_at IS NULL
@@ -173,7 +188,7 @@ export function createPostgresRepository(pool) {
     return mapEnquiry(result.rows[0], items.rows, documents.rows);
   };
 
-  const loadOrder = async (client,id) => {
+  const loadOrder = async (client,id,actor) => {
     const result=await client.query(`SELECT o.*,c.name AS company_name,customer.display_name AS customer_name,
       rep.display_name AS representative_name,rep.branch_name FROM app.orders o JOIN app.companies c ON c.id=o.company_id
       LEFT JOIN app.users customer ON customer.id=o.customer_user_id LEFT JOIN app.representatives rep ON rep.id=o.representative_id
@@ -188,7 +203,8 @@ export function createPostgresRepository(pool) {
       poNumber:row.purchase_order_number || '',purchaseOrderNumber:row.purchase_order_number || '',quotationNumber:row.quotation_number || '',origin:row.origin,source:row.source,version:row.row_version,details:row.details || {},laboratory:row.details?.laboratory || undefined,createdAt:row.created_at,updatedAt:row.updated_at,completedAt:row.completed_at,archivedAt:row.archived_at,
       items:items.rows.map(item=>({id:item.id,lineId:item.id,productId:item.product_id,code:item.product_code_snapshot,name:item.product_name_snapshot,quantity:item.quantity,configuration:item.configuration,unitState:item.unit_state})),
       documents:documents.rows.map(document=>({id:document.id,documentType:document.kind,fileName:document.original_name,mimeType:document.media_type,sizeBytes:Number(document.size_bytes),scanStatus:document.scan_status,customerVisible:document.customer_visible,uploadedAt:document.created_at})),
-      trackingHistory:history.rows.map(event=>({id:event.id,fromStatus:event.from_status,toStatus:event.to_status,status:event.to_status,entityType:'order',action:event.action,note:event.customer_note || event.internal_note || '',customerVisible:event.customer_visible,createdAt:event.created_at})),allowedWorkflowActions:[] };
+      trackingHistory:history.rows.map(event=>({id:event.id,fromStatus:event.from_status,toStatus:event.to_status,status:event.to_status,entityType:'order',action:event.action,note:event.customer_note || (actor?.role !== 'customer' ? event.internal_note : '') || '',customerVisible:event.customer_visible,createdAt:event.created_at})),allowedWorkflowActions:[],
+      ...expeditingProjection(row.details || {},actor) };
   };
 
   return {
@@ -263,8 +279,20 @@ export function createPostgresRepository(pool) {
             JOIN app.user_roles role ON role.user_id=user_record.id AND role.role_code='customer' AND role.revoked_at IS NULL
             WHERE user_record.deleted_at IS NULL ORDER BY company.name,user_record.display_name`);
         const roles = await client.query("SELECT code, name FROM app.roles WHERE is_internal AND is_active AND code <> 'administrator' ORDER BY name");
-        const permissions = await client.query('SELECT code FROM app.permissions WHERE is_active ORDER BY code');
-        const rolePermissions = await client.query('SELECT role_code, permission_code FROM app.role_permissions ORDER BY role_code, permission_code');
+        const permissions = await client.query(`SELECT p.code FROM app.permissions p WHERE p.is_active AND EXISTS (
+          SELECT 1 FROM app.role_permissions rp JOIN app.roles r ON r.code=rp.role_code
+          WHERE rp.permission_code=p.code AND r.is_internal AND r.is_active AND r.code<>'administrator'
+        ) ORDER BY p.code`);
+        const rolePermissions = await client.query('SELECT rp.role_code, rp.permission_code FROM app.role_permissions rp JOIN app.roles r ON r.code=rp.role_code AND r.is_active JOIN app.permissions p ON p.code=rp.permission_code AND p.is_active ORDER BY role_code, permission_code');
+        const grants = await client.query('SELECT g.user_id, g.permission_code FROM app.user_permission_grants g JOIN app.permissions p ON p.code=g.permission_code AND p.is_active WHERE g.revoked_at IS NULL');
+        const denials = await client.query('SELECT user_id, permission_code FROM app.user_permission_denials WHERE revoked_at IS NULL');
+        const permissionDetails = (id, assignedRoles) => {
+          const rolePermissionsForUser = [...new Set(rolePermissions.rows.filter(row => assignedRoles.includes(row.role_code)).map(row => row.permission_code))];
+          const additionalPermissions = grants.rows.filter(row => row.user_id === id).map(row => row.permission_code);
+          const deniedPermissions = denials.rows.filter(row => row.user_id === id).map(row => row.permission_code);
+          return { rolePermissions: rolePermissionsForUser, additionalPermissions, deniedPermissions,
+            permissions: [...new Set([...rolePermissionsForUser, ...additionalPermissions])].filter(code => !deniedPermissions.includes(code)) };
+        };
         const companies = await client.query(`SELECT company.id,company.name,company.status,company.area,company.industry,company.branch_id,
             company.created_at,company.updated_at,count(DISTINCT member.user_id)::integer AS contacts,
             assignment.representative_id
@@ -278,14 +306,14 @@ export function createPostgresRepository(pool) {
         const mappedInternalUsers = users.rows.map(user => ({
           id: user.id, contact: user.display_name, displayName: user.display_name,
           email: user.email, signInName: user.username, username: user.username,
-          role: user.role_codes[0], roles: user.role_codes, permissions: [], company: 'Internal',
+          role: user.role_codes[0], roles: user.role_codes, ...permissionDetails(user.id, user.role_codes), company: 'Internal',
           category: 'internal', department: user.department || '', branchId: user.branch_id || '', phone: user.phone || '', status: user.status,
           lastLoginAt: user.last_login_at, createdAt: user.created_at, loginHistoryCount: 0,
           notificationPreferences: {},
         }));
         const mappedCustomerUsers = customerUsers.rows.map(user => ({
           id:user.id,contact:user.display_name,displayName:user.display_name,email:user.email,signInName:user.username || '',username:user.username || '',
-          phone:user.phone || '',role:'customer',roles:['customer'],permissions:[],companyId:user.company_id,company:user.company_name,
+          phone:user.phone || '',role:'customer',roles:['customer'],...permissionDetails(user.id, ['customer']),companyId:user.company_id,company:user.company_name,
           category:'customer',area:user.area || '',branchId:user.branch_id || '',department:'',status:user.status,lastLoginAt:user.last_login_at,
           createdAt:user.created_at,loginHistoryCount:0,notificationPreferences:{ channels:{ inApp:true,email:false,push:false } },
         }));
@@ -353,7 +381,19 @@ export function createPostgresRepository(pool) {
       }
     },
     async administerUser(actor,userId,operation,payload,correlationId) {
-      return inTransaction(async client => (await client.query('SELECT app.administer_user($1,$2,$3::jsonb,$4) AS result',[userId,operation,json(payload),correlationId])).rows[0].result,{actor});
+      try {
+        return await inTransaction(async client => (await client.query('SELECT app.administer_user($1,$2,$3::jsonb,$4) AS result',[userId,operation,json(payload),correlationId])).rows[0].result,{actor});
+      } catch (error) {
+        const safeErrors = {
+          '22023': ['VALIDATION_ERROR', 422, 'Choose valid roles or permissions and record a reason for the change.'],
+          '22P02': ['VALIDATION_ERROR', 422, 'The account or submitted details are invalid.'],
+          '42501': ['FORBIDDEN', 403, 'This protected account or permission cannot be changed through employee management.'],
+          'P0002': ['NOT_FOUND', 404, 'The account no longer exists. Refresh the directory.'],
+          '23505': ['CONFLICT', 409, 'The account changed during this update. Refresh and review its current roles.'],
+        };
+        if (safeErrors[error.code]) [error.code, error.statusCode, error.message] = safeErrors[error.code];
+        throw error;
+      }
     },
     async softDeleteUser(actor,userId,payload,correlationId) {
       try {
@@ -452,22 +492,43 @@ export function createPostgresRepository(pool) {
           customerVisible: row.customer_visible, readAt: row.read_at,
           createdAt: row.created_at, rfqId: row.rfq_id, orderId: row.order_id,
           recordId: row.order_id || row.rfq_id, reference: row.order_reference || row.rfq_reference || '',
-          link: row.link_path || '', deliveries: row.deliveries || [],
+          entityType: row.order_id ? 'order' : 'rfq', entityId: row.order_id || row.rfq_id,
+          link: { entityType: row.order_id ? 'order' : 'rfq', entityId: row.order_id || row.rfq_id, customerView: 'tracking', internalView: row.event_type?.startsWith('technical_') ? 'technical' : 'expeditor' }, deliveries: row.deliveries || [],
         }));
       }, { actor });
     },
-    async markNotificationRead(actor, notificationId) {
+    async markNotificationRead(actor, notificationId, correlationId) {
       return inTransaction(async client => {
+        const existing = await client.query('SELECT id, read_at, company_id FROM app.notifications WHERE id=$1 AND recipient_user_id=$2 FOR UPDATE', [notificationId, actor.id]);
+        if (!existing.rows[0]) throw notFound('The notification was not found.');
         const result = await client.query(`UPDATE app.notifications SET read_at = COALESCE(read_at, now())
           WHERE id = $1 AND recipient_user_id = $2 RETURNING id, read_at`, [notificationId, actor.id]);
         if (!result.rows[0]) throw notFound('The notification was not found.');
+        if (!existing.rows[0].read_at) await client.query(`INSERT INTO app.audit_events(event_type,actor_user_id,actor_role,company_id,action,entity_type,entity_id,outcome,correlation_id,details)
+          VALUES('notification.read',$1,$2,$3,'mark_notification_read','notification',$4,'success',$5,'{}')`, [actor.id,actor.role,existing.rows[0].company_id,notificationId,correlationId || randomUUID()]);
         return { id: result.rows[0].id, readAt: result.rows[0].read_at };
       }, { actor });
     },
-    async markAllNotificationsRead(actor) {
+    async markAllNotificationsRead(actor, correlationId) {
       return inTransaction(async client => {
         const result = await client.query('UPDATE app.notifications SET read_at = COALESCE(read_at, now()) WHERE recipient_user_id = $1 AND read_at IS NULL', [actor.id]);
-        return { updated: result.rowCount };
+        if (result.rowCount) await client.query(`INSERT INTO app.audit_events(event_type,actor_user_id,actor_role,action,entity_type,entity_id,outcome,correlation_id,details)
+          VALUES('notification.all_read',$1::uuid,$2,'mark_all_notifications_read','user',($1::uuid)::text,'success',$3,$4::jsonb)`, [actor.id,actor.role,correlationId || randomUUID(),json({ updatedCount: result.rowCount })]);
+        return { updated: result.rowCount, updatedCount: result.rowCount };
+      }, { actor });
+    },
+    async getWorkspaceRevision(actor) {
+      return inTransaction(async client => {
+        // RLS applies to every source. Return only an opaque change token, never
+        // an unscoped global counter or an operational record.
+        const result = await client.query(`SELECT
+          (SELECT jsonb_agg(jsonb_build_array(id,row_version,updated_at) ORDER BY id) FROM app.rfqs) AS rfqs,
+          (SELECT jsonb_agg(jsonb_build_array(id,row_version,updated_at) ORDER BY id) FROM app.orders) AS orders,
+          (SELECT jsonb_agg(jsonb_build_array(id,read_at) ORDER BY id) FROM app.notifications WHERE recipient_user_id=$1) AS notifications,
+          (SELECT jsonb_agg(jsonb_build_array(id,updated_at) ORDER BY id) FROM app.technical_support_requests) AS technical,
+          (SELECT max(id) FROM app.audit_events) AS audit`, [actor.id]);
+        const revision = createHash('sha256').update(json({ userId: actor.id, roles: actor.roles, permissions: actor.permissions, state: result.rows[0] })).digest('hex');
+        return { revision, intervalSeconds: 30 };
       }, { actor });
     },
     async retryNotificationDelivery(actor,notificationId,deliveryId,correlationId){return inTransaction(async client=>{const row=(await client.query('SELECT * FROM app.notifications WHERE id=$1 FOR UPDATE',[notificationId])).rows[0];if(!row)throw notFound('The notification delivery was not found.');const deliveries=Array.isArray(row.deliveries)?row.deliveries:[];const index=deliveries.findIndex(item=>item.id===deliveryId);if(index<0)throw notFound('The notification delivery was not found.');const delivery={...deliveries[index],status:deliveries[index].channel==='in_app'?'in_app':`${deliveries[index].channel}_pending`,attempts:Number(deliveries[index].attempts||0)+1,lastAttemptAt:new Date().toISOString()};deliveries[index]=delivery;await client.query('UPDATE app.notifications SET deliveries=$2::jsonb WHERE id=$1',[notificationId,json(deliveries)]);await client.query(`INSERT INTO app.audit_events(event_type,actor_user_id,actor_role,company_id,action,entity_type,entity_id,outcome,correlation_id,details) VALUES('notification.delivery_retry_requested',$1,$2,$3,'retry_notification_delivery','notification',$4,'success',$5,$6::jsonb)`,[actor.id,actor.role,row.company_id,notificationId,correlationId,json({deliveryId,channel:delivery.channel})]);return delivery;},{actor});},
@@ -629,14 +690,15 @@ export function createPostgresRepository(pool) {
             poNumber: row.purchase_order_number || '', quotationNumber: row.quotation_number || '', origin: row.origin,
             version: row.row_version, details: row.details || {}, laboratory: row.details?.laboratory || undefined, createdAt: row.created_at, updatedAt: row.updated_at,
             items: items.rows.map(item => ({ id: item.id, lineId: item.id, productId: item.product_id, code: item.product_code_snapshot, name: item.product_name_snapshot, quantity: item.quantity, configuration: item.configuration, unitState: item.unit_state })),
-            trackingHistory: history.rows.map(event => ({ id: event.id, fromStatus: event.from_status, toStatus: event.to_status, status: event.to_status, entityType: 'order', action: event.action, note: event.customer_note || event.internal_note || '', customerVisible: event.customer_visible, createdAt: event.created_at })),
+            trackingHistory: history.rows.map(event => ({ id: event.id, fromStatus: event.from_status, toStatus: event.to_status, status: event.to_status, entityType: 'order', action: event.action, note: event.customer_note || (actor.role !== 'customer' ? event.internal_note : '') || '', customerVisible: event.customer_visible, createdAt: event.created_at })),
             allowedWorkflowActions: [],
+            ...expeditingProjection(row.details || {},actor),
           });
         }
         return records;
       }, { actor });
     },
-    async getOrder(actor,id) { return inTransaction(client=>loadOrder(client,id),{actor}); },
+    async getOrder(actor,id) { return inTransaction(client=>loadOrder(client,id,actor),{actor}); },
     async performWorkflowAction(actor,command) {
       return inTransaction(async client => {
         const table=command.entityType==='rfq'?'rfqs':'orders';
@@ -682,7 +744,7 @@ export function createPostgresRepository(pool) {
         if (roleForAction) for (const row of (await client.query('SELECT user_id FROM app.user_roles WHERE role_code=$1 AND revoked_at IS NULL',[roleForAction])).rows) recipients.add(row.user_id);
         for (const recipient of recipients) await client.query(`INSERT INTO app.notifications(id,company_id,recipient_user_id,rfq_id,order_id,event_type,title,message,customer_visible,link_path)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[randomUUID(),companyId,recipient,command.entityType==='rfq'?record.id:null,command.entityType==='order'?record.id:orderId,`workflow_${command.action}`,command.definition.label,customerNote || `Status updated to ${toStatus.replaceAll('_',' ')}.`,recipient===customerUserId,command.entityType==='rfq'?`/rfqs/${record.id}`:`/orders/${record.id}`]);
-        return command.entityType==='rfq' ? { enquiry:await loadEnquiry(client,record.id),order:orderId?await loadOrder(client,orderId):null } : { order:await loadOrder(client,record.id) };
+        return command.entityType==='rfq' ? { enquiry:await loadEnquiry(client,record.id),order:orderId?await loadOrder(client,orderId,actor):null } : { order:await loadOrder(client,record.id,actor) };
       }, { actor });
     },
     async listLocations(actor) {

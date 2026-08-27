@@ -211,6 +211,7 @@ export function ManagementDashboard({
   serviceMode,
   onRecordsChanged,
   onOpenAudit,
+  refreshToken = 0,
 }) {
   const [dashboard, setDashboard] = useState(EMPTY_DASHBOARD);
   const [representatives, setRepresentatives] = useState([]);
@@ -235,8 +236,8 @@ export function ManagementDashboard({
     && accountCan(account, PERMISSIONS.EXPORT_MANAGEMENT_PDF);
 
   const filters = useMemo(() => ({ search, status, branch }), [branch, search, status]);
-  const load = async currentFilters => {
-    setState('loading');
+  const load = async (currentFilters, background = false) => {
+    if (!background) setState('loading');
     setError('');
     try {
       const [nextDashboard, nextRepresentatives, nextPerformanceOptions] = await Promise.all([
@@ -258,6 +259,7 @@ export function ManagementDashboard({
     const timer = window.setTimeout(() => load(filters), search ? 200 : 0);
     return () => window.clearTimeout(timer);
   }, [account.id, account.role, branch, search, status]);
+  useEffect(() => { if (refreshToken) load(filters, true); }, [refreshToken]);
 
   const run = async (key, operation, successMessage) => {
     setBusy(key);

@@ -1,4 +1,5 @@
 import { validationError } from '../errors.js';
+import { EXPEDITOR_PROGRESS_STEPS } from '../domain/expeditingOptions.js';
 
 const definitions=Object.freeze({
   rfq:Object.freeze({
@@ -43,7 +44,13 @@ function validate(action,input) {
   if (action==='mark_quoted') { const quotation=data.quotation || {}; requiredText(quotation.number,'quotationNumber','the quotation number',errors); requiredText(quotation.date,'quotationDate','the quotation date',errors); }
   if (action==='accept_order') { const acceptance=data.acceptance || {}; requiredText(acceptance.type,'acceptanceType','the acceptance type',errors); requiredText(acceptance.date,'acceptanceDate','the acceptance date',errors); if (acceptance.verified!==true) errors.acceptanceVerified='Confirm that the acceptance evidence was checked.'; }
   if (action==='complete_planning') { const planning=data.planning || data; requiredText(planning.internalJobNumber,'internalJobNumber','the internal job number',errors); requiredText(planning.salesOrderNumber,'salesOrderNumber','the Sales Order Number',errors); requiredText(planning.assignedPlanningUserId,'assignedPlanningUserId','the assigned Planning user',errors); }
-  if (['add_expediting_update','start_expediting'].includes(action)) { const update=data.expeditingUpdate || data; requiredText(update.progressStep,'progressStep','the progress step',errors); requiredText(update.customerMessage,'customerMessage','the customer-facing update',errors); }
+  if (['add_expediting_update','start_expediting'].includes(action)) {
+    const update=data.expeditingUpdate || data;
+    requiredText(update.progressStep,'progressStep','the progress step',errors);
+    requiredText(update.customerMessage,'customerMessage','the customer-facing update',errors);
+    const step = EXPEDITOR_PROGRESS_STEPS.find(item => item.id === update.progressStep);
+    if (!step || (action === 'add_expediting_update' && !step.selectableForUpdate) || (action === 'start_expediting' && step.id !== 'planning_received')) errors.progressStep='Choose a valid progress step for this workflow action.';
+  }
   if (['place_on_hold','cancel_order','cancel_rfq','expire_rfq'].includes(action)) requiredText(data.comment || data.reason || input.comment,'comment','a reason',errors);
   if (Object.keys(errors).length) throw validationError(errors,'Complete the required workflow information.');
   return data;

@@ -8,7 +8,7 @@ test('Phase 1 migration applies to an empty PostgreSQL-compatible database with 
   await runMigrations(db);
   await runMigrations(db);
   const migrationRecords = await db.query('SELECT version FROM public.rhomberg_schema_migrations');
-  assert.deepEqual(migrationRecords.rows.map(row => row.version).sort(), ['001_phase1_vertical_slice.sql', '002_protected_request_context.sql', '003_initial_administrator_bootstrap.sql', '004_internal_test_operational_foundation.sql', '005_approved_product_catalogue.sql', '006_account_directory_fields.sql', '007_simplified_laboratory_access.sql', '008_administration_lifecycle.sql', '009_document_and_governance_fields.sql', '010_client_visits.sql', '011_workspace_and_record_controls.sql', '012_administration_directory_scope.sql', '013_first_login_password_change.sql', '014_customer_registration_and_dedicated_representative.sql', '015_administrator_account_soft_delete.sql', '016_conditional_product_configuration.sql', '017_restore_customer_lifecycle_functions.sql']);
+  assert.deepEqual(migrationRecords.rows.map(row => row.version).sort(), ['001_phase1_vertical_slice.sql', '002_protected_request_context.sql', '003_initial_administrator_bootstrap.sql', '004_internal_test_operational_foundation.sql', '005_approved_product_catalogue.sql', '006_account_directory_fields.sql', '007_simplified_laboratory_access.sql', '008_administration_lifecycle.sql', '009_document_and_governance_fields.sql', '010_client_visits.sql', '011_workspace_and_record_controls.sql', '012_administration_directory_scope.sql', '013_first_login_password_change.sql', '014_customer_registration_and_dedicated_representative.sql', '015_administrator_account_soft_delete.sql', '016_conditional_product_configuration.sql', '017_restore_customer_lifecycle_functions.sql', '018_role_permission_inheritance.sql', '019_notification_read_access.sql']);
   const tables = await db.query("SELECT tablename FROM pg_tables WHERE schemaname = 'app'");
   const names = new Set(tables.rows.map(row => row.tablename));
   for (const required of ['companies', 'users', 'roles', 'permissions', 'user_roles', 'company_users', 'sessions', 'rfqs', 'rfq_items', 'document_metadata', 'audit_events', 'notifications', 'idempotency_records', 'request_security_contexts', 'platform_bootstrap_state', 'user_settings', 'notification_preferences', 'enquiry_drafts', 'orders', 'order_items', 'workflow_events', 'technical_support_requests', 'technical_support_messages', 'locations', 'platform_policies', 'user_permission_grants', 'user_profile_images', 'client_appointments', 'catalogue_overrides']) assert.equal(names.has(required), true, `missing ${required}`);
@@ -95,4 +95,33 @@ test('migration 017 restores customer lifecycle functions on a drifted recorded 
     'soft_delete_user',
   ]);
   await db.close();
+});
+
+test('migration 018 preserves assignment history and revokes unsafe legacy permission exceptions with audit', async t => {
+  const db = new PGlite();
+  t.after(() => db.close());
+  await runMigrations(db);
+  await db.exec(`
+    DROP INDEX app.user_roles_one_active_idx;
+    DROP TABLE app.user_permission_denials;
+    DROP POLICY permission_grants_self_read ON app.user_permission_grants;
+    DELETE FROM public.rhomberg_schema_migrations WHERE version='018_role_permission_inheritance.sql';
+    INSERT INTO app.users(id,username,display_name,password_hash,identity_provider,status) VALUES
+      ('82200000-0000-4000-8000-000000000001','fabricated-upgrade-actor','Fabricated Upgrade Actor','unusable-fabricated-hash','local_password','active'),
+      ('82200000-0000-4000-8000-000000000002','fabricated-upgrade-employee','Fabricated Upgrade Employee','unusable-fabricated-hash','local_password','active');
+    INSERT INTO app.user_roles(user_id,role_code,assigned_at) VALUES
+      ('82200000-0000-4000-8000-000000000001','administrator',now()),
+      ('82200000-0000-4000-8000-000000000002','planning',now()-interval '1 day'),
+      ('82200000-0000-4000-8000-000000000002','planning',now());
+    INSERT INTO app.user_permission_grants(user_id,permission_code,granted_by_user_id)
+      VALUES('82200000-0000-4000-8000-000000000002','administer_users','82200000-0000-4000-8000-000000000001');
+  `);
+  await runMigrations(db);
+  await runMigrations(db);
+  const roles = await db.query("SELECT count(*) FILTER (WHERE revoked_at IS NULL)::int active,count(*)::int total FROM app.user_roles WHERE role_code='planning'");
+  assert.deepEqual(roles.rows[0], { active: 1, total: 2 });
+  const unsafe = await db.query("SELECT revoked_at IS NOT NULL AS revoked FROM app.user_permission_grants WHERE permission_code='administer_users'");
+  assert.equal(unsafe.rows[0].revoked, true);
+  const audit = await db.query("SELECT count(*)::int total FROM app.audit_events WHERE event_type='administrator.unsafe_permission_revoked'");
+  assert.equal(audit.rows[0].total, 1);
 });

@@ -382,6 +382,55 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
     assert.equal(representativeForgery.json().error.code, 'REPRESENTATIVE_ASSIGNMENT_CONFLICT');
   });
 
+  await t.test('Expeditor options/progress, recipient acknowledgement and scoped live revisions work on real PostgreSQL', async () => {
+    const expeditor = await login(app, 'pg.expeditor@example.invalid');
+    const orderId = randomUUID();
+    await migrationPool.query(`INSERT INTO app.orders(id,reference,company_id,customer_user_id,representative_id,origin,status,application,fulfilment,created_by_user_id)
+      VALUES($1,$2,$3,$4,$5,'representative_loaded_order','expediting_in_progress','Fabricated live update validation','collect',$6)`,
+      [orderId, 'OR-FABRICATED-LIVE-' + orderId, ids.companyA, ids.customerA, ids.repA, ids.repUserA]);
+    const headers = auth => ({ cookie: auth.cookie, 'x-csrf-token': auth.csrf });
+    const revision = async auth => {
+      const response = await app.inject({ url: '/api/v1/workspace/updates', headers: headers(auth) });
+      assert.equal(response.statusCode, 200, response.body);
+      assert.equal(response.headers['cache-control'], 'no-store');
+      assert.match(response.json().data.revision, /^[a-f0-9]{64}$/);
+      return response.json().data.revision;
+    };
+    const initialA = await revision(authA), initialB = await revision(authB);
+    assert.equal(await revision(authA), initialA, 'unchanged database has a stable token');
+    const options = await app.inject({ url: '/api/v1/expediting/workspace-options', headers: headers(expeditor) });
+    assert.ok(options.json().data.progressSteps.find(step => step.id === 'materials_checked').selectableForUpdate);
+    const update = await app.inject({ method: 'POST', url: '/api/v1/orders/' + orderId + '/workflow-actions', headers: headers(expeditor),
+      payload: { action: 'add_expediting_update', data: { expeditingUpdate: { progressStep: 'materials_checked', customerMessage: 'Fabricated materials checked.', internalNote: 'FABRICATED-PRIVATE-EXPEDITING-SENTINEL' } } } });
+    assert.equal(update.statusCode, 200, update.body);
+    assert.notEqual(await revision(authA), initialA);
+    assert.equal(await revision(authB), initialB, 'another company does not observe this update');
+    const customerOrders = await app.inject({ url: '/api/v1/orders', headers: headers(authA) });
+    assert.ok(!customerOrders.body.includes('FABRICATED-PRIVATE-EXPEDITING-SENTINEL'));
+    const visible = customerOrders.json().data.find(item => item.id === orderId);
+    assert.equal(visible.expediting.updates.at(-1).progressStep, 'materials_checked');
+    const staffOrders = await app.inject({ url: '/api/v1/orders', headers: headers(expeditor) });
+    assert.ok(staffOrders.body.includes('FABRICATED-PRIVATE-EXPEDITING-SENTINEL'));
+    const invalid = await app.inject({ method: 'POST', url: '/api/v1/orders/' + orderId + '/workflow-actions', headers: headers(expeditor),
+      payload: { action: 'add_expediting_update', data: { progressStep: 'cancelled', customerMessage: 'Must not cancel through progress.' } } });
+    assert.equal(invalid.statusCode, 422);
+    const notifications = (await app.inject({ url: '/api/v1/notifications', headers: headers(authA) })).json().data;
+    const notification = notifications.find(item => item.orderId === orderId);
+    assert.equal(notification.entityType, 'order'); assert.equal(notification.entityId, orderId);
+    const acknowledge = auth => app.inject({ method: 'POST', url: '/api/v1/notifications/' + notification.id + '/read', headers: headers(auth) });
+    assert.equal((await acknowledge(authB)).statusCode, 404);
+    const first = await acknowledge(authA); assert.equal(first.statusCode, 200, first.body);
+    assert.equal((await acknowledge(authA)).json().data.readAt, first.json().data.readAt);
+    assert.equal((await migrationPool.query("SELECT count(*)::int n FROM app.audit_events WHERE event_type='notification.read' AND entity_id=$1", [notification.id])).rows[0].n, 1);
+    for (const auth of [authA, expeditor]) {
+      const batch = await app.inject({ method: 'POST', url: '/api/v1/notifications/read-all', headers: headers(auth) });
+      assert.equal(batch.statusCode, 200, batch.body);
+      assert.equal(typeof batch.json().data.updatedCount, 'number');
+      const remaining = (await app.inject({ url: '/api/v1/notifications', headers: headers(auth) })).json().data;
+      assert.ok(remaining.every(item => item.readAt));
+    }
+  });
+
   await t.test('runtime grants prevent DDL and audit mutation while application audit inserts work', async () => {
     const runtimeRole = decodeURIComponent(new URL(runtimeUrl).username);
     const role = (await migrationPool.query(`SELECT rolsuper,rolinherit,rolcreaterole,rolcreatedb,rolcanlogin,rolreplication,rolbypassrls

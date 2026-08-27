@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createWorkspaceUpdates, startWorkspacePolling } from './services/liveUpdates.js';
 import { Account } from './components/Account.jsx';
 import { AdministratorDashboard } from './components/AdministratorDashboard.jsx';
 import { ArchivedOrders } from './components/ArchivedOrders.jsx';
@@ -137,6 +138,65 @@ export default function App() {
   const [success, setSuccess] = useState(null);
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
+  const [liveRevision, setLiveRevision] = useState(0);
+  const [liveMessage, setLiveMessage] = useState('');
+  const liveState = useRef(null);
+  liveState.current = { account, enquiries, orders, notifications };
+
+  useEffect(() => {
+    if (!account || account.forcePasswordChange || appStatus !== 'ready') return undefined;
+    const currentAccountId = account.id;
+    const same = (before, after) => JSON.stringify(before) === JSON.stringify(after);
+    const polling = startWorkspacePolling({
+      updates: createWorkspaceUpdates(services),
+      available: () => document.visibilityState !== 'hidden' && globalThis.navigator?.onLine !== false,
+      capture: () => liveState.current,
+      canApply: before => {
+        const current = liveState.current;
+        return current.account?.id === currentAccountId
+          && before.account === current.account && before.orders === current.orders
+          && before.enquiries === current.enquiries && before.notifications === current.notifications
+          && !document.querySelector('[role="dialog"], [data-live-editing="true"]');
+      },
+      apply: snapshot => {
+        // Do not reset RFQ drafts, typed form values, settings, filters or scroll.
+        const previous = liveState.current;
+        if (!snapshot.account || snapshot.account.forcePasswordChange) {
+          setAccount(snapshot.account); setEnquiries([]); setOrders([]); setNotifications([]); setAuditEvents([]);
+          setView(snapshot.account ? 'settings' : 'home');
+          return;
+        }
+        if (snapshot.account.id !== currentAccountId) return;
+        if (!same(previous.account, snapshot.account)) {
+          setAccount(snapshot.account);
+          setView(current => normaliseViewForRole(snapshot.account.role, current));
+        }
+        if (!same(previous.enquiries, snapshot.enquiries)) setEnquiries(snapshot.enquiries);
+        if (!same(previous.orders, snapshot.orders)) setOrders(snapshot.orders);
+        if (!same(previous.notifications, snapshot.notifications)) setNotifications(snapshot.notifications);
+        setAuditEvents(current => same(current, snapshot.auditEvents) ? current : snapshot.auditEvents);
+        setLiveRevision(value => value + 1);
+      },
+      onError: error => {
+        if ([401, 403].includes(error?.status)) {
+          polling.stop();
+          setAccount(null); setEnquiries([]); setOrders([]); setNotifications([]); setAuditEvents([]);
+          setAccessError('Your session or access changed. Please sign in again.');
+        } else setLiveMessage('Automatic updates are delayed. Your work is kept; reconnecting automatically.');
+      },
+      onSuccess: () => setLiveMessage(''),
+    });
+    const resume = () => polling.refresh();
+    document.addEventListener('visibilitychange', resume);
+    window.addEventListener('online', resume);
+    window.addEventListener('focus', resume);
+    return () => {
+      polling.stop();
+      document.removeEventListener('visibilitychange', resume);
+      window.removeEventListener('online', resume);
+      window.removeEventListener('focus', resume);
+    };
+  }, [account?.id, account?.role, account?.forcePasswordChange, appStatus]);
 
   useEffect(() => {
     let active = true;
@@ -568,7 +628,7 @@ export default function App() {
 
   const markNotificationRead = async notificationId => {
     const updated = await services.notifications.markRead(notificationId);
-    setNotifications(current => current.map(notification => notification.id === updated.id ? updated : notification));
+    setNotifications(current => current.map(notification => notification.id === updated.id ? { ...notification, ...updated } : notification));
     return updated;
   };
 
@@ -908,9 +968,10 @@ export default function App() {
         {__PUBLIC_PREVIEW__ && SHOW_PREVIEW_NAVIGATION && <div className="platform-preview-banner"><span><strong>{PREVIEW_CONTEXT.product}</strong> {PREVIEW_CONTEXT.platform}</span><a href={PREVIEW_CONTEXT.executiveDemo ? '../../' : './'}>All previews</a></div>}
         <AppHeader account={account} onNavigate={navigate} onBack={detailView ? backFromDetail : null} backLabel={view === 'settings' ? 'Settings' : view === 'configurator' ? 'Product configuration' : selectedProduct?.code || 'Catalogue'} theme={document.documentElement.dataset.theme || theme} onToggleTheme={toggleTheme} serviceMode={services.mode} preview={PREVIEW_CONTEXT} showThemeToggle={!isCustomerExperience} personalisation={isCustomerExperience ? customerPersonalisation : null} />
         <main className="app-main">
+          {liveMessage && <p className="operations-message" role="status">{liveMessage}</p>}
           {isStaff ? (
             <>
-              {view === 'administration' && <AdministratorDashboard account={account} administrationActions={services.administration} serviceMode={services.mode} onOpenManagement={() => navigate('expeditor')} onOpenAudit={() => navigate('audit')} onOpenArchive={() => navigate('archive')} onRecordsChanged={refreshAfterManagementAction} />}
+              {view === 'administration' && <AdministratorDashboard refreshToken={liveRevision} account={account} administrationActions={services.administration} serviceMode={services.mode} onOpenManagement={() => navigate('expeditor')} onOpenAudit={() => navigate('audit')} onOpenArchive={() => navigate('archive')} onRecordsChanged={refreshAfterManagementAction} />}
               {view === 'load-order' && <RepresentativeOrderLoader actions={services.representativeOrders} maxDocumentBytes={services.preview.maxRepresentativeOrderDocumentBytes} onCreated={representativeOrderCreated} onClose={() => navigate('expeditor')} />}
               {view === 'expeditor' && (accountCan(account, PERMISSIONS.VIEW_ASSIGNED_RFQS)
                 && notificationTarget?.entityType !== 'order'
@@ -926,12 +987,12 @@ export default function App() {
                     : isDispatchWorkspace
                       ? <DispatchDashboard account={account} orders={orders} onAction={performWorkflowAction} serviceMode={services.mode} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} documentActions={orderDocumentActions} />
                     : isManagementWorkspace
-                      ? <ManagementDashboard account={account} managementActions={services.management} serviceMode={services.mode} onRecordsChanged={refreshAfterManagementAction} onOpenAudit={() => navigate('audit')} />
+                      ? <ManagementDashboard refreshToken={liveRevision} account={account} managementActions={services.management} serviceMode={services.mode} onRecordsChanged={refreshAfterManagementAction} onOpenAudit={() => navigate('audit')} />
                       : <OperationalDashboard account={account} enquiries={staffRecords} onAction={performWorkflowAction} canUpdate={canPerformWorkflow} serviceMode={services.mode} planningOptions={planningOptions} expeditingOptions={expeditingOptions} dispatchOptions={dispatchOptions} focusRecordId={notificationTarget?.entityId} documentActions={orderDocumentActions} />)}
-              {view === 'technical' && <TechnicalSupportWorkspace account={account} actions={services.technicalSupport} onChanged={refreshTechnicalRecords} focusRecordId={notificationTarget?.entityId} />}
+              {view === 'technical' && <TechnicalSupportWorkspace refreshToken={liveRevision} account={account} actions={services.technicalSupport} onChanged={refreshTechnicalRecords} focusRecordId={notificationTarget?.entityId} />}
               {view === 'clients' && <ClientVisitsDashboard account={account} actions={services.clientVisits} serviceMode={services.mode} />}
               {view === 'notifications' && <Notifications notifications={notifications} preferences={notificationPreferences} onMarkRead={markNotificationRead} onMarkAllRead={markAllNotificationsRead} onSavePreferences={saveNotificationPreferences} onOpenNotification={openNotificationRecord} onRetryDelivery={retryNotificationDelivery} canRetryDelivery={accountCan(account, PERMISSIONS.RETRY_NOTIFICATION_DELIVERY)} serviceMode={services.mode} />}
-              {view === 'archive' && <ArchivedOrders account={account} archiveActions={services.archive} serviceMode={services.mode} onRecordsChanged={refreshAfterRetentionAction} />}
+              {view === 'archive' && <ArchivedOrders refreshToken={liveRevision} account={account} archiveActions={services.archive} serviceMode={services.mode} onRecordsChanged={refreshAfterRetentionAction} />}
               {view === 'audit' && <AuditTrail events={auditEvents} serviceMode={services.mode} />}
               {view === 'account' && <Account account={account} enquiries={staffRecords} onSignOut={signOut} serviceMode={services.mode} onOpenSettings={() => navigate('settings')} credentialActions={services.mode === 'mock' ? services.credentials : null} onCredentialChanged={finishCredentialChange} />}
               {view === 'settings' && <Settings account={account} initialValue={userSettings} notificationPreferences={notificationPreferences} serviceMode={services.mode} credentialActions={services.mode === 'mock' ? services.credentials : null} onChangeTemporaryPassword={services.mode === 'api' ? services.auth.changePassword : null} onCredentialChanged={finishCredentialChange} onSwitchWorkspace={switchWorkspace} onSignOut={signOut} onSave={saveUserSettings} onSaveNotifications={saveNotificationPreferences} onReset={resetUserSettings} onReplayTutorial={replayTutorial} onTestSound={value => provideFeedback(value, 'success', 'success')} onTestHaptic={value => triggerHaptic(value, 'success')} onClose={() => navigate('account')} />}

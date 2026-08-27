@@ -1,5 +1,9 @@
 # Phase 21 notification architecture
 
+## Server-backed acknowledgement and refresh
+
+See [live updates and notifications](LIVE_UPDATES_AND_NOTIFICATIONS.md) for migration 019's recipient-only UPDATE policy, transactional read audit events, order-aware links and 30-second authenticated revision checks. Partial acknowledgement responses preserve notification content in the UI. Cross-recipient updates remain denied; polling does not supply authorization or create notifications.
+
 `src/domain/notifications.js` defines events and delivery records; service implementations decide recipients only after a successful workflow transaction. React reads the notification service and cannot fabricate a workflow event.
 
 Phase 21 adds recipient-scoped events for Laboratory receipt/progress/release, certificate upload, QA entry/failure/rework/reinspection/pass, receipt from Laboratory, and Dispatch physical receipt. Customer wording excludes technical blame and internal notes. Representatives receive their assigned records; Expediting and department users receive relevant queues; management receives only permissions-backed summaries.

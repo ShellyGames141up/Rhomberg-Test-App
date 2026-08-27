@@ -589,6 +589,7 @@ export function createApiServices(config = {}) {
 
   return {
     mode: 'api',
+    updates: { getRevision: () => client.get('/workspace/updates') },
     initialize: refreshCsrfToken,
     auth,
     accounts,

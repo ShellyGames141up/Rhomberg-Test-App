@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createFixture, ids, login } from './fixtures.js';
+import { createFixture, ids, login, FABRICATED_PASSWORD } from './fixtures.js';
 
 const mutate=(app,auth,method,url,payload)=>app.inject({method,url,headers:{cookie:auth.cookie,'x-csrf-token':auth.csrf},payload});
 
@@ -10,7 +10,7 @@ test('Administrator lifecycle changes are authoritative, audited and revoke disa
   const target=repository._state.users.find(user=>user.id===ids.representativeUser);
   const updated=await mutate(app,admin,'PATCH',`/api/v1/administration/users/${target.id}`,{values:{contact:'Fabricated Updated Representative',email:target.email,signInName:'fabricated.rep',branchId:'fabricated-branch'},reason:'Fabricated lifecycle validation'});
   assert.equal(updated.statusCode,200); assert.equal(target.displayName,'Fabricated Updated Representative');
-  const roles=await mutate(app,admin,'POST',`/api/v1/admin/users/${target.id}/roles`,{roles:['sales_representative','manager'],reason:'Fabricated role validation'});
+  const roles=await mutate(app,admin,'POST',`/api/v1/admin/users/${target.id}/roles`,{roles:['sales_representative','manager'],reason:'Fabricated role validation',verification:FABRICATED_PASSWORD});
   assert.equal(roles.statusCode,200); assert.deepEqual(target.roles,['sales_representative','manager']);
   const status=await mutate(app,admin,'PUT',`/api/v1/administration/users/${target.id}/status`,{status:'disabled',reason:'Fabricated disable validation'});
   assert.equal(status.statusCode,200); assert.equal(target.status,'disabled');

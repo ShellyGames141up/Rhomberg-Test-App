@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { notFound } from '../errors.js';
 
 const clone = value => structuredClone(value);
@@ -14,6 +14,12 @@ export function createMemoryRepository(seed = {}) {
     locations: clone(seed.locations || []), technicalRequests: clone(seed.technicalRequests || []), appointments: clone(seed.appointments || []), catalogueOverrides: new Map(), profileImages: new Map(), idempotency: new Map(),
   };
 
+  // Explicit test-fixture role definitions; never used by the production API.
+  const roleDefaults = roles => [...new Set(roles.flatMap(role => seed.rolePermissions?.[role] || []))];
+  const refreshPermissions = user => {
+    user.rolePermissions = roleDefaults(user.roles);
+    user.permissions = [...new Set([...user.rolePermissions, ...(user.additionalPermissions || [])])].filter(code => !(user.deniedPermissions || []).includes(code));
+  };
   const actorForUser = user => ({
     id: user.id, username: user.username || null, email: user.email, contact: user.displayName, displayName: user.displayName,
     status: user.status, identityProvider: user.identityProvider || 'local_password',
@@ -82,7 +88,7 @@ export function createMemoryRepository(seed = {}) {
       const users = state.users.filter(user => !user.deletedAt && user.roles.some(role => role !== 'customer')).map(user => ({
         id: user.id, contact: user.displayName, displayName: user.displayName, email: user.email,
         signInName: user.username, username: user.username, role: user.roles[0], roles: [...user.roles],
-        permissions: [...user.permissions], company: 'Internal', category: 'internal', department: '', branchId: '',
+        permissions: [...user.permissions], rolePermissions: roleDefaults(user.roles), additionalPermissions: user.additionalPermissions || [], deniedPermissions: user.deniedPermissions || [], company: 'Internal', category: 'internal', department: '', branchId: '',
         status: user.status, lastLoginAt: user.lastLoginAt || null, createdAt: user.createdAt || null,
         loginHistoryCount: 0, notificationPreferences: {},
       }));
@@ -90,8 +96,8 @@ export function createMemoryRepository(seed = {}) {
         summary: { users: users.length, customerCompanies: 0, internalAccounts: users.length, auditEvents: state.audits.length },
         users, companies: [], representatives: [], branches: [], departments: [], accountStatuses: ['active', 'disabled', 'archived'],
         authenticationTypes: ['password'], activationMethods: ['administrator_temporary_password'], correctionRecords: [], archivedRecords: [],
-        roles: [{ id: 'sales_representative', label: 'Sales representative', permissions: ['view_assigned_rfqs'] }, { id: 'manager', label: 'Manager', permissions: ['view_all_rfqs'] }],
-        permissions: [], catalogue: { categories: [], products: [] }, configurations: {},
+        roles: Object.entries(seed.rolePermissions || {}).map(([id, permissions]) => ({ id, label: id, permissions })),
+        permissions: [...new Set(Object.values(seed.rolePermissions || {}).flat())], catalogue: { categories: [], products: [] }, configurations: {},
       });
     },
     async createInternalUser(actor, command) {
@@ -105,7 +111,7 @@ export function createMemoryRepository(seed = {}) {
         const error = new Error('That sign-in name or email is already in use.'); error.code = 'CONFLICT'; error.statusCode = 409; throw error;
       }
       const createdAt = new Date().toISOString();
-      state.users.push({ id: command.id, username: command.username, email: command.email, displayName: command.displayName, passwordHash: command.passwordHash, mustChangePassword: true, status: 'active', identityProvider: 'local_password', roles: [command.role], permissions: [], companyIds: [] });
+      state.users.push({ id: command.id, username: command.username, email: command.email, displayName: command.displayName, passwordHash: command.passwordHash, mustChangePassword: true, status: 'active', identityProvider: 'local_password', roles: [...new Set([command.role, ...(command.additionalRoles || [])])], permissions: roleDefaults([command.role, ...(command.additionalRoles || [])]), companyIds: [] });
       state.audits.push({ id: state.audits.length + 1, eventType: 'administrator.internal_user_created', actorUserId: actor.id, actorRole: actor.role, companyId: null, action: 'create_internal_user', entityType: 'user', entityId: command.id, outcome: 'success', correlationId: command.correlationId, details: { role: command.role }, createdAt });
       return clone({ id: command.id, username: command.username, email: command.email, displayName: command.displayName, role: command.role, status: 'active', createdAt });
     },
@@ -132,12 +138,24 @@ export function createMemoryRepository(seed = {}) {
       if(!actor.permissions.includes('administer_users')) { const error=new Error('You are not authorised to perform this action.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }
       const user=state.users.find(item=>item.id===userId); if(!user) throw notFound('The account was not found.');
       if(userId===actor.id && ['status','archive','roles','permissions','temporary_password'].includes(operation)) { const error=new Error('Self security changes are prohibited.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }
+      if (['roles','permissions'].includes(operation) && user.roles.some(role => ['customer','administrator'].includes(role))) {
+        const error = new Error('Protected account roles and permissions cannot be changed here.'); error.code='FORBIDDEN'; error.statusCode=403; throw error;
+      }
       if(operation==='update') Object.assign(user,{displayName:payload.displayName || user.displayName,username:payload.username || user.username,email:payload.email || user.email,phone:payload.phone ?? user.phone,department:payload.department ?? user.department,branchId:payload.branchId ?? user.branchId});
       if(operation==='status') { if(!['active','disabled'].includes(payload.status)) { const error=new Error('Invalid account status.'); error.code='VALIDATION_ERROR'; error.statusCode=422; throw error; } user.status=payload.status; }
       if(operation==='archive') user.status='archived';
       if(operation==='branch') user.branchId=payload.branchId || '';
-      if(operation==='roles') { if(!Array.isArray(payload.roles) || !payload.roles.length || payload.roles.some(role=>['administrator','customer'].includes(role))) { const error=new Error('Invalid role assignment.'); error.code='VALIDATION_ERROR'; error.statusCode=422; throw error; } user.roles=[...new Set(payload.roles)]; }
-      if(operation==='permissions') user.permissions=[...new Set(payload.permissions || [])];
+      if(operation==='roles') { if(!Array.isArray(payload.roles) || !payload.roles.length || payload.roles.some(role=>['administrator','customer'].includes(role))) { const error=new Error('Invalid role assignment.'); error.code='VALIDATION_ERROR'; error.statusCode=422; throw error; } user.roles=[...new Set(payload.roles)]; refreshPermissions(user); }
+      if(operation==='permissions') {
+        const defaults = roleDefaults(user.roles);
+        const requested = [...new Set(payload.permissions || [])];
+        if (requested.some(code => !Object.values(seed.rolePermissions || {}).flat().includes(code))) {
+          const error=new Error('Protected or unknown permission.'); error.code='FORBIDDEN'; error.statusCode=403; throw error;
+        }
+        user.additionalPermissions = requested.filter(code => !defaults.includes(code));
+        user.deniedPermissions = defaults.filter(code => !requested.includes(code));
+        refreshPermissions(user);
+      }
       if(operation==='notification_preferences') state.notificationPreferences.set(userId,{preferences:clone(payload.preferences || {}),updated_at:new Date().toISOString()});
       if(operation==='temporary_password') { user.passwordHash=payload.passwordHash; user.mustChangePassword=true; user.status='active'; state.sessions.filter(session=>session.userId===userId).forEach(session=>{session.revokedAt=new Date().toISOString();}); }
       state.audits.push({id:state.audits.length+1,eventType:'administrator.user_changed',actorUserId:actor.id,actorRole:actor.role,companyId:null,action:`admin_${operation}`,entityType:'user',entityId:userId,outcome:'success',correlationId,details:{operation,reason:payload.reason || ''},createdAt:new Date().toISOString()});
@@ -190,18 +208,27 @@ export function createMemoryRepository(seed = {}) {
       return clone(row);
     },
     async listNotifications(actor) { return clone(state.notifications.filter(item => item.recipientUserId === actor.id)); },
-    async markNotificationRead(actor, notificationId) {
+    async markNotificationRead(actor, notificationId, correlationId) {
       const item = state.notifications.find(notification => notification.id === notificationId && notification.recipientUserId === actor.id);
       if (!item) throw notFound('The notification was not found.');
-      item.readAt ||= new Date().toISOString();
+      if (!item.readAt) {
+        item.readAt = new Date().toISOString();
+        state.audits.push({ eventType: 'notification.read', actorUserId: actor.id, action: 'mark_notification_read', entityId: item.id, correlationId, createdAt: item.readAt });
+      }
       return clone({ id: item.id, readAt: item.readAt });
     },
-    async markAllNotificationsRead(actor) {
+    async markAllNotificationsRead(actor, correlationId) {
       let updated = 0;
       for (const item of state.notifications.filter(notification => notification.recipientUserId === actor.id && !notification.readAt)) {
         item.readAt = new Date().toISOString(); updated += 1;
       }
-      return { updated };
+      if (updated) state.audits.push({ eventType: 'notification.all_read', actorUserId: actor.id, action: 'mark_all_notifications_read', details: { updatedCount: updated }, correlationId, createdAt: new Date().toISOString() });
+      return { updated, updatedCount: updated };
+    },
+    async getWorkspaceRevision(actor) {
+      const own = state.notifications.filter(item => item.recipientUserId === actor.id);
+      const records = [...await this.listEnquiries(actor), ...await this.listOrders(actor)];
+      return { revision: createHash('sha256').update(JSON.stringify({ id: actor.id, roles: actor.roles, permissions: actor.permissions, own, records })).digest('hex'), intervalSeconds: 30 };
     },
     async retryNotificationDelivery(actor,notificationId,deliveryId,correlationId){const item=state.notifications.find(notification=>notification.id===notificationId);if(!item||(!actor.permissions.includes('retry_notification_delivery')&&item.recipientUserId!==actor.id))throw notFound('The notification delivery was not found.');const delivery=(item.deliveries||[]).find(x=>x.id===deliveryId);if(!delivery)throw notFound('The notification delivery was not found.');delivery.status=delivery.channel==='in_app'?'in_app':`${delivery.channel}_pending`;delivery.attempts=Number(delivery.attempts||0)+1;delivery.lastAttemptAt=new Date().toISOString();state.audits.push({id:state.audits.length+1,eventType:'notification.delivery_retry_requested',actorUserId:actor.id,actorRole:actor.role,action:'retry_notification_delivery',entityType:'notification',entityId:notificationId,outcome:'success',correlationId,details:{deliveryId,channel:delivery.channel},createdAt:new Date().toISOString()});return clone(delivery);},
     async listAuditEvents(actor) {

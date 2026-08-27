@@ -124,7 +124,7 @@ export function WorkflowActionPanel({
   };
 
   return (
-    <div className="expeditor-update-box">
+    <div className="expeditor-update-box" data-live-editing={Boolean(note || Object.keys(actionData).length || isSaving)}>
       <div className="panel-index"><span>↻</span><div><strong>{title}</strong><small>{description}</small></div></div>
       {availableActions.length > 1 ? (
         <label className="form-field"><span>Available action</span><select value={actionId} onChange={event => { setSelectedAction(event.target.value); setActionData({}); setFieldErrors({}); setError(''); }}>{availableActions.map(option => <option key={option.action} value={option.action}>{option.label}{option.toStatus ? ` → ${statusById(option.toStatus, record.workflowType).label}` : ''}</option>)}</select></label>

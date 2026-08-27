@@ -10,6 +10,9 @@ test('runtime grants validate approved functions before revoking existing access
   const firstRevokeIndex = sql.indexOf('REVOKE ALL ON SCHEMA app');
   assert.ok(preflightIndex >= 0, 'missing approved-function preflight');
   assert.ok(firstRevokeIndex > preflightIndex, 'runtime privileges must not be revoked before preflight');
+  assert.ok(sql.indexOf("to_regclass('app.user_permission_denials')") < firstRevokeIndex, 'migration 018 must be present before revoking access');
+  const notificationPolicyIndex = sql.indexOf("policyname='notifications_recipient_update'");
+  assert.ok(notificationPolicyIndex >= 0 && notificationPolicyIndex < firstRevokeIndex, 'migration 019 must be present before revoking access');
 });
 
 test('runtime grants use the explicit catalogue allowlist and verify every execute permission', async () => {

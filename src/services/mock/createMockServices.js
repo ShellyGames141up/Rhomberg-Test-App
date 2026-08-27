@@ -5053,6 +5053,9 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       },
       users: accountRecords.map(item => ({
         ...toPublicAccount(item),
+        rolePermissions: [...new Set((item.roles || [item.role]).flatMap(permissionsForRole))],
+        additionalPermissions: item.additionalPermissions || [],
+        deniedPermissions: item.deniedPermissions || [],
         category: item.authRealm === 'customer' ? 'customer' : 'internal',
         profileImageUrl: readUserProfileImages()[item.id]?.dataUrl || '',
         loginHistoryCount: readUserLoginHistory().filter(event => event.userId === item.id).length,
@@ -5071,6 +5074,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       accountStatuses: [...ACCOUNT_STATUSES],
       authenticationTypes: [...AUTHENTICATION_TYPES],
       activationMethods: [...ACTIVATION_METHODS],
+      permissions: [...new Set(Object.values(USER_ROLES).filter(role => ![USER_ROLES.CUSTOMER, USER_ROLES.ADMINISTRATOR].includes(role)).flatMap(permissionsForRole))],
       roles: Object.values(USER_ROLES).map(role => ({
         id: role,
         label: role.replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase()),
@@ -5186,13 +5190,16 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       verifyHighRiskAdministration(actor, input.verification);
       if (accountId === actor.id) throw new ServiceError('A second authorised administrator must change your roles.', { code: 'SELF_ROLE_CHANGE_BLOCKED', status: 409 });
       const requested = [...new Set(Array.isArray(input.roles) ? input.roles : [])];
-      if (!requested.length || requested.some(role => !Object.values(USER_ROLES).includes(role) || role === USER_ROLES.CUSTOMER)) throw new ServiceError('Choose at least one valid internal role.', { code: 'ACCOUNT_ROLE_INVALID', status: 422 });
+      if (!requested.length || requested.some(role => !Object.values(USER_ROLES).includes(role) || [USER_ROLES.CUSTOMER, USER_ROLES.ADMINISTRATOR].includes(role))) throw new ServiceError('Choose at least one valid internal role.', { code: 'ACCOUNT_ROLE_INVALID', status: 422 });
       const accountRecords = readAccounts();
       const index = accountRecords.findIndex(item => item.id === accountId && item.authRealm === 'internal');
       if (index < 0) throw new ServiceError('The internal account was not found.', { code: 'ACCOUNT_NOT_FOUND', status: 404 });
       const current = accountRecords[index];
       const previousValue = { roles: current.roles || [current.role] };
-      accountRecords[index] = { ...current, role: requested[0], roles: requested, labRoles: requested.filter(role => role.startsWith('laboratory_')), permissions: undefined, updatedAt: now().toISOString() };
+      if ((current.roles || [current.role]).includes(USER_ROLES.ADMINISTRATOR)) throw new ServiceError('The Administrator account is protected.', { code: 'FORBIDDEN', status: 403 });
+      const inherited = [...new Set(requested.flatMap(permissionsForRole))];
+      const permissions = [...new Set([...inherited, ...(current.additionalPermissions || [])])].filter(code => !(current.deniedPermissions || []).includes(code));
+      accountRecords[index] = { ...current, role: requested[0], roles: requested, labRoles: requested.filter(role => role.startsWith('laboratory_')), permissions, updatedAt: now().toISOString() };
       writeAccounts(accountRecords);
       administrationAudit({ actor, action: 'administration.user_roles_changed', entityType: 'user', entityId: accountId, companyId: current.companyId, previousValue, newValue: { roles: requested }, fieldsChanged: ['roles'], reason });
       return toPublicAccount(accountRecords[index]);
@@ -5490,10 +5497,12 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       if (index < 0) throw new ServiceError('The internal account was not found.', { code: 'ACCOUNT_NOT_FOUND', status: 404 });
       const requested = [...new Set(Array.isArray(input.permissions) ? input.permissions : [])];
       if (requested.some(permission => !Object.values(PERMISSIONS).includes(permission))) throw new ServiceError('One or more permissions are invalid.', { code: 'PERMISSION_INVALID', status: 422 });
-      const required = [PERMISSIONS.ACCESS_INTERNAL_WORKSPACE];
-      const nextPermissions = [...new Set([...required, ...requested])];
+      const inherited = [...new Set((accountRecords[index].roles || [accountRecords[index].role]).flatMap(permissionsForRole))];
+      const assignable = new Set(Object.values(USER_ROLES).filter(role => ![USER_ROLES.CUSTOMER, USER_ROLES.ADMINISTRATOR].includes(role)).flatMap(permissionsForRole));
+      if (accountRecords[index].role === USER_ROLES.ADMINISTRATOR || requested.some(code => !assignable.has(code))) throw new ServiceError('Protected Administrator permissions cannot be assigned here.', { code: 'FORBIDDEN', status: 403 });
+      const nextPermissions = requested;
       const previousValue = { permissions: toPublicAccount(accountRecords[index]).permissions };
-      accountRecords[index] = { ...accountRecords[index], permissions: nextPermissions, updatedAt: now().toISOString() };
+      accountRecords[index] = { ...accountRecords[index], permissions: nextPermissions, additionalPermissions: requested.filter(code => !inherited.includes(code)), deniedPermissions: inherited.filter(code => !requested.includes(code)), updatedAt: now().toISOString() };
       writeAccounts(accountRecords);
       administrationAudit({ actor, action: 'administration.account_permissions_changed', entityType: 'user', entityId: accountId, companyId: accountRecords[index].companyId, previousValue, newValue: { permissions: nextPermissions }, fieldsChanged: ['permissions'], reason });
       return toPublicAccount(accountRecords[index]);

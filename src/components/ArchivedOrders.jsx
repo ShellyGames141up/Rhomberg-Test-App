@@ -17,7 +17,7 @@ const downloadBase64Pdf = document => {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
-export function ArchivedOrders({ account, archiveActions, serviceMode, onRecordsChanged }) {
+export function ArchivedOrders({ account, archiveActions, serviceMode, onRecordsChanged, refreshToken = 0 }) {
   const [records, setRecords] = useState([]);
   const [policy, setPolicy] = useState(null);
   const [search, setSearch] = useState('');
@@ -41,7 +41,7 @@ export function ArchivedOrders({ account, archiveActions, serviceMode, onRecords
 
   useEffect(() => {
     load().catch(loadError => setError(loadError.message || 'Archive records could not be loaded.'));
-  }, []);
+  }, [refreshToken]);
 
   const filtered = useMemo(() => filterArchiveRecords(records, {
     search,

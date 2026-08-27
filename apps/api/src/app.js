@@ -161,7 +161,7 @@ export async function buildApp({ config, repository, storage, identityProvider, 
     logger: logger ? {
       level: config.logLevel,
       redact: {
-        paths: ['req.headers.authorization', 'req.headers.cookie', 'req.headers.x-csrf-token', 'res.headers.set-cookie', 'body.password', 'body.currentPassword', 'body.newPassword', '*.password', '*.currentPassword', '*.newPassword', '*.sessionToken', '*.csrfToken', '*.databaseUrl'],
+        paths: ['req.headers.authorization', 'req.headers.cookie', 'req.headers.x-csrf-token', 'res.headers.set-cookie', 'body.verification', '*.verification', 'body.password', 'body.currentPassword', 'body.newPassword', '*.password', '*.currentPassword', '*.newPassword', '*.sessionToken', '*.csrfToken', '*.databaseUrl'],
         censor: '[REDACTED]',
       },
       ...(logStream ? { stream: logStream } : {}),
@@ -176,7 +176,7 @@ export async function buildApp({ config, repository, storage, identityProvider, 
     : createUnconfiguredExternalIdentityProvider());
   const authService = createAuthService({ repository, identityProvider: resolvedIdentityProvider, config });
   const enquiryService = createEnquiryService({ repository, storage });
-  const administrationService = createAdministrationService({ repository, storage });
+  const administrationService = createAdministrationService({ repository, storage, identityProvider: resolvedIdentityProvider });
   const publicReferenceService = createPublicReferenceService();
   const registrationService = createRegistrationService({ repository, publicReferenceService });
   const phase1WorkspaceService = createPhase1WorkspaceService({ repository, maxUploadBytes: config.maxUploadBytes });
@@ -364,8 +364,12 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   app.get('/api/v1/orders/:id/workflow-actions', { preHandler: requireAuthentication }, async request => ({ data: await workflowService.allowed(request.actor,'order',request.params.id), meta: { requestId: request.id } }));
   app.post('/api/v1/orders/:id/workflow-actions', { preHandler: requireCsrf }, async request => ({ data: await workflowService.perform(request.actor,'order',request.params.id,request.body || {},request.id), meta: { requestId: request.id } }));
   app.get('/api/v1/notifications', { preHandler: requireAuthentication }, async request => ({ data: await phase1WorkspaceService.listNotifications(request.actor), meta: { requestId: request.id } }));
-  app.post('/api/v1/notifications/:id/read', { preHandler: requireCsrf }, async request => ({ data: await phase1WorkspaceService.markNotificationRead(request.actor, request.params.id), meta: { requestId: request.id } }));
-  app.post('/api/v1/notifications/read-all', { preHandler: requireCsrf }, async request => ({ data: await phase1WorkspaceService.markAllNotificationsRead(request.actor), meta: { requestId: request.id } }));
+  app.post('/api/v1/notifications/:id/read', { preHandler: requireCsrf }, async request => ({ data: await phase1WorkspaceService.markNotificationRead(request.actor, request.params.id, request.id), meta: { requestId: request.id } }));
+  app.post('/api/v1/notifications/read-all', { preHandler: requireCsrf }, async request => ({ data: await phase1WorkspaceService.markAllNotificationsRead(request.actor, request.id), meta: { requestId: request.id } }));
+  app.get('/api/v1/workspace/updates', { preHandler: requireAuthentication }, async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    return { data: await phase1WorkspaceService.getWorkspaceRevision(request.actor), meta: { requestId: request.id } };
+  });
   app.post('/api/v1/notifications/:notificationId/deliveries/:deliveryId/retry', { preHandler: requireCsrf }, async request => ({data:await repository.retryNotificationDelivery(request.actor,request.params.notificationId,request.params.deliveryId,request.id),meta:{requestId:request.id}}));
   app.get('/api/v1/audit-events', { preHandler: requireAuthentication }, async request => {
     if (!request.actor.permissions.includes(PERMISSIONS.ADMINISTER_USERS) && !request.actor.permissions.includes(PERMISSIONS.READ_AUDIT_HISTORY)) requirePermission(request.actor, PERMISSIONS.READ_AUDIT_HISTORY);
@@ -549,9 +553,9 @@ export async function buildApp({ config, repository, storage, identityProvider, 
     preHandler: requireCsrf,
     schema: { body: { type:'object', additionalProperties:false, required:['reason'], properties:{ reason:{type:'string',minLength:8,maxLength:1000} } } },
   }, async request => ({ data: await administrationService.deleteUser(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
-  app.post('/api/v1/admin/users/:accountId/roles', { preHandler: requireCsrf }, async request => ({ data: await administrationService.assignRoles(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
+  app.post('/api/v1/admin/users/:accountId/roles', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } }, preHandler: requireCsrf }, async request => ({ data: await administrationService.assignRoles(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
   app.post('/api/v1/admin/users/:accountId/branch', { preHandler: requireCsrf }, async request => ({ data: await administrationService.assignBranch(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
-  app.put('/api/v1/administration/users/:accountId/permissions', { preHandler: requireCsrf }, async request => ({ data: await administrationService.setPermissions(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
+  app.put('/api/v1/administration/users/:accountId/permissions', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } }, preHandler: requireCsrf }, async request => ({ data: await administrationService.setPermissions(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
   app.put('/api/v1/administration/users/:accountId/notification-preferences', { preHandler: requireCsrf }, async request => ({ data: await administrationService.setNotificationPreferences(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
   app.patch('/api/v1/administration/catalogue/:kinds/:itemId', { preHandler: requireCsrf }, async request=>{requirePermission(request.actor,'manage_products');const kind=String(request.params.kinds||'').replace(/s$/,'');if(!['category','product'].includes(kind))throw validationError({kind:'Choose a supported catalogue record type.'});if(String(request.body?.reason||'').trim().length<5)throw validationError({reason:'Record why the catalogue information is changing.'});return{data:await repository.saveCatalogueOverride(request.actor,kind,request.params.itemId,request.body||{},request.id),meta:{requestId:request.id}};});
   app.post('/api/v1/administration/workflow-records/:recordId/corrections', { preHandler: requireCsrf }, async request=>{requirePermission(request.actor,'correct_approved_records');if(String(request.body?.reason||'').trim().length<10)throw validationError({reason:'Record a detailed correction reason.'});if(!request.body?.values||!Object.keys(request.body.values).length)throw validationError({values:'Enter at least one approved correction.'});return{data:await repository.manageRecord(request.actor,request.params.recordId,'correction',request.body,request.id),meta:{requestId:request.id}};});

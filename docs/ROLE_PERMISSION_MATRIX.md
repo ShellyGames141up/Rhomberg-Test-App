@@ -1,5 +1,16 @@
 # Role and preview access matrix
 
+## Server-side inheritance
+
+For API mode, the active database roles, role_permissions and permissions are
+authoritative. Migration 018 computes the union of all assigned active role
+defaults plus explicit user grants, minus explicit user restrictions. Adding a
+role requires no separate permission assignment. Removing it removes only its
+exclusive defaults, preserving permissions supplied by another role.
+Administrator/customer roles and protected administrative permissions cannot be
+assigned through ordinary employee editing. See
+[role/permission correction](ROLE_PERMISSION_INHERITANCE_FIX.md).
+
 ## Application surface authority
 
 `src/shared/platform/applicationAccess.js` is the single normal-route device-access authority. Customer, Sales Representative, Expeditor and Manager are active on Desktop and Mobile. Planning, Dispatch, Laboratory roles, QA roles, Technical Advisor, Technical Director, Sales Manager, Company Owner and Administrator are active on Desktop only. Buyer is Desktop prepared/inactive. This surface matrix does not replace the permission matrix below; service permissions still decide which records and workflow actions an authenticated account may use.

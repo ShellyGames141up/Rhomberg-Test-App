@@ -598,6 +598,7 @@ export const toPublicAccount = account => {
 
 export const friendlyServiceError = (error, fallback = 'Something went wrong. Please try again.') => {
   if (error instanceof ServiceError) {
+    if (error.code === 'ADMIN_VERIFICATION_FAILED') return 'Administrator password confirmation failed. No changes were saved.';
     if (error.status === 401) return 'Your session has ended. Please sign in again.';
     if (error.status === 403) return 'You do not have permission to complete this action.';
     if (error.status >= 500) return error.code === 'NETWORK_ERROR'

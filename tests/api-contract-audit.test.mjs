@@ -18,6 +18,7 @@ test('API contract audit covers every active API-mode frontend contract', async 
     'GET /enquiries',
     'GET /orders',
     'GET /notifications',
+    'GET /workspace/updates',
     'GET /users/me/notification-preferences',
     'GET /users/me/settings',
     'GET /administration/overview',

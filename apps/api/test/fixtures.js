@@ -15,6 +15,12 @@ export const ids = Object.freeze({
 export async function createFixture({ configOverrides = {}, logger = false, logStream } = {}) {
   const passwordHash = await hashPassword(FABRICATED_PASSWORD);
   const repository = createMemoryRepository({
+    rolePermissions: {
+      planning: ['access_internal_workspace','read_catalogue','view_planning_queue','add_planning_information','submit_to_expediting'],
+      dispatch: ['access_internal_workspace','read_catalogue','view_dispatch_queue','confirm_delivery','confirm_collection'],
+      sales_representative: ['access_internal_workspace','read_catalogue','view_assigned_rfqs'],
+      manager: ['access_internal_workspace','view_all_rfqs','view_all_orders'],
+    },
     companies: [{ id: ids.companyA, name: 'Fabricated Company A', area: 'Gauteng', branchId: 'johannesburg' }, { id: ids.companyB, name: 'Fabricated Company B', area: 'Western Cape', branchId: 'cape-town' }],
     users: [
       { id: ids.customerA, email: 'customer.a@example.invalid', displayName: 'Fabricated Customer A', passwordHash, status: 'active', roles: ['customer'], permissions: ['create_rfq', 'view_own_company_rfqs', 'read_document_metadata'], companyIds: [ids.companyA] },

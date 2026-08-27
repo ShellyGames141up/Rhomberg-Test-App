@@ -1,4 +1,5 @@
 import { validationError } from '../errors.js';
+import { EXPEDITOR_PROGRESS_STEPS, REQUIRED_EXPEDITOR_STEP_IDS, EXPEDITOR_DOCUMENT_TYPES } from '../domain/expeditingOptions.js';
 
 const clone = value => structuredClone(value);
 const isObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -65,8 +66,12 @@ export function createPhase1WorkspaceService({ repository, maxUploadBytes }) {
     },
     listOrders: actor => repository.listOrders(actor),
     listNotifications: actor => repository.listNotifications(actor),
-    markNotificationRead: (actor, id) => repository.markNotificationRead(actor, id),
-    markAllNotificationsRead: actor => repository.markAllNotificationsRead(actor),
+    markNotificationRead: (actor, id, correlationId) => {
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))) throw validationError({ notification: 'Choose a valid notification.' });
+      return repository.markNotificationRead(actor, id, correlationId);
+    },
+    markAllNotificationsRead: (actor, correlationId) => repository.markAllNotificationsRead(actor, correlationId),
+    getWorkspaceRevision: actor => repository.getWorkspaceRevision(actor),
     listAuditEvents: actor => repository.listAuditEvents(actor),
     async getNotificationPreferences(actor) {
       const row = await repository.getNotificationPreferences(actor);
@@ -97,9 +102,9 @@ export function createPhase1WorkspaceService({ repository, maxUploadBytes }) {
       return { users: [{ id: actor.id, name: actor.contact, displayName: actor.contact }], locations, priorities: ['standard', 'high', 'urgent'] };
     },
     getExpeditingOptions: () => ({
-      progressSteps: ['planning_received','materials_checked','materials_ordered','awaiting_materials','materials_received','production_started','assembly_in_progress','calibration_or_testing','quality_check','paperwork_preparation','ready_for_dispatch','on_hold','cancelled'].map(id => ({ id, label: id.replaceAll('_',' ').replace(/\b\w/g, character => character.toUpperCase()) })),
-      requiredStepIds: ['planning_received','materials_checked','production_started','quality_check','paperwork_preparation','ready_for_dispatch'],
-      documentTypes: ['progress_photo','supplier_confirmation','quality_record','supporting_document'], approachingCompletionDays: 3,
+      progressSteps: clone(EXPEDITOR_PROGRESS_STEPS),
+      requiredStepIds: [...REQUIRED_EXPEDITOR_STEP_IDS],
+      documentTypes: clone(EXPEDITOR_DOCUMENT_TYPES), approachingCompletionDays: 3,
     }),
     getDispatchOptions: () => ({ methods: ['collection', 'company_delivery', 'courier', 'third_party_delivery'], proofTypes: ['delivery_note', 'proof_of_delivery', 'collection_confirmation'], maxProofBytes: maxUploadBytes }),
     getLaboratoryOptions: () => ({ certificationTypes: ['SANAS', 'Traceable'], releaseDestinations: ['expediting', 'dispatch'], maxCertificateBytes: maxUploadBytes }),

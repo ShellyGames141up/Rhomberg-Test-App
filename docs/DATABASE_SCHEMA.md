@@ -1,5 +1,9 @@
 # Phase 21 database schema guide
 
+## Notification acknowledgement migration 019
+
+`019_notification_read_access.sql` adds `notifications_recipient_update` for UPDATE with USING/WITH CHECK `recipient_user_id=app.current_user_id()`. It complements the existing SELECT policy and restricted column grants; no public or cross-recipient update access is added. Runtime-grant preflight checks the policy before revoking privileges. Read/read-all audit events commit in the same transaction as acknowledgement. The live revision endpoint is a read-only RLS-scoped query; it adds no tables or database grants.
+
 ## First-login credential boundary
 
 ## Customer onboarding and Dedicated Representative relationship
@@ -83,3 +87,16 @@ The executable migration chain now extends the Phase 1 baseline with:
 ### PostgreSQL client-serialization audit
 
 The PostgreSQL repository was audited for `Promise.all`, `Promise.allSettled`, parallel array mapping and equivalent patterns around checked-out clients. All statements inside one `inTransaction` callback are sequential. The three service-layer `Promise.all` calls operate through independent repository methods, each of which checks out its own pool connection, so those independent operations remain safely parallel. A serial-only client regression test fails immediately if a repository method again attempts concurrent queries on one transaction client.
+# Role inheritance amendment — migration 018
+
+The executable API migration adds `app.user_permission_denials`: composite
+primary key `(user_id, permission_code)`, foreign keys to users/permissions and
+the acting Administrator, `denied_at` and nullable `revoked_at`. RLS permits
+own/admin reads; runtime writes are forbidden outside the guarded function.
+
+`user_roles_one_active_idx` uniquely constrains active `(user_id, role_code)`
+assignments while preserving revoked history. `administer_user` serialises edits
+by locking the target user and audits before/after state. Effective permissions
+are role defaults plus explicit grants minus denials in both the API session
+projection and `establish_request_context`; company scoping remains unchanged.
+See [migration and security details](ROLE_PERMISSION_INHERITANCE_FIX.md).

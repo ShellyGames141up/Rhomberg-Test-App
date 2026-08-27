@@ -1224,6 +1224,32 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/Notification' }
                   meta: { $ref: '#/components/schemas/PageMeta' }
+  /workspace/updates:
+    get:
+      operationId: getWorkspaceRevision
+      summary: Poll an opaque caller-scoped change token every 30 seconds
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: RLS-scoped token only; changed tokens trigger existing authorised reads
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [revision, intervalSeconds]
+                    properties:
+                      revision: { type: string, pattern: '^[a-f0-9]{64}$' }
+                      intervalSeconds: { type: integer, const: 30 }
+        '401':
+          $ref: '#/components/responses/ApiError'
   /notifications/{notificationId}/read:
     post:
       operationId: markNotificationRead
@@ -1237,14 +1263,19 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         '200':
-          description: Notification marked as read
+          description: Own-recipient idempotent acknowledgement; merge into existing notification
           content:
             application/json:
               schema:
                 type: object
                 required: [data]
                 properties:
-                  data: { $ref: '#/components/schemas/Notification' }
+                  data:
+                    type: object
+                    required: [id, readAt]
+                    properties:
+                      id: { type: string, format: uuid }
+                      readAt: { type: string, format: date-time }
         '404':
           $ref: '#/components/responses/ApiError'
   /notifications/read-all:
@@ -1264,10 +1295,10 @@ paths:
                 properties:
                   data:
                     type: object
-                    required: [updatedCount, readAt]
+                    required: [updatedCount, updated]
                     properties:
                       updatedCount: { type: integer, minimum: 0 }
-                      readAt: { type: string, format: date-time }
+                      updated: { type: integer, minimum: 0, description: Compatibility alias for updatedCount }
   /users/me/notification-preferences:
     get:
       operationId: getNotificationPreferences

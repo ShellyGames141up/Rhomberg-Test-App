@@ -1,5 +1,37 @@
 # Client visit and location API contract
 
+## Workspace refresh and notification acknowledgement
+
+`GET /api/v1/workspace/updates` requires a valid session and returns `{data:{revision:"<opaque SHA-256>",intervalSeconds:30},meta:{requestId:"<UUID>"}}` with `Cache-Control: no-store`. The token reflects only caller-authorised data and permissions; clients fetch through existing services when it changes. It conveys no additional access.
+
+`POST /notifications/{notificationId}/read` requires session + CSRF and returns `{data:{id,readAt}}`; clients merge the acknowledgement. Other recipients' IDs return 404, invalid UUIDs return 422. Read-all returns `{data:{updatedCount,updated}}`; both counts are equal. Changes are audited transactionally. See [implementation and operating limits](LIVE_UPDATES_AND_NOTIFICATIONS.md).
+
+## Administrator role/permission amendment (migration 018)
+
+Existing endpoints (prefix `/api/v1`):
+
+- `POST /admin/users/{accountId}/roles`: `roles` is a nonempty array of active,
+  permitted internal role codes.
+- `PUT /administration/users/{accountId}/permissions`: `permissions` is the
+  desired effective permission array (empty is permitted); the server derives
+  additions/restrictions relative to assigned-role defaults.
+- Both require `reason` (minimum 8 characters), private `verification` password
+  confirmation, authenticated Administrator session and valid CSRF. Never log
+  or persist `verification`. These routes are rate-limited.
+- Success returns `data: {id, operation, status}` plus request metadata. The
+  client refreshes Administration Overview after a successful change.
+- Overview user records now include `permissions`, `rolePermissions`,
+  `additionalPermissions` and `deniedPermissions`. Its top-level `permissions`
+  lists permitted assignable codes, not a browser-invented catalogue.
+- Invalid details return 422; protected targets/escalation/failed password
+  confirmation return 403; missing accounts return 404; conflicts return 409.
+  Errors are visible in the open confirmation dialog.
+
+Example non-secret selection: `roles: ["planning", "dispatch"]`. Credentials are
+supplied only interactively; no credential example is stored here. The next
+authenticated request derives the new permissions from database state, preserving
+company isolation and RLS. See [the correction](ROLE_PERMISSION_INHERITANCE_FIX.md).
+
 This supplements the canonical `docs/api/openapi.yaml`. Production endpoints must enforce permissions and Representative/customer scope server-side.
 
 - `GET /representatives/clients`

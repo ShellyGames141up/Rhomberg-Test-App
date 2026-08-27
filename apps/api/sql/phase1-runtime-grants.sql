@@ -32,6 +32,12 @@ DECLARE
   ];
   missing_signatures text[];
 BEGIN
+  IF to_regclass('app.user_permission_denials') IS NULL THEN
+    RAISE EXCEPTION 'Apply migration 018 before runtime grants; existing privileges have not been changed.';
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='app' AND tablename='notifications' AND policyname='notifications_recipient_update') THEN
+    RAISE EXCEPTION 'Apply migration 019 before runtime grants; existing privileges have not been changed.';
+  END IF;
   SELECT array_agg(required_signature ORDER BY required_signature)
   INTO missing_signatures
   FROM unnest(required_signatures) AS required_signature
@@ -75,6 +81,7 @@ GRANT SELECT ON
   app.technical_support_messages,
   app.locations,
   app.platform_policies
+  ,app.user_permission_denials
   ,app.user_permission_grants
   ,app.user_profile_images
   ,app.client_appointments

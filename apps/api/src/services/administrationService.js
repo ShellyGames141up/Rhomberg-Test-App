@@ -1,12 +1,24 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { validationError } from '../errors.js';
+import { validationError, ApiError } from '../errors.js';
 import { hashPassword } from '../security/crypto.js';
 import { requirePermission } from '../authorization/permissions.js';
 
 const usernamePattern = /^[A-Za-z][A-Za-z0-9._-]{2,39}$/;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function createAdministrationService({ repository, storage, passwordHasher = hashPassword }) {
+export function createAdministrationService({ repository, storage, identityProvider, passwordHasher = hashPassword }) {
+  async function validateSecurityChange(actor, input, field) {
+    requirePermission(actor, 'administer_users');
+    const values = input?.[field];
+    const errors = {};
+    if (!Array.isArray(values) || values.length > 500 || values.some(value => typeof value !== 'string' || !/^[a-z][a-z0-9_]*$/.test(value)) || field === 'roles' && !values.length) errors[field] = 'Select valid ' + field + '.';
+    if (typeof input?.reason !== 'string' || input.reason.trim().length < 8 || input.reason.length > 1000) errors.reason = 'Explain this change in 8–1000 characters.';
+    if (typeof input?.verification !== 'string' || !input.verification || input.verification.length > 256) errors.verification = 'Enter your current Administrator password.';
+    if (Object.keys(errors).length) throw validationError(errors);
+    const verified = await identityProvider?.authenticate({ identifier: actor.username || actor.email, password: input.verification });
+    if (!verified || verified.id !== actor.id) throw new ApiError('ADMIN_VERIFICATION_FAILED', 'Administrator password confirmation failed. No changes were saved.', 403);
+    return { [field]: [...new Set(values)], reason: input.reason.trim() };
+  }
   return Object.freeze({
     async createInternalUser(actor, input, correlationId) {
       const displayName = String(input.displayName || '').trim();
@@ -74,9 +86,9 @@ export function createAdministrationService({ repository, storage, passwordHashe
     updateStatus(actor,userId,input,correlationId) { requirePermission(actor,'administer_users'); return repository.administerUser(actor,userId,'status',{status:String(input?.status || ''),reason:String(input?.reason || '')},correlationId); },
     archiveUser(actor,userId,input,correlationId) { requirePermission(actor,'administer_users'); if(String(input?.reason || '').trim().length<5) throw validationError({reason:'Record why this employee account is being archived.'}); return repository.administerUser(actor,userId,'archive',input,correlationId); },
     deleteUser(actor,userId,input,correlationId) { requirePermission(actor,'administer_users'); if(String(input?.reason || '').trim().length<8) throw validationError({reason:'Record why this account is being deleted.'}); return repository.softDeleteUser(actor,userId,{reason:String(input.reason).trim()},correlationId); },
-    assignRoles(actor,userId,input,correlationId) { requirePermission(actor,'administer_users'); return repository.administerUser(actor,userId,'roles',{roles:[...new Set(input?.roles || [])],reason:String(input?.reason || '')},correlationId); },
+    async assignRoles(actor,userId,input,correlationId) { return repository.administerUser(actor,userId,'roles',await validateSecurityChange(actor,input,'roles'),correlationId); },
     assignBranch(actor,userId,input,correlationId) { requirePermission(actor,'administer_users'); if(!String(input?.branchId || '').trim()) throw validationError({branchId:'Select a branch.'}); return repository.administerUser(actor,userId,'branch',input,correlationId); },
-    setPermissions(actor,userId,input,correlationId) { requirePermission(actor,'administer_users'); return repository.administerUser(actor,userId,'permissions',{permissions:[...new Set(input?.permissions || [])],reason:String(input?.reason || '')},correlationId); },
+    async setPermissions(actor,userId,input,correlationId) { return repository.administerUser(actor,userId,'permissions',await validateSecurityChange(actor,input,'permissions'),correlationId); },
     setNotificationPreferences(actor,userId,input,correlationId) { requirePermission(actor,'administer_users'); return repository.administerUser(actor,userId,'notification_preferences',{preferences:input?.preferences || {},reason:String(input?.reason || '')},correlationId); },
     async resetTemporaryPassword(actor,userId,input,correlationId) {
       requirePermission(actor,'administer_users'); if(String(input?.reason || '').trim().length<5) throw validationError({reason:'Record why the login is being reset.'});
