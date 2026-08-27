@@ -1,6 +1,8 @@
 import { validationError } from '../errors.js';
+import { validateQuotation } from '../domain/quotation.js';
 import { QA_PROBLEM_CATEGORIES, QA_SEVERITIES, QA_REWORK_DESTINATIONS } from '../domain/qualityOptions.js';
 import { EXPEDITOR_PROGRESS_STEPS } from '../domain/expeditingOptions.js';
+import { DISPATCH_ACTIONS } from '../domain/dispatchWorkflow.js';
 
 const definitions=Object.freeze({
   rfq:Object.freeze({
@@ -27,6 +29,9 @@ const definitions=Object.freeze({
     start_qa_rework:{from:['qa_failed'],to:'returned_to_expediting',permission:'manage_qa_rework',label:'Start Corrective Work'},
     resubmit_to_qa:{from:['returned_to_expediting'],to:'qa_reinspection_required',permission:'manage_qa_rework',label:'Resubmit to QA'},
     release_qa_order:{from:['qa_passed'],to:'awaiting_dispatch',permission:'release_qa_order',label:'Send to Dispatch'},
+    confirm_dispatch_receipt:{from:['awaiting_dispatch'],to:'__same__',permission:'view_dispatch_queue',label:'Confirm Received in Dispatch'},
+    confirm_lab_receipt_dispatch:{from:['awaiting_lab_receipt_dispatch'],to:'awaiting_dispatch',permission:'view_dispatch_queue',label:'Confirm receipt from laboratory'},
+    report_delivery_problem:{from:['out_for_delivery'],to:'__same__',permission:'confirm_delivery',label:'Report Delivery Problem'},
     mark_ready_for_collection:{from:['awaiting_dispatch'],to:'ready_for_collection',permission:'confirm_collection',label:'Mark Ready for Collection'},
     start_delivery:{from:['awaiting_dispatch'],to:'out_for_delivery',permission:'confirm_delivery',label:'Mark Out for Delivery'},
     confirm_collection:{from:['ready_for_collection'],to:'collected',permission:'confirm_collection',label:'Confirm Collected'},
@@ -67,9 +72,14 @@ function validate(action,input) {
   return data;
 }
 
-export function createWorkflowService({ repository }) {
+export function createWorkflowService({ repository, storage }) {
   const actionsForRecord = (actor, entityType, record) => Object.entries(definitions[entityType])
-    .filter(([, definition]) => definition.from.includes(record.trackingStatus) && has(actor, definition.permission))
+    .filter(([action, definition]) => definition.from.includes(record.trackingStatus) && has(actor, definition.permission)
+      && (!DISPATCH_ACTIONS.includes(action) || actor.permissions.includes('view_dispatch_queue'))
+      && (action !== 'confirm_dispatch_receipt' || !record.dispatch?.receivedAt)
+      && (!['mark_ready_for_collection','start_delivery'].includes(action) || Boolean(record.dispatch?.receivedAt))
+      && (!['mark_ready_for_collection','confirm_collection','complete_collection'].includes(action) || record.fulfilment === 'collect')
+      && (!['start_delivery','confirm_delivery','complete_delivery','report_delivery_problem'].includes(action) || record.fulfilment === 'delivery'))
     .map(([action, definition]) => ({ action, label: definition.label, toStatus: definition.to, permission: definition.permission }));
 
   const enrich = (actor, entityType, record) => ({
@@ -83,10 +93,26 @@ export function createWorkflowService({ repository }) {
       const record=entityType==='rfq' ? await repository.getEnquiry(actor,id) : await repository.getOrder(actor,id);
       return actionsForRecord(actor, entityType, record);
     },
-    async perform(actor,entityType,id,input,correlationId) {
+    async perform(actor,entityType,id,input,correlationId,attachment = null) {
       const definition=definitions[entityType]?.[String(input?.action || '')];
       if (!definition || !has(actor,definition.permission)) { const error=new Error('You are not authorised to perform this workflow action.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }
-      const result = await repository.performWorkflowAction(actor,{entityType,id,action:input.action,definition,data:validate(input.action,input),comment:String(input.comment || input.data?.comment || input.data?.reason || '').trim(),correlationId});
+      if (DISPATCH_ACTIONS.includes(input.action) && !actor.permissions.includes('view_dispatch_queue')) { const error=new Error('Dispatch access is required.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }
+      const data = validate(input.action,input);
+      if (input.action === 'mark_quoted') data.quotation = validateQuotation(data.quotation);
+      const acceptsDocument = entityType === 'rfq' ? ['mark_quoted','accept_order'].includes(input.action) : DISPATCH_ACTIONS.includes(input.action) && !input.action.includes('receipt');
+      if (attachment && !acceptsDocument) throw validationError({ document: 'This action does not accept a document.' });
+      if (attachment && entityType === 'order') {
+        if (!data.dispatchUpdate?.proofOfDelivery) throw validationError({ dispatchProofType: 'Select the type of Dispatch proof being uploaded.' });
+        data.dispatchUpdate.proofOfDelivery.reference ||= attachment.originalName;
+      }
+      let document; let result;
+      try {
+        document = attachment ? await storage.put(attachment) : null;
+        result = await repository.performWorkflowAction(actor,{entityType,id,action:input.action,definition,data,document,comment:String(input.comment || input.data?.comment || input.data?.reason || '').trim(),correlationId});
+      } catch (error) {
+        if (document) await storage.remove(document.storageKey).catch(() => undefined);
+        throw error;
+      }
       return {
         ...result,
         ...(result.enquiry ? { enquiry: enrich(actor, 'rfq', result.enquiry) } : {}),

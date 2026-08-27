@@ -3,9 +3,27 @@ import { requirePermission } from '../authorization/permissions.js';
 import { averageHours, buildOperationalStatistics, reportRecord } from '../domain/operationalStatistics.js';
 import { QA_PROBLEM_CATEGORIES, QA_SEVERITIES, QA_REWORK_DESTINATIONS } from '../domain/qualityOptions.js';
 import { EXPEDITOR_PROGRESS_STEPS, REQUIRED_EXPEDITOR_STEP_IDS, EXPEDITOR_DOCUMENT_TYPES } from '../domain/expeditingOptions.js';
+import { DISPATCH_METHODS, DISPATCH_PROOF_TYPES } from '../domain/dispatchWorkflow.js';
+import { buildSalesPerformanceAnalytics, formatDurationDaysHours, resolveManagementPeriod } from '../domain/salesAnalytics.js';
+import { MANAGEMENT_REPORT_SECTIONS, generateManagementPdfReport } from '../domain/managementReports.js';
 
 const clone = value => structuredClone(value);
 const isObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const commercialAccess = actor => ['company_owner','sales_manager'].some(role => (actor.roles || [actor.role]).includes(role)) && actor.permissions.includes('view_commercial_analytics');
+
+function reportOptions(input = {}) {
+  const errors = {};
+  if (input.periodMode && !['last_31_days','date_range','rolling_months'].includes(input.periodMode)) errors.periodMode = 'Select a supported period.';
+  if (input.rollingMonths !== undefined && (!Number.isInteger(Number(input.rollingMonths)) || Number(input.rollingMonths) < 1 || Number(input.rollingMonths) > 60)) errors.rollingMonths = 'Select 1 to 60 months.';
+  if (input.periodMode === 'date_range') {
+    for (const key of ['startDate','endDate']) if (!/^\d{4}-\d{2}-\d{2}$/.test(input[key] || '') || !Number.isFinite(Date.parse(input[key])) || new Date(input[key]).toISOString().slice(0,10) !== input[key]) errors[key] = 'Enter a valid date.';
+    if (input.startDate > input.endDate) errors.startDate = 'Start date must not follow end date.';
+  }
+  const sections = input.sections || MANAGEMENT_REPORT_SECTIONS.map(item => item.id);
+  if (!Array.isArray(sections) || !sections.length || sections.some(id => !MANAGEMENT_REPORT_SECTIONS.some(item => item.id === id))) errors.sections = 'Select approved report sections.';
+  if (Object.keys(errors).length) throw validationError(errors);
+  return { ...input, periodMode: input.periodMode || 'last_31_days', sections };
+}
 
 const notificationPreferences = Object.freeze({
   schemaVersion: 1,
@@ -109,7 +127,7 @@ export function createPhase1WorkspaceService({ repository, maxUploadBytes, clock
       requiredStepIds: [...REQUIRED_EXPEDITOR_STEP_IDS],
       documentTypes: clone(EXPEDITOR_DOCUMENT_TYPES), approachingCompletionDays: 3,
     }),
-    getDispatchOptions: () => ({ methods: ['collection', 'company_delivery', 'courier', 'third_party_delivery'], proofTypes: ['delivery_note', 'proof_of_delivery', 'collection_confirmation'], maxProofBytes: maxUploadBytes }),
+    getDispatchOptions: () => ({ methods: DISPATCH_METHODS, proofTypes: DISPATCH_PROOF_TYPES, maxProofBytes: maxUploadBytes }),
     getLaboratoryOptions: () => ({ certificationTypes: ['SANAS', 'Traceable'], releaseDestinations: ['expediting', 'dispatch'], maxCertificateBytes: maxUploadBytes }),
     getQualityOptions: () => ({ problemCategories: clone(QA_PROBLEM_CATEGORIES), severities: clone(QA_SEVERITIES), reworkDestinations: clone(QA_REWORK_DESTINATIONS) }),
     getLocations: actor => repository.listLocations(actor),
@@ -134,7 +152,23 @@ export function createPhase1WorkspaceService({ repository, maxUploadBytes, clock
     listTechnicalRequests: actor => repository.listTechnicalRequests(actor),
     async getManagementDashboard(actor, filters = {}) {
       if (!actor.permissions.includes('view_reports')) requirePermission(actor, 'view_all_orders');
-      const [rfqs, orders] = await Promise.all([repository.listEnquiries(actor, { forReporting: true }), repository.listOrders(actor, { forReporting: true })]);
+      const options = reportOptions(filters);
+      const period = resolveManagementPeriod(options, clock());
+      const [allRfqs, allOrders] = await Promise.all([repository.listEnquiries(actor, { forReporting: true }), repository.listOrders(actor, { forReporting: true })]);
+      const sourceById = new Map(allRfqs.map(item => [item.id, item]));
+      for (const order of allOrders) if (order.sourceRfqId) order.sourceRfqReference = sourceById.get(order.sourceRfqId)?.reference || order.sourceRfqId;
+      const scope = item => (!options.representativeId || options.representativeId === 'all' || item.selectedRep?.id === options.representativeId)
+        && (!options.branchId || options.branchId === 'all' || item.selectedRep?.branchId === options.branchId);
+      const inPeriod = item => { const timestamp = Date.parse(item.createdAt); if (!Number.isFinite(timestamp)) return false; const date = new Date(timestamp).toISOString().slice(0,10); return date >= period.startDate && date <= period.endDate; };
+      const filtered = Boolean(options.periodMode || options.rollingMonths);
+      const rfqs = allRfqs.filter(scope).filter(item => !filtered || inPeriod(item));
+      const orders = allOrders.filter(scope).filter(item => !filtered || inPeriod(item));
+      let salesPerformance = { authorised: false };
+      if (commercialAccess(actor)) {
+        const values = new Map((await repository.listCommercialQuotations(actor)).map(item => [item.id, item.quotation]));
+        const inputs = [...allRfqs, ...allOrders].map(item => ({ ...item, quotation: values.get(item.id) || item.quotation }));
+        salesPerformance = buildSalesPerformanceAnalytics(inputs, { ...options, now: clock() });
+      }
       const audits = actor.permissions.includes('read_audit_history') ? await repository.listAuditEvents(actor) : [];
       const records = [...rfqs, ...orders];
       const group = (items, selector) => [...items.reduce((map, item) => {
@@ -157,7 +191,7 @@ export function createPhase1WorkspaceService({ repository, maxUploadBytes, clock
         .map(item => ({ ...reportRecord(item), ageDays: Math.max(0,Math.floor((now-new Date(item.updatedAt || item.createdAt || now))/86400000)) }))
         .sort((left,right) => right.ageDays-left.ageDays);
       return {
-        generatedAt: now.toISOString(),
+        generatedAt: now.toISOString(), period,
         metrics: {
           openRfqs: rfqs.filter(item => !terminalRfqs.has(item.trackingStatus)).length,
           awaitingRepresentativeAction: rfqs.filter(item => ['assigned_to_rep','under_rep_review'].includes(item.trackingStatus)).length,
@@ -172,7 +206,7 @@ export function createPhase1WorkspaceService({ repository, maxUploadBytes, clock
           completed: orders.filter(item => item.trackingStatus === 'completed').length,
           archived: orders.filter(item => item.trackingStatus === 'archived').length,
           emergency: activeOrders.filter(item => item.priority === 'urgent' || item.emergency === 'yes').length,
-          averageStageHours: stageHours, averageStageDuration: `${stageHours} hours`,
+          averageStageHours: stageHours, averageStageDuration: formatDurationDaysHours(stageHours),
         },
         records: visibleRecords.map(reportRecord), ageing,
         recentActivity: audits.slice(0, 20).map(event => ({ id: event.id, eventType: event.eventType, action: event.action, timestamp: event.timestamp || event.createdAt, actingUser: typeof event.actingUser === 'string' ? event.actingUser : event.actingUser?.displayName || 'System' })),
@@ -180,12 +214,31 @@ export function createPhase1WorkspaceService({ repository, maxUploadBytes, clock
         ordersByBranch: group(orders, item => item.selectedRep?.branchName),
         ordersByStatus: group(orders, item => item.trackingStatus),
         phase21: buildOperationalStatistics(rfqs, orders, now),
-        salesPerformance: { authorised: false },
+        salesPerformance,
         filters: {
           statuses: [...new Set(records.map(item => item.trackingStatus).filter(Boolean))].sort(),
           branches: [...new Map(records.filter(item => item.selectedRep?.branchId).map(item => [item.selectedRep.branchId,{ id:item.selectedRep.branchId,name:item.selectedRep.branchName || item.selectedRep.branchId }])).values()].sort((left,right) => left.name.localeCompare(right.name)),
         },
       };
+    },
+    async getPerformanceReportOptions(actor) {
+      requirePermission(actor, 'export_management_pdf');
+      if (!commercialAccess(actor)) { const error = new Error('Restricted management reporting is not authorised.'); error.code = 'FORBIDDEN'; error.statusCode = 403; throw error; }
+      const records = [...await repository.listEnquiries(actor, { forReporting: true }), ...await repository.listOrders(actor, { forReporting: true })];
+      return {
+        representatives: [...new Map(records.filter(item => item.selectedRep?.id).map(item => [item.selectedRep.id, item.selectedRep])).values()],
+        branches: [...new Map(records.filter(item => item.selectedRep?.branchId).map(item => [item.selectedRep.branchId, { id:item.selectedRep.branchId, name:item.selectedRep.branchName || item.selectedRep.branchId }])).values()],
+        rollingMonthOptions: [1,3,6,12,24,36], sections: MANAGEMENT_REPORT_SECTIONS,
+      };
+    },
+    async createPerformanceReport(actor, input, correlationId) {
+      requirePermission(actor, 'export_management_pdf');
+      if (!commercialAccess(actor)) { const error = new Error('Restricted management reporting is not authorised.'); error.code = 'FORBIDDEN'; error.statusCode = 403; throw error; }
+      const options = reportOptions(input);
+      const dashboard = await service.getManagementDashboard(actor, options);
+      const bytesBase64 = await generateManagementPdfReport({ dashboard, options, generatedAt: dashboard.generatedAt, generatedBy: actor.contact || actor.displayName || 'Authorised manager', roleLabel: actor.role.replaceAll('_',' ') });
+      await repository.appendAudit({ eventType:'management.pdf_exported',actorUserId:actor.id,actorRole:actor.role,action:'export_management_pdf',entityType:'report',entityId:correlationId,outcome:'success',correlationId,details:{recordCount:dashboard.records.length,sections:options.sections,period:dashboard.period} });
+      return { bytesBase64, mimeType:'application/pdf', period: dashboard.period, fileName:`rhomberg-management-${dashboard.period.startDate}-to-${dashboard.period.endDate}.pdf` };
     },
     async listArchivedOrders(actor) {
       const orders = await repository.listOrders(actor);

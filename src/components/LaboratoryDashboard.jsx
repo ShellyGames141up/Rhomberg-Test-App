@@ -33,7 +33,7 @@ export function LaboratoryDashboard({ account, orders = [], laboratoryActions, o
         setMessage('Replacement certificate saved with full version history.');
       } else if (laboratoryActions.uploadCertificatesBatch) {
         await laboratoryActions.uploadCertificatesBatch(order.id, entries);
-        setMessage(`${entries.length} certificate${entries.length === 1 ? '' : 's'} uploaded successfully. Authorised users can now access ${entries.length === 1 ? 'it' : 'them'}.`);
+        setMessage(`${entries.length} certificate${entries.length === 1 ? '' : 's'} uploaded successfully. Customer downloads remain subject to document security checks.`);
       } else {
         for (const entry of entries) await laboratoryActions.uploadCertificate(order.id, entry.unitId, entry);
         setMessage(`${entries.length} certificate${entries.length === 1 ? '' : 's'} uploaded successfully.`);
@@ -63,11 +63,21 @@ export function LaboratoryDashboard({ account, orders = [], laboratoryActions, o
       onOpenUpload={(unit = null, replace = false) => { setError(''); setMessage(''); setUploadPanel({ preferredUnitId: unit?.id || '', replace }); }}
       onCloseUpload={() => setUploadPanel(null)}
       onSubmitUpload={submitCertificates}
+      onDownload={async unit => {
+        setError('');
+        try {
+          const result = await laboratoryActions.downloadCertificate(unit.certificateId);
+          const href = result.downloadUrl || result.dataUrl;
+          if (!href) throw new Error('The certificate download is not available.');
+          const link = document.createElement('a'); link.href = href; link.download = result.fileName || `${unit.certificateNumber}.pdf`;
+          document.body.appendChild(link); link.click(); link.remove();
+        } catch (cause) { setError(friendlyServiceError(cause)); }
+      }}
     />}
   </section>;
 }
 
-function LaboratoryOrderDetail({ order, account, uploadPanel, onBack, onOpenUpload, onCloseUpload, onSubmitUpload }) {
+function LaboratoryOrderDetail({ order, account, uploadPanel, onBack, onOpenUpload, onCloseUpload, onSubmitUpload, onDownload }) {
   const units = order.laboratory.units.filter(unit => laboratoryManagerCanHandle(account, unit.certificationType));
   const pendingUnits = units.filter(unit => !unit.certificateId);
   return <div className="laboratory-order-detail">
@@ -78,7 +88,7 @@ function LaboratoryOrderDetail({ order, account, uploadPanel, onBack, onOpenUplo
     <div className="lab-unit-list">{units.map(unit => {
       const item = order.items.find(value => (value.lineId || value.id) === unit.lineItemId);
       const recipient = unit.certificateRecipientSnapshot || item?.certificateRecipientSnapshot;
-      return <article key={unit.id} className="lab-unit-card"><div className="lab-unit-heading"><div><span>Unit {unit.unitNumber} of {unit.quantityInLine}</span><h3>{unit.productCode} · {unit.productName}</h3></div><b className={unit.certificateId ? 'complete' : ''}>{status(unit)}</b></div><ConfiguredUnitDetails unit={item || unit} context="Laboratory" extra={{ physicalUnit: `Unit ${unit.unitNumber}`, certificateType: unit.certificationType, serialNumber: unit.serialNumber || 'Pending', certificateNumber: unit.certificateNumber || 'Pending' }} /><div className="certificate-recipient-review"><strong>Certificate Recipient</strong><span>{recipient?.recipientType === 'customer_company' ? 'My Company' : 'My Client'}</span><span>{recipient?.recipientName || 'Recipient snapshot pending'}</span><span>{recipient?.recipientAddress || 'Address pending'}</span></div><button className={unit.certificateId ? 'secondary-button' : 'primary-button'} onClick={() => onOpenUpload(unit, Boolean(unit.certificateId))}>{unit.certificateId ? 'Replace Certificate' : 'Upload Certificate'}</button>{unit.certificateVersions?.length > 0 && <small>{unit.certificateVersions.length} superseded version(s) preserved in audit history.</small>}</article>;
+      return <article key={unit.id} className="lab-unit-card"><div className="lab-unit-heading"><div><span>Unit {unit.unitNumber} of {unit.quantityInLine}</span><h3>{unit.productCode} · {unit.productName}</h3></div><b className={unit.certificateId ? 'complete' : ''}>{status(unit)}</b></div><ConfiguredUnitDetails unit={item || unit} context="Laboratory" extra={{ physicalUnit: `Unit ${unit.unitNumber}`, certificateType: unit.certificationType, serialNumber: unit.serialNumber || 'Pending', certificateNumber: unit.certificateNumber || 'Pending' }} /><div className="certificate-recipient-review"><strong>Certificate Recipient</strong><span>{recipient?.recipientType === 'customer_company' ? 'My Company' : 'My Client'}</span><span>{recipient?.recipientName || 'Recipient snapshot pending'}</span><span>{recipient?.recipientAddress || 'Address pending'}</span></div><div className="form-actions"><button className={unit.certificateId ? 'secondary-button' : 'primary-button'} onClick={() => onOpenUpload(unit, Boolean(unit.certificateId))}>{unit.certificateId ? 'Replace Certificate' : 'Upload Certificate'}</button>{unit.certificateId && <button type="button" className="secondary-button" onClick={() => onDownload(unit)}>Download Certificate</button>}</div>{unit.certificateVersions?.length > 0 && <small>{unit.certificateVersions.length} superseded version(s) preserved in audit history.</small>}</article>;
     })}</div>
   </div>;
 }

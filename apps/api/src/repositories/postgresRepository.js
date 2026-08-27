@@ -1,11 +1,15 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { notFound } from '../errors.js';
 import { qualityProjection } from '../domain/qualityProjection.js';
+import { quotationProjection } from '../domain/quotation.js';
+import { applyDispatchAction, dispatchProjection, DISPATCH_ACTIONS } from '../domain/dispatchWorkflow.js';
+import { requirePermission } from '../authorization/permissions.js';
 
 const json = value => JSON.stringify(value ?? {});
 
 function expeditingProjection(details = {}, actor) {
   const customer = actor?.role === 'customer';
+  const laboratory = customer && details.laboratory ? { status: details.laboratory.status, completedAt: details.laboratory.completedAt, units: (details.laboratory.units || []).map(unit => Object.fromEntries(['id','orderId','lineItemId','productId','productCode','productName','unitNumber','quantityInLine','certificationType','certificateId','certificateNumber','certificateIssueDate','certificateStatus','serialNumber','status','certificateUploadedAt'].map(key => [key, unit[key]]))) } : details.laboratory;
   const updates = (details.expeditingUpdates || []).map((item, index) => ({
     id: item.id || `expediting-${index}`, progressStep: item.progressStep,
     customerMessage: item.customerMessage, createdAt: item.createdAt,
@@ -14,7 +18,9 @@ function expeditingProjection(details = {}, actor) {
   }));
   const last = updates.at(-1);
   return {
-    details: customer ? { ...details, qualityUpdates: undefined, qualityAssurance: undefined, expeditingUpdates: updates } : details,
+    details: customer ? { ...details, laboratory, qualityUpdates: undefined, qualityAssurance: undefined, expeditingUpdates: updates, dispatch: dispatchProjection(details, actor).dispatch, dispatchUpdates: undefined } : details,
+    laboratory,
+    ...dispatchProjection(details, actor),
     ...(!customer ? { qualityAssurance: qualityProjection(details), internalJobNumber: details.planning?.internalJobNumber || '', salesOrderNumber: details.planning?.salesOrderNumber || '' } : {}),
     expediting: { updates, currentStep: last?.progressStep || '', estimatedCompletionDate: last?.estimatedCompletionDate || details.planning?.estimatedCompletionDate || '', currentDelayReason: last?.delayReason || '' },
   };
@@ -111,7 +117,7 @@ async function loadActor(client, user, databaseSessionTokenHash = '') {
   return { ...actorFromRows(user, roles.rows, permissions.rows, companies.rows, representative.rows[0]), databaseSessionTokenHash };
 }
 
-function mapEnquiry(row, items = [], documents = []) {
+function mapEnquiry(row, items = [], documents = [], actor = { role: 'customer' }) {
   return {
     id: row.id,
     reference: row.reference,
@@ -132,8 +138,13 @@ function mapEnquiry(row, items = [], documents = []) {
     status: row.status === 'assigned_to_rep' ? 'Assigned to representative' : 'RFQ submitted',
     priority: row.internal_priority,
     version: row.row_version,
+    quotation: quotationProjection(row.details?.quotation, actor),
+    quotedAt: row.details?.quotation?.recordedAt || '',
     items: items.map(item => ({
       id: item.id,
+      lineId: item.id,
+      code: item.product_code_snapshot,
+      name: item.product_name_snapshot,
       productId: item.product_id,
       product: { id: item.product_id, code: item.product_code_snapshot, name: item.product_name_snapshot },
       quantity: item.quantity,
@@ -182,12 +193,12 @@ export function createPostgresRepository(pool) {
     }
   };
 
-  const loadEnquiry = async (client, id) => {
+  const loadEnquiry = async (client, id, actor) => {
     const result = await client.query(`${enquirySelect} WHERE r.id = $1`, [id]);
     if (!result.rows[0]) throw notFound('The RFQ was not found or is outside your authorised company account.');
     const items = await client.query('SELECT * FROM app.rfq_items WHERE rfq_id = $1 ORDER BY line_number', [id]);
     const documents = await client.query('SELECT * FROM app.document_metadata WHERE rfq_id = $1 AND deleted_at IS NULL ORDER BY created_at', [id]);
-    return mapEnquiry(result.rows[0], items.rows, documents.rows);
+    return mapEnquiry(result.rows[0], items.rows, documents.rows, actor);
   };
 
   const loadOrder = async (client,id,actor) => {
@@ -204,7 +215,7 @@ export function createPostgresRepository(pool) {
       application:row.application,fulfilment:row.fulfilment,deliveryAddress:row.delivery_address || '',collectionBranch:row.collection_branch || '',notes:row.customer_notes || '',priority:row.internal_priority,
       poNumber:row.purchase_order_number || '',purchaseOrderNumber:row.purchase_order_number || '',quotationNumber:row.quotation_number || '',origin:row.origin,source:row.source,version:row.row_version,details:row.details || {},laboratory:row.details?.laboratory || undefined,createdAt:row.created_at,updatedAt:row.updated_at,completedAt:row.completed_at,archivedAt:row.archived_at,
       items:items.rows.map(item=>({id:item.id,lineId:item.id,productId:item.product_id,code:item.product_code_snapshot,name:item.product_name_snapshot,quantity:item.quantity,configuration:item.configuration,unitState:item.unit_state})),
-      documents:documents.rows.map(document=>({id:document.id,documentType:document.kind,fileName:document.original_name,mimeType:document.media_type,sizeBytes:Number(document.size_bytes),scanStatus:document.scan_status,customerVisible:document.customer_visible,uploadedAt:document.created_at})),
+      documents:documents.rows.filter(document => actor?.role !== 'customer' || document.kind !== 'certificate' || (row.details?.laboratory?.units || []).some(unit => unit.certificateId === document.id)).map(document=>({id:document.id,documentType:document.kind,fileName:document.original_name,mimeType:document.media_type,sizeBytes:Number(document.size_bytes),scanStatus:document.scan_status,customerVisible:document.customer_visible,uploadedAt:document.created_at})),
       trackingHistory:history.rows.map(event=>({id:event.id,fromStatus:event.from_status,toStatus:event.to_status,status:event.to_status,entityType:'order',action:event.action,note:event.customer_note || (actor?.role !== 'customer' ? event.internal_note : '') || '',customerVisible:event.customer_visible,createdAt:event.created_at})),allowedWorkflowActions:[],
       ...expeditingProjection(row.details || {},actor) };
   };
@@ -530,7 +541,7 @@ export function createPostgresRepository(pool) {
           (SELECT jsonb_agg(jsonb_build_array(id,updated_at) ORDER BY id) FROM app.technical_support_requests) AS technical,
           (SELECT max(id) FROM app.audit_events) AS audit`, [actor.id]);
         const revision = createHash('sha256').update(json({ userId: actor.id, roles: actor.roles, permissions: actor.permissions, state: result.rows[0] })).digest('hex');
-        return { revision, intervalSeconds: 30 };
+        return { revision, intervalSeconds: 300 };
       }, { actor });
     },
     async retryNotificationDelivery(actor,notificationId,deliveryId,correlationId){return inTransaction(async client=>{const row=(await client.query('SELECT * FROM app.notifications WHERE id=$1 FOR UPDATE',[notificationId])).rows[0];if(!row)throw notFound('The notification delivery was not found.');const deliveries=Array.isArray(row.deliveries)?row.deliveries:[];const index=deliveries.findIndex(item=>item.id===deliveryId);if(index<0)throw notFound('The notification delivery was not found.');const delivery={...deliveries[index],status:deliveries[index].channel==='in_app'?'in_app':`${deliveries[index].channel}_pending`,attempts:Number(deliveries[index].attempts||0)+1,lastAttemptAt:new Date().toISOString()};deliveries[index]=delivery;await client.query('UPDATE app.notifications SET deliveries=$2::jsonb WHERE id=$1',[notificationId,json(deliveries)]);await client.query(`INSERT INTO app.audit_events(event_type,actor_user_id,actor_role,company_id,action,entity_type,entity_id,outcome,correlation_id,details) VALUES('notification.delivery_retry_requested',$1,$2,$3,'retry_notification_delivery','notification',$4,'success',$5,$6::jsonb)`,[actor.id,actor.role,row.company_id,notificationId,correlationId,json({deliveryId,channel:delivery.channel})]);return delivery;},{actor});},
@@ -658,8 +669,9 @@ export function createPostgresRepository(pool) {
         return result;
       }, { actor });
     },
-    async listOrders(actor, { forReporting = false } = {}) {
+    async listOrders(actor, { forReporting = false, forLaboratory = false } = {}) {
       return inTransaction(async client => {
+        if (forLaboratory) requirePermission(actor, 'view_lab_queue');
         const queueStatuses = actor.permissions.includes('view_planning_queue') ? ['awaiting_planning','planning_in_progress','planned']
           : actor.permissions.includes('view_expediting_queue') ? ['awaiting_lab_receipt_expediting','submitted_to_expediting','expediting_in_progress','qa_failed','returned_to_expediting','awaiting_qa','awaiting_dispatch','on_hold']
             : actor.permissions.includes('view_lab_queue') ? ['awaiting_lab','lab_received','calibration_in_progress','calibration_on_hold','calibration_completed','awaiting_lab_release','released_from_lab']
@@ -668,7 +680,13 @@ export function createPostgresRepository(pool) {
         let predicate = actor.permissions.includes('view_all_orders') ? 'TRUE'
           : queueStatuses ? 'o.status = ANY($1::text[])' : 'o.company_id = ANY($1::uuid[])';
         const values = actor.permissions.includes('view_all_orders') ? [] : [queueStatuses || actor.companyIds];
-        if (actor.permissions.includes('view_assigned_orders') && !actor.permissions.includes('view_all_orders')) {
+        // Certificate preparation is independent of physical fulfilment at launch.
+        // Include active and historical certificate tasks, not only old technician stages.
+        if (forLaboratory || (!forReporting && actor.permissions.includes('view_lab_queue') && !actor.permissions.includes('view_planning_queue') && !actor.permissions.includes('view_expediting_queue'))) {
+          predicate = "o.status <> 'cancelled' AND (EXISTS (SELECT 1 FROM app.order_items li WHERE li.order_id=o.id AND (li.configuration->>'sanas' ~* '^(yes|required)' OR li.configuration->>'traceability' ~* '^(yes|required)')) OR o.details ? 'laboratory')";
+          values.length = 0;
+        }
+        if (actor.permissions.includes('view_assigned_orders') && !actor.permissions.includes('view_all_orders') && !forLaboratory) {
           predicate += ` AND o.representative_id = $${values.length + 1}`;
           values.push(actor.representativeId);
         }
@@ -689,7 +707,7 @@ export function createPostgresRepository(pool) {
           const items = { rows: itemsByOrder.get(row.id) || [] };
           const history = { rows: historyByOrder.get(row.id) || [] };
           records.push({
-            id: row.id, reference: row.reference, workflowType: 'order', trackingStatus: row.status,
+            id: row.id, reference: row.reference, sourceRfqId: row.source_rfq_id, workflowType: 'order', trackingStatus: row.status,
             status: row.status, companyId: row.company_id, company: row.company_name,
             contact: row.customer_name || '', representativeId: row.representative_id,
             selectedRep: { id: row.representative_id, name: row.representative_name || '', branchId: row.branch_id || '', branchName: row.branch_name || '' },
@@ -719,6 +737,8 @@ export function createPostgresRepository(pool) {
           if (pending.rows[0]) { const error=new Error('Technical Review Pending. Complete or formally override the technical request before marking the RFQ quoted.'); error.code='TECHNICAL_REVIEW_PENDING'; error.statusCode=409; throw error; }
         }
         let toStatus=command.definition.to; const details={...(record.details || {})};
+        if (toStatus === '__same__') toStatus = record.status;
+        if (DISPATCH_ACTIONS.includes(command.action)) details.dispatch = applyDispatchAction(record, command.action, command.data, actor, new Date().toISOString());
         if (command.action === 'fail_qa') {
           const affected = await client.query('SELECT 1 FROM app.order_items WHERE order_id=$1 AND id=$2', [record.id, command.data.qaFailure.affectedItemId]);
           if (!affected.rows.length) { const error = new Error('Select an affected item belonging to this order.'); error.code = 'INVALID_QA_ITEM'; error.statusCode = 422; throw error; }
@@ -726,10 +746,27 @@ export function createPostgresRepository(pool) {
         if (toStatus==='__resume__') toStatus=details.previousStatus || 'expediting_in_progress';
         if (command.action==='place_on_hold') details.previousStatus=record.status;
         if (command.action==='mark_quoted') details.quotation={...command.data.quotation,recordedAt:new Date().toISOString(),recordedBy:actor.id};
+        if (command.document) {
+          const document = command.document;
+          const kind = command.action === 'mark_quoted' ? 'quotation' : command.entityType === 'order' ? 'dispatch_proof' : 'supporting_document';
+          const customerVisible = kind === 'quotation' && details.quotation.documentCustomerVisible === true;
+          await client.query(`INSERT INTO app.document_metadata(id,company_id,rfq_id,uploaded_by_user_id,kind,original_name,storage_key,media_type,size_bytes,sha256_hex,scan_status,customer_visible,order_id)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,$12)`,
+          [document.id,record.company_id,command.entityType === 'rfq' ? record.id : null,actor.id,kind,document.originalName,document.storageKey,document.mediaType,document.sizeBytes,document.sha256Hex,customerVisible,command.entityType === 'order' ? record.id : null]);
+          const metadata = { id: document.id, fileName: document.originalName, mimeType: document.mediaType, sizeBytes: document.sizeBytes, scanStatus: 'pending', customerVisible };
+          if (kind === 'quotation') details.quotation.document = metadata;
+          else if (kind === 'dispatch_proof') {
+            details.dispatch.proofOfDelivery = { ...details.dispatch.proofOfDelivery, ...metadata };
+            details.dispatch.updates.at(-1).proofOfDelivery = details.dispatch.proofOfDelivery;
+          }
+          else command.data.acceptance = { ...command.data.acceptance, document: metadata };
+          await client.query(`INSERT INTO app.audit_events(event_type,actor_user_id,actor_role,company_id,action,entity_type,entity_id,outcome,correlation_id,details)
+            VALUES('document.uploaded',$1,$2,$3,'upload_workflow_document','document',$4,'success',$5,$6::jsonb)`,
+          [actor.id,actor.role,record.company_id,document.id,command.correlationId,json({kind,entityType:command.entityType,recordId:record.id,customerVisible,sizeBytes:document.sizeBytes})]);
+        }
         if (command.action==='complete_planning') details.planning={...(command.data.planning || command.data),completedAt:new Date().toISOString(),completedBy:actor.id};
         if (['start_expediting','add_expediting_update'].includes(command.action)) details.expeditingUpdates=[...(details.expeditingUpdates || []),{...(command.data.expeditingUpdate || command.data),createdAt:new Date().toISOString(),createdBy:actor.id}];
         if (command.action.includes('qa') || ['pass_qa','fail_qa'].includes(command.action)) details.qualityUpdates=[...(details.qualityUpdates || []),{action:command.action,...command.data,createdAt:new Date().toISOString(),createdBy:actor.id}];
-        if (['mark_ready_for_collection','start_delivery','confirm_collection','confirm_delivery','complete_collection','complete_delivery'].includes(command.action)) details.dispatchUpdates=[...(details.dispatchUpdates || []),{action:command.action,...command.data,createdAt:new Date().toISOString(),createdBy:actor.id}];
         let orderId=null; let orderReference='';
         if (command.entityType==='rfq' && command.action==='accept_order') {
           details.acceptance={...command.data.acceptance,recordedAt:new Date().toISOString(),recordedBy:actor.id};
@@ -745,7 +782,7 @@ export function createPostgresRepository(pool) {
           details.orderId=orderId; details.orderReference=orderReference;
         }
         await client.query(`UPDATE app.${table} SET status=$2,details=$3::jsonb,row_version=row_version+1,updated_at=now()${command.entityType==='order' && ['complete_collection','complete_delivery'].includes(command.action)?',completed_at=now()':''} WHERE id=$1`,[record.id,toStatus,json(details)]);
-        const companyId=record.company_id; const eventId=randomUUID(); const customerNote=String(command.data?.customerMessage || command.data?.qaFailure?.customerMessage || command.data?.qaPass?.customerMessage || command.data?.qaRework?.customerMessage || command.data?.expeditingUpdate?.customerMessage || command.data?.dispatchUpdate?.customerMessage || '').trim();
+        const companyId=record.company_id; const eventId=randomUUID(); const customerNote=String((DISPATCH_ACTIONS.includes(command.action) ? details.dispatch.customerMessage : '') || command.data?.customerMessage || command.data?.qaFailure?.customerMessage || command.data?.qaPass?.customerMessage || command.data?.qaRework?.customerMessage || command.data?.expeditingUpdate?.customerMessage || command.data?.dispatchUpdate?.customerMessage || '').trim();
         await client.query(`INSERT INTO app.workflow_events(id,company_id,entity_type,entity_id,from_status,to_status,action,customer_note,internal_note,customer_visible,actor_user_id,actor_role,metadata)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)`,[eventId,companyId,command.entityType,record.id,record.status,toStatus,command.action,customerNote || null,command.comment || null,Boolean(customerNote || ['acknowledge_quotation','accept_order','start_planning','submit_to_expediting','mark_ready_for_collection','start_delivery','confirm_collection','confirm_delivery','complete_collection','complete_delivery'].includes(command.action)),actor.id,actor.role,json({orderId,orderReference})]);
         await client.query(`INSERT INTO app.audit_events(event_type,actor_user_id,actor_role,company_id,action,entity_type,entity_id,outcome,correlation_id,details)
@@ -756,8 +793,23 @@ export function createPostgresRepository(pool) {
         if (roleForAction) for (const row of (await client.query('SELECT user_id FROM app.user_roles WHERE role_code=$1 AND revoked_at IS NULL',[roleForAction])).rows) recipients.add(row.user_id);
         for (const recipient of recipients) await client.query(`INSERT INTO app.notifications(id,company_id,recipient_user_id,rfq_id,order_id,event_type,title,message,customer_visible,link_path)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[randomUUID(),companyId,recipient,command.entityType==='rfq'?record.id:null,command.entityType==='order'?record.id:orderId,`workflow_${command.action}`,command.definition.label,customerNote || `Status updated to ${toStatus.replaceAll('_',' ')}.`,recipient===customerUserId,command.entityType==='rfq'?`/rfqs/${record.id}`:`/orders/${record.id}`]);
-        return command.entityType==='rfq' ? { enquiry:await loadEnquiry(client,record.id),order:orderId?await loadOrder(client,orderId,actor):null } : { order:await loadOrder(client,record.id,actor) };
+        return command.entityType==='rfq' ? { enquiry:await loadEnquiry(client,record.id,actor),order:orderId?await loadOrder(client,orderId,actor):null } : { order:await loadOrder(client,record.id,actor) };
       }, { actor });
+    },
+    async listCommercialQuotations(actor) {
+      requirePermission(actor, 'view_commercial_analytics');
+      if (!['company_owner','sales_manager'].some(role => (actor.roles || [actor.role]).includes(role))) {
+        const error = new Error('Restricted management reporting requires an approved management role.'); error.code = 'FORBIDDEN'; error.statusCode = 403; throw error;
+      }
+      // RLS remains active. Return only verified aggregate inputs, not pricing engines or documents.
+      return inTransaction(async client => (await client.query(`SELECT id,reference,details->'quotation' AS quotation FROM app.rfqs
+        UNION ALL SELECT id,reference,details->'quotation' AS quotation FROM app.orders WHERE deleted_at IS NULL`)).rows.map(row => ({
+        id: row.id, reference: row.reference,
+        quotation: {
+          number: row.quotation?.number || '', date: row.quotation?.date || '',
+          commercialTotal: ['manually_verified','verified'].includes(row.quotation?.extractionStatus) && row.quotation?.currency === 'ZAR' ? row.quotation?.commercialTotal ?? null : null,
+        },
+      })), { actor });
     },
     async listLocations(actor) {
       return inTransaction(async client => {
@@ -875,11 +927,11 @@ export function createPostgresRepository(pool) {
         const events = forReporting ? (await client.query("SELECT entity_id,action,created_at FROM app.workflow_events WHERE entity_type='rfq' AND entity_id=ANY($1::uuid[]) ORDER BY created_at", [result.rows.map(row => row.id)])).rows : [];
         const history = new Map();
         for (const event of events) { if (!history.has(event.entity_id)) history.set(event.entity_id, []); history.get(event.entity_id).push({ action: event.action, createdAt: event.created_at }); }
-        return result.rows.map(row => ({ ...mapEnquiry(row), trackingHistory: history.get(row.id) || [] }));
+        return result.rows.map(row => ({ ...mapEnquiry(row, [], [], actor), trackingHistory: history.get(row.id) || [] }));
       }, { actor });
     },
     async getEnquiry(actor, id) {
-      return inTransaction(client => loadEnquiry(client, id), { actor });
+      return inTransaction(client => loadEnquiry(client, id, actor), { actor });
     },
     async getDocument(actor, id) {
       return inTransaction(async client => {
@@ -892,29 +944,46 @@ export function createPostgresRepository(pool) {
       }, { actor });
     },
     async saveLaboratoryCertificate(actor, command) {
+      return (await this.saveLaboratoryCertificates(actor, [command]))[0];
+    },
+    async saveLaboratoryCertificates(actor, commands) {
+      requirePermission(actor, 'manage_certificates');
+      requirePermission(actor, 'view_lab_queue');
       return inTransaction(async client => {
-        const order = (await client.query('SELECT id,company_id,details FROM app.orders WHERE id=$1 AND deleted_at IS NULL FOR UPDATE', [command.orderId])).rows[0];
+        const results = [];
+        for (const command of commands) {
+        const order = (await client.query('SELECT id,company_id,status,details FROM app.orders WHERE id=$1 AND deleted_at IS NULL FOR UPDATE', [command.orderId])).rows[0];
         if (!order) throw notFound('The order was not found or is outside your authorised scope.');
+        if (['cancelled','archived'].includes(order.status)) throw notFound('The order is closed to certificate uploads.');
         const laboratory = order.details?.laboratory || {};
-        const units = Array.isArray(laboratory.units) ? [...laboratory.units] : [];
+        const savedUnits = new Map((laboratory.units || []).map(unit => [unit.id, unit]));
+        const units = (command.units || [command.unit]).map(unit => savedUnits.get(unit.id) || { ...unit, certificateId: '' });
         const index = units.findIndex(unit => unit.id === command.unit.id);
         const current = index >= 0 ? units[index] : command.unit;
+        if (command.replacement && current.certificateId !== command.unit.certificateId) { const error = new Error('The certificate changed. Refresh before replacing it.'); error.code = 'CONFLICT'; error.statusCode = 409; throw error; }
         if (command.replacement && !current.certificateId) { const error = new Error('There is no certificate to replace.'); error.code = 'CONFLICT'; error.statusCode = 409; throw error; }
         if (!command.replacement && current.certificateId) { const error = new Error('Use controlled replacement for an existing certificate.'); error.code = 'CONFLICT'; error.statusCode = 409; throw error; }
-        await client.query(`INSERT INTO app.document_metadata(id,company_id,order_id,uploaded_by_user_id,kind,original_name,storage_key,media_type,size_bytes,sha256_hex,scan_status,customer_visible)
-          VALUES($1,$2,$3,$4,'certificate',$5,$6,$7,$8,$9,'pending',true)`, [command.certificateId, order.company_id, order.id, actor.id, command.document.originalName, command.document.storageKey, command.document.mediaType, command.document.sizeBytes, command.document.sha256Hex]);
+        if (units.some(unit => unit.id !== current.id && String(unit.certificateNumber || '').toLowerCase() === command.unit.certificateNumber.toLowerCase())) { const error = new Error('Another unit already uses this certificate number.'); error.code = 'CONFLICT'; error.statusCode = 409; throw error; }
+        await client.query(`INSERT INTO app.document_metadata(id,company_id,order_id,uploaded_by_user_id,kind,original_name,storage_key,media_type,size_bytes,sha256_hex,scan_status,customer_visible,version,supersedes_document_id,replacement_reason)
+          VALUES($1,$2,$3,$4,'certificate',$5,$6,$7,$8,$9,'pending',true,$10,$11,$12)`, [command.certificateId, order.company_id, order.id, actor.id, command.document.originalName, command.document.storageKey, command.document.mediaType, command.document.sizeBytes, command.document.sha256Hex, (current.certificateVersions || []).length + (current.certificateId ? 2 : 1), current.certificateId || null, command.unit.reason || null]);
         const now = new Date().toISOString();
         const previous = current.certificateId ? { id: current.certificateId, certificateNumber: current.certificateNumber, issueDate: current.certificateIssueDate, serialNumber: current.serialNumber, replacedAt: now, replacementReason: command.unit.reason } : null;
         const updated = { ...current, ...command.unit, certificateId: command.certificateId, certificateNumber: command.unit.certificateNumber, certificateIssueDate: command.unit.issueDate, serialNumber: command.unit.serialNumber, certificateStatus: 'uploaded', status: 'certificate_uploaded', certificateUploadedAt: now, updatedAt: now, certificateVersions: [...(current.certificateVersions || []), ...(previous ? [previous] : [])] };
         if (index >= 0) units[index] = updated; else units.push(updated);
-        const details = { ...(order.details || {}), laboratory: { ...laboratory, units, lastUpdatedAt: now } };
+        const completed = units.length > 0 && units.every(unit => unit.certificateId);
+        const details = { ...(order.details || {}), laboratory: { ...laboratory, units, status: completed ? 'completed' : 'awaiting_certificate', completedAt: completed ? laboratory.completedAt || now : '', lastUpdatedAt: now } };
         await client.query('UPDATE app.orders SET details=$2::jsonb,row_version=row_version+1,updated_at=now() WHERE id=$1', [order.id, json(details)]);
         await client.query(`INSERT INTO app.audit_events(event_type,actor_user_id,actor_role,company_id,action,entity_type,entity_id,outcome,correlation_id,details)
-          VALUES($1,$2,$3,$4,$5,'document',$6,'success',$7,$8::jsonb)`, [command.replacement ? 'certificate.replaced' : 'certificate.uploaded', actor.id, actor.role, order.company_id, command.replacement ? 'replace_certificate' : 'upload_certificate', command.certificateId, command.correlationId, json({ orderId: order.id, unitId: command.unit.id, previousCertificateId: previous?.id || null })]);
-        const customer = (await client.query('SELECT customer_user_id FROM app.orders WHERE id=$1', [order.id])).rows[0]?.customer_user_id;
-        if (customer) await client.query(`INSERT INTO app.notifications(id,company_id,recipient_user_id,order_id,event_type,title,message,customer_visible,link_path)
-          VALUES($1,$2,$3,$4,'certificate_available','Certificate update','A calibration certificate has been added to your order.',true,$5)`, [randomUUID(), order.company_id, customer, order.id, `/tracking/${order.id}`]);
-        return updated;
+          VALUES($1,$2,$3,$4,$5,'document',$6,'success',$7,$8::jsonb)`, [command.replacement ? 'certificate.replaced' : 'certificate.uploaded', actor.id, actor.role, order.company_id, command.replacement ? 'replace_certificate' : 'upload_certificate', command.certificateId, command.correlationId, json({ orderId: order.id, unitId: command.unit.id, previousCertificateId: previous?.id || null, reason: command.unit.reason || null })]);
+        const recipients = (await client.query('SELECT o.customer_user_id,r.user_id AS representative_user_id FROM app.orders o LEFT JOIN app.representatives r ON r.id=o.representative_id WHERE o.id=$1', [order.id])).rows[0];
+        const note = 'A calibration certificate has been added to your order. Downloads remain subject to security checks.';
+        for (const recipient of new Set([recipients?.customer_user_id, recipients?.representative_user_id].filter(Boolean))) await client.query(`INSERT INTO app.notifications(id,company_id,recipient_user_id,order_id,event_type,title,message,customer_visible,link_path)
+          VALUES($1,$2,$3,$4,'certificate_available','Certificate update',$5,true,$6)`, [randomUUID(), order.company_id, recipient, order.id, note, `/tracking/${order.id}`]);
+        await client.query(`INSERT INTO app.workflow_events(id,company_id,entity_type,entity_id,from_status,to_status,action,customer_note,customer_visible,actor_user_id,actor_role,metadata)
+          VALUES($1,$2,'order',$3,$4,$4,$5,$6,true,$7,$8,'{}')`, [randomUUID(),order.company_id,order.id,order.status,command.replacement?'certificate_replaced':'certificate_uploaded',note,actor.id,actor.role]);
+        results.push(updated);
+        }
+        return results;
       }, { actor });
     },
     async archiveLaboratoryCertificates(actor, orderId, correlationId) {
@@ -922,6 +991,7 @@ export function createPostgresRepository(pool) {
         const order=(await client.query('SELECT id,company_id,details FROM app.orders WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[orderId])).rows[0];
         if(!order) throw notFound('The order was not found or is outside your authorised scope.');
         const laboratory=order.details?.laboratory || {}; const units=(laboratory.units || []).map(unit=>unit.certificateId?{...unit,certificateStatus:'archived',updatedAt:new Date().toISOString()}:unit);
+        if (laboratory.status !== 'completed' || !units.length || units.some(unit => !unit.certificateId)) { const error = new Error('Complete every required certificate before archiving the task.'); error.code = 'CONFLICT'; error.statusCode = 409; throw error; }
         const details={...(order.details || {}),laboratory:{...laboratory,units,archivedAt:new Date().toISOString()}};
         await client.query('UPDATE app.orders SET details=$2::jsonb,row_version=row_version+1,updated_at=now() WHERE id=$1',[orderId,json(details)]);
         await client.query(`INSERT INTO app.audit_events(event_type,actor_user_id,actor_role,company_id,action,entity_type,entity_id,outcome,correlation_id,details) VALUES('certificate.archived',$1,$2,$3,'archive_certificates','order',$4,'success',$5,'{}')`,[actor.id,actor.role,order.company_id,orderId,correlationId]);

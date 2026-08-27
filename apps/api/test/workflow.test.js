@@ -20,7 +20,7 @@ test('RFQ review, quotation acknowledgement and accepted-order conversion use co
   assert.ok(representativeInbox.json().data.find(rfq => rfq.id === rfqId).allowedWorkflowActions.some(action => action.action === 'start_rep_review'));
   const started=await mutate(app,representative,`/api/v1/enquiries/${rfqId}/workflow-actions`,{action:'start_rep_review',entityType:'rfq',data:{}});
   assert.equal(started.statusCode,200); assert.equal(started.json().data.enquiry.trackingStatus,'under_rep_review');
-  const quoted=await mutate(app,representative,`/api/v1/enquiries/${rfqId}/workflow-actions`,{action:'mark_quoted',entityType:'rfq',data:{quotation:{number:'Q-FAB-001',date:'2099-01-01'}}});
+  const quoted=await mutate(app,representative,`/api/v1/enquiries/${rfqId}/workflow-actions`,{action:'mark_quoted',entityType:'rfq',data:{quotation:{number:'Q-FAB-001',date:'2020-01-01'}}});
   assert.equal(quoted.statusCode,200); assert.equal(quoted.json().data.enquiry.trackingStatus,'quoted');
   const customerList = await app.inject({ method: 'GET', url: '/api/v1/enquiries', headers: { cookie: customer.cookie } });
   assert.equal(customerList.statusCode, 200, customerList.body);
@@ -40,12 +40,12 @@ test('workflow service rejects skipped transitions and unassigned representative
   repository._state.users.find(user=>user.id===ids.representativeUser).permissions.push('mark_rfq_under_review','mark_rfq_quoted');
   const customer=await login(app); const created=await createRfq(app,customer); const rfqId=created.json().data.enquiry.id;
   const representative=await login(app,'representative@example.invalid');
-  const skipped=await mutate(app,representative,`/api/v1/enquiries/${rfqId}/workflow-actions`,{action:'mark_quoted',entityType:'rfq',data:{quotation:{number:'Q-FAB-002',date:'2099-01-01'}}});
+  const skipped=await mutate(app,representative,`/api/v1/enquiries/${rfqId}/workflow-actions`,{action:'mark_quoted',entityType:'rfq',data:{quotation:{number:'Q-FAB-002',date:'2020-01-01'}}});
   assert.equal(skipped.statusCode,409); assert.equal(skipped.json().error.code,'INVALID_WORKFLOW_TRANSITION');
   const started=await mutate(app,representative,`/api/v1/enquiries/${rfqId}/workflow-actions`,{action:'start_rep_review',entityType:'rfq',data:{}});
   assert.equal(started.statusCode,200);
   repository._state.enquiries[0].representativeId=ids.representativeB;
-  const denied=await mutate(app,representative,`/api/v1/enquiries/${rfqId}/workflow-actions`,{action:'mark_quoted',entityType:'rfq',data:{quotation:{number:'Q-FAB-003',date:'2099-01-01'}}});
+  const denied=await mutate(app,representative,`/api/v1/enquiries/${rfqId}/workflow-actions`,{action:'mark_quoted',entityType:'rfq',data:{quotation:{number:'Q-FAB-003',date:'2020-01-01'}}});
   assert.equal(denied.statusCode,403);
 });
 
@@ -114,6 +114,6 @@ test('Technical Support request persists one 24-hour extension and blocks quotat
   const support=requested.json().data; assert.equal(new Date(support.revisedQuotationTarget)-new Date(support.originalQuotationTarget),24*36e5);
   const duplicate=await mutate(app,representative,`/api/v1/rfqs/${enquiry.id}/technical-support`,{category:'product_selection',question:'A second request must not add another allowance.',lineItemId:enquiry.items[0].id,priority:'standard',classification:'internal_only',confirmRequired:true});
   assert.equal(duplicate.statusCode,409);
-  const quoted=await mutate(app,representative,`/api/v1/enquiries/${enquiry.id}/workflow-actions`,{action:'mark_quoted',entityType:'rfq',data:{quotation:{number:'Q-BLOCKED',date:'2099-01-01'}}});
+  const quoted=await mutate(app,representative,`/api/v1/enquiries/${enquiry.id}/workflow-actions`,{action:'mark_quoted',entityType:'rfq',data:{quotation:{number:'Q-BLOCKED',date:'2020-01-01'}}});
   assert.equal(quoted.statusCode,409); assert.equal(quoted.json().error.code,'TECHNICAL_REVIEW_PENDING');
 });

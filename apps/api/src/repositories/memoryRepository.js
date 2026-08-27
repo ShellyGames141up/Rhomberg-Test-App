@@ -1,4 +1,5 @@
 import { randomUUID, createHash } from 'node:crypto';
+import { applyDispatchAction, dispatchProjection, DISPATCH_ACTIONS } from '../domain/dispatchWorkflow.js';
 import { notFound } from '../errors.js';
 
 const clone = value => structuredClone(value);
@@ -228,7 +229,7 @@ export function createMemoryRepository(seed = {}) {
     async getWorkspaceRevision(actor) {
       const own = state.notifications.filter(item => item.recipientUserId === actor.id);
       const records = [...await this.listEnquiries(actor), ...await this.listOrders(actor)];
-      return { revision: createHash('sha256').update(JSON.stringify({ id: actor.id, roles: actor.roles, permissions: actor.permissions, own, records })).digest('hex'), intervalSeconds: 30 };
+      return { revision: createHash('sha256').update(JSON.stringify({ id: actor.id, roles: actor.roles, permissions: actor.permissions, own, records })).digest('hex'), intervalSeconds: 300 };
     },
     async retryNotificationDelivery(actor,notificationId,deliveryId,correlationId){const item=state.notifications.find(notification=>notification.id===notificationId);if(!item||(!actor.permissions.includes('retry_notification_delivery')&&item.recipientUserId!==actor.id))throw notFound('The notification delivery was not found.');const delivery=(item.deliveries||[]).find(x=>x.id===deliveryId);if(!delivery)throw notFound('The notification delivery was not found.');delivery.status=delivery.channel==='in_app'?'in_app':`${delivery.channel}_pending`;delivery.attempts=Number(delivery.attempts||0)+1;delivery.lastAttemptAt=new Date().toISOString();state.audits.push({id:state.audits.length+1,eventType:'notification.delivery_retry_requested',actorUserId:actor.id,actorRole:actor.role,action:'retry_notification_delivery',entityType:'notification',entityId:notificationId,outcome:'success',correlationId,details:{deliveryId,channel:delivery.channel},createdAt:new Date().toISOString()});return clone(delivery);},
     async listAuditEvents(actor) {
@@ -293,6 +294,11 @@ export function createMemoryRepository(seed = {}) {
       if (actor.role==='sales_representative' && record.representativeId!==actor.representativeId) { const error=new Error('This record is assigned to another representative.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }
       if(command.entityType==='rfq' && command.action==='mark_quoted' && state.technicalRequests.some(item=>item.rfqId===record.id && !['technical_support_completed','technical_support_cancelled'].includes(item.status) && !item.quotationOverride?.active)) { const error=new Error('Technical Review Pending. Complete or formally override the technical request before marking the RFQ quoted.'); error.code='TECHNICAL_REVIEW_PENDING'; error.statusCode=409; throw error; }
       let toStatus=command.definition.to; record.details ||= {};
+      if (toStatus === '__same__') toStatus = record.trackingStatus;
+      if (DISPATCH_ACTIONS.includes(command.action)) {
+        record.details.dispatch = applyDispatchAction({ ...record, status: record.trackingStatus }, command.action, command.data, actor, new Date().toISOString());
+        Object.assign(record, dispatchProjection(record.details, actor));
+      }
       if (toStatus==='__resume__') toStatus=record.details.previousStatus || 'expediting_in_progress';
       if (command.action==='place_on_hold') record.details.previousStatus=record.trackingStatus;
       if (command.action==='mark_quoted') record.details.quotation={...clone(command.data.quotation),recordedAt:new Date().toISOString(),recordedBy:actor.id};
@@ -373,6 +379,17 @@ export function createMemoryRepository(seed = {}) {
       state.documents.push({...clone(command.document),id:command.certificateId,companyId:order.companyId,orderId:order.id,kind:'certificate',scanStatus:'pending',customerVisible:true,createdAt:now});
       state.audits.push({id:state.audits.length+1,eventType:command.replacement?'certificate.replaced':'certificate.uploaded',actorUserId:actor.id,actorRole:actor.role,companyId:order.companyId,action:command.replacement?'replace_certificate':'upload_certificate',entityType:'document',entityId:command.certificateId,outcome:'success',correlationId:command.correlationId,details:{orderId:order.id,unitId:command.unit.id},createdAt:now});
       return clone(updated);
+    },
+    async saveLaboratoryCertificates(actor, commands) {
+      const snapshot = clone({ orders: state.orders, documents: state.documents, audits: state.audits });
+      try {
+        const results = [];
+        for (const command of commands) results.push(await this.saveLaboratoryCertificate(actor, command));
+        return results;
+      } catch (error) {
+        Object.assign(state, snapshot);
+        throw error;
+      }
     },
     async archiveLaboratoryCertificates(actor,orderId,correlationId) {
       const order=state.orders.find(item=>item.id===orderId && (actor.permissions.includes('view_all_orders') || actor.permissions.includes('view_lab_queue'))); if(!order) throw notFound('The order was not found or is outside your authorised scope.');

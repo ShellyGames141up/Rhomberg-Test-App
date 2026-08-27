@@ -87,6 +87,12 @@ Customer product payloads use `sanas: Yes — SANAS | No SANAS` or `traceability
 
 ## Product Completion Pass 2 implemented API surface
 
+### Management statistics and report period (local next update)
+
+`GET /api/v1/management/dashboard` defaults to `periodMode=last_31_days`, meaning today and the preceding 30 UTC calendar dates. The response includes `period.startDate`, `period.endDate` and the calculation time. This does not delete older records. Existing `date_range` and `rolling_months` periods remain available.
+
+`POST /api/v1/management/performance-reports` accepts `periodMode`, optional historical date/month bounds, representative/branch filters and selected report sections. It returns an authenticated JSON envelope containing `bytesBase64`, `mimeType: application/pdf`, `fileName` and `period`. The Owner/Sales Manager must have the database-authoritative export/commercial-report permissions; session, CSRF and record scope remain enforced. Each successful export records the selected period and record count in the audit history. No public PDF URL or invented commercial values are returned. See [MANAGEMENT_REPORTING_WINDOW.md](MANAGEMENT_REPORTING_WINDOW.md).
+
 The generated authority is [API_MODE_CONTRACT_AUDIT.md](API_MODE_CONTRACT_AUDIT.md): 130 active adapter contracts match 138 registered `/api/v1` routes. The server implements the approved simplified Laboratory routes under `/laboratory/orders`, authenticated binary downloads, Administrator lifecycle/company/catalogue mutations, governance and retention actions, client visits, persisted personalisation, management projections/exports, Technical Support, notification retry and workspace selection. Public registration and browser-local credential recovery are deliberately absent; identity provisioning/recovery remain server/identity-provider responsibilities.
 
 The API must continue to enforce authentication, exact-origin CORS, CSRF on mutations, permission checks, company/assignment scope, idempotency where declared and append-only audit evidence. The local private-storage adapter is suitable only for controlled development. Production file content requires managed private object storage and an approved malware-scanning integration.

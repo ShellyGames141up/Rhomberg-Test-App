@@ -4,6 +4,12 @@ Internal Windows PWA and Android/Capacitor packaging preparation is documented i
 
 ## Phase 1 production API foundation
 
+Local next-update work: management statistics default to the [latest 31 days](docs/MANAGEMENT_REPORTING_WINDOW.md), with audited detailed PDF downloads for the authorised Owner and Sales Manager. Older records are retained. Background data checks now run every five minutes. These changes are not deployed.
+
+Local Sales/Dispatch correction: [quotation uploads and Dispatch handover](docs/SALES_DISPATCH_CORRECTION.md) now use validated multipart workflow requests, persisted receipt/handover details and migration 022's narrow private-proof access policies. This work is not yet released or deployed.
+
+Local [SANAS Laboratory corrections](docs/SANAS_LAB_REVIEW.md) align UI/API unit IDs, restore the certificate queue across fulfilment stages, make multi-unit uploads atomic, preserve version history and restrict customer certificate payloads/downloads. A manager download action and real PostgreSQL regression coverage are included. These changes are not deployed.
+
 The 5.2.18 staging [QA controls and Company Owner reporting correction](docs/QA_OWNER_REPORTING_FIX.md)
 restores labelled QA/QA Manager selections, persisted inspection history and calculated
 Owner statistics. It requires matching frontend/API code and migration 020. Owner scope
@@ -25,7 +31,7 @@ The existing GitHub Pages and Executive Demo previews remain independent and moc
 
 The local [Expediting, notification and live-refresh correction](docs/LIVE_UPDATES_AND_NOTIFICATIONS.md)
 restores progress choices and recipient-only notification acknowledgements, and adds
-authenticated 30-second updates without resetting unsaved forms. It requires matching
+authenticated five-minute updates without resetting unsaved forms. It requires matching
 frontend/API code and migration 019 after migration 018; it is not yet deployed.
 
 The local [role/permission correction](docs/ROLE_PERMISSION_INHERITANCE_FIX.md)

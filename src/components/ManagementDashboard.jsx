@@ -27,7 +27,7 @@ const EMPTY_DASHBOARD = {
 };
 
 const DEFAULT_REPORT_CONFIG = Object.freeze({
-  periodMode: 'rolling_months',
+  periodMode: 'last_31_days',
   rollingMonths: 12,
   startDate: '',
   endDate: new Date().toISOString().slice(0, 10),
@@ -191,11 +191,11 @@ function PerformanceReportBuilder({ config, onConfig, options, reportingProfile,
         <small>Every generation is added to the immutable audit history</small>
       </div>
       <div className="management-report-scope">
-        <label><span>Period selection</span><select value={config.periodMode} onChange={event => set('periodMode', event.target.value)}><option value="rolling_months">Set number of months</option><option value="date_range">Date to date</option></select></label>
-        {config.periodMode === 'rolling_months' ? <label><span>Months</span><select value={config.rollingMonths} onChange={event => set('rollingMonths', Number(event.target.value))}>{options.rollingMonthOptions.map(months => <option key={months} value={months}>{months} month{months === 1 ? '' : 's'}</option>)}</select></label> : <>
+        <label><span>Period selection</span><select value={config.periodMode} onChange={event => set('periodMode', event.target.value)}><option value="last_31_days">Latest 31 days</option><option value="rolling_months">Set number of months</option><option value="date_range">Date to date</option></select></label>
+        {config.periodMode === 'rolling_months' ? <label><span>Months</span><select value={config.rollingMonths} onChange={event => set('rollingMonths', Number(event.target.value))}>{options.rollingMonthOptions.map(months => <option key={months} value={months}>{months} month{months === 1 ? '' : 's'}</option>)}</select></label> : config.periodMode === 'date_range' ? <>
           <label><span>Start date</span><input type="date" value={config.startDate} onChange={event => set('startDate', event.target.value)} /></label>
           <label><span>End date</span><input type="date" value={config.endDate} onChange={event => set('endDate', event.target.value)} /></label>
-        </>}
+        </> : <p>Today and the previous 30 days (UTC). Older records remain available through a date-range report.</p>}
         <label><span>{reportingProfile.representativeFilterLabel}</span><select value={config.representativeId} onChange={event => set('representativeId', event.target.value)}><option value="all">All authorised representatives</option>{options.representatives.map(rep => <option key={rep.id} value={rep.id}>{rep.name} · {rep.branchName}</option>)}</select></label>
         <label><span>Branch scope</span><select value={config.branchId} onChange={event => set('branchId', event.target.value)}><option value="all">All authorised branches</option>{options.branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
       </div>
@@ -306,6 +306,7 @@ export function ManagementDashboard({
           <span className="eyebrow">{serviceMode === 'mock' ? 'Test · ' : ''}{dashboardLabel}</span>
           <h1 id="management-title">Workflow health.<br /><em>Decisions with evidence.</em></h1>
           <p>Operational totals use only records authorised for {account.contact}. Protected price-engine values are excluded from this workspace and its exports.</p>
+          {dashboard.period && <p>Latest 31 days: {dashboard.period.label}. Historical records are retained; reports can use a different date range.</p>}
         </div>
         <div className="management-hero-actions">
           {canUsePerformanceReports && <button className="primary-button" type="button" aria-expanded={showReportBuilder} onClick={() => setShowReportBuilder(value => !value)}>{showReportBuilder ? 'Close PDF options' : 'Download Operational PDF'}</button>}

@@ -11,7 +11,7 @@ Status: local implementation, not deployed. Preserve the separately reviewed rol
 
 ## Automatic updates
 
-Authenticated clients check `GET /api/v1/workspace/updates` every **30 seconds**. Response: `{data:{revision:"<opaque SHA-256>",intervalSeconds:30}}`. The token reflects RLS-visible RFQs, orders, technical requests, own notifications, visible audit history and effective permissions. Another company's hidden changes do not change a customer's token. It is a change detector, not a credential or authorization proof.
+Authenticated clients check `GET /api/v1/workspace/updates` every **five minutes**. Response: `{data:{revision:"<opaque SHA-256>",intervalSeconds:300}}`. The token reflects RLS-visible RFQs, orders, technical requests, own notifications, visible audit history and effective permissions. Another company's hidden changes do not change a customer's token. It is a change detector, not a credential or authorization proof. Successful local actions still refresh immediately. Failed checks back off to ten, then twenty minutes; successful recovery restores the five-minute interval.
 
 Only a changed revision triggers service-layer retrieval of the authorised account, RFQs, orders, notifications and audit. Self-loading Administration, Technical, Management and Archive views receive a refresh signal. Public mock previews use the same controller with independent mock reads; staging never falls back to mock data.
 
@@ -25,7 +25,7 @@ The staging revision query aggregates visible IDs/versions each check. Measure l
 
 ## Verification
 
-Tests cover selectable options, forbidden progress shortcuts, read/read-all audit idempotency, missing CSRF, cross-recipient denial, revision authentication/no-store, real PostgreSQL company isolation, customer-safe history and unchanged-company revisions. Timer tests cover 30-second scheduling, unchanged data, hidden/offline availability, unsaved edits, non-overlap, disposal and retry/backoff.
+Tests cover selectable options, forbidden progress shortcuts, read/read-all audit idempotency, missing CSRF, cross-recipient denial, revision authentication/no-store, real PostgreSQL company isolation, customer-safe history and unchanged-company revisions. Timer tests cover five-minute scheduling, unchanged data, hidden/offline availability, unsaved edits, non-overlap, disposal and retry/backoff.
 
 Local verification used Node 22.23.2, pnpm 11.19.0 and disposable PostgreSQL 17.10. The full backend suite passed 78 tests with no skips, including the new real-database case. Migrations 001–019 applied from empty and repeated safely; runtime grants applied as the migration identity. Frontend suite, JS/CSS checks, production/internal-staging builds and scanners, Android static packaging checks, all five previews and combined Pages build passed. The local browser harness displayed ten selectable progress steps and validated Materials received/Production started in light/dark themes without console errors. This harness used real components/options/validation but is not a live server acceptance test.
 

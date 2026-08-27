@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { requirePermission } from '../authorization/permissions.js';
 import { validationError } from '../errors.js';
+import { createLaboratoryService } from './laboratoryService.js';
 
 const escapePdf=value=>String(value || '').replaceAll('\\','\\\\').replaceAll('(','\\(').replaceAll(')','\\)');
 export function simplePdf(lines) {
@@ -13,11 +14,12 @@ export function simplePdf(lines) {
 export function createGovernanceService({repository,storage}) {
   const download=async(actor,orderId,documentId,correlationId)=>{
     const order=await repository.getOrder(actor,orderId); const document=await repository.getDocument(actor,documentId);
+    if (document.kind === 'certificate' && document.order_id === order.id) return createLaboratoryService({ repository, storage }).download(actor, documentId, correlationId);
     if(document.order_id!==order.id || (actor.role==='customer' && (!document.customer_visible || document.scan_status!=='clean'))) { const error=new Error('The document was not found or is unavailable to your account.'); error.code='NOT_FOUND'; error.statusCode=404; throw error; }
     const buffer=await storage.get(document.storage_key); await repository.appendAudit({eventType:'document.downloaded',actorUserId:actor.id,actorRole:actor.role,companyId:order.companyId,action:'download_order_document',entityType:'document',entityId:document.id,outcome:'success',correlationId,details:{orderId}}); return {buffer,fileName:path.basename(document.original_name),mediaType:document.media_type};
   };
   return Object.freeze({
-    listDocuments:async(actor,orderId)=>{const order=await repository.getOrder(actor,orderId);return repository.listOrderDocuments(actor,order.id);},
+    listDocuments:async(actor,orderId)=>{const order=await repository.getOrder(actor,orderId);const documents=await repository.listOrderDocuments(actor,order.id);return documents.filter(document=>actor.role!=='customer'||document.documentType!=='certificate'||(order.laboratory?.units||[]).some(unit=>unit.certificateId===document.id));},
     download,
     async replaceDocument(actor,orderId,documentId,input,file,correlationId){ requirePermission(actor,'replace_order_source_document'); const reason=String(input?.reason || '').trim(); if(reason.length<5) throw validationError({reason:'Record why this document is being replaced.'}); if(!file) throw validationError({document:'Attach the replacement document.'}); const stored=await storage.put(file); try{return await repository.replaceOrderDocument(actor,{orderId,documentId,reason,document:stored,correlationId});}catch(error){await storage.remove(stored.storageKey).catch(()=>undefined);throw error;}},
     sharingOptions:async(actor,orderId)=>{await repository.getOrder(actor,orderId);return {audiences:[{id:'customer_safe',label:'Customer-safe summary'},{id:'internal',label:'Internal operational summary'}],emailEnabled:false,emailState:'simulated_pending',pricingIncluded:false};},

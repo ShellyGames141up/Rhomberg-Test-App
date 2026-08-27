@@ -3309,7 +3309,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         now: now(),
         includeSalesPerformance: canUseCommercialReporting(account),
         salesOptions: {
-          periodMode: filters.periodMode || 'rolling_months',
+          periodMode: filters.periodMode || 'last_31_days',
           rollingMonths: filters.rollingMonths || 12,
           startDate: filters.startDate,
           endDate: filters.endDate,

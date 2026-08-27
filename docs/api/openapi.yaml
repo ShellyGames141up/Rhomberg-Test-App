@@ -1227,7 +1227,7 @@ paths:
   /workspace/updates:
     get:
       operationId: getWorkspaceRevision
-      summary: Poll an opaque caller-scoped change token every 30 seconds
+      summary: Poll an opaque caller-scoped change token every five minutes
       security:
         - sessionCookie: []
       responses:
@@ -1247,7 +1247,7 @@ paths:
                     required: [revision, intervalSeconds]
                     properties:
                       revision: { type: string, pattern: '^[a-f0-9]{64}$' }
-                      intervalSeconds: { type: integer, const: 30 }
+                      intervalSeconds: { type: integer, const: 300 }
         '401':
           $ref: '#/components/responses/ApiError'
   /notifications/{notificationId}/read:

@@ -38,3 +38,11 @@ test('certificate access is tenant-safe and customer download remains quarantine
   assert.equal((await app.inject({ url: `/api/v1/certificates/${documentId}/download`, headers: { cookie: customerA.cookie } })).statusCode, 423);
   assert.equal((await app.inject({ url: `/api/v1/certificates/${documentId}/download`, headers: { cookie: customerB.cookie } })).statusCode, 404);
 });
+
+test('certificate download rejects non-certificate documents even when company-visible', async t => {
+  const { app, repository } = await createFixture(); t.after(() => app.close());
+  const documentId = randomUUID();
+  repository._state.documents.push({ id: documentId, storageKey: 'memory/not-present', companyId: ids.companyA, kind: 'quotation', originalName: 'fabricated.pdf', mediaType: 'application/pdf', scanStatus: 'clean', customerVisible: true });
+  const customer = await login(app);
+  assert.equal((await app.inject({ url: `/api/v1/certificates/${documentId}/download`, headers: { cookie: customer.cookie } })).statusCode, 404);
+});

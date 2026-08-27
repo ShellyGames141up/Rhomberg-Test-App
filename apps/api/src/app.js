@@ -16,6 +16,7 @@ import { createPhase1WorkspaceService } from './services/phase1WorkspaceService.
 import { createRepresentativeOrderService } from './services/representativeOrderService.js';
 import { createWorkflowService } from './services/workflowService.js';
 import { QA_QUEUE_STATUSES } from './domain/qualityOptions.js';
+import { TECHNICAL_CATEGORY_OPTIONS } from './domain/technicalOptions.js';
 import { createTechnicalSupportService } from './services/technicalSupportService.js';
 import { createLaboratoryService } from './services/laboratoryService.js';
 import { createGovernanceService, simplePdf } from './services/governanceService.js';
@@ -108,6 +109,35 @@ async function parseOptionalDocumentRequest(request,maxBytes) {
   if(!payload) throw validationError({payload:'The request payload is required.'}); return {payload,attachment};
 }
 
+async function parseWorkflowRequest(request, maxBytes) {
+  if (!request.isMultipart()) return { payload: request.body || {}, attachment: null };
+  let payload; let attachment; let fileField;
+  for await (const part of request.parts()) {
+    if (part.type === 'field') {
+      if (part.fieldname !== 'payload' || payload !== undefined || part.valueTruncated) throw validationError({ payload: 'Supply one complete workflow payload.' });
+      try { payload = JSON.parse(String(part.value)); } catch { throw validationError({ payload: 'The workflow payload is invalid.' }); }
+      continue;
+    }
+    if (attachment || !['quotationDocument', 'acceptanceDocument', 'dispatchProof'].includes(part.fieldname)) {
+      await part.toBuffer().catch(() => undefined);
+      throw validationError({ document: 'Attach only the expected workflow document.' });
+    }
+    const originalName = path.basename(String(part.filename || ''));
+    const types = { pdf: 'application/pdf', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' };
+    const extension = path.extname(originalName).slice(1).toLowerCase();
+    const buffer = await part.toBuffer();
+    if (!types[extension] || types[extension] !== part.mimetype || !buffer.length || part.file.truncated || buffer.length > Math.min(maxBytes, 4 * 1024 * 1024)) throw validationError({ document: 'Use a non-empty approved document, no larger than 4 MB, with a matching file type.' });
+    if (extension === 'pdf' && buffer.subarray(0, 5).toString('ascii') !== '%PDF-') throw validationError({ document: 'Attach a valid PDF document.' });
+    attachment = { buffer, originalName, mediaType: part.mimetype };
+    fileField = part.fieldname;
+  }
+  const expectedField = { mark_quoted: 'quotationDocument', accept_order: 'acceptanceDocument',
+    mark_ready_for_collection: 'dispatchProof', start_delivery: 'dispatchProof', confirm_collection: 'dispatchProof',
+    confirm_delivery: 'dispatchProof', complete_collection: 'dispatchProof', complete_delivery: 'dispatchProof', report_delivery_problem: 'dispatchProof' }[payload?.action];
+  if (!expectedField || !attachment || fileField !== expectedField) throw validationError({ document: 'The attachment does not match the workflow action.' });
+  return { payload, attachment };
+}
+
 async function parseCertificateRequest(request, maxBytes, { batch = false } = {}) {
   if (!request.isMultipart()) throw validationError({ certificate: 'Attach the certificate PDF.' });
   let metadata; const files = [];
@@ -182,7 +212,7 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   const registrationService = createRegistrationService({ repository, publicReferenceService });
   const phase1WorkspaceService = createPhase1WorkspaceService({ repository, maxUploadBytes: config.maxUploadBytes });
   const representativeOrderService = createRepresentativeOrderService({ repository, storage, publicReferenceService, branches });
-  const workflowService = createWorkflowService({ repository });
+  const workflowService = createWorkflowService({ repository, storage });
   const technicalSupportService = createTechnicalSupportService({ repository,storage });
   const laboratoryService = createLaboratoryService({ repository, storage });
   const governanceService = createGovernanceService({ repository, storage });
@@ -341,7 +371,10 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   app.get('/api/v1/enquiries/:id', { preHandler: requireAuthentication, schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } } } }, async request => ({ data: workflowService.enrich(request.actor, 'rfq', await enquiryService.get(request.actor, request.params.id)), meta: { requestId: request.id } }));
   app.get('/api/v1/enquiries/inbox', { preHandler: requireAuthentication }, async request => ({ data: (await enquiryService.list(request.actor)).map(record => workflowService.enrich(request.actor, 'rfq', record)), meta: { page: 1, pageSize: 100, requestId: request.id } }));
   app.get('/api/v1/enquiries/:id/workflow-actions', { preHandler: requireAuthentication }, async request => ({ data: await workflowService.allowed(request.actor,'rfq',request.params.id), meta: { requestId: request.id } }));
-  app.post('/api/v1/enquiries/:id/workflow-actions', { preHandler: requireCsrf }, async request => ({ data: await workflowService.perform(request.actor,'rfq',request.params.id,request.body || {},request.id), meta: { requestId: request.id } }));
+  app.post('/api/v1/enquiries/:id/workflow-actions', { preHandler: requireCsrf }, async request => {
+    const { payload, attachment } = await parseWorkflowRequest(request, config.maxUploadBytes);
+    return { data: await workflowService.perform(request.actor, 'rfq', request.params.id, payload, request.id, attachment), meta: { requestId: request.id } };
+  });
   app.get('/api/v1/documents/:id', { preHandler: requireAuthentication, schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } } } }, async request => ({ data: await enquiryService.getDocument(request.actor, request.params.id, request.id), meta: { requestId: request.id } }));
 
   // Authenticated Phase 1 bootstrap resources. Empty collections are truthful for
@@ -363,7 +396,10 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   app.post('/api/v1/orders/:orderId/deletion-requests', { preHandler: requireCsrf }, async request=>({data:await governanceService.deletionRequest(request.actor,request.params.orderId,request.body || {},request.id),meta:{requestId:request.id}}));
   app.post('/api/v1/orders/:orderId/retention-exports', { preHandler: requireCsrf }, async request=>({data:await governanceService.retentionExport(request.actor,request.params.orderId,request.body || {},request.id),meta:{requestId:request.id}}));
   app.get('/api/v1/orders/:id/workflow-actions', { preHandler: requireAuthentication }, async request => ({ data: await workflowService.allowed(request.actor,'order',request.params.id), meta: { requestId: request.id } }));
-  app.post('/api/v1/orders/:id/workflow-actions', { preHandler: requireCsrf }, async request => ({ data: await workflowService.perform(request.actor,'order',request.params.id,request.body || {},request.id), meta: { requestId: request.id } }));
+  app.post('/api/v1/orders/:id/workflow-actions', { preHandler: requireCsrf }, async request => {
+    const { payload, attachment } = await parseWorkflowRequest(request, config.maxUploadBytes);
+    return { data: await workflowService.perform(request.actor,'order',request.params.id,payload,request.id,attachment), meta: { requestId: request.id } };
+  });
   app.get('/api/v1/notifications', { preHandler: requireAuthentication }, async request => ({ data: await phase1WorkspaceService.listNotifications(request.actor), meta: { requestId: request.id } }));
   app.post('/api/v1/notifications/:id/read', { preHandler: requireCsrf }, async request => ({ data: await phase1WorkspaceService.markNotificationRead(request.actor, request.params.id, request.id), meta: { requestId: request.id } }));
   app.post('/api/v1/notifications/read-all', { preHandler: requireCsrf }, async request => ({ data: await phase1WorkspaceService.markAllNotificationsRead(request.actor, request.id), meta: { requestId: request.id } }));
@@ -462,7 +498,7 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   });
   app.get('/api/v1/technical-support/options', { preHandler: requireAuthentication }, async request => {
     if (!request.actor.permissions.includes(PERMISSIONS.VIEW_TECHNICAL_QUEUE) && !request.actor.permissions.includes('request_technical_support')) requirePermission(request.actor, PERMISSIONS.VIEW_TECHNICAL_QUEUE);
-    return { data: { categories: ['product_selection','product_compatibility','product_configuration','application_suitability','material_suitability','pressure_range','temperature_range','connection_requirement','electrical_requirement','calibration_requirement','sanas_or_traceable_requirement','special_manufacturing_request','installation_question','missing_technical_information','other'], priorities: ['standard','high','urgent'], departments: ['Technical Support'], technicalUsers: await repository.listTechnicalUsers(request.actor) }, meta: { requestId: request.id } };
+    return { data: { categories: TECHNICAL_CATEGORY_OPTIONS, priorities: ['standard','high','urgent'], departments: ['Technical Support'], technicalUsers: await repository.listTechnicalUsers(request.actor) }, meta: { requestId: request.id } };
   });
   app.get('/api/v1/rfqs/:rfqId/technical-support', { preHandler: requireAuthentication }, async request => ({data:await technicalSupportService.getByRfq(request.actor,request.params.rfqId),meta:{requestId:request.id}}));
   app.post('/api/v1/rfqs/:rfqId/technical-support', { preHandler: requireCsrf }, async (request,reply) => { const parsed=await parseOptionalDocumentRequest(request,config.maxUploadBytes); const result=await technicalSupportService.request(request.actor,request.params.rfqId,parsed.payload,{attachment:parsed.attachment,correlationId:request.id}); reply.code(201); return {data:result,meta:{requestId:request.id}}; });
@@ -493,9 +529,14 @@ export async function buildApp({ config, repository, storage, identityProvider, 
     if (!request.actor.permissions.includes('reassign_representative') && !request.actor.permissions.includes(PERMISSIONS.ADMINISTER_USERS)) requirePermission(request.actor, PERMISSIONS.ADMINISTER_USERS);
     return { data: await repository.listRepresentatives(request.actor), meta: { requestId: request.id } };
   });
-  app.get('/api/v1/management/performance-report-options', { preHandler: requireAuthentication }, async request => {requirePermission(request.actor,'export_management_pdf');return{data:{representatives:await repository.listRepresentatives(request.actor),branches,rollingMonthOptions:[1,3,6,12,24,36]},meta:{requestId:request.id}};});
+  app.get('/api/v1/management/performance-report-options', { preHandler: requireAuthentication }, async request => ({
+    data: await phase1WorkspaceService.getPerformanceReportOptions(request.actor), meta: { requestId: request.id },
+  }));
   app.post('/api/v1/management/reports', { preHandler: requireCsrf }, async request => {requirePermission(request.actor,'export_operational_reports');const dashboard=await phase1WorkspaceService.getManagementDashboard(request.actor);const rows=['Reference,Type,Company,Status,Representative',...dashboard.records.map(item=>[item.reference,item.workflowType,item.company,item.trackingStatus,item.selectedRep?.name||''].map(value=>`"${String(value||'').replaceAll('"','""')}"`).join(','))];await repository.appendAudit({eventType:'management.report_exported',actorUserId:request.actor.id,actorRole:request.actor.role,action:'export_operational_report',entityType:'report',entityId:request.id,outcome:'success',correlationId:request.id,details:{recordCount:dashboard.records.length}});return{data:{csv:rows.join('\r\n'),mimeType:'text/csv',fileName:`rhomberg-operational-${new Date().toISOString().slice(0,10)}.csv`},meta:{requestId:request.id}};});
-  app.post('/api/v1/management/performance-reports', { preHandler: requireCsrf }, async request => {requirePermission(request.actor,'export_management_pdf');const dashboard=await phase1WorkspaceService.getManagementDashboard(request.actor);const pdf=simplePdf(['Rhomberg Connect Management Report',`Generated ${new Date().toISOString()}`,`Authorised records: ${dashboard.records.length}`,...dashboard.ordersByStatus.map(x=>`${x.label}: ${x.count}`)]);await repository.appendAudit({eventType:'management.pdf_exported',actorUserId:request.actor.id,actorRole:request.actor.role,action:'export_management_pdf',entityType:'report',entityId:request.id,outcome:'success',correlationId:request.id,details:{recordCount:dashboard.records.length}});return{data:{bytesBase64:pdf.toString('base64'),mimeType:'application/pdf',fileName:`rhomberg-management-${new Date().toISOString().slice(0,10)}.pdf`},meta:{requestId:request.id}};});
+  app.post('/api/v1/management/performance-reports', { preHandler: requireCsrf }, async request => ({
+    data: await phase1WorkspaceService.createPerformanceReport(request.actor, request.body || {}, request.id),
+    meta: { requestId: request.id },
+  }));
   app.post('/api/v1/management/records/:recordId/representative', { preHandler: requireCsrf }, async request=>{requirePermission(request.actor,'reassign_representative');if(String(request.body?.reason||'').trim().length<5)throw validationError({reason:'Record why the representative is changing.'});return{data:await repository.manageRecord(request.actor,request.params.recordId,'reassign',request.body||{},request.id),meta:{requestId:request.id}};});
   app.post('/api/v1/management/records/:recordId/workflow-override-approval', { preHandler: requireCsrf }, async request=>{requirePermission(request.actor,'approve_workflow_override');if(String(request.body?.reason||'').trim().length<10)throw validationError({reason:'Record a detailed override approval reason.'});return{data:await repository.manageRecord(request.actor,request.params.recordId,'override_approval',request.body||{},request.id),meta:{requestId:request.id}};});
   app.get('/api/v1/archived-orders', { preHandler: requireAuthentication }, async request => {

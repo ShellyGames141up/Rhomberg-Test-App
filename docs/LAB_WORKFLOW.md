@@ -25,6 +25,8 @@ The launch path is:
 
 ## Replacement and privacy
 
+The real API correction and regression coverage are documented in [SANAS_LAB_REVIEW.md](SANAS_LAB_REVIEW.md). Certificate tasks are independent of the legacy technician-stage filter. Multi-unit uploads are atomic; completing all certificates completes the certificate task only, not physical fulfilment. Manager downloads are available from order details. Customer downloads require a clean security scan and the current authorised version.
+
 Replacing a certificate requires a new PDF and reason. The prior version is marked `superseded`; it is not silently overwritten. Customers receive only the current customer-visible version for their own company/order. Production must use authenticated private object storage, backend MIME/signature/size validation, malware scanning, row-level company isolation and immutable audit storage.
 
 ## Deferred functionality

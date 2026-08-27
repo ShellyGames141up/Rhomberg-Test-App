@@ -1,0 +1,115 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import fs from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { PGlite } from '@electric-sql/pglite';
+import pg from 'pg';
+import { runMigrations } from '../src/db/migrate.js';
+import { createPostgresRepository } from '../src/repositories/postgresRepository.js';
+import { createMemoryPrivateStorage } from '../src/storage/localPrivateStorage.js';
+import { buildApp } from '../src/app.js';
+import { hashPassword } from '../src/security/crypto.js';
+import { createApiServices } from '../../../src/services/api/createApiServices.js';
+import { ensureLaboratoryRecord } from '../../../src/domain/certification.js';
+
+test('SANAS certificate launch: real adapter, runtime RLS, atomic batches, history and customer privacy', { timeout: 120000 }, async t => {
+  const url = process.env.RHOMBERG_TEST_LAB_DATABASE_URL;
+  if (url) { const parsed = new URL(url); assert.ok(['localhost','127.0.0.1'].includes(parsed.hostname)); assert.match(parsed.pathname, /^\/rhomberg_lab_test_[a-z0-9_]+$/); }
+  const db = url ? new pg.Client({ connectionString: url }) : new PGlite();
+  if (url) await db.connect();
+  t.after(() => url ? db.end() : db.close());
+  await runMigrations(db); await runMigrations(db);
+  const q = (sql, values) => db.query(sql, values);
+  const ids = Object.fromEntries(['lab','customer','other','planning','sales','rep','company','otherCompany','order','item'].map(key => [key, randomUUID()]));
+  const password = 'Fabricated-Laboratory-Only!742';
+  const hash = await hashPassword(password);
+  for (const [key,role] of [['lab','laboratory_manager'],['customer','customer'],['other','customer'],['planning','planning'],['sales','sales_representative']]) {
+    await q("INSERT INTO app.users(id,username,email,display_name,password_hash,identity_provider,status) VALUES($1,$2,$3,$2,$4,'local_password','active')", [ids[key],'fabricated-'+key,key+'@example.invalid',hash]);
+    await q('INSERT INTO app.user_roles(user_id,role_code) VALUES($1,$2)', [ids[key],role]);
+  }
+  for (const key of ['company','otherCompany']) await q("INSERT INTO app.companies(id,name,area,industry) VALUES($1,$2,'Western Cape','Fabricated')",[ids[key],'FABRICATED '+key]);
+  await q('INSERT INTO app.company_users(company_id,user_id,is_primary) VALUES($1,$2,true),($3,$4,true)',[ids.company,ids.customer,ids.otherCompany,ids.other]);
+  await q("INSERT INTO app.orders(id,reference,company_id,customer_user_id,origin,status,application,fulfilment,created_by_user_id) VALUES($1,'FAB-LAB-001',$2,$3,'representative_loaded_order','awaiting_planning','FABRICATED SANAS test','collect',$4)",[ids.order,ids.company,ids.customer,ids.lab]);
+  await q("INSERT INTO app.representatives(id,user_id,display_name,branch_name) VALUES($1,$2,'FABRICATED Sales','FABRICATED branch')",[ids.rep,ids.sales]);
+  await q('UPDATE app.orders SET representative_id=$1 WHERE id=$2',[ids.rep,ids.order]);
+  await q("INSERT INTO app.order_items(id,order_id,line_number,product_id,product_code_snapshot,product_name_snapshot,quantity,configuration) VALUES($1,$2,1,(SELECT id FROM app.products WHERE code='PBB' LIMIT 1),'PBB','FABRICATED SANAS gauge',2,$3::jsonb)",[ids.item,ids.order,JSON.stringify({sanas:'Yes — SANAS Calibration'})]);
+  await q("DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='lab_test_runtime') THEN CREATE ROLE lab_test_runtime NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE; END IF; END $$");
+  const source = await fs.readFile(new URL('../sql/phase1-runtime-grants.sql',import.meta.url),'utf8');
+  const databaseName = (await q('SELECT current_database() AS name')).rows[0].name;
+  const grants = source.slice(source.indexOf('REVOKE ALL ON SCHEMA'),source.indexOf('-- Resolve each exact approved signature')).replaceAll(':"runtime_role"','"lab_test_runtime"').replaceAll(':"DBNAME"','"'+databaseName+'"');
+  for (const statement of grants.split(';').filter(s => s.trim())) { if (!url && /GRANT CONNECT ON DATABASE/.test(statement)) continue; await q(statement); }
+  for (const match of source.slice(0,source.indexOf('missing_signatures text[]')).matchAll(/'(app\.[^']+\([^']*\))'/g)) await q('GRANT EXECUTE ON FUNCTION '+match[1]+' TO lab_test_runtime');
+  await q('SET ROLE lab_test_runtime');
+  let pending = Promise.resolve();
+  const repository = createPostgresRepository({ query:q, connect:async () => { const before=pending; let release; pending=new Promise(resolve=>{release=resolve;}); await before; return {query:q,release}; } });
+  const storage = createMemoryPrivateStorage();
+  const app = await buildApp({repository,storage,config:{environment:'test',host:'127.0.0.1',port:0,logLevel:'silent',trustProxy:false,cookieSecure:false,cookieName:'fabricated_lab_session',sessionTtlSeconds:3600,sessionPepper:'fabricated-local-laboratory-pepper-32-characters',maxUploadBytes:4194304,allowedOrigins:[],identityMode:'local_password'}});
+  t.after(() => app.close());
+  const clients = {};
+  let clientNumber = 1;
+  for (const role of ['lab','customer','other','planning']) {
+    const remoteAddress = `127.0.0.${clientNumber++}`; let cookie = '';
+    const api = createApiServices({apiBaseUrl:'http://adapter.invalid/api/v1',fetchImplementation:async (input,init) => {
+      const req = new Request(input,init), headers=Object.fromEntries(req.headers); if(cookie) headers.cookie=cookie;
+      const response=await app.inject({remoteAddress,method:req.method,url:new URL(req.url).pathname,headers,payload:req.method==='GET'?undefined:Buffer.from(await req.arrayBuffer())});
+      if(response.headers['set-cookie']) cookie=response.headers['set-cookie'].split(';')[0];
+      return new Response(response.rawPayload,{status:response.statusCode,headers:response.headers});
+    }});
+    await api.auth.signIn({email:role+'@example.invalid',password}); clients[role]={api,headers:()=>({cookie})};
+  }
+  const api = clients.lab.api;
+  const orders = await api.orders.list();
+  assert.equal(orders.length,1,'Certificate queue must not hide orders awaiting Planning');
+  const uiUnits = ensureLaboratoryRecord(orders[0]).laboratory.units;
+  const queue = await api.laboratory.listOrders();
+  assert.deepEqual(queue[0].laboratory.units.map(u=>u.id),uiUnits.map(u=>u.id),'Backend and UI physical unit IDs agree');
+  const entry = index => ({unitId:uiUnits[index].id,certificateNumber:'FAB-CERT-'+index,issueDate:'2020-01-02',serialNumber:'FAB-SERIAL-'+index,confirmAssociation:true,certificationType:'sanas',notes:'INTERNAL-LAB-NOTE',file:new File(['%PDF-1.4\nFABRICATED CERTIFICATE '+index+'\n%%EOF'],'fabricated-'+index+'.pdf',{type:'application/pdf'})});
+  await assert.rejects(api.laboratory.uploadCertificatesBatch(ids.order,[entry(0),{...entry(1),confirmAssociation:false}]));
+  assert.equal(storage._objects.size,0,'Validation happens before any file is saved');
+  await assert.rejects(api.laboratory.uploadCertificatesBatch(ids.order,[entry(0),entry(0)]));
+  await assert.rejects(api.laboratory.uploadCertificate(ids.order,uiUnits[0].id,{...entry(0),issueDate:'2020-02-30'}));
+  await assert.rejects(api.laboratory.uploadCertificate(ids.order,uiUnits[0].id,{...entry(0),certificationType:'traceable'}));
+  await assert.rejects(clients.planning.api.laboratory.uploadCertificate(ids.order,uiUnits[0].id,entry(0)));
+  await assert.rejects(clients.customer.api.laboratory.listOrders());
+  await assert.rejects(api.laboratory.archiveCertificates(ids.order));
+  // Inject a failure in the second DB INSERT, after the first INSERT succeeded.
+  const originalPut=storage.put; let writes=0;
+  storage.put=async file=>{const result=await originalPut(file); return ++writes===2?{...result,sizeBytes:-1}:result;};
+  await assert.rejects(api.laboratory.uploadCertificatesBatch(ids.order,[entry(0),entry(1)]));
+  storage.put=originalPut;
+  assert.equal(storage._objects.size,0,'Rolled-back batch removes all stored files');
+  assert.ok((await api.laboratory.listOrders())[0].laboratory.units.every(u=>!u.certificateId));
+  const concurrent = await Promise.allSettled([api.laboratory.uploadCertificatesBatch(ids.order,[entry(0),entry(1)]),api.laboratory.uploadCertificatesBatch(ids.order,[entry(0),entry(1)])]);
+  assert.equal(concurrent.filter(result => result.status === 'fulfilled').length,1,'Concurrent repeated batches create only one set of certificates');
+  const uploaded=concurrent.find(result => result.status === 'fulfilled').value;
+  assert.equal(uploaded.length,2);
+  assert.equal((await api.laboratory.getDashboard()).metrics.completedOrders,1);
+  assert.equal((await api.orders.getById(ids.order)).trackingStatus,'awaiting_planning','Certificate upload is not a physical Dispatch release');
+  const downloaded=await api.laboratory.downloadCertificate(uploaded[0].certificateId); assert.ok(downloaded.downloadUrl || downloaded.dataUrl);
+  const customerOrder=await clients.customer.api.orders.getById(ids.order);
+  assert.doesNotMatch(JSON.stringify(customerOrder),/INTERNAL-LAB-NOTE|replacementReason|storageKey/);
+  await assert.rejects(clients.other.api.orders.getById(ids.order));
+  await assert.rejects(clients.customer.api.laboratory.downloadCertificate(uploaded[0].certificateId),error=>error.status===423);
+  await assert.rejects(api.laboratory.replaceCertificate(ids.order,uiUnits[0].id,entry(0)));
+  const replacement=await api.laboratory.replaceCertificate(ids.order,uiUnits[0].id,{...entry(0),reason:'INTERNAL-LAB-REASON'});
+  assert.equal(replacement.certificateVersions.length,1);
+  await assert.rejects(api.laboratory.uploadCertificate(ids.order,uiUnits[0].id,entry(0)));
+  await q('RESET ROLE');
+  const documents=(await q('SELECT * FROM app.document_metadata WHERE order_id=$1 ORDER BY created_at',[ids.order])).rows;
+  assert.equal(documents.length,3);
+  assert.equal(documents.at(-1).version,2);
+  assert.equal(documents.at(-1).supersedes_document_id,uploaded[0].certificateId);
+  assert.equal(Number((await q("SELECT count(*) FROM app.notifications WHERE order_id=$1 AND event_type='certificate_available'",[ids.order])).rows[0].count),6,'Customer and assigned representative are both notified');
+  await q("UPDATE app.document_metadata SET scan_status='clean' WHERE order_id=$1",[ids.order]);
+  assert.equal(Number((await q("SELECT count(*) FROM app.audit_events WHERE action='upload_certificate'")).rows[0].count),2,'Failed batch left no upload audit rows');
+  await q('SET ROLE lab_test_runtime');
+  await assert.rejects(clients.customer.api.laboratory.downloadCertificate(uploaded[0].certificateId),error=>error.status===404);
+  const oldSource = await app.inject({url:`/api/v1/orders/${ids.order}/source-documents/${uploaded[0].certificateId}/download`,headers:clients.customer.headers()});
+  assert.equal(oldSource.statusCode,404,'Generic document download cannot bypass superseded certificate controls');
+  assert.ok((await clients.customer.api.laboratory.downloadCertificate(replacement.certificateId)).downloadUrl);
+  assert.doesNotMatch(JSON.stringify(await clients.customer.api.orders.getById(ids.order)),/INTERNAL-LAB/);
+  const current = await clients.customer.api.orders.getById(ids.order);
+  assert.ok(!current.documents.some(document => document.id === uploaded[0].certificateId),'Customer order lists only current certificate versions');
+  await api.laboratory.archiveCertificates(ids.order);
+  assert.equal((await api.laboratory.listOrders()).length,1,'Completed certificate history remains searchable');
+});

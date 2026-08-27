@@ -2,6 +2,8 @@
 
 Dispatch is a desktop workspace and a separate physical custody boundary.
 
+The pending real-API correction is documented in [Sales/Dispatch correction](SALES_DISPATCH_CORRECTION.md). It requires the matching backend plus migration 022; do not replace application authorization with broad runtime grants.
+
 ## Receipt control
 
 Every order entering Dispatch must use `Confirm Received in Dispatch`, including orders from Laboratory, QA, Expediting or an authorised Planning exception. Receipt records the receiving user, source department, time, package count, an optional internal note, a customer-safe message and an exception reason where needed.

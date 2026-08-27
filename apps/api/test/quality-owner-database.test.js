@@ -22,8 +22,8 @@ test('QA options/actions and Owner aggregates work through migrated runtime RLS'
   assert.equal(Number((await q('SELECT count(*) FROM app.users')).rows[0].count), 0);
   const password = 'Fabricated-QA-Owner-Only!739', pepper = 'fabricated-qa-owner-session-pepper-32-characters';
   const hash = await hashPassword(password);
-  const ids = Object.fromEntries(['owner', 'qa', 'manager', 'customer', 'otherCustomer', 'companyA', 'companyB', 'order', 'otherOrder', 'line', 'otherLine'].map(key => [key, randomUUID()]));
-  for (const [key, role] of [['owner', 'company_owner'], ['qa', 'quality_assurance'], ['manager', 'quality_manager'], ['customer', 'customer'], ['otherCustomer', 'customer']]) {
+  const ids = Object.fromEntries(['owner', 'salesManager', 'qa', 'manager', 'customer', 'otherCustomer', 'companyA', 'companyB', 'order', 'otherOrder', 'line', 'otherLine'].map(key => [key, randomUUID()]));
+  for (const [key, role] of [['owner', 'company_owner'], ['salesManager', 'sales_manager'], ['qa', 'quality_assurance'], ['manager', 'quality_manager'], ['customer', 'customer'], ['otherCustomer', 'customer']]) {
     await q("INSERT INTO app.users(id,username,email,display_name,password_hash,identity_provider,status) VALUES($1,$2,$3,$2,$4,'local_password','active')", [ids[key], 'fabricated-' + key, key.toLowerCase() + '@example.invalid', hash]);
     await q('INSERT INTO app.user_roles(user_id,role_code) VALUES($1,$2)', [ids[key], role]);
   }
@@ -55,6 +55,24 @@ test('QA options/actions and Owner aggregates work through migrated runtime RLS'
   t.after(() => app.close());
   const signIn = async key => { const result = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { identifier: 'fabricated-' + key, password } }); assert.equal(result.statusCode, 200, result.body); return { cookie: result.headers['set-cookie'].split(';')[0], 'x-csrf-token': result.json().data.csrfToken }; };
   const owner = await signIn('owner'), qa = await signIn('qa'), manager = await signIn('manager'), customer = await signIn('customer');
+  const salesManager = await signIn('salesManager');
+  for (const headers of [owner, salesManager]) {
+    const options = await app.inject({ url: '/api/v1/management/performance-report-options', headers });
+    assert.equal(options.statusCode, 200, options.body);
+    assert.ok(options.json().data.sections.length > 0);
+    const dashboard = await app.inject({ url: '/api/v1/management/dashboard', headers });
+    assert.equal(dashboard.statusCode, 200, dashboard.body);
+    assert.equal(dashboard.json().data.period.mode, 'last_31_days');
+    const report = await app.inject({ method: 'POST', url: '/api/v1/management/performance-reports', headers, payload: { periodMode: 'last_31_days', sections: ['executive_summary','operational_records'] } });
+    assert.equal(report.statusCode, 200, report.body);
+    assert.equal(Buffer.from(report.json().data.bytesBase64, 'base64').subarray(0, 4).toString(), '%PDF');
+    assert.deepEqual(report.json().data.period, dashboard.json().data.period);
+    const audit = (await app.inject({ url: '/api/v1/audit-events', headers: owner })).json().data.find(event => event.eventType === 'management.pdf_exported');
+    assert.deepEqual(audit.details.period, report.json().data.period);
+    assert.equal(audit.details.recordCount, dashboard.json().data.records.length);
+  }
+  assert.equal((await app.inject({ method: 'POST', url: '/api/v1/management/performance-reports', headers: customer, payload: {} })).statusCode, 403);
+  assert.equal((await app.inject({ method: 'POST', url: '/api/v1/management/performance-reports', headers: { cookie: owner.cookie }, payload: {} })).statusCode, 403);
   for (const headers of [qa, manager]) {
     const options = await app.inject({ url: '/api/v1/quality-assurance/workspace-options', headers }); assert.equal(options.statusCode, 200, options.body);
     assert.ok(Object.values(options.json().data).every(choices => choices.every(choice => choice.id && choice.label)));
