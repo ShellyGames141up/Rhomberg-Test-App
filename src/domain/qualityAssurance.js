@@ -1,40 +1,8 @@
 import { ServiceError } from '../services/contracts.js';
 import { orderRequiresLaboratory } from './certification.js';
 
-export const QA_PROBLEM_CATEGORIES = Object.freeze([
-  { id: 'incorrect_assembly', label: 'Incorrect assembly' },
-  { id: 'incorrect_configuration', label: 'Incorrect configuration' },
-  { id: 'calibration_issue', label: 'Calibration issue' },
-  { id: 'physical_damage', label: 'Physical damage' },
-  { id: 'labelling_issue', label: 'Labelling issue' },
-  { id: 'functional_test_failure', label: 'Functional test failure' },
-  { id: 'leakage', label: 'Leakage' },
-  { id: 'electrical_issue', label: 'Electrical issue' },
-  { id: 'documentation', label: 'Documentation' },
-  { id: 'packaging', label: 'Packaging' },
-  { id: 'missing_component', label: 'Missing component' },
-  { id: 'incorrect_product', label: 'Incorrect product' },
-  { id: 'other', label: 'Other' },
-]);
-
-export const QA_SEVERITIES = Object.freeze([
-  { id: 'minor', label: 'Minor' },
-  { id: 'major', label: 'Major' },
-  { id: 'critical', label: 'Critical' },
-]);
-
-export const QA_REWORK_DESTINATIONS = Object.freeze([
-  { id: 'planning', label: 'Planning' },
-  { id: 'materials', label: 'Materials' },
-  { id: 'stores', label: 'Stores' },
-  { id: 'assembly', label: 'Assembly' },
-  { id: 'production', label: 'Production' },
-  { id: 'calibration_testing', label: 'Calibration or Testing' },
-  { id: 'expediting', label: 'Expediting' },
-  { id: 'documentation', label: 'Documentation' },
-  { id: 'packaging', label: 'Packaging' },
-  { id: 'other', label: 'Other' },
-]);
+import { QA_PROBLEM_CATEGORIES, QA_SEVERITIES, QA_REWORK_DESTINATIONS } from '../../apps/api/src/domain/qualityOptions.js';
+export { QA_PROBLEM_CATEGORIES, QA_SEVERITIES, QA_REWORK_DESTINATIONS };
 
 export const orderRequiresQualityAssurance = order => !orderRequiresLaboratory(order);
 

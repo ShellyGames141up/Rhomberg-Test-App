@@ -2,6 +2,12 @@
 
 ## Server-side inheritance
 
+Migration 020 completes the Company Owner read scope with `read_catalogue`,
+`view_all_companies`, `view_all_rfqs` and `view_reports`. It does not grant
+`administer_users`, `override_workflow`, or QA mutation rights. Explicit user
+restrictions remain authoritative. QA and QA Manager keep their existing permissions
+and share labelled reference options. See [QA/Owner correction](QA_OWNER_REPORTING_FIX.md).
+
 For API mode, the active database roles, role_permissions and permissions are
 authoritative. Migration 018 computes the union of all assigned active role
 defaults plus explicit user grants, minus explicit user restrictions. Adding a

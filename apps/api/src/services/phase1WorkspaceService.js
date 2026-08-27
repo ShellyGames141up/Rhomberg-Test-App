@@ -1,4 +1,7 @@
 import { validationError } from '../errors.js';
+import { requirePermission } from '../authorization/permissions.js';
+import { averageHours, buildOperationalStatistics, reportRecord } from '../domain/operationalStatistics.js';
+import { QA_PROBLEM_CATEGORIES, QA_SEVERITIES, QA_REWORK_DESTINATIONS } from '../domain/qualityOptions.js';
 import { EXPEDITOR_PROGRESS_STEPS, REQUIRED_EXPEDITOR_STEP_IDS, EXPEDITOR_DOCUMENT_TYPES } from '../domain/expeditingOptions.js';
 
 const clone = value => structuredClone(value);
@@ -53,7 +56,7 @@ function validatePreferences(candidate) {
   return merged;
 }
 
-export function createPhase1WorkspaceService({ repository, maxUploadBytes }) {
+export function createPhase1WorkspaceService({ repository, maxUploadBytes, clock = () => new Date() }) {
   const service = {
     async getCurrentDraft(actor) {
       const row = await repository.getEnquiryDraft(actor);
@@ -108,7 +111,7 @@ export function createPhase1WorkspaceService({ repository, maxUploadBytes }) {
     }),
     getDispatchOptions: () => ({ methods: ['collection', 'company_delivery', 'courier', 'third_party_delivery'], proofTypes: ['delivery_note', 'proof_of_delivery', 'collection_confirmation'], maxProofBytes: maxUploadBytes }),
     getLaboratoryOptions: () => ({ certificationTypes: ['SANAS', 'Traceable'], releaseDestinations: ['expediting', 'dispatch'], maxCertificateBytes: maxUploadBytes }),
-    getQualityOptions: () => ({ problemCategories: ['workmanship', 'configuration', 'documentation', 'damage', 'other'], severities: ['minor', 'major', 'critical'], reworkDestinations: ['expediting', 'laboratory'] }),
+    getQualityOptions: () => ({ problemCategories: clone(QA_PROBLEM_CATEGORIES), severities: clone(QA_SEVERITIES), reworkDestinations: clone(QA_REWORK_DESTINATIONS) }),
     getLocations: actor => repository.listLocations(actor),
     async saveLocation(actor, candidate, correlationId) {
       if (!isObject(candidate)) throw validationError({ location: 'Location details are required.' });
@@ -130,7 +133,9 @@ export function createPhase1WorkspaceService({ repository, maxUploadBytes }) {
     },
     listTechnicalRequests: actor => repository.listTechnicalRequests(actor),
     async getManagementDashboard(actor, filters = {}) {
-      const [rfqs, orders] = await Promise.all([repository.listEnquiries(actor), repository.listOrders(actor)]);
+      if (!actor.permissions.includes('view_reports')) requirePermission(actor, 'view_all_orders');
+      const [rfqs, orders] = await Promise.all([repository.listEnquiries(actor, { forReporting: true }), repository.listOrders(actor, { forReporting: true })]);
+      const audits = actor.permissions.includes('read_audit_history') ? await repository.listAuditEvents(actor) : [];
       const records = [...rfqs, ...orders];
       const group = (items, selector) => [...items.reduce((map, item) => {
         const label = selector(item) || 'Unassigned';
@@ -146,19 +151,13 @@ export function createPhase1WorkspaceService({ repository, maxUploadBytes }) {
       const terminalRfqs = new Set(['cancelled','expired','converted_to_order']);
       const terminalOrders = new Set(['completed','cancelled','archived']);
       const activeOrders = orders.filter(item => !terminalOrders.has(item.trackingStatus));
-      const quantities = orders.flatMap(order => (order.items || []).map(item => ({
-        quantity: Number(item.quantity || 0),
-        product: item.productName || item.name || item.productCode || item.productId || 'Unspecified product',
-        representative: order.selectedRep?.name || 'Unassigned',
-      })));
-      const quantityGroup = key => [...quantities.reduce((map,item) => map.set(item[key],(map.get(item[key]) || 0) + item.quantity),new Map())]
-        .map(([label,quantity]) => ({ label, quantity })).sort((left,right) => right.quantity-left.quantity || left.label.localeCompare(right.label));
-      const now = new Date();
+      const now = clock();
+      const stageHours = averageHours(records.flatMap(record => (record.trackingHistory || []).slice(1).map((event, index) => [record.trackingHistory[index].createdAt, event.createdAt])));
       const ageing = visibleRecords.filter(item => item.workflowType === 'rfq' ? !terminalRfqs.has(item.trackingStatus) : !terminalOrders.has(item.trackingStatus))
-        .map(item => ({ ...item, ageDays: Math.max(0,Math.floor((now-new Date(item.updatedAt || item.createdAt || now))/86400000)) }))
+        .map(item => ({ ...reportRecord(item), ageDays: Math.max(0,Math.floor((now-new Date(item.updatedAt || item.createdAt || now))/86400000)) }))
         .sort((left,right) => right.ageDays-left.ageDays);
       return {
-        generatedAt: new Date().toISOString(),
+        generatedAt: now.toISOString(),
         metrics: {
           openRfqs: rfqs.filter(item => !terminalRfqs.has(item.trackingStatus)).length,
           awaitingRepresentativeAction: rfqs.filter(item => ['assigned_to_rep','under_rep_review'].includes(item.trackingStatus)).length,
@@ -173,13 +172,14 @@ export function createPhase1WorkspaceService({ repository, maxUploadBytes }) {
           completed: orders.filter(item => item.trackingStatus === 'completed').length,
           archived: orders.filter(item => item.trackingStatus === 'archived').length,
           emergency: activeOrders.filter(item => item.priority === 'urgent' || item.emergency === 'yes').length,
-          averageStageHours: 0, averageStageDuration: '0 hours',
+          averageStageHours: stageHours, averageStageDuration: `${stageHours} hours`,
         },
-        records: visibleRecords, ageing, recentActivity: records.slice(0, 20),
+        records: visibleRecords.map(reportRecord), ageing,
+        recentActivity: audits.slice(0, 20).map(event => ({ id: event.id, eventType: event.eventType, action: event.action, timestamp: event.timestamp || event.createdAt, actingUser: typeof event.actingUser === 'string' ? event.actingUser : event.actingUser?.displayName || 'System' })),
         ordersByRepresentative: group(orders, item => item.selectedRep?.name),
         ordersByBranch: group(orders, item => item.selectedRep?.branchName),
         ordersByStatus: group(orders, item => item.trackingStatus),
-        phase21: { products: { totalUnits: quantities.reduce((sum,item) => sum+item.quantity,0), byProduct: quantityGroup('product'), byCategory: [], byMonth: [], byYear: [], byRepresentative: quantityGroup('representative'), byCompany: [] }, laboratory: {}, quality: {}, routing: {}, operations: {} },
+        phase21: buildOperationalStatistics(rfqs, orders, now),
         salesPerformance: { authorised: false },
         filters: {
           statuses: [...new Set(records.map(item => item.trackingStatus).filter(Boolean))].sort(),

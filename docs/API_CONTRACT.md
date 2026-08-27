@@ -2,6 +2,24 @@
 
 ## Workspace refresh and notification acknowledgement
 
+### QA options and Owner reporting correction
+
+`GET /api/v1/quality-assurance/workspace-options` returns `{id,label}` objects in
+`problemCategories`, `severities` and `reworkDestinations`, matching shared UI/API
+definitions. QA queues use `awaiting_qa` and existing inspection/rework/pass states.
+The `fail_qa` workflow validates canonical selections, required text/date and an
+affected item from that order. Invalid choices/items return 422; permission/state
+checks remain authoritative. Internal QA history/notes are omitted from customer
+payloads; customer-safe messages populate the existing timeline/notifications.
+
+`GET /api/v1/management/dashboard` computes authorised totals, unit quantities, QA,
+available certificate information and recorded durations without normal workspace
+page truncation. `records`/`ageing` omit raw JSON, documents and pricing;
+`recentActivity` comes from authorised audits. No revenue is inferred.
+See [definitions and limitations](QA_OWNER_REPORTING_FIX.md).
+
+### Refresh contract
+
 `GET /api/v1/workspace/updates` requires a valid session and returns `{data:{revision:"<opaque SHA-256>",intervalSeconds:30},meta:{requestId:"<UUID>"}}` with `Cache-Control: no-store`. The token reflects only caller-authorised data and permissions; clients fetch through existing services when it changes. It conveys no additional access.
 
 `POST /notifications/{notificationId}/read` requires session + CSRF and returns `{data:{id,readAt}}`; clients merge the acknowledgement. Other recipients' IDs return 404, invalid UUIDs return 422. Read-all returns `{data:{updatedCount,updated}}`; both counts are equal. Changes are audited transactionally. See [implementation and operating limits](LIVE_UPDATES_AND_NOTIFICATIONS.md).

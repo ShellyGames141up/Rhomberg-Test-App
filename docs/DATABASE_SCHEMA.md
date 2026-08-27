@@ -1,5 +1,15 @@
 # Phase 21 database schema guide
 
+## Company Owner reporting migration 020
+
+Migration `020_owner_reporting_scope.sql` idempotently adds the existing active
+`read_catalogue`, `view_all_companies`, `view_all_rfqs` and `view_reports` permissions
+to the active `company_owner` role. These allow the company joins required by RLS;
+`view_all_orders` alone was insufficient. No policies, runtime grants, identities or
+operational data are changed. Explicit per-user denials remain authoritative.
+QA inspections are projected from existing `orders.details.qualityUpdates`.
+See [QA/Owner validation and rollout](QA_OWNER_REPORTING_FIX.md).
+
 ## Notification acknowledgement migration 019
 
 `019_notification_read_access.sql` adds `notifications_recipient_update` for UPDATE with USING/WITH CHECK `recipient_user_id=app.current_user_id()`. It complements the existing SELECT policy and restricted column grants; no public or cross-recipient update access is added. Runtime-grant preflight checks the policy before revoking privileges. Read/read-all audit events commit in the same transaction as acknowledgement. The live revision endpoint is a read-only RLS-scoped query; it adds no tables or database grants.

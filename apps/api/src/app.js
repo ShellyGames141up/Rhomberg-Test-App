@@ -15,6 +15,7 @@ import { createPublicReferenceService } from './services/publicReferenceService.
 import { createPhase1WorkspaceService } from './services/phase1WorkspaceService.js';
 import { createRepresentativeOrderService } from './services/representativeOrderService.js';
 import { createWorkflowService } from './services/workflowService.js';
+import { QA_QUEUE_STATUSES } from './domain/qualityOptions.js';
 import { createTechnicalSupportService } from './services/technicalSupportService.js';
 import { createLaboratoryService } from './services/laboratoryService.js';
 import { createGovernanceService, simplePdf } from './services/governanceService.js';
@@ -415,8 +416,8 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   app.get('/api/v1/laboratory/documents/:documentId/download', { preHandler: requireAuthentication }, sendCertificate);
   app.get('/api/v1/certificates/:certificateId/download', { preHandler: requireAuthentication }, sendCertificate);
   app.get('/api/v1/quality-assurance/workspace-options', { preHandler: requireAuthentication }, async request => ({ data: phase1WorkspaceService.getQualityOptions(), meta: { requestId: request.id } }));
-  app.get('/api/v1/quality-assurance/orders', { preHandler: requireAuthentication }, async request => { requirePermission(request.actor,'view_qa_queue');const records=(await repository.listOrders(request.actor)).filter(item=>['awaiting_quality_assurance','qa_in_progress','qa_failed','on_hold'].includes(item.trackingStatus));return{data:records,meta:{requestId:request.id}};});
-  app.get('/api/v1/quality-assurance/dashboard', { preHandler: requireAuthentication }, async request => {requirePermission(request.actor,'view_qa_queue');const records=(await repository.listOrders(request.actor)).filter(item=>['awaiting_quality_assurance','qa_in_progress','qa_failed','on_hold'].includes(item.trackingStatus));return{data:{total:records.length,awaitingInspection:records.filter(x=>x.trackingStatus==='awaiting_quality_assurance').length,inProgress:records.filter(x=>x.trackingStatus==='qa_in_progress').length,failed:records.filter(x=>x.trackingStatus==='qa_failed').length,onHold:records.filter(x=>x.trackingStatus==='on_hold').length},meta:{requestId:request.id}};});
+  app.get('/api/v1/quality-assurance/orders', { preHandler: requireAuthentication }, async request => { requirePermission(request.actor,'view_qa_queue');const records=(await repository.listOrders(request.actor)).filter(item=>QA_QUEUE_STATUSES.includes(item.trackingStatus));return{data:records,meta:{requestId:request.id}};});
+  app.get('/api/v1/quality-assurance/dashboard', { preHandler: requireAuthentication }, async request => {requirePermission(request.actor,'view_qa_queue');const records=(await repository.listOrders(request.actor)).filter(item=>QA_QUEUE_STATUSES.includes(item.trackingStatus));return{data:{total:records.length,awaitingInspection:records.filter(x=>x.trackingStatus==='awaiting_qa').length,inProgress:records.filter(x=>x.trackingStatus==='qa_in_progress').length,failed:records.filter(x=>x.trackingStatus==='qa_failed').length,onHold:records.filter(x=>x.trackingStatus==='on_hold').length},meta:{requestId:request.id}};});
   app.get('/api/v1/admin/locations', { preHandler: requireAuthentication }, async request => {
     requirePermission(request.actor, PERMISSIONS.MANAGE_LOCATION_SETTINGS);
     return { data: await phase1WorkspaceService.getLocations(request.actor), meta: { requestId: request.id } };

@@ -1,4 +1,5 @@
 import { validationError } from '../errors.js';
+import { QA_PROBLEM_CATEGORIES, QA_SEVERITIES, QA_REWORK_DESTINATIONS } from '../domain/qualityOptions.js';
 import { EXPEDITOR_PROGRESS_STEPS } from '../domain/expeditingOptions.js';
 
 const definitions=Object.freeze({
@@ -52,6 +53,16 @@ function validate(action,input) {
     if (!step || (action === 'add_expediting_update' && !step.selectableForUpdate) || (action === 'start_expediting' && step.id !== 'planning_received')) errors.progressStep='Choose a valid progress step for this workflow action.';
   }
   if (['place_on_hold','cancel_order','cancel_rfq','expire_rfq'].includes(action)) requiredText(data.comment || data.reason || input.comment,'comment','a reason',errors);
+  if (action === 'fail_qa') {
+    const failure = data.qaFailure || {};
+    for (const [key, choices] of [['category', QA_PROBLEM_CATEGORIES], ['severity', QA_SEVERITIES], ['reworkDestination', QA_REWORK_DESTINATIONS]]) {
+      if (!choices.some(choice => choice.id === failure[key])) errors[key] = 'Select an approved QA option.';
+    }
+    for (const key of ['problemDescription', 'customerMessage']) if (typeof failure[key] !== 'string' || failure[key].trim().length < 5 || failure[key].length > 2000) errors[key] = 'Enter a clear description (5–2,000 characters).';
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(failure.affectedItemId || '')) errors.affectedItemId = 'Select the affected order item.';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(failure.dateFound || '') || !Number.isFinite(Date.parse(failure.dateFound))) errors.dateFound = 'Enter a valid inspection date.';
+    if ([failure.category, failure.reworkDestination].includes('other') && String(failure.otherExplanation || '').trim().length < 5) errors.otherExplanation = 'Explain the selected Other option.';
+  }
   if (Object.keys(errors).length) throw validationError(errors,'Complete the required workflow information.');
   return data;
 }

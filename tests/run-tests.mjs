@@ -10,6 +10,7 @@ await import('./planning-queue.test.mjs');
 await import('./expediting.test.mjs');
 await import('./dispatch.test.mjs');
 await import('./phase21.test.mjs');
+await import('./quality-options-ui.test.mjs');
 await import('./workflow.test.mjs');
 await import('./notifications.test.mjs');
 await import('./live-updates.test.mjs');

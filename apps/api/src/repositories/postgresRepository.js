@@ -1,5 +1,6 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { notFound } from '../errors.js';
+import { qualityProjection } from '../domain/qualityProjection.js';
 
 const json = value => JSON.stringify(value ?? {});
 
@@ -13,7 +14,8 @@ function expeditingProjection(details = {}, actor) {
   }));
   const last = updates.at(-1);
   return {
-    details: customer ? { ...details, expeditingUpdates: updates } : details,
+    details: customer ? { ...details, qualityUpdates: undefined, qualityAssurance: undefined, expeditingUpdates: updates } : details,
+    ...(!customer ? { qualityAssurance: qualityProjection(details), internalJobNumber: details.planning?.internalJobNumber || '', salesOrderNumber: details.planning?.salesOrderNumber || '' } : {}),
     expediting: { updates, currentStep: last?.progressStep || '', estimatedCompletionDate: last?.estimatedCompletionDate || details.planning?.estimatedCompletionDate || '', currentDelayReason: last?.delayReason || '' },
   };
 }
@@ -116,7 +118,7 @@ function mapEnquiry(row, items = [], documents = []) {
     companyId: row.company_id,
     company: row.company_name,
     contact: row.requester_name,
-    selectedRep: { id: row.representative_id, name: row.representative_name, branchName: row.branch_name },
+    selectedRep: { id: row.representative_id, name: row.representative_name, branchId: row.branch_id, branchName: row.branch_name },
     representativeId: row.representative_id,
     application: row.application,
     medium: row.process_medium || '',
@@ -156,7 +158,7 @@ function mapEnquiry(row, items = [], documents = []) {
 }
 
 const enquirySelect = `SELECT r.*, c.name AS company_name, u.display_name AS requester_name,
-  rep.display_name AS representative_name, rep.branch_name
+  rep.display_name AS representative_name, rep.branch_name, rep.branch_id
   FROM app.rfqs r
   JOIN app.companies c ON c.id = r.company_id
   JOIN app.users u ON u.id = r.requester_user_id
@@ -656,7 +658,7 @@ export function createPostgresRepository(pool) {
         return result;
       }, { actor });
     },
-    async listOrders(actor) {
+    async listOrders(actor, { forReporting = false } = {}) {
       return inTransaction(async client => {
         const queueStatuses = actor.permissions.includes('view_planning_queue') ? ['awaiting_planning','planning_in_progress','planned']
           : actor.permissions.includes('view_expediting_queue') ? ['awaiting_lab_receipt_expediting','submitted_to_expediting','expediting_in_progress','qa_failed','returned_to_expediting','awaiting_qa','awaiting_dispatch','on_hold']
@@ -671,25 +673,31 @@ export function createPostgresRepository(pool) {
           values.push(actor.representativeId);
         }
         const result = await client.query(`SELECT o.*, c.name AS company_name, customer.display_name AS customer_name,
-          rep.display_name AS representative_name, rep.branch_name
+          rep.display_name AS representative_name, rep.branch_name, rep.branch_id
           FROM app.orders o JOIN app.companies c ON c.id = o.company_id
           LEFT JOIN app.users customer ON customer.id = o.customer_user_id
           LEFT JOIN app.representatives rep ON rep.id = o.representative_id
-          WHERE ${predicate} AND o.deleted_at IS NULL ORDER BY o.updated_at DESC LIMIT 200`, values);
+          WHERE ${predicate} AND o.deleted_at IS NULL ORDER BY o.updated_at DESC ${forReporting ? '' : 'LIMIT 200'}`, values);
+        // Batch enrichment avoids two additional round trips per reporting row.
+        const ids = result.rows.map(row => row.id);
+        const itemRows = (await client.query('SELECT * FROM app.order_items WHERE order_id=ANY($1::uuid[]) ORDER BY line_number', [ids])).rows;
+        const eventRows = (await client.query("SELECT * FROM app.workflow_events WHERE entity_type='order' AND entity_id=ANY($1::uuid[]) ORDER BY created_at", [ids])).rows;
+        const byOrder = (rows, key) => { const map = new Map(); for (const row of rows) { if (!map.has(row[key])) map.set(row[key], []); map.get(row[key]).push(row); } return map; };
+        const itemsByOrder = byOrder(itemRows, 'order_id'), historyByOrder = byOrder(eventRows, 'entity_id');
         const records = [];
         for (const row of result.rows) {
-          const items = await client.query('SELECT * FROM app.order_items WHERE order_id = $1 ORDER BY line_number', [row.id]);
-          const history = await client.query("SELECT * FROM app.workflow_events WHERE entity_type = 'order' AND entity_id = $1 ORDER BY created_at", [row.id]);
+          const items = { rows: itemsByOrder.get(row.id) || [] };
+          const history = { rows: historyByOrder.get(row.id) || [] };
           records.push({
             id: row.id, reference: row.reference, workflowType: 'order', trackingStatus: row.status,
             status: row.status, companyId: row.company_id, company: row.company_name,
             contact: row.customer_name || '', representativeId: row.representative_id,
-            selectedRep: { id: row.representative_id, name: row.representative_name || '', branchName: row.branch_name || '' },
+            selectedRep: { id: row.representative_id, name: row.representative_name || '', branchId: row.branch_id || '', branchName: row.branch_name || '' },
             application: row.application, fulfilment: row.fulfilment, deliveryAddress: row.delivery_address || '',
             collectionBranch: row.collection_branch || '', notes: row.customer_notes || '', priority: row.internal_priority,
             poNumber: row.purchase_order_number || '', quotationNumber: row.quotation_number || '', origin: row.origin,
-            version: row.row_version, details: row.details || {}, laboratory: row.details?.laboratory || undefined, createdAt: row.created_at, updatedAt: row.updated_at,
-            items: items.rows.map(item => ({ id: item.id, lineId: item.id, productId: item.product_id, code: item.product_code_snapshot, name: item.product_name_snapshot, quantity: item.quantity, configuration: item.configuration, unitState: item.unit_state })),
+            version: row.row_version, details: row.details || {}, laboratory: row.details?.laboratory || undefined, createdAt: row.created_at, updatedAt: row.updated_at, completedAt: row.completed_at, customerPoNumber: row.purchase_order_number || '',
+            items: items.rows.map(item => ({ id: item.id, lineId: item.id, productId: item.product_id, code: item.product_code_snapshot, name: item.product_name_snapshot, categoryId: item.category_id, quantity: item.quantity, configuration: item.configuration, unitState: item.unit_state })),
             trackingHistory: history.rows.map(event => ({ id: event.id, fromStatus: event.from_status, toStatus: event.to_status, status: event.to_status, entityType: 'order', action: event.action, note: event.customer_note || (actor.role !== 'customer' ? event.internal_note : '') || '', customerVisible: event.customer_visible, createdAt: event.created_at })),
             allowedWorkflowActions: [],
             ...expeditingProjection(row.details || {},actor),
@@ -711,6 +719,10 @@ export function createPostgresRepository(pool) {
           if (pending.rows[0]) { const error=new Error('Technical Review Pending. Complete or formally override the technical request before marking the RFQ quoted.'); error.code='TECHNICAL_REVIEW_PENDING'; error.statusCode=409; throw error; }
         }
         let toStatus=command.definition.to; const details={...(record.details || {})};
+        if (command.action === 'fail_qa') {
+          const affected = await client.query('SELECT 1 FROM app.order_items WHERE order_id=$1 AND id=$2', [record.id, command.data.qaFailure.affectedItemId]);
+          if (!affected.rows.length) { const error = new Error('Select an affected item belonging to this order.'); error.code = 'INVALID_QA_ITEM'; error.statusCode = 422; throw error; }
+        }
         if (toStatus==='__resume__') toStatus=details.previousStatus || 'expediting_in_progress';
         if (command.action==='place_on_hold') details.previousStatus=record.status;
         if (command.action==='mark_quoted') details.quotation={...command.data.quotation,recordedAt:new Date().toISOString(),recordedBy:actor.id};
@@ -733,7 +745,7 @@ export function createPostgresRepository(pool) {
           details.orderId=orderId; details.orderReference=orderReference;
         }
         await client.query(`UPDATE app.${table} SET status=$2,details=$3::jsonb,row_version=row_version+1,updated_at=now()${command.entityType==='order' && ['complete_collection','complete_delivery'].includes(command.action)?',completed_at=now()':''} WHERE id=$1`,[record.id,toStatus,json(details)]);
-        const companyId=record.company_id; const eventId=randomUUID(); const customerNote=String(command.data?.customerMessage || command.data?.expeditingUpdate?.customerMessage || command.data?.dispatchUpdate?.customerMessage || '').trim();
+        const companyId=record.company_id; const eventId=randomUUID(); const customerNote=String(command.data?.customerMessage || command.data?.qaFailure?.customerMessage || command.data?.qaPass?.customerMessage || command.data?.qaRework?.customerMessage || command.data?.expeditingUpdate?.customerMessage || command.data?.dispatchUpdate?.customerMessage || '').trim();
         await client.query(`INSERT INTO app.workflow_events(id,company_id,entity_type,entity_id,from_status,to_status,action,customer_note,internal_note,customer_visible,actor_user_id,actor_role,metadata)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)`,[eventId,companyId,command.entityType,record.id,record.status,toStatus,command.action,customerNote || null,command.comment || null,Boolean(customerNote || ['acknowledge_quotation','accept_order','start_planning','submit_to_expediting','mark_ready_for_collection','start_delivery','confirm_collection','confirm_delivery','complete_collection','complete_delivery'].includes(command.action)),actor.id,actor.role,json({orderId,orderReference})]);
         await client.query(`INSERT INTO app.audit_events(event_type,actor_user_id,actor_role,company_id,action,entity_type,entity_id,outcome,correlation_id,details)
@@ -851,7 +863,7 @@ export function createPostgresRepository(pool) {
         VALUES ($1,$2::jsonb,$3) ON CONFLICT(code) DO UPDATE SET value=EXCLUDED.value,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()
         RETURNING value,updated_at`, [code, json(value), actor.id])).rows[0], { actor });
     },
-    async listEnquiries(actor) {
+    async listEnquiries(actor, { forReporting = false } = {}) {
       return inTransaction(async client => {
         let predicate = actor.permissions.includes('view_all_rfqs') ? 'TRUE' : 'r.company_id = ANY($1::uuid[])';
         const values = actor.permissions.includes('view_all_rfqs') ? [] : [actor.companyIds];
@@ -859,8 +871,11 @@ export function createPostgresRepository(pool) {
           predicate += ` AND r.representative_id = $${values.length + 1}`;
           values.push(actor.representativeId);
         }
-        const result = await client.query(`${enquirySelect} WHERE ${predicate} ORDER BY r.created_at DESC LIMIT 100`, values);
-        return result.rows.map(row => mapEnquiry(row));
+        const result = await client.query(`${enquirySelect} WHERE ${predicate} ORDER BY r.created_at DESC ${forReporting ? '' : 'LIMIT 100'}`, values);
+        const events = forReporting ? (await client.query("SELECT entity_id,action,created_at FROM app.workflow_events WHERE entity_type='rfq' AND entity_id=ANY($1::uuid[]) ORDER BY created_at", [result.rows.map(row => row.id)])).rows : [];
+        const history = new Map();
+        for (const event of events) { if (!history.has(event.entity_id)) history.set(event.entity_id, []); history.get(event.entity_id).push({ action: event.action, createdAt: event.created_at }); }
+        return result.rows.map(row => ({ ...mapEnquiry(row), trackingHistory: history.get(row.id) || [] }));
       }, { actor });
     },
     async getEnquiry(actor, id) {
