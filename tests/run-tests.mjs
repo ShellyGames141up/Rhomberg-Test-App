@@ -51,3 +51,5 @@ await import('./forced-password-onboarding.test.mjs');
 await import('./customer-onboarding-ui.test.mjs');
 await import('./internal-staging-packaging.test.mjs');
 await import('./api-contract-audit.test.mjs');
+await import('./management-workspace-routing.test.mjs');
+await import('./laboratory-sanas-selection.test.mjs');

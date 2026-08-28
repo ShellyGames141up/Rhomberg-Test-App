@@ -388,6 +388,12 @@ export const usesRepresentativeInbox = account => (
   && !accountCan(account, PERMISSIONS.VIEW_ALL_RFQS)
   && Boolean(account?.representativeId)
 );
+// Active workspace, not the union of every assigned role's permissions, selects
+// the screen. This does not grant data access; the API still authorises requests.
+export const usesSalesWorkspace = account => (
+  account?.role === USER_ROLES.SALES_REPRESENTATIVE
+  && accountCan(account, PERMISSIONS.VIEW_ASSIGNED_RFQS)
+);
 export const canListRfqs = account => (
   accountCan(account, PERMISSIONS.VIEW_OWN_COMPANY_RFQS)
   || accountCan(account, PERMISSIONS.VIEW_ASSIGNED_RFQS)

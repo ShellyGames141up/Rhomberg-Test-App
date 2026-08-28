@@ -8,6 +8,8 @@ test('Phase 1 migration applies to an empty PostgreSQL-compatible database with 
   await runMigrations(db);
   await runMigrations(db);
   const migrationRecords = await db.query('SELECT version FROM public.rhomberg_schema_migrations');
+  assert.ok(migrationRecords.rows.some(row => row.version === '023_technical_workspace_read_contract.sql'));
+  migrationRecords.rows = migrationRecords.rows.filter(row => row.version !== '023_technical_workspace_read_contract.sql');
   assert.ok(migrationRecords.rows.some(row => row.version === '022_dispatch_proof_access.sql'));
   migrationRecords.rows = migrationRecords.rows.filter(row => row.version !== '022_dispatch_proof_access.sql');
 assert.deepEqual(migrationRecords.rows.map(row => row.version).sort(), ['001_phase1_vertical_slice.sql', '002_protected_request_context.sql', '003_initial_administrator_bootstrap.sql', '004_internal_test_operational_foundation.sql', '005_approved_product_catalogue.sql', '006_account_directory_fields.sql', '007_simplified_laboratory_access.sql', '008_administration_lifecycle.sql', '009_document_and_governance_fields.sql', '010_client_visits.sql', '011_workspace_and_record_controls.sql', '012_administration_directory_scope.sql', '013_first_login_password_change.sql', '014_customer_registration_and_dedicated_representative.sql', '015_administrator_account_soft_delete.sql', '016_conditional_product_configuration.sql', '017_restore_customer_lifecycle_functions.sql', '018_role_permission_inheritance.sql', '019_notification_read_access.sql', '020_owner_reporting_scope.sql', '021_management_commercial_reporting.sql']);

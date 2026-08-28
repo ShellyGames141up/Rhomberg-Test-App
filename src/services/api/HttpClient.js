@@ -81,7 +81,7 @@ export class HttpClient {
         });
       }
       if (responseType === 'blob') return { blob: payload, contentType: response.headers.get('content-type') || '', disposition: response.headers.get('content-disposition') || '' };
-      return payload?.data ?? payload;
+      return payload && Object.hasOwn(payload, 'data') ? payload.data : payload;
     } catch (error) {
       if (error instanceof ServiceError) throw error;
       if (error?.name === 'AbortError') throw error;

@@ -7,7 +7,8 @@ export const LABORATORY_LAUNCH = Object.freeze({
 
 export const LAB_MANAGER_DISCIPLINES = Object.freeze({
   laboratory_manager_pressure: ['sanas'],
-  laboratory_manager_temperature: ['traceable'],
+  // Temperature now supports SANAS; retain historical Traceable certificates.
+  laboratory_manager_temperature: ['sanas', 'traceable'],
 });
 
 export const certificateRecipientSnapshot = (line, account, createdAt = new Date().toISOString()) => {

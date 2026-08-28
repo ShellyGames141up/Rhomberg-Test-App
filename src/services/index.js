@@ -30,6 +30,7 @@ export {
   usesPlanningWorkspace,
   usesQualityWorkspace,
   usesRepresentativeInbox,
+  usesSalesWorkspace,
   usesTechnicalWorkspace,
 } from '../domain/accessControl.js';
 export { MAX_PO_FILE_BYTES } from './validation.js';

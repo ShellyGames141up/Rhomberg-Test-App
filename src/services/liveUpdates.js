@@ -23,7 +23,7 @@ export function createWorkspaceUpdates(services) {
 // Lifecycle and timer injection keep this testable without a browser or real clock.
 export function startWorkspacePolling({ updates, apply, canApply = () => true, capture = () => null,
   available = () => true, onError = () => {}, onSuccess = () => {},
-  intervalMs = 300000, schedule = setTimeout, cancel = clearTimeout }) {
+  intervalMs = 900000, schedule = setTimeout, cancel = clearTimeout }) {
   let stopped = false, running = false, timer, revision, failures = 0;
   const interval = Math.max(10000, intervalMs);
   const tick = async () => {

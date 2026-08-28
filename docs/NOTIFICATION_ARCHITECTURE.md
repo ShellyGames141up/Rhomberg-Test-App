@@ -2,7 +2,7 @@
 
 ## Server-backed acknowledgement and refresh
 
-See [live updates and notifications](LIVE_UPDATES_AND_NOTIFICATIONS.md) for migration 019's recipient-only UPDATE policy, transactional read audit events, order-aware links and five-minute authenticated revision checks. Partial acknowledgement responses preserve notification content in the UI. Cross-recipient updates remain denied; polling does not supply authorization or create notifications.
+See [live updates and notifications](LIVE_UPDATES_AND_NOTIFICATIONS.md) for migration 019's recipient-only UPDATE policy, transactional read audit events, order-aware links and 15-minute authenticated revision checks. Partial acknowledgement responses preserve notification content in the UI. Cross-recipient updates remain denied; polling does not supply authorization or create notifications.
 
 `src/domain/notifications.js` defines events and delivery records; service implementations decide recipients only after a successful workflow transaction. React reads the notification service and cannot fabricate a workflow event.
 

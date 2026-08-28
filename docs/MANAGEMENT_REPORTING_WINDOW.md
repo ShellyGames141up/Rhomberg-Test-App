@@ -6,4 +6,4 @@ This is a reporting filter, **not a retention/deletion policy**. No scheduled cl
 
 Use **Download Operational PDF**, leave **Latest 31 days** selected, choose report sections, and download. The PDF records the reporting dates and generation time. Date-to-date and rolling-month exports remain available for historical records. Every successful export adds an audit event. Commercial amounts are restricted to the Company Owner/Sales Manager with the required database-authoritative permissions; missing verified totals are not estimated.
 
-The five-minute background check refreshes changed data. It does not deploy a new application release, retain a historical dashboard snapshot, or overwrite unsaved form edits. The current user's successful mutations still refresh immediately.
+The 15-minute background check refreshes changed data. It does not deploy a new application release, retain a historical dashboard snapshot, or overwrite unsaved form edits. The current user's successful mutations still refresh immediately.

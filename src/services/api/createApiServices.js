@@ -498,7 +498,7 @@ export function createApiServices(config = {}) {
     request(rfqId, input) {
       return client.post(`/rfqs/${encodeURIComponent(rfqId)}/technical-support`, technicalMultipart(input, input.attachment));
     },
-    assign: (requestId, input) => client.post(`/technical-support/${encodeURIComponent(requestId)}/assign`, input),
+    assign: (requestId, input) => client.post(`/technical-support/${encodeURIComponent(requestId)}/assign`, { assignedUserId: input.technicalUserId || input.assignedUserId }),
     startReview: requestId => client.post(`/technical-support/${encodeURIComponent(requestId)}/start-review`, {}),
     postMessage(requestId, input) {
       validateTechnicalMessage(input, { customer: false });

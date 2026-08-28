@@ -304,7 +304,8 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
     assert.ok(planning.body.data.user.permissions.includes('view_planning_queue'),JSON.stringify(planning.body.data.user));
     const action=(auth,entity,id,name,data={})=>app.inject({method:'POST',url:`/api/v1/${entity}/${id}/workflow-actions`,headers:{cookie:auth.cookie,'x-csrf-token':auth.csrf},payload:{action:name,entityType:entity==='enquiries'?'rfq':'order',data}});
     const review=await action(rep,'enquiries',enquiryA.id,'start_rep_review');assert.equal(review.statusCode,200,review.body);
-    assert.equal((await action(rep,'enquiries',enquiryA.id,'mark_quoted',{quotation:{number:'Q-PG-FAB-001',date:'2099-01-01'}})).statusCode,200);
+    const quoted=await action(rep,'enquiries',enquiryA.id,'mark_quoted',{quotation:{number:'Q-PG-FAB-001',date:'2020-01-01'}});
+    assert.equal(quoted.statusCode,200,quoted.body);
     assert.equal((await action(authA,'enquiries',enquiryA.id,'acknowledge_quotation')).statusCode,200);
     const accepted=await action(rep,'enquiries',enquiryA.id,'accept_order',{acceptance:{type:'purchase_order',date:'2099-01-02',verified:true}});
     assert.equal(accepted.statusCode,200,accepted.body);const orderId=accepted.json().data.order.id;
@@ -318,9 +319,15 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
     assert.equal((await action(quality,'orders',orderId,'start_qa')).statusCode,200);
     assert.equal((await action(quality,'orders',orderId,'pass_qa')).statusCode,200);
     assert.equal((await action(quality,'orders',orderId,'release_qa_order')).statusCode,200);
-    assert.equal((await action(dispatch,'orders',orderId,'mark_ready_for_collection')).statusCode,200);
-    assert.equal((await action(dispatch,'orders',orderId,'confirm_collection')).statusCode,200);
-    assert.equal((await action(dispatch,'orders',orderId,'complete_collection')).statusCode,200);
+    // This RFQ requests delivery. Exercise the required receipt and handover
+    // evidence rather than bypassing Dispatch's current controlled workflow.
+    const receipt=await action(dispatch,'orders',orderId,'confirm_dispatch_receipt',{dispatchReceipt:{sourceDepartment:'quality_assurance',numberOfPackages:1,customerMessage:'Fabricated order received by Dispatch.'}});
+    assert.equal(receipt.statusCode,200,receipt.body);
+    const dispatchUpdate={method:'company_delivery',readyDate:'2020-01-02',numberOfPackages:1,courierOrDriver:'Fabricated Driver',customerMessage:'Fabricated delivery update.'};
+    for(const name of ['start_delivery','confirm_delivery','complete_delivery']) {
+      const result=await action(dispatch,'orders',orderId,name,{dispatchUpdate:{...dispatchUpdate,deliveryDate:'2020-01-03',recipientName:'Fabricated Recipient'}});
+      assert.equal(result.statusCode,200,result.body);
+    }
     const reloaded=await app.inject({url:`/api/v1/orders/${orderId}`,headers:{cookie:authA.cookie}});
     assert.equal(reloaded.statusCode,200);assert.equal(reloaded.json().data.trackingStatus,'completed');
     const archive=await app.inject({method:'POST',url:`/api/v1/orders/${orderId}/archive`,headers:{cookie:manager.cookie,'x-csrf-token':manager.csrf},payload:{reason:'Fabricated completed-record retention validation'}});

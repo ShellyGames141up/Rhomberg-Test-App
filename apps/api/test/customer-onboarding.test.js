@@ -19,6 +19,8 @@ function createInjectFetch(app) {
 
 test('public customer registration creates only a server-authoritative customer and supports subsequent login', async t=>{
   const {app,repository}=await createFixture(); t.after(()=>app.close());
+  const administrator=await login(app,'fabricated.admin@example.invalid');
+  const before=await app.inject({method:'GET',url:'/api/v1/workspace/updates',headers:{cookie:administrator.cookie}});
   const services=createApiServices({apiBaseUrl:'/api/v1',requestTimeoutMs:5000,fetchImplementation:createInjectFetch(app)});
   await services.initialize();
   const input={company:'Fabricated Registration Company',contact:'Fabricated Registration Contact',email:'new.customer@example.invalid',phone:'+27 00 000 1234',area:'Gauteng',industry:'Manufacturing',password:STRONG_PASSWORD,consent:'on'};
@@ -32,6 +34,13 @@ test('public customer registration creates only a server-authoritative customer 
   const stored=repository._state.users.find(user=>user.id===account.id);
   assert.match(stored.passwordHash,/^scrypt\$/); assert.notEqual(stored.passwordHash,input.password);
   assert.equal(JSON.stringify(repository._state.audits).includes(input.password),false);
+  const after=await app.inject({method:'GET',url:'/api/v1/workspace/updates',headers:{cookie:administrator.cookie}});
+  assert.equal(after.statusCode,200);
+  assert.equal(after.json().data.intervalSeconds,900);
+  assert.notEqual(after.json().data.revision,before.json().data.revision,'registration must invalidate the Administrator directory');
+  const overview=await app.inject({method:'GET',url:'/api/v1/administration/overview',headers:{cookie:administrator.cookie}});
+  assert.equal(overview.statusCode,200);
+  assert.ok(JSON.stringify(overview.json().data).includes(input.email),'Administrator can see the newly registered customer');
 });
 
 test('registration rejects duplicate identities, weak payloads and role injection', async t=>{

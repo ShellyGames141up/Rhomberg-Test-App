@@ -242,7 +242,7 @@ export function ManagementDashboard({
     try {
       const [nextDashboard, nextRepresentatives, nextPerformanceOptions] = await Promise.all([
         managementActions.getDashboard(currentFilters),
-        canManageRecords ? managementActions.getRepresentativeOptions() : Promise.resolve([]),
+        canReassign ? managementActions.getRepresentativeOptions() : Promise.resolve([]),
         canUsePerformanceReports ? managementActions.getPerformanceReportOptions() : Promise.resolve(performanceReportOptions),
       ]);
       setDashboard(nextDashboard);

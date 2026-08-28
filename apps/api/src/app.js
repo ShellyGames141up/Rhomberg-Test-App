@@ -18,6 +18,7 @@ import { createWorkflowService } from './services/workflowService.js';
 import { QA_QUEUE_STATUSES } from './domain/qualityOptions.js';
 import { TECHNICAL_CATEGORY_OPTIONS } from './domain/technicalOptions.js';
 import { createTechnicalSupportService } from './services/technicalSupportService.js';
+import { technicalMetrics } from './services/technicalMetrics.js';
 import { createLaboratoryService } from './services/laboratoryService.js';
 import { createGovernanceService, simplePdf } from './services/governanceService.js';
 import { createClientVisitService } from './services/clientVisitService.js';
@@ -512,12 +513,12 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   app.post('/api/v1/technical-support/:requestId/override', { preHandler: requireCsrf }, async request => ({data:await technicalSupportService.override(request.actor,request.params.requestId,request.body || {},request.id),meta:{requestId:request.id}}));
   app.get('/api/v1/technical-support/queue', { preHandler: requireAuthentication }, async request => {
     requirePermission(request.actor, PERMISSIONS.VIEW_TECHNICAL_QUEUE);
-    return { data: await phase1WorkspaceService.listTechnicalRequests(request.actor), meta: { requestId: request.id } };
+    return { data: await technicalSupportService.listQueue(request.actor, request.query || {}), meta: { requestId: request.id } };
   });
   app.get('/api/v1/technical-support/metrics', { preHandler: requireAuthentication }, async request => {
     requirePermission(request.actor, PERMISSIONS.VIEW_TECHNICAL_QUEUE);
     const records = await phase1WorkspaceService.listTechnicalRequests(request.actor);
-    return { data: { total: records.length, newRequests: records.filter(item => item.status === 'technical_support_requested').length, inProgress: records.filter(item => item.status === 'technical_review_in_progress').length, awaitingInformation: records.filter(item => ['awaiting_representative_information','awaiting_customer_information'].includes(item.status)).length, completed: records.filter(item => item.status === 'technical_support_completed').length, overdue: 0, averageResponseHours: 0, byCategory: [] }, meta: { requestId: request.id } };
+    return { data: technicalMetrics(records), meta: { requestId: request.id } };
   });
   app.get('/api/v1/technical-support/:requestId/rfq/download', { preHandler: requireAuthentication }, async request=>({data:await technicalSupportService.downloadRfq(request.actor,request.params.requestId,request.id),meta:{requestId:request.id}}));
   app.get('/api/v1/technical-support/:requestId/attachments/:attachmentId/download', { preHandler: requireAuthentication }, async(request,reply)=>{const result=await technicalSupportService.downloadAttachment(request.actor,request.params.requestId,request.params.attachmentId,request.id);reply.header('Content-Type',result.mediaType).header('Content-Disposition',`attachment; filename="${result.fileName.replace(/["\\\r\n]/g,'_')}"`).header('X-Content-Type-Options','nosniff');return reply.send(result.buffer);});

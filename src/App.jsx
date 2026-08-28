@@ -58,6 +58,7 @@ import {
   usesPlanningWorkspace,
   usesQualityWorkspace,
   usesRepresentativeInbox,
+  usesSalesWorkspace,
 } from './services/index.js';
 
 const EMPTY_CATALOGUE = { categories: [], products: [], recommendedCategories: {} };
@@ -973,7 +974,7 @@ export default function App() {
             <>
               {view === 'administration' && <AdministratorDashboard refreshToken={liveRevision} account={account} administrationActions={services.administration} serviceMode={services.mode} onOpenManagement={() => navigate('expeditor')} onOpenAudit={() => navigate('audit')} onOpenArchive={() => navigate('archive')} onRecordsChanged={refreshAfterManagementAction} />}
               {view === 'load-order' && <RepresentativeOrderLoader actions={services.representativeOrders} maxDocumentBytes={services.preview.maxRepresentativeOrderDocumentBytes} onCreated={representativeOrderCreated} onClose={() => navigate('expeditor')} />}
-              {view === 'expeditor' && (accountCan(account, PERMISSIONS.VIEW_ASSIGNED_RFQS)
+              {view === 'expeditor' && (usesSalesWorkspace(account)
                 && notificationTarget?.entityType !== 'order'
                 ? <SalesRepresentativeDashboard account={account} rfqs={enquiries} onAction={performWorkflowAction} onLoadCustomerOrder={() => navigate('load-order')} technicalSupportActions={services.technicalSupport} onRecordsChanged={refreshTechnicalRecords} serviceMode={services.mode} focusRecordId={notificationTarget?.entityId} />
                 : isPlanningWorkspace

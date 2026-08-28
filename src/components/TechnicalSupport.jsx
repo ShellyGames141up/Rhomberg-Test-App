@@ -42,9 +42,22 @@ export function RepresentativeTechnicalSupport({ rfq, account, actions, onChange
   const [options, setOptions] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const request = rfq.technicalSupport;
+  const [loadedRequest, setLoadedRequest] = useState(null);
+  const request = rfq.technicalSupport || (loadedRequest?.rfqId === rfq.id ? loadedRequest : null);
+  useEffect(() => {
+    let active = true;
+    if (actions.getByRfq && !rfq.technicalSupport) {
+      actions.getByRfq(rfq.id).then(value => { if (active) setLoadedRequest(value); })
+        .catch(reason => { if (active) setError(errorText(reason)); });
+    }
+    return () => { active = false; };
+  }, [actions, rfq]);
+  useEffect(() => {
+    setForm(current => rfq.items?.some(item => item.lineId === current.lineItemId)
+      ? current : { ...current, lineItemId: rfq.items?.[0]?.lineId || '' });
+  }, [rfq.id, rfq.items]);
   useEffect(() => { actions.getOptions().then(setOptions).catch(reason => setError(errorText(reason))); }, [actions]);
-  const run = async callback => { setBusy(true); setError(''); try { const updated = await callback(); await onChanged?.(updated); } catch (reason) { setError(errorText(reason)); } finally { setBusy(false); } };
+  const run = async callback => { setBusy(true); setError(''); try { const updated = await callback(); if (actions.getByRfq) setLoadedRequest(await actions.getByRfq(rfq.id)); await onChanged?.(updated); } catch (reason) { setError(errorText(reason)); } finally { setBusy(false); } };
   if (request) {
     const completed = request.status === 'technical_support_completed';
     return <section className={`technical-support-card is-active ${completed ? 'is-completed' : ''}`}>
@@ -65,7 +78,7 @@ export function RepresentativeTechnicalSupport({ rfq, account, actions, onChange
       <div className="technical-section-heading"><div><span className="eyebrow">Before quotation</span><h3>Request Technical Support</h3></div><p>One controlled review adds a single 24-hour allowance.</p></div>
       <div className="technical-form-grid">
         <label><span>Category</span><select value={form.category} onChange={event => setForm(current => ({ ...current, category: event.target.value }))} required><option value="">Select category</option>{options?.categories.map(item => <option value={item.id} key={item.id}>{item.label}</option>)}</select></label>
-        <label><span>RFQ line item</span><select value={form.lineItemId} onChange={event => setForm(current => ({ ...current, lineItemId: event.target.value }))} required>{rfq.items.map(item => <option value={item.lineId} key={item.lineId}>{item.code} · {item.name}</option>)}</select></label>
+        <label><span>RFQ line item</span><select value={form.lineItemId} onChange={event => setForm(current => ({ ...current, lineItemId: event.target.value }))} required><option value="">Select RFQ line item</option>{(rfq.items || []).map(item => <option value={item.lineId} key={item.lineId}>{item.code} · {item.name}</option>)}</select>{!rfq.items?.length && <small role="alert">No saved RFQ lines are available. Refresh the RFQ before requesting Technical Support.</small>}</label>
         <label><span>Priority</span><select value={form.priority} onChange={event => setForm(current => ({ ...current, priority: event.target.value }))}>{(options?.priorities || ['standard', 'high', 'urgent']).map(item => <option value={item} key={item}>{label(item)}</option>)}</select></label>
         <label><span>Visibility</span><select value={form.classification} onChange={event => setForm(current => ({ ...current, classification: event.target.value }))}><option value="internal_only">Internal only</option><option value="customer_safe">Customer-safe summary</option></select></label>
         <label><span>Requested technical person <small>Optional</small></span><select value={form.requestedTechnicalUserId || ''} onChange={event => setForm(current => ({ ...current, requestedTechnicalUserId: event.target.value }))}><option value="">Technical Department to assign</option>{(options?.technicalUsers || []).map(user => <option value={user.id} key={user.id}>{user.name}</option>)}</select></label>
@@ -76,14 +89,23 @@ export function RepresentativeTechnicalSupport({ rfq, account, actions, onChange
       <label><span>Supporting attachment <small>Optional</small></span><input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp" onChange={event => setForm(current => ({ ...current, attachment: event.target.files?.[0] || null }))} /></label>
       <label className="technical-confirm"><input type="checkbox" checked={form.confirmRequired} onChange={event => setForm(current => ({ ...current, confirmRequired: event.target.checked }))} /><span>I confirm Technical Support is required before the final quotation.</span></label>
       {error && <p className="form-error" role="alert">{error}</p>}
-      <button className="primary-button" disabled={busy}>{busy ? 'Submitting…' : 'Submit Technical Support request'}</button>
+      <button className="primary-button" disabled={busy || !rfq.items?.length}>{busy ? 'Submitting…' : 'Submit Technical Support request'}</button>
     </form>}
   </section>;
 }
 
 export function CustomerTechnicalSupport({ rfq, actions, onChanged }) {
-  const request = rfq.technicalSupport;
-  if (!request) return null;
+  const [loadedRequest, setLoadedRequest] = useState(null);
+  const [loadError, setLoadError] = useState('');
+  const request = rfq.technicalSupport || (loadedRequest?.rfqId === rfq.id ? loadedRequest : null);
+  useEffect(() => {
+    let active = true;
+    if (actions.getByRfq && !rfq.technicalSupport) actions.getByRfq(rfq.id)
+      .then(value => { if (active) { setLoadedRequest(value); setLoadError(''); } })
+      .catch(reason => { if (active) setLoadError(errorText(reason)); });
+    return () => { active = false; };
+  }, [actions, rfq]);
+  if (!request) return loadError ? <p className="form-error" role="alert">{loadError}</p> : null;
   return <section className="customer-technical-card"><span className="eyebrow">Technical review</span><h3>{customerTechnicalLabel(request.status)}</h3><p>{request.customerMessage}</p><dl className="technical-due-grid"><div><dt>Revised quotation target</dt><dd>{formatDate(request.revisedQuotationTargetAt)}</dd></div><div><dt>Additional allowance</dt><dd>Up to {request.additionalAllowanceHours} hours</dd></div></dl>{request.customerInformationRequest?.message && <p className="customer-information-request"><strong>Additional information required</strong>{request.customerInformationRequest.message}</p>}<MessageThread request={request} customer allowPost={request.status === 'awaiting_customer_information'} onPost={async input => { const updated = await actions.postMessage(request.id, input); await onChanged?.(updated); }} /></section>;
 }
 

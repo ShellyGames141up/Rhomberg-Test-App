@@ -68,3 +68,9 @@ await assert.rejects(() => nonRetryingClient.post('/orders', { reference: 'TEST'
 assert.equal(postAttempts, 1, 'state-changing requests must not retry unless protected by an explicit higher-level idempotency flow');
 
 console.log('Date validation, public errors and safe network retry tests passed.');
+
+const nullClient = new HttpClient({
+  baseUrl: 'https://example.invalid/api',
+  fetchImplementation: async () => new Response(JSON.stringify({data:null,meta:{requestId:'fabricated'}}), {status:200}),
+});
+assert.equal(await nullClient.get('/technical-support'), null, 'An absent request must remain null, not become a truthy envelope.');

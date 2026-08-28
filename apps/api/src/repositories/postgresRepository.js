@@ -1,5 +1,5 @@
 import { randomUUID, createHash } from 'node:crypto';
-import { notFound } from '../errors.js';
+import { notFound, validationError } from '../errors.js';
 import { qualityProjection } from '../domain/qualityProjection.js';
 import { quotationProjection } from '../domain/quotation.js';
 import { applyDispatchAction, dispatchProjection, DISPATCH_ACTIONS } from '../domain/dispatchWorkflow.js';
@@ -199,6 +199,18 @@ export function createPostgresRepository(pool) {
     const items = await client.query('SELECT * FROM app.rfq_items WHERE rfq_id = $1 ORDER BY line_number', [id]);
     const documents = await client.query('SELECT * FROM app.document_metadata WHERE rfq_id = $1 AND deleted_at IS NULL ORDER BY created_at', [id]);
     return mapEnquiry(result.rows[0], items.rows, documents.rows, actor);
+  };
+
+  const notifyTechnical = async (client, record, eventType, message, customerVisible = false) => {
+    const rfq = (await client.query('SELECT requester_user_id FROM app.rfqs WHERE id=$1',[record.rfq_id])).rows[0];
+    const rep = (await client.query('SELECT user_id FROM app.representatives WHERE id=$1',[record.representative_id])).rows[0];
+    const recipients = new Set([rep?.user_id, record.assigned_user_id].filter(Boolean));
+    if (customerVisible && rfq?.requester_user_id) recipients.add(rfq.requester_user_id);
+    for (const recipient of recipients) await client.query(
+      `INSERT INTO app.notifications(id,company_id,recipient_user_id,rfq_id,event_type,title,message,customer_visible,link_path)
+       VALUES($1,$2,$3,$4,$5,'Technical review update',$6,$7,$8)`,
+      [randomUUID(),record.company_id,recipient,record.rfq_id,eventType,message,
+        recipient===rfq?.requester_user_id,`/rfqs/${record.rfq_id}`]);
   };
 
   const loadOrder = async (client,id,actor) => {
@@ -539,9 +551,11 @@ export function createPostgresRepository(pool) {
           (SELECT jsonb_agg(jsonb_build_array(id,row_version,updated_at) ORDER BY id) FROM app.orders) AS orders,
           (SELECT jsonb_agg(jsonb_build_array(id,read_at) ORDER BY id) FROM app.notifications WHERE recipient_user_id=$1) AS notifications,
           (SELECT jsonb_agg(jsonb_build_array(id,updated_at) ORDER BY id) FROM app.technical_support_requests) AS technical,
-          (SELECT max(id) FROM app.audit_events) AS audit`, [actor.id]);
+          (SELECT max(id) FROM app.audit_events) AS audit,
+          (SELECT jsonb_agg(jsonb_build_array(id,updated_at) ORDER BY id) FROM app.companies) AS companies,
+          (SELECT jsonb_agg(jsonb_build_array(id,status,deleted_at) ORDER BY id) FROM app.users) AS users`, [actor.id]);
         const revision = createHash('sha256').update(json({ userId: actor.id, roles: actor.roles, permissions: actor.permissions, state: result.rows[0] })).digest('hex');
-        return { revision, intervalSeconds: 300 };
+        return { revision, intervalSeconds: 900 };
       }, { actor });
     },
     async retryNotificationDelivery(actor,notificationId,deliveryId,correlationId){return inTransaction(async client=>{const row=(await client.query('SELECT * FROM app.notifications WHERE id=$1 FOR UPDATE',[notificationId])).rows[0];if(!row)throw notFound('The notification delivery was not found.');const deliveries=Array.isArray(row.deliveries)?row.deliveries:[];const index=deliveries.findIndex(item=>item.id===deliveryId);if(index<0)throw notFound('The notification delivery was not found.');const delivery={...deliveries[index],status:deliveries[index].channel==='in_app'?'in_app':`${deliveries[index].channel}_pending`,attempts:Number(deliveries[index].attempts||0)+1,lastAttemptAt:new Date().toISOString()};deliveries[index]=delivery;await client.query('UPDATE app.notifications SET deliveries=$2::jsonb WHERE id=$1',[notificationId,json(deliveries)]);await client.query(`INSERT INTO app.audit_events(event_type,actor_user_id,actor_role,company_id,action,entity_type,entity_id,outcome,correlation_id,details) VALUES('notification.delivery_retry_requested',$1,$2,$3,'retry_notification_delivery','notification',$4,'success',$5,$6::jsonb)`,[actor.id,actor.role,row.company_id,notificationId,correlationId,json({deliveryId,channel:delivery.channel})]);return delivery;},{actor});},
@@ -590,9 +604,7 @@ export function createPostgresRepository(pool) {
       }, { actor });
     },
     async listTechnicalUsers(actor) {
-      return inTransaction(async client => (await client.query(`SELECT DISTINCT users.id,users.display_name AS name,roles.role_code AS role
-        FROM app.users users JOIN app.user_roles roles ON roles.user_id=users.id AND roles.revoked_at IS NULL
-        WHERE roles.role_code IN ('technical_support','technical_manager','technical_director') AND users.status='active' AND users.deleted_at IS NULL ORDER BY users.display_name`)).rows,{actor});
+      return inTransaction(async client => (await client.query('SELECT * FROM app.list_technical_advisors()')).rows,{actor});
     },
     async getCurrentCompany(actor) {
       if (!actor.companyId) return null;
@@ -843,7 +855,7 @@ export function createPostgresRepository(pool) {
           FROM app.technical_support_requests request
           JOIN app.rfqs rfq ON rfq.id=request.rfq_id JOIN app.companies company ON company.id=request.company_id
           JOIN app.representatives representative ON representative.id=request.representative_id
-          JOIN app.users requester ON requester.id=request.requested_by_user_id
+          LEFT JOIN app.users requester ON requester.id=request.requested_by_user_id
           LEFT JOIN app.users assignee ON assignee.id=request.assigned_user_id
           ORDER BY request.updated_at DESC`);
         const records = [];
@@ -861,9 +873,10 @@ export function createPostgresRepository(pool) {
         const records=await client.query(`SELECT request.*, rfq.reference AS rfq_reference, company.name AS company_name,
           representative.display_name AS representative_name, requester.display_name AS requester_name, assignee.display_name AS assignee_name
           FROM app.technical_support_requests request JOIN app.rfqs rfq ON rfq.id=request.rfq_id JOIN app.companies company ON company.id=request.company_id
-          JOIN app.representatives representative ON representative.id=request.representative_id JOIN app.users requester ON requester.id=request.requested_by_user_id
+          JOIN app.representatives representative ON representative.id=request.representative_id LEFT JOIN app.users requester ON requester.id=request.requested_by_user_id
           LEFT JOIN app.users assignee ON assignee.id=request.assigned_user_id WHERE request.id=$1`,[row.id]);
-        const item=records.rows[0]; const messages=(await client.query('SELECT * FROM app.technical_support_messages WHERE request_id=$1 ORDER BY created_at',[item.id])).rows;
+        const item=records.rows[0]; if(!item) return null;
+        const messages=(await client.query('SELECT * FROM app.technical_support_messages WHERE request_id=$1 ORDER BY created_at',[item.id])).rows;
         return {id:item.id,reference:item.reference,rfqId:item.rfq_id,rfqReference:item.rfq_reference,companyId:item.company_id,company:item.company_name,representativeId:item.representative_id,representativeName:item.representative_name,requestedBy:item.requester_name,assignedTechnicalUserId:item.assigned_user_id,assignedTechnicalUserName:item.assignee_name || '',category:item.category,question:item.question,lineItemId:item.line_item_id,priority:item.priority,classification:item.classification,status:item.status,originalQuotationTarget:item.original_due_at,revisedQuotationTarget:item.revised_due_at,createdAt:item.created_at,updatedAt:item.updated_at,completedAt:item.completed_at,messages:messages.map(message=>({id:message.id,message:message.message,sender:message.sender_user_id,senderRole:message.sender_role,classification:message.classification,metadata:message.metadata,createdAt:message.created_at}))};
       },{actor});
     },
@@ -872,17 +885,21 @@ export function createPostgresRepository(pool) {
         const rfq=(await client.query('SELECT * FROM app.rfqs WHERE id=$1 FOR UPDATE',[rfqId])).rows[0]; if(!rfq) throw notFound('The RFQ was not found or is outside your authorised scope.');
         const line=(await client.query('SELECT id FROM app.rfq_items WHERE id=$1 AND rfq_id=$2',[command.lineItemId,rfqId])).rows[0]; if(!line) { const error=new Error('Select a line item from this RFQ.'); error.code='VALIDATION_ERROR'; error.statusCode=422; throw error; }
         const active=(await client.query("SELECT id FROM app.technical_support_requests WHERE rfq_id=$1 AND status NOT IN ('technical_support_completed','technical_support_cancelled')",[rfqId])).rows[0]; if(active) { const error=new Error('This RFQ already has an active Technical Support request.'); error.code='CONFLICT'; error.statusCode=409; throw error; }
+        if(command.requestedTechnicalUserId && !(await client.query('SELECT id FROM app.list_technical_advisors() WHERE id=$1',[command.requestedTechnicalUserId])).rows.length) throw validationError({requestedTechnicalUserId:'Select an active Technical Advisor.'});
+        const requestedStatus=command.requestedTechnicalUserId?'technical_support_assigned':'technical_support_requested';
         const original=rfq.details?.quotationTargetAt || new Date(new Date(rfq.submitted_at).getTime()+72*36e5).toISOString(); const revised=new Date(new Date(original).getTime()+24*36e5).toISOString(); const reference=`TS-${new Date().getUTCFullYear()}-${command.id.slice(0,8).toUpperCase()}`;
         await client.query(`INSERT INTO app.technical_support_requests(id,reference,rfq_id,company_id,representative_id,requested_by_user_id,assigned_user_id,category,question,line_item_id,priority,classification,original_due_at,revised_due_at)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,[command.id,reference,rfqId,rfq.company_id,rfq.representative_id,actor.id,command.requestedTechnicalUserId || null,command.category,command.question,command.lineItemId,command.priority,command.classification,original,revised]);
+        if(command.requestedTechnicalUserId) await client.query('UPDATE app.technical_support_requests SET status=$2 WHERE id=$1',[command.id,requestedStatus]);
         if(command.document) await client.query(`INSERT INTO app.document_metadata(id,company_id,rfq_id,technical_request_id,uploaded_by_user_id,kind,original_name,storage_key,media_type,size_bytes,sha256_hex,scan_status,customer_visible)
           VALUES($1,$2,$3,$4,$5,'technical_attachment',$6,$7,$8,$9,$10,'pending',$11)`,[randomUUID(),rfq.company_id,rfqId,command.id,actor.id,command.document.originalName,command.document.storageKey,command.document.mediaType,command.document.sizeBytes,command.document.sha256Hex,command.classification==='customer_safe']);
         await client.query('UPDATE app.rfqs SET details=details || $2::jsonb,updated_at=now(),row_version=row_version+1 WHERE id=$1',[rfqId,json({technicalSupportRequestId:command.id,originalQuotationTarget:original,revisedQuotationTarget:revised})]);
         await client.query(`INSERT INTO app.workflow_events(id,company_id,entity_type,entity_id,to_status,action,customer_note,internal_note,customer_visible,actor_user_id,actor_role,metadata)
-          VALUES($1,$2,'technical_support',$3,'technical_support_requested','request_technical_support',$4,$5,true,$6,$7,$8::jsonb)`,[randomUUID(),rfq.company_id,command.id,'Technical review is required for your enquiry. The quotation timeframe has been extended by up to 24 hours.',command.question,actor.id,actor.role,json({rfqId,originalQuotationTarget:original,revisedQuotationTarget:revised})]);
+          VALUES($1,$2,'technical_support',$3,$9,'request_technical_support',$4,$5,true,$6,$7,$8::jsonb)`,[randomUUID(),rfq.company_id,command.id,'Technical review is required for your enquiry. The quotation timeframe has been extended by up to 24 hours.',command.question,actor.id,actor.role,json({rfqId,assignedTechnicalUserId:command.requestedTechnicalUserId || null,originalQuotationTarget:original,revisedQuotationTarget:revised}),requestedStatus]);
         await client.query(`INSERT INTO app.audit_events(event_type,actor_user_id,actor_role,company_id,action,entity_type,entity_id,outcome,correlation_id,details) VALUES('technical_support.requested',$1,$2,$3,'request_technical_support','technical_support',$4,'success',$5,$6::jsonb)`,[actor.id,actor.role,rfq.company_id,command.id,command.correlationId,json({rfqId,originalQuotationTarget:original,revisedQuotationTarget:revised})]);
-        const recipients=new Set(); const repUser=(await client.query('SELECT user_id FROM app.representatives WHERE id=$1',[rfq.representative_id])).rows[0]?.user_id; if(repUser) recipients.add(repUser); for(const row of (await client.query("SELECT user_id FROM app.user_roles WHERE role_code IN ('technical_support','technical_manager','technical_director') AND revoked_at IS NULL")).rows) recipients.add(row.user_id);
+        const recipients=new Set(); const repUser=(await client.query('SELECT user_id FROM app.representatives WHERE id=$1',[rfq.representative_id])).rows[0]?.user_id; if(repUser) recipients.add(repUser); for(const row of (await client.query('SELECT id FROM app.list_technical_advisors()')).rows) recipients.add(row.id);
         for(const recipient of recipients) await client.query(`INSERT INTO app.notifications(id,company_id,recipient_user_id,rfq_id,event_type,title,message,customer_visible,link_path) VALUES($1,$2,$3,$4,'technical_support_requested','Technical Support request', $5,false,$6)`,[randomUUID(),rfq.company_id,recipient,rfqId,`${reference} requires review.`,`/technical/${command.id}`]);
+        await notifyTechnical(client,{rfq_id:rfqId,company_id:rfq.company_id,assigned_user_id:command.requestedTechnicalUserId},'technical_review_required','Technical review is required. Your quotation timeframe has been extended by up to 24 hours.',true);
         return (await client.query('SELECT * FROM app.technical_support_requests WHERE id=$1',[command.id])).rows[0];
       },{actor});
     },
@@ -890,9 +907,11 @@ export function createPostgresRepository(pool) {
       return inTransaction(async client => {
         const record=(await client.query('SELECT * FROM app.technical_support_requests WHERE id=$1 FOR UPDATE',[id])).rows[0]; if(!record) throw notFound('The Technical Support request was not found.');
         const allowed={assign:['technical_support_requested'],start_review:['technical_support_assigned'],complete:['technical_response_submitted']}; if(allowed[command.action] && !allowed[command.action].includes(record.status)) { const error=new Error('This Technical Support action is not available at the current stage.'); error.code='INVALID_WORKFLOW_TRANSITION'; error.statusCode=409; throw error; }
-        if(command.action==='assign') { const user=(await client.query("SELECT 1 FROM app.user_roles WHERE user_id=$1 AND role_code IN ('technical_support','technical_manager','technical_director') AND revoked_at IS NULL",[command.assignedUserId])).rows[0]; if(!user) { const error=new Error('Select an active Technical Advisor.'); error.code='VALIDATION_ERROR'; error.statusCode=422; throw error; } }
+        if(command.action==='assign') { const user=(await client.query('SELECT id FROM app.list_technical_advisors() WHERE id=$1',[command.assignedUserId])).rows[0]; if(!user) { const error=new Error('Select an active Technical Advisor.'); error.code='VALIDATION_ERROR'; error.statusCode=422; throw error; } }
         const metadata=command.action==='override'?{quotationOverride:{active:true,reason:command.reason,actorUserId:actor.id,createdAt:new Date().toISOString()}}:{};
         const result=(await client.query(`UPDATE app.technical_support_requests SET status=COALESCE($2,status),assigned_user_id=COALESCE($3,assigned_user_id),updated_at=now(),completed_at=CASE WHEN $2='technical_support_completed' THEN now() ELSE completed_at END WHERE id=$1 RETURNING *`,[id,command.toStatus,command.assignedUserId || null])).rows[0];
+        await notifyTechnical(client,result,`technical_support_${command.action}`,
+          command.action==='complete'?'Technical review is complete. Your representative can continue with your quotation.':'The technical review has been updated.',command.action==='complete');
         await client.query(`INSERT INTO app.workflow_events(id,company_id,entity_type,entity_id,from_status,to_status,action,internal_note,customer_visible,actor_user_id,actor_role,metadata) VALUES($1,$2,'technical_support',$3,$4,$5,$6,$7,false,$8,$9,$10::jsonb)`,[randomUUID(),record.company_id,id,record.status,result.status,command.action,command.comment || command.reason || null,actor.id,actor.role,json(metadata)]);
         await client.query(`INSERT INTO app.audit_events(event_type,actor_user_id,actor_role,company_id,action,entity_type,entity_id,outcome,correlation_id,details) VALUES($1,$2,$3,$4,$5,'technical_support',$6,'success',$7,$8::jsonb)`,[`technical_support.${command.action}`,actor.id,actor.role,record.company_id,command.action,id,command.correlationId,json({fromStatus:record.status,toStatus:result.status,...metadata})]); return result;
       },{actor});
@@ -900,11 +919,33 @@ export function createPostgresRepository(pool) {
     async addTechnicalSupportMessage(actor,id,command) {
       return inTransaction(async client => {
         const record=(await client.query('SELECT * FROM app.technical_support_requests WHERE id=$1 FOR UPDATE',[id])).rows[0]; if(!record) throw notFound('The Technical Support request was not found.'); const messageId=randomUUID();
+        const allowed = {
+          request_information:['technical_support_assigned','technical_review_in_progress'],
+          request_customer_information:['awaiting_representative_information'],
+          technical_response:['technical_support_assigned','technical_review_in_progress','awaiting_representative_information','awaiting_customer_information'],
+        };
+        if ((allowed[command.action] && !allowed[command.action].includes(record.status))
+          || (actor.role==='customer' && record.status!=='awaiting_customer_information')) {
+          const error=new Error('This Technical Support action is not available at the current stage.');
+          error.code='INVALID_WORKFLOW_TRANSITION'; error.statusCode=409; throw error;
+        }
         await client.query(`INSERT INTO app.technical_support_messages(id,request_id,company_id,sender_user_id,sender_role,message,classification,metadata) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,[messageId,id,record.company_id,actor.id,actor.role,command.message,command.classification,json(command.metadata || {})]);
+        if (command.action==='technical_response' && command.metadata?.customerSafeNote?.trim()) {
+          await client.query(`INSERT INTO app.technical_support_messages(id,request_id,company_id,sender_user_id,sender_role,message,classification,metadata)
+            VALUES($1,$2,$3,$4,$5,$6,'customer_safe','{}')`,
+          [randomUUID(),id,record.company_id,actor.id,actor.role,command.metadata.customerSafeNote.trim()]);
+        }
         if(command.document) await client.query(`INSERT INTO app.document_metadata(id,company_id,rfq_id,technical_request_id,uploaded_by_user_id,kind,original_name,storage_key,media_type,size_bytes,sha256_hex,scan_status,customer_visible) VALUES($1,$2,$3,$4,$5,'technical_attachment',$6,$7,$8,$9,$10,'pending',$11)`,[randomUUID(),record.company_id,record.rfq_id,id,actor.id,command.document.originalName,command.document.storageKey,command.document.mediaType,command.document.sizeBytes,command.document.sha256Hex,command.classification==='customer_safe']);
-        if(command.toStatus) await client.query('UPDATE app.technical_support_requests SET status=$2,updated_at=now() WHERE id=$1',[id,command.toStatus]); else await client.query('UPDATE app.technical_support_requests SET updated_at=now() WHERE id=$1',[id]);
-        await client.query(`INSERT INTO app.audit_events(event_type,actor_user_id,actor_role,company_id,action,entity_type,entity_id,outcome,correlation_id,details) VALUES('technical_support.message_posted',$1,$2,$3,$4,'technical_support',$5,'success',$6,$7::jsonb)`,[actor.id,actor.role,record.company_id,command.action,id,command.correlationId,json({classification:command.classification,toStatus:command.toStatus || record.status})]);
-        return {id:messageId,requestId:id,status:command.toStatus || record.status,message:command.message,classification:command.classification,createdAt:new Date().toISOString()};
+        const replyResumesReview=command.action==='post_message' && (
+          (actor.role==='customer' && record.status==='awaiting_customer_information')
+          || (actor.permissions.includes('request_technical_support') && record.status==='awaiting_representative_information'));
+        const nextStatus=command.toStatus || (replyResumesReview?'technical_review_in_progress':record.status);
+        await client.query('UPDATE app.technical_support_requests SET status=$2,updated_at=now() WHERE id=$1',[id,nextStatus]);
+        await notifyTechnical(client,record,'technical_support_message',
+          command.action==='request_customer_information'?'Additional information is required for your enquiry. Please open its technical conversation.':'A new message is available in the technical conversation.',
+          command.action==='request_customer_information');
+        await client.query(`INSERT INTO app.audit_events(event_type,actor_user_id,actor_role,company_id,action,entity_type,entity_id,outcome,correlation_id,details) VALUES('technical_support.message_posted',$1,$2,$3,$4,'technical_support',$5,'success',$6,$7::jsonb)`,[actor.id,actor.role,record.company_id,command.action,id,command.correlationId,json({classification:command.classification,fromStatus:record.status,toStatus:nextStatus})]);
+        return {id:messageId,requestId:id,status:nextStatus,message:command.message,classification:command.classification,createdAt:new Date().toISOString()};
       },{actor});
     },
     async getPolicy(actor, code) {
@@ -924,10 +965,20 @@ export function createPostgresRepository(pool) {
           values.push(actor.representativeId);
         }
         const result = await client.query(`${enquirySelect} WHERE ${predicate} ORDER BY r.created_at DESC ${forReporting ? '' : 'LIMIT 100'}`, values);
+        // Batch only the authorised parent IDs on this transaction's RLS context.
+        const lines = result.rows.length ? (await client.query(
+          'SELECT * FROM app.rfq_items WHERE rfq_id = ANY($1::uuid[]) ORDER BY rfq_id, line_number',
+          [result.rows.map(row => row.id)],
+        )).rows : [];
+        const linesByRfq = new Map();
+        for (const line of lines) {
+          if (!linesByRfq.has(line.rfq_id)) linesByRfq.set(line.rfq_id, []);
+          linesByRfq.get(line.rfq_id).push(line);
+        }
         const events = forReporting ? (await client.query("SELECT entity_id,action,created_at FROM app.workflow_events WHERE entity_type='rfq' AND entity_id=ANY($1::uuid[]) ORDER BY created_at", [result.rows.map(row => row.id)])).rows : [];
         const history = new Map();
         for (const event of events) { if (!history.has(event.entity_id)) history.set(event.entity_id, []); history.get(event.entity_id).push({ action: event.action, createdAt: event.created_at }); }
-        return result.rows.map(row => ({ ...mapEnquiry(row, [], [], actor), trackingHistory: history.get(row.id) || [] }));
+        return result.rows.map(row => ({ ...mapEnquiry(row, linesByRfq.get(row.id) || [], [], actor), trackingHistory: history.get(row.id) || [] }));
       }, { actor });
     },
     async getEnquiry(actor, id) {

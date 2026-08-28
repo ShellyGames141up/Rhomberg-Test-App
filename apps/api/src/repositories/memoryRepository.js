@@ -86,16 +86,19 @@ export function createMemoryRepository(seed = {}) {
       if (!actor.permissions.includes('administer_users')) {
         const error = new Error('You are not authorised to perform this action.'); error.code = 'FORBIDDEN'; error.statusCode = 403; throw error;
       }
-      const users = state.users.filter(user => !user.deletedAt && user.roles.some(role => role !== 'customer')).map(user => ({
+      const users = state.users.filter(user => !user.deletedAt).map(user => ({
         id: user.id, contact: user.displayName, displayName: user.displayName, email: user.email,
         signInName: user.username, username: user.username, role: user.roles[0], roles: [...user.roles],
-        permissions: [...user.permissions], rolePermissions: roleDefaults(user.roles), additionalPermissions: user.additionalPermissions || [], deniedPermissions: user.deniedPermissions || [], company: 'Internal', category: 'internal', department: '', branchId: '',
+        permissions: [...user.permissions], rolePermissions: roleDefaults(user.roles), additionalPermissions: user.additionalPermissions || [], deniedPermissions: user.deniedPermissions || [],
+        company: user.roles.includes('customer') ? state.companies.find(company=>user.companyIds.includes(company.id))?.name || '' : 'Internal',
+        companyId: user.roles.includes('customer') ? user.companyIds[0] : undefined,
+        category: user.roles.includes('customer') ? 'customer' : 'internal', department: '', branchId: '',
         status: user.status, lastLoginAt: user.lastLoginAt || null, createdAt: user.createdAt || null,
         loginHistoryCount: 0, notificationPreferences: {},
       }));
       return clone({
-        summary: { users: users.length, customerCompanies: 0, internalAccounts: users.length, auditEvents: state.audits.length },
-        users, companies: [], representatives: [], branches: [], departments: [], accountStatuses: ['active', 'disabled', 'archived'],
+        summary: { users: users.length, customerCompanies: state.companies.length, internalAccounts: users.filter(user=>user.category==='internal').length, auditEvents: state.audits.length },
+        users, companies: state.companies, representatives: [], branches: [], departments: [], accountStatuses: ['active', 'disabled', 'archived'],
         authenticationTypes: ['password'], activationMethods: ['administrator_temporary_password'], correctionRecords: [], archivedRecords: [],
         roles: Object.entries(seed.rolePermissions || {}).map(([id, permissions]) => ({ id, label: id, permissions })),
         permissions: [...new Set(Object.values(seed.rolePermissions || {}).flat())], catalogue: { categories: [], products: [] }, configurations: {},
@@ -229,7 +232,9 @@ export function createMemoryRepository(seed = {}) {
     async getWorkspaceRevision(actor) {
       const own = state.notifications.filter(item => item.recipientUserId === actor.id);
       const records = [...await this.listEnquiries(actor), ...await this.listOrders(actor)];
-      return { revision: createHash('sha256').update(JSON.stringify({ id: actor.id, roles: actor.roles, permissions: actor.permissions, own, records })).digest('hex'), intervalSeconds: 300 };
+      const directory = actor.permissions.includes('administer_users')
+        ? { users: state.users.map(user => [user.id,user.status]), companies: state.companies } : null;
+      return { revision: createHash('sha256').update(JSON.stringify({ id: actor.id, roles: actor.roles, permissions: actor.permissions, own, records, directory })).digest('hex'), intervalSeconds: 900 };
     },
     async retryNotificationDelivery(actor,notificationId,deliveryId,correlationId){const item=state.notifications.find(notification=>notification.id===notificationId);if(!item||(!actor.permissions.includes('retry_notification_delivery')&&item.recipientUserId!==actor.id))throw notFound('The notification delivery was not found.');const delivery=(item.deliveries||[]).find(x=>x.id===deliveryId);if(!delivery)throw notFound('The notification delivery was not found.');delivery.status=delivery.channel==='in_app'?'in_app':`${delivery.channel}_pending`;delivery.attempts=Number(delivery.attempts||0)+1;delivery.lastAttemptAt=new Date().toISOString();state.audits.push({id:state.audits.length+1,eventType:'notification.delivery_retry_requested',actorUserId:actor.id,actorRole:actor.role,action:'retry_notification_delivery',entityType:'notification',entityId:notificationId,outcome:'success',correlationId,details:{deliveryId,channel:delivery.channel},createdAt:new Date().toISOString()});return clone(delivery);},
     async listAuditEvents(actor) {

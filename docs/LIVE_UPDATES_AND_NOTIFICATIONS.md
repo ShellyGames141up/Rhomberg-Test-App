@@ -11,11 +11,11 @@ Status: local implementation, not deployed. Preserve the separately reviewed rol
 
 ## Automatic updates
 
-Authenticated clients check `GET /api/v1/workspace/updates` every **five minutes**. Response: `{data:{revision:"<opaque SHA-256>",intervalSeconds:300}}`. The token reflects RLS-visible RFQs, orders, technical requests, own notifications, visible audit history and effective permissions. Another company's hidden changes do not change a customer's token. It is a change detector, not a credential or authorization proof. Successful local actions still refresh immediately. Failed checks back off to ten, then twenty minutes; successful recovery restores the five-minute interval.
+Authenticated clients check `GET /api/v1/workspace/updates` every **15 minutes**. Response: `{data:{revision:"<opaque SHA-256>",intervalSeconds:900}}`. The token reflects RLS-visible RFQs, orders, technical requests, own notifications, visible audit history, effective permissions and authorised company/user directory changes. A newly registered customer changes the Administrator's token. Another company's hidden changes do not change a customer's token. It is a change detector, not a credential or authorization proof. Successful local actions still refresh immediately. Failed checks back off to twenty minutes; successful recovery restores the 15-minute interval.
 
 Only a changed revision triggers service-layer retrieval of the authorised account, RFQs, orders, notifications and audit. Self-loading Administration, Technical, Management and Archive views receive a refresh signal. Public mock previews use the same controller with independent mock reads; staging never falls back to mock data.
 
-Polling pauses for hidden/offline pages, retries on focus/connectivity return, never overlaps cycles and backs off to 60/120 seconds on failures. Session/access rejection signs the interface out. Disposal ignores late responses. Unsaved workflow forms, message drafts and open dialogs defer snapshot application; deferred revisions are not consumed. RFQ drafts, settings, filters and scroll are not reset. Updates are eventual, not instantaneous; editing can delay them.
+Polling pauses for hidden/offline pages, retries on focus/connectivity return and never overlaps cycles. Session/access rejection signs the interface out. Disposal ignores late responses. Unsaved workflow forms, message drafts and open dialogs defer snapshot application; deferred revisions are not consumed. RFQ drafts, settings, filters and scroll are not reset. Updates are eventual, not instantaneous; editing can delay them.
 
 ## Deployment and limitations
 
@@ -25,7 +25,7 @@ The staging revision query aggregates visible IDs/versions each check. Measure l
 
 ## Verification
 
-Tests cover selectable options, forbidden progress shortcuts, read/read-all audit idempotency, missing CSRF, cross-recipient denial, revision authentication/no-store, real PostgreSQL company isolation, customer-safe history and unchanged-company revisions. Timer tests cover five-minute scheduling, unchanged data, hidden/offline availability, unsaved edits, non-overlap, disposal and retry/backoff.
+Tests cover selectable options, forbidden progress shortcuts, read/read-all audit idempotency, missing CSRF, cross-recipient denial, revision authentication/no-store, real PostgreSQL company isolation, customer-safe history and unchanged-company revisions. Timer tests cover 15-minute scheduling, unchanged data, hidden/offline availability, unsaved edits, non-overlap, disposal and retry/backoff. Registration tests verify the new customer is returned in Administration and changes its revision.
 
 Local verification used Node 22.23.2, pnpm 11.19.0 and disposable PostgreSQL 17.10. The full backend suite passed 78 tests with no skips, including the new real-database case. Migrations 001–019 applied from empty and repeated safely; runtime grants applied as the migration identity. Frontend suite, JS/CSS checks, production/internal-staging builds and scanners, Android static packaging checks, all five previews and combined Pages build passed. The local browser harness displayed ten selectable progress steps and validated Materials received/Production started in light/dark themes without console errors. This harness used real components/options/validation but is not a live server acceptance test.
 

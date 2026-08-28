@@ -31,5 +31,6 @@ export {
   usesPlanningWorkspace,
   usesQualityWorkspace,
   usesRepresentativeInbox,
+  usesSalesWorkspace,
 } from '../domain/accessControl.js';
 export { MAX_PO_FILE_BYTES } from './validation.js';

@@ -16,11 +16,11 @@ const harness = changes => {
   return { polling, state, scheduled: () => scheduled, applications: () => applications, downloads: () => downloads, cancelled: () => cancelled };
 };
 
-test('five-minute polling skips unchanged data, hidden/offline views and preserves unsaved work', async () => {
+test('fifteen-minute polling skips unchanged data, hidden/offline views and preserves unsaved work', async () => {
   const h = harness();
-  assert.equal(h.scheduled().delay, 300000);
+  assert.equal(h.scheduled().delay, 900000);
   await h.polling.refresh(); assert.equal(h.applications(), 1);
-  assert.equal(h.scheduled().delay, 300000, 'successful polling must not shorten the interval');
+  assert.equal(h.scheduled().delay, 900000, 'successful polling must not shorten the interval');
   await h.polling.refresh(); assert.equal(h.downloads(), 1);
   h.state.visible = false; h.state.revision = 'two';
   await h.polling.refresh(); assert.equal(h.downloads(), 1);
@@ -44,10 +44,10 @@ test('polls never overlap and disposed sessions cannot publish stale responses',
 test('poll failures retain data and back off; successful recovery resets interval', async () => {
   let failed = true;
   const h = harness({ updates: { revision: async () => { if (failed) throw new Error('offline'); return 'one'; }, snapshot: async () => ({}) } });
-  await h.polling.refresh(); assert.equal(h.scheduled().delay, 600000); assert.equal(h.applications(), 0);
+  await h.polling.refresh(); assert.equal(h.scheduled().delay, 1200000); assert.equal(h.applications(), 0);
   await h.polling.refresh(); assert.equal(h.scheduled().delay, 1200000);
   await h.polling.refresh(); assert.equal(h.scheduled().delay, 1200000);
-  failed = false; await h.polling.refresh(); assert.equal(h.scheduled().delay, 300000); assert.equal(h.applications(), 1);
+  failed = false; await h.polling.refresh(); assert.equal(h.scheduled().delay, 900000); assert.equal(h.applications(), 1);
   h.polling.stop();
 });
 
