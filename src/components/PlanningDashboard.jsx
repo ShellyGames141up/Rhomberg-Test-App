@@ -209,7 +209,7 @@ function PlanningOrder({ order, expanded, onToggle, onAction, account, planningO
           {primaryAction?.action === 'submit_to_expediting' && (
             <p className="planning-route-notice">
               <strong>{laboratoryRoute ? 'Laboratory route' : 'Standard route'}</strong>
-              {laboratoryRoute
+              {serviceMode === 'api' ? (laboratoryRoute ? 'This order moves to Expediting, then QC, Laboratory receipt and certification, then Dispatch receipt.' : 'This order moves to Expediting, then QC, then Dispatch receipt.') : laboratoryRoute
                 ? 'SANAS or Traceable calibration was selected. Planning will route this order to the Laboratory, and it will not enter the standard QA queue.'
                 : 'This order will move to Expediting and then Quality Assurance before Dispatch.'}
             </p>
@@ -224,7 +224,7 @@ function PlanningOrder({ order, expanded, onToggle, onAction, account, planningO
               onAction={onAction}
               account={account}
               planningOptions={planningOptions}
-              title={primaryAction.action === 'complete_planning' ? 'Save planning details' : laboratoryRoute ? 'Route to Laboratory' : 'Route to Expediting'}
+              title={primaryAction.action === 'complete_planning' ? 'Save planning details' : serviceMode !== 'api' && laboratoryRoute ? 'Route to Laboratory' : 'Route to Expediting'}
               description={primaryAction.action === 'complete_planning' ? 'Complete the required fields below.' : 'Confirm the next department for this order.'}
             />
           ) : (

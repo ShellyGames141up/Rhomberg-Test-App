@@ -1,5 +1,7 @@
 # Phase 21 order workflow
 
+For the current API-mode physical workflow, use [Production handovers and deletion](PRODUCTION_HANDOFF_AND_DELETION_FIX.md). It supersedes the historical mock routing below: Planning → Expediting production steps → QC → Laboratory for certified units only → Dispatch receipt. Audited Administrator soft deletion is also defined there.
+
 This document describes the controlled mock workflow and the future server contract. React never changes a status directly; every action passes through the service layer and `src/domain/workflow.js`. Production must repeat every permission, state, evidence and company-scope check on the API.
 
 ## Order origins

@@ -588,7 +588,7 @@ export function validateExpeditingAction(
   const forcedStep = {
     start_expediting: 'planning_received',
     place_on_hold: 'on_hold',
-    complete_expediting: 'ready_for_dispatch',
+    complete_expediting: options.handoffStep || 'ready_for_dispatch',
   }[action];
   const progressStep = forcedStep || present(expeditingValue(data, 'progressStep', 'expeditingProgressStep'));
   const today = options.today || new Date().toISOString().slice(0, 10);

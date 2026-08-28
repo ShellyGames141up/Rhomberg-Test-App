@@ -1,8 +1,9 @@
 import { validationError } from '../errors.js';
 import { validateQuotation } from '../domain/quotation.js';
 import { QA_PROBLEM_CATEGORIES, QA_SEVERITIES, QA_REWORK_DESTINATIONS } from '../domain/qualityOptions.js';
-import { EXPEDITOR_PROGRESS_STEPS } from '../domain/expeditingOptions.js';
+import { PRODUCTION_STEPS as EXPEDITOR_PROGRESS_STEPS } from '../domain/productionHandoffs.js';
 import { DISPATCH_ACTIONS } from '../domain/dispatchWorkflow.js';
+import { laboratoryUnitsForOrder } from './laboratoryService.js';
 
 const definitions=Object.freeze({
   rfq:Object.freeze({
@@ -17,18 +18,20 @@ const definitions=Object.freeze({
     start_planning:{from:['awaiting_planning'],to:'planning_in_progress',permission:'add_planning_information',label:'Start Planning'},
     complete_planning:{from:['planning_in_progress'],to:'planned',permission:'add_planning_information',label:'Save Planning Details'},
     submit_to_expediting:{from:['planned'],to:'submitted_to_expediting',permission:'submit_to_expediting',label:'Submit to Expediting'},
-    start_expediting:{from:['submitted_to_expediting'],to:'expediting_in_progress',permission:'update_order_progress',label:'Start Work'},
+    start_expediting:{from:['submitted_to_expediting','expediting_in_progress'],to:'expediting_in_progress',permission:'update_order_progress',label:'Confirm Received from Planning'},
     add_expediting_update:{from:['expediting_in_progress'],to:'expediting_in_progress',permission:'update_order_progress',label:'Add Progress Update'},
     place_on_hold:{from:['planning_in_progress','submitted_to_expediting','expediting_in_progress','awaiting_qa','qa_in_progress','awaiting_dispatch'],to:'on_hold',permission:'manage_order_hold',label:'Place on Hold'},
     resume_order:{from:['on_hold'],to:'__resume__',permission:'manage_order_hold',label:'Resume Order'},
-    complete_expediting:{from:['expediting_in_progress'],to:'awaiting_qa',permission:'move_to_dispatch',label:'Complete Expediting'},
+    complete_expediting:{from:['expediting_in_progress'],to:'awaiting_qa',permission:'update_order_progress',label:'QC — Send to Quality Control'},
     start_qa:{from:['awaiting_qa'],to:'qa_in_progress',permission:'inspect_order',label:'Start Quality Inspection'},
     start_qa_reinspection:{from:['qa_reinspection_required'],to:'qa_in_progress',permission:'inspect_order',label:'Start Reinspection'},
     pass_qa:{from:['qa_in_progress'],to:'qa_passed',permission:'release_qa_order',label:'Pass Quality Inspection'},
     fail_qa:{from:['qa_in_progress'],to:'qa_failed',permission:'record_qa_failure',label:'Record Quality Problem'},
     start_qa_rework:{from:['qa_failed'],to:'returned_to_expediting',permission:'manage_qa_rework',label:'Start Corrective Work'},
     resubmit_to_qa:{from:['returned_to_expediting'],to:'qa_reinspection_required',permission:'manage_qa_rework',label:'Resubmit to QA'},
-    release_qa_order:{from:['qa_passed'],to:'awaiting_dispatch',permission:'release_qa_order',label:'Send to Dispatch'},
+    release_qa_order:{from:['qa_passed'],to:'__after_qc__',permission:'release_qa_order',label:'Release QC'},
+    receive_lab_order:{from:['awaiting_lab'],to:'lab_received',permission:'update_lab_work',label:'Confirm Units Received in Laboratory'},
+    release_from_lab:{from:['lab_received','calibration_completed','awaiting_lab_release'],to:'awaiting_lab_receipt_dispatch',permission:'manage_certificates',label:'Send Certified Units to Dispatch'},
     confirm_dispatch_receipt:{from:['awaiting_dispatch'],to:'__same__',permission:'view_dispatch_queue',label:'Confirm Received in Dispatch'},
     confirm_lab_receipt_dispatch:{from:['awaiting_lab_receipt_dispatch'],to:'awaiting_dispatch',permission:'view_dispatch_queue',label:'Confirm receipt from laboratory'},
     report_delivery_problem:{from:['out_for_delivery'],to:'__same__',permission:'confirm_delivery',label:'Report Delivery Problem'},
@@ -47,6 +50,11 @@ const requiredText=(value,field,label,errors)=>{ if (String(value || '').trim().
 
 function validate(action,input) {
   const data=input?.data || {}; const errors={};
+  if (action === 'complete_expediting' && data.completionCheckConfirmed !== true && data.expeditingHandoff?.completionCheckConfirmed !== true) errors.completionCheckConfirmed = 'Confirm the production checks before sending to QC.';
+  if (action === 'pass_qa') {
+    if (data.qaPass?.checklistConfirmed !== true) errors.checklistConfirmed = 'Confirm the inspection checklist.';
+    if (data.qaPass?.meetsRequirements !== true) errors.meetsRequirements = 'Confirm that the units meet requirements.';
+  }
   if (action==='mark_quoted') { const quotation=data.quotation || {}; requiredText(quotation.number,'quotationNumber','the quotation number',errors); requiredText(quotation.date,'quotationDate','the quotation date',errors); }
   if (action==='accept_order') { const acceptance=data.acceptance || {}; requiredText(acceptance.type,'acceptanceType','the acceptance type',errors); requiredText(acceptance.date,'acceptanceDate','the acceptance date',errors); if (acceptance.verified!==true) errors.acceptanceVerified='Confirm that the acceptance evidence was checked.'; }
   if (action==='complete_planning') { const planning=data.planning || data; requiredText(planning.internalJobNumber,'internalJobNumber','the internal job number',errors); requiredText(planning.salesOrderNumber,'salesOrderNumber','the Sales Order Number',errors); requiredText(planning.assignedPlanningUserId,'assignedPlanningUserId','the assigned Planning user',errors); }
@@ -76,11 +84,17 @@ export function createWorkflowService({ repository, storage }) {
   const actionsForRecord = (actor, entityType, record) => Object.entries(definitions[entityType])
     .filter(([action, definition]) => definition.from.includes(record.trackingStatus) && has(actor, definition.permission)
       && (!DISPATCH_ACTIONS.includes(action) || actor.permissions.includes('view_dispatch_queue'))
+      && (!['receive_lab_order','release_from_lab'].includes(action) || actor.permissions.includes('view_lab_queue'))
+      && (action !== 'start_expediting' || !(record.expediting?.updates || []).some(update => update.progressStep === 'planning_received'))
       && (action !== 'confirm_dispatch_receipt' || !record.dispatch?.receivedAt)
       && (!['mark_ready_for_collection','start_delivery'].includes(action) || Boolean(record.dispatch?.receivedAt))
       && (!['mark_ready_for_collection','confirm_collection','complete_collection'].includes(action) || record.fulfilment === 'collect')
       && (!['start_delivery','confirm_delivery','complete_delivery','report_delivery_problem'].includes(action) || record.fulfilment === 'delivery'))
-    .map(([action, definition]) => ({ action, label: definition.label, toStatus: definition.to, permission: definition.permission }));
+    .map(([action, definition]) => {
+      const needsLab = action === 'release_qa_order' && laboratoryUnitsForOrder(record).length > 0;
+      return { action, label: action === 'release_qa_order' ? (needsLab ? 'Send to Laboratory' : 'Send to Dispatch') : definition.label,
+        toStatus: action === 'release_qa_order' ? (needsLab ? 'awaiting_lab' : 'awaiting_dispatch') : definition.to, permission: definition.permission };
+    });
 
   const enrich = (actor, entityType, record) => ({
     ...record,
@@ -97,6 +111,7 @@ export function createWorkflowService({ repository, storage }) {
       const definition=definitions[entityType]?.[String(input?.action || '')];
       if (!definition || !has(actor,definition.permission)) { const error=new Error('You are not authorised to perform this workflow action.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }
       if (DISPATCH_ACTIONS.includes(input.action) && !actor.permissions.includes('view_dispatch_queue')) { const error=new Error('Dispatch access is required.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }
+      if (['receive_lab_order','release_from_lab'].includes(input.action) && !actor.permissions.includes('view_lab_queue')) { const error=new Error('Laboratory access is required.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }
       const data = validate(input.action,input);
       if (input.action === 'mark_quoted') data.quotation = validateQuotation(data.quotation);
       const acceptsDocument = entityType === 'rfq' ? ['mark_quoted','accept_order'].includes(input.action) : DISPATCH_ACTIONS.includes(input.action) && !input.action.includes('receipt');

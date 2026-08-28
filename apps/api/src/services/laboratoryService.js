@@ -56,7 +56,7 @@ const validateEntry = (entry, { replacement = false } = {}) => {
   return { certificateNumber, issueDate, serialNumber, reason, notes: String(entry?.notes || '').trim().slice(0, 2000) };
 };
 
-export function createLaboratoryService({ repository, storage }) {
+export function createLaboratoryService({ repository, storage, workflowService }) {
   const prepare = async (actor, orderId, unitId, entry, file, correlationId, replacement = false) => {
     requirePermission(actor, 'manage_certificates');
     requirePermission(actor, 'view_lab_queue');
@@ -89,7 +89,7 @@ export function createLaboratoryService({ repository, storage }) {
     async listOrders(actor) {
       requirePermission(actor, 'view_lab_queue');
       const orders = await repository.listOrders(actor, { forLaboratory: true });
-      return orders.map(order => ({ ...order, laboratory: { ...(order.details?.laboratory || {}), units: laboratoryUnitsForOrder(order) } })).filter(order => order.laboratory.units.length);
+      return orders.map(order => ({ ...(workflowService ? workflowService.enrich(actor, 'order', order) : order), laboratory: { ...(order.details?.laboratory || {}), units: laboratoryUnitsForOrder(order) } })).filter(order => order.laboratory.units.length);
     },
     async dashboard(actor) {
       const orders = await this.listOrders(actor);

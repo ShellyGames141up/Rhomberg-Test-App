@@ -2,10 +2,10 @@
 
 Generated from `src/services/api/createApiServices.js` and `apps/api/src/app.js`.
 
-- Unique frontend API contracts: **135**
-- Registered backend API routes: **143**
-- Registered backend routes including health endpoints: **146**
-- Frontend contracts currently implemented: **135**
+- Unique frontend API contracts: **136**
+- Registered backend API routes: **144**
+- Registered backend routes including health endpoints: **147**
+- Frontend contracts currently implemented: **136**
 - Frontend contracts still missing: **0**
 - Frontend contracts currently incompatible: **0**
 
@@ -17,6 +17,7 @@ Every active API-mode adapter contract has a matching backend route. Contract pa
 | /admin/locations | GET | authenticated session | not required | implemented | P1 |
 | /admin/locations | POST | authenticated session | required | implemented | P2 |
 | /admin/locations/:id | PATCH | authenticated session | required | implemented | P2 |
+| /admin/orders/:orderId | DELETE | authenticated session | required | implemented | P2 |
 | /admin/retention-policy | GET | authenticated session | not required | implemented | P1 |
 | /admin/retention-policy | PUT | authenticated session | required | implemented | P2 |
 | /admin/users | POST | authenticated session | required | implemented | P2 |

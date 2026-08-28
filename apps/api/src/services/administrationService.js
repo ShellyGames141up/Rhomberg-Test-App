@@ -20,6 +20,12 @@ export function createAdministrationService({ repository, storage, identityProvi
     return { [field]: [...new Set(values)], reason: input.reason.trim() };
   }
   return Object.freeze({
+    deleteOrder(actor,orderId,input,correlationId) {
+      requirePermission(actor,'administer_users');
+      if (!(actor.roles || [actor.role]).includes('administrator')) throw new ApiError('FORBIDDEN','Administrator role required.',403);
+      if (String(input?.reason || '').trim().length < 8) throw validationError({reason:'Record why this order is being deleted.'});
+      return repository.softDeleteOrder(actor,orderId,{reason:input.reason.trim()},correlationId);
+    },
     async createInternalUser(actor, input, correlationId) {
       const displayName = String(input.displayName || '').trim();
       const username = String(input.username || '').trim();

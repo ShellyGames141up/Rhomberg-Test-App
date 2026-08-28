@@ -25,7 +25,7 @@ DECLARE
     'app.create_customer_account(uuid,uuid,text,text,text,text,text,text,text,uuid,text,text)',
     'app.register_customer_account(uuid,uuid,text,text,text,text,text,text,text,text,text)',
     'app.resolve_rfq_representative(uuid,uuid,text)',
-    'app.soft_delete_user(uuid,text,text)',
+    'app.soft_delete_user(uuid,text,text)','app.soft_delete_order(uuid,text,text)',
     'app.administer_user(uuid,text,jsonb,text)',
     'app.administer_company(uuid,text,jsonb,text)',
     'app.admin_user_login_history(uuid)',
@@ -128,7 +128,9 @@ TO :"runtime_role";
 GRANT INSERT, UPDATE, DELETE ON app.user_profile_images TO :"runtime_role";
 
 GRANT UPDATE (read_at, deliveries) ON app.notifications TO :"runtime_role";
-GRANT UPDATE (details, row_version, updated_at) ON app.orders TO :"runtime_role";
+REVOKE UPDATE ON app.orders FROM :"runtime_role";
+-- Deletion timestamp is writable only through the audited Administrator function.
+GRANT UPDATE (status, representative_id, purchase_order_number, completed_at, archived_at, details, row_version, updated_at) ON app.orders TO :"runtime_role";
 
 GRANT USAGE, SELECT ON SEQUENCE app.rfq_reference_sequence TO :"runtime_role";
 GRANT USAGE, SELECT ON SEQUENCE app.order_reference_sequence TO :"runtime_role";
@@ -141,7 +143,7 @@ WITH approved(signature) AS (VALUES
   ('app.list_internal_users()'),('app.list_technical_advisors()'),('app.complete_internal_user_profile(uuid,text,text,text,text[],uuid,text,text)'),
   ('app.create_customer_account(uuid,uuid,text,text,text,text,text,text,text,uuid,text,text)'),
   ('app.register_customer_account(uuid,uuid,text,text,text,text,text,text,text,text,text)'),
-  ('app.resolve_rfq_representative(uuid,uuid,text)'),('app.soft_delete_user(uuid,text,text)'),
+  ('app.resolve_rfq_representative(uuid,uuid,text)'),('app.soft_delete_user(uuid,text,text)'),('app.soft_delete_order(uuid,text,text)'),
   ('app.administer_user(uuid,text,jsonb,text)'),('app.administer_company(uuid,text,jsonb,text)'),
   ('app.admin_user_login_history(uuid)'),('app.change_own_password(text,text)')
 )
@@ -157,7 +159,7 @@ WITH approved(signature) AS (VALUES
   ('app.list_internal_users()'),('app.list_technical_advisors()'),('app.complete_internal_user_profile(uuid,text,text,text,text[],uuid,text,text)'),
   ('app.create_customer_account(uuid,uuid,text,text,text,text,text,text,text,uuid,text,text)'),
   ('app.register_customer_account(uuid,uuid,text,text,text,text,text,text,text,text,text)'),
-  ('app.resolve_rfq_representative(uuid,uuid,text)'),('app.soft_delete_user(uuid,text,text)'),
+  ('app.resolve_rfq_representative(uuid,uuid,text)'),('app.soft_delete_user(uuid,text,text)'),('app.soft_delete_order(uuid,text,text)'),
   ('app.administer_user(uuid,text,jsonb,text)'),('app.administer_company(uuid,text,jsonb,text)'),
   ('app.admin_user_login_history(uuid)'),('app.change_own_password(text,text)')
 )

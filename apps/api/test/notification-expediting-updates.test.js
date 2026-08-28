@@ -2,14 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createFixture, login, ids } from './fixtures.js';
-import { EXPEDITOR_PROGRESS_STEPS, expeditorUpdateSteps } from '../../../src/domain/expediting.js';
+import { expeditorUpdateSteps } from '../../../src/domain/expediting.js';
+import { PRODUCTION_STEPS } from '../src/domain/productionHandoffs.js';
 import { validateExpeditingAction } from '../../../src/services/validation.js';
 import { createPhase1WorkspaceService } from '../src/services/phase1WorkspaceService.js';
 
 test('Expediting options retain selectable flags, required steps and document objects', () => {
   const options = createPhase1WorkspaceService({ repository: {} }).getExpeditingOptions();
-  assert.deepEqual(options.progressSteps, EXPEDITOR_PROGRESS_STEPS);
-  assert.ok(expeditorUpdateSteps(options.progressSteps).length > 5);
+  assert.deepEqual(options.progressSteps, PRODUCTION_STEPS);
+  assert.equal(expeditorUpdateSteps(options.progressSteps).length, 5);
   for (const step of expeditorUpdateSteps(options.progressSteps)) {
     assert.doesNotThrow(() => validateExpeditingAction('add_expediting_update', { expeditingProgressStep: step.id, expeditingCustomerMessage: 'Fabricated progress update.' }, options));
   }

@@ -377,6 +377,7 @@ export function createApiServices(config = {}) {
     resetUserLogin: (accountId, input) => client.post(`/admin/users/${encodeURIComponent(accountId)}/temporary-password`, input),
     archiveEmployee: (accountId, input) => client.post(`/admin/users/${encodeURIComponent(accountId)}/archive`, input),
     deleteAccount: (accountId, input) => client.delete(`/admin/users/${encodeURIComponent(accountId)}`, { reason: input.reason || '' }),
+    deleteOrder: (orderId, input) => client.delete(`/admin/orders/${encodeURIComponent(orderId)}`, { reason: input.reason || '' }),
     uploadEmployeeProfileImage: (accountId, file, input = {}) => {
       const body = new FormData();
       body.append('file', file);

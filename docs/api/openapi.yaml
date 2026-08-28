@@ -26,6 +26,51 @@ servers:
 security:
   - sessionCookie: []
 paths:
+  /admin/orders/{orderId}:
+    delete:
+      operationId: softDeleteOrder
+      summary: Administrator-only audited order deletion
+      description: Requires an active Administrator role and administer_users. Preserves order/document/audit history, refuses legal hold and is idempotent. Does not permanently purge data.
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 8, maxLength: 1000 }
+            example: { reason: 'FABRICATED duplicate order created during testing' }
+      responses:
+        '200':
+          description: Deleted, or already deleted, with historical evidence retained
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string, format: uuid }
+                      status: { type: string, const: deleted }
+                      deletedAt: { type: string, format: date-time }
+                  meta: { type: object, properties: { requestId: { type: string } } }
+        '400': { description: Invalid identifier or reason }
+        '401': { description: Authentication required }
+        '403': { description: Administrator permission or CSRF verification failed }
+        '404': { description: Order missing or inaccessible }
+        '409': { description: Legal hold prevents deletion }
   /auth/csrf-token:
     get:
       security: []

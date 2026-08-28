@@ -4,6 +4,8 @@ Internal Windows PWA and Android/Capacitor packaging preparation is documented i
 
 ## Phase 1 production API foundation
 
+Staging 5.2.21 preparation: [Production handovers, representative visibility and Administrator deletion](docs/PRODUCTION_HANDOFF_AND_DELETION_FIX.md). Planning/customer order visibility and newly created representative assignment are corrected. Expediting now hands every order to QC; SANAS units proceed through Laboratory receipt/certificates before Dispatch receipt. Administrator order deletion is audited and preserves history, while user deletion blocks both login and existing sessions. Requires migrations 024/025 and matching runtime grants. Deploy the matching API and frontend together; local validation is not RHOMAPP acceptance.
+
 Next staging package: [Technical workspace and registration refresh correction](docs/TECHNICAL_WORKSPACE_REFRESH_FIX.md). Saved RFQ line selections, advisor assignment, private correspondence and customer replies now use the backend contracts. Owner/Sales Manager retain their full management workspace. Management statistics default to the [latest 31 days](docs/MANAGEMENT_REPORTING_WINDOW.md), with audited PDF downloads; older records are retained. Background data checks run every **15 minutes**, including newly registered customers in Administration. This package requires migration 023 and matching frontend/API deployment; local validation is not RHOMAPP acceptance.
 
 Local Sales/Dispatch correction: [quotation uploads and Dispatch handover](docs/SALES_DISPATCH_CORRECTION.md) now use validated multipart workflow requests, persisted receipt/handover details and migration 022's narrow private-proof access policies. This work is not yet released or deployed.

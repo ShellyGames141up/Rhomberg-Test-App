@@ -110,3 +110,7 @@ by locking the target user and audits before/after state. Effective permissions
 are role defaults plus explicit grants minus denials in both the API session
 projection and `establish_request_context`; company scoping remains unchanged.
 See [migration and security details](ROLE_PERMISSION_INHERITANCE_FIX.md).
+
+## Local migrations 024/025
+
+The [production handover and deletion extension](PRODUCTION_HANDOFF_AND_DELETION_FIX.md) adds representative-directory synchronisation and a restricted `app.soft_delete_order(uuid,text,text)` function. The existing `orders.deleted_at`, version, audit and JSON handover metadata fields are reused. Public function execution is revoked; matching runtime grants allow only the audited Administrator operation to change the deletion timestamp. No historical assignment or operational completion data is seeded.

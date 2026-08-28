@@ -12,6 +12,9 @@ import { buildApp } from '../src/app.js';
 import { hashPassword } from '../src/security/crypto.js';
 import { createApiServices } from '../../../src/services/api/createApiServices.js';
 import { DISPATCH_METHODS, DISPATCH_PROOF_TYPES } from '../../../src/domain/dispatch.js';
+import { optionsForField, shouldShowField } from '../../../src/domain/productConfiguration.js';
+import { customerRecords } from '../../../src/domain/customerRecords.js';
+import { PRODUCTION_REQUIRED_STEPS } from '../src/domain/productionHandoffs.js';
 
 test('Sales multipart quotation and Dispatch receipt-to-completion use the real adapter and runtime RLS', { timeout: 120000 }, async t => {
   const url = process.env.RHOMBERG_TEST_DISPATCH_DATABASE_URL;
@@ -21,11 +24,11 @@ test('Sales multipart quotation and Dispatch receipt-to-completion use the real 
   t.after(() => url ? db.end() : db.close());
   await runMigrations(db); await runMigrations(db);
   const q = (sql, values) => db.query(sql, values);
-  const ids = Object.fromEntries(['customer','other','sales','unassigned','dispatch','planning','company','otherCompany','rep','otherRep','rfq','otherRfq','collect','deliver','lab'].map(key => [key,randomUUID()]));
+  const ids = Object.fromEntries(['customer','other','sales','unassigned','dispatch','planning','expeditor','qa','labManager','company','otherCompany','rep','otherRep','rfq','otherRfq','collect','deliver','lab'].map(key => [key,randomUUID()]));
   const password = 'Fabricated-Dispatch-Only!584';
   const hash = await hashPassword(password);
-  for (const [key,role] of [['customer','customer'],['other','customer'],['sales','sales_representative'],['unassigned','sales_representative'],['dispatch','dispatch'],['planning','planning']]) {
-    await q("INSERT INTO app.users(id,username,email,display_name,password_hash,identity_provider,status) VALUES($1,$2,$3,$2,$4,'local_password','active')",[ids[key],'fabricated-'+key,key+'@example.invalid',hash]);
+  for (const [key,role] of [['customer','customer'],['other','customer'],['sales','sales_representative'],['unassigned','sales_representative'],['dispatch','dispatch'],['planning','planning'],['expeditor','expeditor'],['qa','quality_assurance'],['labManager','laboratory_manager']]) {
+    await q("INSERT INTO app.users(id,username,email,display_name,password_hash,identity_provider,status) VALUES($1,$2,$3,$2,$4,'local_password','active')",[ids[key],'fabricated-'+key,key.toLowerCase()+'@example.invalid',hash]);
     await q('INSERT INTO app.user_roles(user_id,role_code) VALUES($1,$2)',[ids[key],role]);
   }
   for (const key of ['company','otherCompany']) await q("INSERT INTO app.companies(id,name,area,industry) VALUES($1,$2,'Western Cape','Fabricated')",[ids[key],'FABRICATED '+key]);
@@ -52,7 +55,7 @@ test('Sales multipart quotation and Dispatch receipt-to-completion use the real 
   t.after(() => app.close());
   const clients = {};
   let clientNumber = 1;
-  for (const role of ['customer','other','sales','unassigned','dispatch','planning']) {
+  for (const role of ['customer','other','sales','unassigned','dispatch','planning','expeditor','qa','labManager']) {
     const remoteAddress = `127.0.0.${clientNumber++}`;
     let cookie = '';
     const api = createApiServices({ apiBaseUrl:'http://adapter.invalid/api/v1', fetchImplementation:async (input,init) => {
@@ -62,9 +65,58 @@ test('Sales multipart quotation and Dispatch receipt-to-completion use the real 
       if (response.headers['set-cookie']) cookie = response.headers['set-cookie'].split(';')[0];
       return new Response(response.rawPayload,{status:response.statusCode,headers:response.headers});
     } });
-    await api.auth.signIn({email:role+'@example.invalid',password});
+    await api.auth.signIn({email:role.toLowerCase()+'@example.invalid',password});
     clients[role] = {api,headers:() => ({cookie})};
   }
+  await t.test('representative loaded order persists into Planning and customer workspaces', async () => {
+    const options = await clients.sales.api.representativeOrders.getOptions();
+    const product = options.products.find(item => item.id === 'pbg');
+    const configuration = {};
+    for (let pass = 0; pass < 5; pass++) for (const field of product.configurations) {
+      if (!field.required || !shouldShowField(field, configuration) || configuration[field.key] !== undefined) continue;
+      const choices = optionsForField(field, configuration);
+      configuration[field.key] = field.type === 'toggle' ? false : field.type === 'multiChoice' ? [choices[0]] : choices[0] || 'Fabricated requirement';
+    }
+    const input = {
+      submissionKey: randomUUID(), companyId: ids.company, customerContactId: ids.customer,
+      representativeId: ids.rep, branchId: 'cape-town', orderSource: 'email',
+      application: 'FABRICATED Planning handoff', fulfilment: 'collect', priority: 'standard',
+      quotationNumber: 'FAB-HANDOFF-Q', quotationDate: '2020-01-01',
+      purchaseOrderNumber: 'FAB-HANDOFF-PO', purchaseOrderDate: '2020-01-01', sourceConfirmed: true,
+      items: [{productId: product.id, quantity: 2, configuration}],
+      quotationFile: new File(['%PDF-1.4\nFABRICATED QUOTE\n%%EOF'], 'fabricated-quote.pdf', {type:'application/pdf'}),
+      purchaseOrderFile: new File(['%PDF-1.4\nFABRICATED PO\n%%EOF'], 'fabricated-po.pdf', {type:'application/pdf'}),
+    };
+    const created = await clients.sales.api.representativeOrders.create(input);
+    assert.equal(created.order.trackingStatus, 'awaiting_planning');
+    const id = created.order.id;
+    for (const role of ['planning', 'customer']) {
+      const orders = await clients[role].api.orders.list();
+      assert.ok(orders.some(order => order.id === id), `${role} must see the saved order`);
+      const detail = await clients[role].api.orders.getById(id);
+      assert.equal(detail.companyId, ids.company);
+      assert.equal(detail.items[0].quantity, 2);
+      const notices = await clients[role].api.notifications.list();
+      assert.ok(notices.some(notice => notice.orderId === id), `${role} receives the handoff notification`);
+    }
+    await assert.rejects(clients.other.api.orders.getById(id));
+    const planned = await clients.planning.api.workflow.performAction(id, {action:'start_planning',entityType:'order',expectedVersion:1,data:{}});
+    assert.equal(planned.trackingStatus, 'planning_in_progress');
+    assert.equal((await clients.customer.api.orders.getById(id)).trackingStatus,'planning_in_progress');
+    assert.equal((await clients.sales.api.representativeOrders.create(input)).order.id, id, 'Replay must not duplicate the order');
+    const saved = await clients.planning.api.workflow.performAction(id, {action:'complete_planning',entityType:'order',expectedVersion:0,data:{planning:{
+      internalJobNumber:'FAB-JOB',salesOrderNumber:'FAB-SO',assignedPlanningUserId:ids.planning,
+      customerPoNumber:'FAB-HANDOFF-PO',submissionDate:'2020-01-01',notes:'INTERNAL-PLANNING-SENTINEL',
+    }}});
+    assert.equal(saved.trackingStatus, 'planned');
+    const reloaded = await clients.planning.api.orders.getById(id);
+    assert.equal(reloaded.planning?.internalJobNumber, 'FAB-JOB', 'saved Planning form is available after refresh');
+    assert.equal((await clients.planning.api.orders.list()).find(order=>order.id===id).planning?.salesOrderNumber, 'FAB-SO');
+    assert.doesNotMatch(JSON.stringify(await clients.customer.api.orders.getById(id)), /INTERNAL-PLANNING-SENTINEL/);
+    const submitted = await clients.planning.api.workflow.performAction(id,{action:'submit_to_expediting',entityType:'order',expectedVersion:0,data:{}});
+    assert.equal(submitted.trackingStatus,'submitted_to_expediting');
+    assert.equal((await clients.customer.api.orders.getById(id)).trackingStatus,'submitted_to_expediting');
+  });
   const options = await clients.dispatch.api.dispatch.getWorkspaceOptions();
   assert.deepEqual(options.methods,DISPATCH_METHODS);
   assert.deepEqual(options.proofTypes,DISPATCH_PROOF_TYPES);
@@ -72,10 +124,25 @@ test('Sales multipart quotation and Dispatch receipt-to-completion use the real 
   const quote = {action:'mark_quoted',entityType:'rfq',data:{quotationNumber:'FAB-Q-01',quotationDate:'2020-01-01',quotationExpiryMode:'not_applicable',quotationInternalNote:'INTERNAL-SALES-SENTINEL',quotationCustomerNote:'Quotation sent separately.',quotationDocumentFile:pdf,quotationDocumentCustomerVisible:true,quotationCommercialTotal:123.45}};
   quote.expectedVersion = 0;
   await assert.rejects(clients.unassigned.api.workflow.performAction(ids.rfq,quote));
-  assert.equal(storage._objects.size,0,'Rejected uploads must be cleaned up');
+  assert.equal(storage._objects.size,2,'Rejected uploads must be cleaned up');
   const quoted = await clients.sales.api.workflow.performAction(ids.rfq,quote);
   assert.equal(quoted.trackingStatus,'quoted');
   assert.equal(quoted.quotation.document.scanStatus,'pending');
+  await t.test('RFQ acceptance creates a Planning order and customer-visible handoff', async () => {
+    await clients.customer.api.workflow.performAction(ids.rfq, {action:'acknowledge_quotation',entityType:'rfq',expectedVersion:quoted.version,data:{}});
+    const accepted = await clients.sales.api.workflow.performAction(ids.rfq, {action:'accept_order',entityType:'rfq',expectedVersion:0,data:{acceptanceType:'purchase_order_received',acceptancePurchaseOrderNumber:'FAB-ACCEPT-PO',acceptanceDate:'2020-01-01',acceptanceInternalNote:'FABRICATED evidence verified',acceptanceVerified:true}});
+    const id = accepted.createdOrder.id;
+    assert.equal(accepted.trackingStatus,'converted_to_order');
+    for (const role of ['customer','planning']) {
+      assert.ok((await clients[role].api.orders.list()).some(order => order.id === id), role+' sees converted order');
+      assert.equal((await clients[role].api.orders.getById(id)).trackingStatus, 'awaiting_planning');
+    }
+    const notices = await clients.planning.api.notifications.list();
+    const notice = notices.find(item => item.orderId === id);
+    assert.ok(notice, 'Planning is notified about the converted order');
+    assert.equal(notice.link.entityType, 'order');
+    assert.equal(notice.link.entityId, id, 'Planning must open the order, not the source RFQ');
+  });
   const customerRfq = await clients.customer.api.enquiries.getById(ids.rfq);
   assert.doesNotMatch(JSON.stringify(customerRfq),/INTERNAL-SALES-SENTINEL|commercialTotal|storageKey/);
   await assert.rejects(clients.other.api.enquiries.getById(ids.rfq));
@@ -117,11 +184,107 @@ test('Sales multipart quotation and Dispatch receipt-to-completion use the real 
   assert.equal((await app.inject({url:proofPath,headers:clients.other.headers()})).statusCode,404);
   const notices = await app.inject({url:'/api/v1/notifications',headers:clients.customer.headers()});
   assert.ok(notices.json().data.some(item=>item.eventType==='workflow_complete_collection'));
+  await t.test('adding a Sales role must not hide the Planning queue', async () => {
+    const before = await clients.planning.api.orders.list();
+    assert.ok(before.length > 0);
+    await q('RESET ROLE');
+    await q("INSERT INTO app.user_roles(user_id,role_code) VALUES($1,'sales_representative')",[ids.planning]);
+    await q('SET ROLE dispatch_test_runtime');
+    const after = await clients.planning.api.orders.list();
+    assert.deepEqual(after.map(order=>order.id).sort(), before.map(order=>order.id).sort(), 'An additional role cannot subtract Planning visibility');
+  });
+  await t.test('customer UI preserves secondary company orders and loses them on membership revocation', async () => {
+    const secondary = randomUUID(), orderId = randomUUID();
+    await q('RESET ROLE');
+    await q("INSERT INTO app.companies(id,name) VALUES($1,'FABRICATED secondary company')", [secondary]);
+    await q('INSERT INTO app.company_users(company_id,user_id,is_primary) VALUES($1,$2,false)', [secondary,ids.customer]);
+    await q("INSERT INTO app.orders(id,reference,company_id,customer_user_id,representative_id,origin,status,application,fulfilment,created_by_user_id) VALUES($1,'FAB-SECONDARY',$2,$3,$4,'representative_loaded_order','awaiting_planning','FABRICATED secondary','collect',$5)", [orderId,secondary,ids.customer,ids.rep,ids.sales]);
+    await q('SET ROLE dispatch_test_runtime');
+    const account = await clients.customer.api.auth.getSession();
+    assert.ok(account.companyIds.includes(secondary));
+    assert.ok(!account.companyIds.includes(ids.otherCompany));
+    assert.ok(customerRecords(account, await clients.customer.api.orders.list()).some(order=>order.id===orderId));
+    await assert.rejects(clients.other.api.orders.getById(orderId));
+    await q('RESET ROLE');
+    await q('UPDATE app.company_users SET revoked_at=now() WHERE company_id=$1 AND user_id=$2', [secondary,ids.customer]);
+    await q('SET ROLE dispatch_test_runtime');
+    const revoked = await clients.customer.api.auth.getSession();
+    assert.ok(!revoked.companyIds.includes(secondary));
+    assert.ok(!customerRecords(revoked, await clients.customer.api.orders.list()).some(order=>order.id===orderId));
+    await assert.rejects(clients.customer.api.orders.getById(orderId));
+  });
+  await t.test('standard and SANAS orders follow production → QC → optional Lab → Dispatch receipt, with persistent customer/rep updates', async () => {
+    await clients.expeditor.api.expediting.getWorkspaceOptions();
+    for (const certified of [false, true]) {
+      const orderId = randomUUID(), lineId = randomUUID();
+      await q('RESET ROLE');
+      await q("INSERT INTO app.orders(id,reference,company_id,customer_user_id,representative_id,origin,status,application,fulfilment,created_by_user_id) VALUES($1,$2,$3,$4,$5,'representative_loaded_order','submitted_to_expediting','FABRICATED physical workflow','collect',$6)", [orderId,'FAB-PHYSICAL-'+orderId,ids.company,ids.customer,ids.rep,ids.sales]);
+      await q("INSERT INTO app.order_items(id,order_id,line_number,product_id,product_code_snapshot,product_name_snapshot,quantity,configuration) VALUES($1,$2,1,'pbg','PBG','FABRICATED gauge',2,$3::jsonb)", [lineId,orderId,JSON.stringify({sanas:certified?'Yes':'No'})]);
+      await q('SET ROLE dispatch_test_runtime');
+      const act = (role, action, data = {}) => clients[role].api.workflow.performAction(orderId,{action,entityType:'order',expectedVersion:0,data});
+      const progress = step => ({expeditingProgressStep:step,expeditingCustomerMessage:'FABRICATED progress '+step});
+      const handoff = {expeditingCustomerMessage:'FABRICATED sent to QC',expeditingCompletionCheckConfirmed:true};
+      await assert.rejects(act('customer','start_expediting',progress('planning_received')));
+      await assert.rejects(act('expeditor','complete_expediting',handoff));
+      await assert.rejects(act('labManager','receive_lab_order'));
+      await act('expeditor','start_expediting',progress('planning_received'));
+      await assert.rejects(act('expeditor','start_expediting',progress('planning_received')));
+      await assert.rejects(act('expeditor','add_expediting_update',progress('final_standard_calibration')));
+      for (const step of PRODUCTION_REQUIRED_STEPS.slice(1)) await act('expeditor','add_expediting_update',progress(step));
+      await assert.rejects(act('expeditor','add_expediting_update',progress('quality_check')));
+      const qc = await act('expeditor','complete_expediting',handoff);
+      assert.equal(qc.trackingStatus,'awaiting_qa');
+      assert.ok((await clients.qa.api.orders.list()).some(order=>order.id===orderId));
+      assert.ok((await clients.qa.api.notifications.list()).some(notice=>notice.orderId===orderId));
+      await assert.rejects(act('expeditor','release_qa_order'));
+      await assert.rejects(act('qa','release_qa_order'));
+      await act('qa','start_qa',{checklistReference:'FAB-QC'});
+      await assert.rejects(act('qa','pass_qa',{}), 'QC cannot be passed without the inspection confirmations');
+      await act('qa','pass_qa',{customerMessage:'Quality checks complete.',checklistConfirmed:true,meetsRequirements:true});
+      const released = await act('qa','release_qa_order');
+      assert.equal(released.trackingStatus,certified?'awaiting_lab':'awaiting_dispatch');
+      if (certified) {
+        const labOrder = (await clients.labManager.api.laboratory.listOrders()).find(order=>order.id===orderId);
+        assert.equal(labOrder.laboratory.units.length,2);
+        assert.ok(labOrder.allowedWorkflowActions.some(action=>action.action==='receive_lab_order'));
+        assert.ok((await clients.labManager.api.notifications.list()).some(notice=>notice.orderId===orderId));
+        const certificate = index => ({file:new File(['%PDF-1.4\nFABRICATED UNIT '+index+'\n%%EOF'],'fabricated-certificate-'+index+'.pdf',{type:'application/pdf'}),certificateNumber:'FAB-CERT-'+index,issueDate:'2020-01-01',serialNumber:'FAB-SERIAL-'+index,confirmAssociation:true,certificationType:'sanas'});
+        await assert.rejects(clients.labManager.api.laboratory.uploadCertificate(orderId,labOrder.laboratory.units[0].id,certificate(1)));
+        await assert.rejects(act('labManager','release_from_lab'));
+        await act('labManager','receive_lab_order');
+        await assert.rejects(act('labManager','receive_lab_order'));
+        await assert.rejects(act('dispatch','confirm_lab_receipt_dispatch'));
+        await clients.labManager.api.laboratory.uploadCertificate(orderId,labOrder.laboratory.units[0].id,certificate(1));
+        await assert.rejects(act('labManager','release_from_lab'));
+        await clients.labManager.api.laboratory.uploadCertificate(orderId,labOrder.laboratory.units[1].id,certificate(2));
+        assert.equal((await clients.customer.api.orders.getById(orderId)).trackingStatus,'lab_received','Uploading certificates alone does not release physical units');
+        assert.equal((await act('labManager','release_from_lab')).trackingStatus,'awaiting_lab_receipt_dispatch');
+        assert.ok((await clients.dispatch.api.orders.list()).some(order=>order.id===orderId));
+        await act('dispatch','confirm_lab_receipt_dispatch');
+      } else {
+        await assert.rejects(act('labManager','receive_lab_order'));
+        await act('dispatch','confirm_dispatch_receipt',{sourceDepartment:'quality_assurance',numberOfPackages:1,customerMessage:'Received from QC in Dispatch.'});
+      }
+      const received = await clients.dispatch.api.orders.getById(orderId);
+      assert.ok(received.dispatch.receivedAt);
+      assert.equal(received.dispatch.sourceDepartment,certified?'laboratory':'quality_assurance');
+      for (const who of ['customer','sales']) {
+        const visible = await clients[who].api.orders.getById(orderId);
+        assert.equal(visible.trackingStatus,'awaiting_dispatch');
+        const notices = await clients[who].api.notifications.list();
+        for (const event of ['complete_expediting','release_qa_order',...(certified?['receive_lab_order','release_from_lab','confirm_lab_receipt_dispatch']:['confirm_dispatch_receipt'])]) assert.ok(notices.some(notice=>notice.orderId===orderId && notice.eventType==='workflow_'+event),who+' '+event);
+      }
+      await assert.rejects(clients.other.api.orders.getById(orderId));
+      await q('RESET ROLE');
+      assert.ok(Number((await q("SELECT count(*) FROM app.audit_events WHERE entity_id=$1 AND event_type='workflow.transition'",[orderId])).rows[0].count)>=10);
+      await q('SET ROLE dispatch_test_runtime');
+    }
+  });
   await q('RESET ROLE');
   assert.ok(Number((await q("SELECT count(*) FROM app.audit_events WHERE action='complete_collection'")).rows[0].count)>0);
   const proof = (await q("SELECT * FROM app.document_metadata WHERE order_id=$1 AND kind='dispatch_proof'",[ids.collect])).rows[0];
   assert.equal(proof.customer_visible,false); assert.equal(proof.scan_status,'pending');
-  assert.equal(storage._objects.size,2);
+  assert.equal(storage._objects.size,6);
   assert.doesNotMatch(logs.join(''),new RegExp(password+'|INTERNAL-DISPATCH-SENTINEL|INTERNAL-SALES-SENTINEL'));
   for (const client of Object.values(clients)) assert.ok(!logs.join('').includes(client.headers().cookie.split('=')[1]), 'Session tokens must not enter logs');
   const session = (await q('SELECT token_hash FROM app.sessions WHERE user_id=$1 AND revoked_at IS NULL',[ids.dispatch])).rows[0];

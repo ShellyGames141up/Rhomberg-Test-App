@@ -42,7 +42,7 @@ const approvedDocumentTypes = new Set(['application/pdf', 'application/msword', 
 const approvedDocumentExtension = /\.(?:pdf|docx?|png|jpe?g)$/i;
 
 const publicActor = actor => ({
-  id: actor.id, companyId: actor.companyId, company: actor.company, contact: actor.contact,
+  id: actor.id, companyId: actor.companyId, companyIds: [...(actor.companyIds || [])], company: actor.company, contact: actor.contact,
   username: actor.username, email: actor.email, role: actor.role, roles: actor.roles, permissions: actor.permissions,
   forcePasswordChange: Boolean(actor.forcePasswordChange),
 });
@@ -215,7 +215,7 @@ export async function buildApp({ config, repository, storage, identityProvider, 
   const representativeOrderService = createRepresentativeOrderService({ repository, storage, publicReferenceService, branches });
   const workflowService = createWorkflowService({ repository, storage });
   const technicalSupportService = createTechnicalSupportService({ repository,storage });
-  const laboratoryService = createLaboratoryService({ repository, storage });
+  const laboratoryService = createLaboratoryService({ repository, storage, workflowService });
   const governanceService = createGovernanceService({ repository, storage });
   const clientVisitService = createClientVisitService({ repository });
   const personalisationService = createPersonalisationService({ repository,storage });
@@ -596,6 +596,10 @@ export async function buildApp({ config, repository, storage, identityProvider, 
     preHandler: requireCsrf,
     schema: { body: { type:'object', additionalProperties:false, required:['reason'], properties:{ reason:{type:'string',minLength:8,maxLength:1000} } } },
   }, async request => ({ data: await administrationService.deleteUser(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
+  app.delete('/api/v1/admin/orders/:orderId', {
+    preHandler: requireCsrf,
+    schema: { params:{type:'object',required:['orderId'],properties:{orderId:{type:'string',format:'uuid'}}}, body:{type:'object',additionalProperties:false,required:['reason'],properties:{reason:{type:'string',minLength:8,maxLength:1000}}} },
+  }, async request => ({ data:await administrationService.deleteOrder(request.actor,request.params.orderId,request.body,request.id),meta:{requestId:request.id} }));
   app.post('/api/v1/admin/users/:accountId/roles', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } }, preHandler: requireCsrf }, async request => ({ data: await administrationService.assignRoles(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
   app.post('/api/v1/admin/users/:accountId/branch', { preHandler: requireCsrf }, async request => ({ data: await administrationService.assignBranch(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
   app.put('/api/v1/administration/users/:accountId/permissions', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } }, preHandler: requireCsrf }, async request => ({ data: await administrationService.setPermissions(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));

@@ -59,6 +59,7 @@ export function ExpeditorDashboard({ account, orders, onAction, serviceMode, exp
   const [sort, setSort] = useState('oldest_update');
   const [openId, setOpenId] = useState(null);
   const options = {
+    ...expeditingOptions,
     progressSteps: expeditingOptions?.progressSteps?.length ? expeditingOptions.progressSteps : EXPEDITOR_PROGRESS_STEPS,
     requiredStepIds: expeditingOptions?.requiredStepIds?.length
       ? expeditingOptions.requiredStepIds
@@ -173,7 +174,7 @@ function ExpeditingOrder({ order, expanded, onToggle, onAction, account, options
   const dispatchAction = actionFor(order, 'complete_expediting');
   const startReworkAction = actionFor(order, 'start_qa_rework');
   const resubmitAction = actionFor(order, 'resubmit_to_qa');
-  const laboratoryOrder = orderRequiresLaboratory(order);
+  const laboratoryOrder = serviceMode !== 'api' && orderRequiresLaboratory(order);
   const approaching = isApproachingEstimatedCompletion(order, now, options.approachingCompletionDays);
   const customerPo = order.planning?.customerPoNumber || order.customerPoNumber || order.poNumber || '';
   const internalJob = order.planning?.internalJobNumber || order.internalJobNumber || '';

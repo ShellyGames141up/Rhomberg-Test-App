@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createWorkspaceUpdates, startWorkspacePolling } from './services/liveUpdates.js';
+import { customerRecords } from './domain/customerRecords.js';
 import { Account } from './components/Account.jsx';
 import { AdministratorDashboard } from './components/AdministratorDashboard.jsx';
 import { ArchivedOrders } from './components/ArchivedOrders.jsx';
@@ -389,7 +390,7 @@ export default function App() {
   const selectedCategory = selectedProduct ? catalogue.categories.find(category => category.id === selectedProduct.category) || null : null;
   const accountRecords = useMemo(() => {
     if (!account || isStaff) return [];
-    return [...enquiries, ...orders].filter(record => record.companyId === account.companyId || record.accountId === account.id);
+    return customerRecords(account, [...enquiries, ...orders]);
   }, [account, enquiries, isStaff, orders]);
   const staffRecords = useMemo(() => [...enquiries, ...orders], [enquiries, orders]);
   const unreadNotifications = notifications.filter(notification => !notification.readAt).length;

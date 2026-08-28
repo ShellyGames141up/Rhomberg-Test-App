@@ -4,12 +4,14 @@ import { laboratoryManagerCanHandle } from '../domain/laboratoryLaunch.js';
 import { friendlyServiceError } from '../services/contracts.js';
 import { ConfiguredUnitDetails } from './ConfiguredUnitDetails.jsx';
 import { StatusBadge } from './StatusBadge.jsx';
+import { WorkflowActionPanel } from './WorkflowActionPanel.jsx';
 
 const date = value => value ? new Date(value).toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not recorded';
 const status = unit => unit.certificateId ? 'Certificate Uploaded' : 'Awaiting Certificate';
+const labComplete = (order, serviceMode) => order.laboratory.units.every(unit => unit.certificateId) && (serviceMode !== 'api' || !['awaiting_lab','lab_received','calibration_completed','awaiting_lab_release'].includes(order.trackingStatus));
 const searchable = order => [order.reference, order.internalJobNumber, order.planning?.internalJobNumber, order.salesOrderNumber, order.customerPoNumber, order.company, order.selectedRep?.name, ...(order.laboratory?.units || []).flatMap(unit => [unit.serialNumber, unit.certificateNumber])].filter(Boolean).join(' ').toLowerCase();
 
-export function LaboratoryDashboard({ account, orders = [], laboratoryActions, onRecordsChanged }) {
+export function LaboratoryDashboard({ account, orders = [], laboratoryActions, onRecordsChanged, onAction, serviceMode }) {
   const [tab, setTab] = useState('active');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(null);
@@ -18,7 +20,7 @@ export function LaboratoryDashboard({ account, orders = [], laboratoryActions, o
   const [error, setError] = useState('');
   const prepared = useMemo(() => orders.map(ensureLaboratoryRecord).filter(order => order.laboratory?.units?.some(unit => laboratoryManagerCanHandle(account, unit.certificationType))), [orders, account]);
   const filtered = prepared.filter(order => {
-    const complete = order.laboratory.units.every(unit => unit.certificateId);
+    const complete = labComplete(order, serviceMode);
     return (tab === 'completed' ? complete : !complete) && (!query || searchable(order).includes(query.toLowerCase()));
   }).sort((a, b) => Number(Boolean(b.priority === 'urgent' || b.emergency === 'yes')) - Number(Boolean(a.priority === 'urgent' || a.emergency === 'yes')) || String(a.laboratory?.lastUpdatedAt || a.createdAt).localeCompare(String(b.laboratory?.lastUpdatedAt || b.createdAt)));
   const order = selected ? prepared.find(item => item.id === selected) : null;
@@ -49,15 +51,17 @@ export function LaboratoryDashboard({ account, orders = [], laboratoryActions, o
 
   return <section className="app-screen laboratory-launch lab-control-centre" aria-labelledby="lab-title">
     <header className="section-heading"><div><span className="eyebrow">Launch certificate workflow</span><h1 id="lab-title">Laboratory Certificate Dashboard</h1><p>Upload one final PDF certificate for every SANAS or Traceable physical unit.</p></div><span className="launch-scope-note">Manager access only</span></header>
-    <div className="lab-summary-grid"><article><strong>{prepared.filter(item => item.laboratory.units.some(unit => !unit.certificateId)).length}</strong><span>Active orders</span></article><article><strong>{prepared.flatMap(item => item.laboratory.units).filter(unit => !unit.certificateId).length}</strong><span>Certificates awaiting upload</span></article><article><strong>{prepared.filter(item => item.laboratory.units.every(unit => unit.certificateId)).length}</strong><span>Completed</span></article></div>
+    <div className="lab-summary-grid"><article><strong>{prepared.filter(item => !labComplete(item, serviceMode)).length}</strong><span>Active orders</span></article><article><strong>{prepared.flatMap(item => item.laboratory.units).filter(unit => !unit.certificateId).length}</strong><span>Certificates awaiting upload</span></article><article><strong>{prepared.filter(item => labComplete(item, serviceMode)).length}</strong><span>Completed</span></article></div>
     <div className="lab-toolbar"><div className="segmented-control"><button className={tab === 'active' ? 'active' : ''} onClick={() => { setTab('active'); setSelected(null); setUploadPanel(null); }}>Active</button><button className={tab === 'completed' ? 'active' : ''} onClick={() => { setTab('completed'); setSelected(null); setUploadPanel(null); }}>Completed Certificates</button></div><input aria-label="Search Laboratory certificates" placeholder="Search order, job, customer, serial or certificate" value={query} onChange={event => setQuery(event.target.value)} /></div>
     {message && <p className="success-message" role="status">{message}</p>}{error && <p className="error-message" role="alert">{error}</p>}
     {!order ? <div className="laboratory-card-grid">{filtered.map(item => {
       const units = item.laboratory.units.filter(unit => laboratoryManagerCanHandle(account, unit.certificationType)); const uploaded = units.filter(unit => unit.certificateId).length;
-      return <button type="button" className="laboratory-order-card" key={item.id} onClick={() => setSelected(item.id)}><span><b>{item.reference}</b><em>{item.priority === 'urgent' || item.emergency === 'yes' ? 'Urgent' : 'Standard'}</em></span><h2>{item.company}</h2><p>{item.planning?.internalJobNumber || item.internalJobNumber || 'Job number pending'} · {item.selectedRep?.name || 'Representative pending'}</p><strong>{uploaded} / {units.length} certificates uploaded</strong><small><StatusBadge status={uploaded === units.length ? 'completed' : 'pending'} label={uploaded === units.length ? 'Completed' : 'Awaiting Certificate'} /> · received {date(item.laboratory?.receivedAt || item.updatedAt)}</small></button>;
+      return <button type="button" className="laboratory-order-card" key={item.id} onClick={() => setSelected(item.id)}><span><b>{item.reference}</b><em>{item.priority === 'urgent' || item.emergency === 'yes' ? 'Urgent' : 'Standard'}</em></span><h2>{item.company}</h2><p>{item.planning?.internalJobNumber || item.internalJobNumber || 'Job number pending'} · {item.selectedRep?.name || 'Representative pending'}</p><strong>{uploaded} / {units.length} certificates uploaded</strong><small><StatusBadge status={labComplete(item, serviceMode) ? 'completed' : 'pending'} label={labComplete(item, serviceMode) ? 'Completed' : uploaded === units.length ? 'Awaiting Dispatch handover' : 'Awaiting Certificate'} /> · received {date(item.laboratory?.receivedAt)}</small></button>;
     })}{!filtered.length && <div className="empty-state"><h2>No matching Laboratory certificate tasks</h2><p>Completed work remains available in Certificate History.</p></div>}</div> : <LaboratoryOrderDetail
       order={order}
       account={account}
+      serviceMode={serviceMode}
+      onAction={onAction}
       uploadPanel={uploadPanel}
       onBack={() => { setSelected(null); setUploadPanel(null); }}
       onOpenUpload={(unit = null, replace = false) => { setError(''); setMessage(''); setUploadPanel({ preferredUnitId: unit?.id || '', replace }); }}
@@ -77,18 +81,22 @@ export function LaboratoryDashboard({ account, orders = [], laboratoryActions, o
   </section>;
 }
 
-function LaboratoryOrderDetail({ order, account, uploadPanel, onBack, onOpenUpload, onCloseUpload, onSubmitUpload, onDownload }) {
+function LaboratoryOrderDetail({ order, account, uploadPanel, onBack, onOpenUpload, onCloseUpload, onSubmitUpload, onDownload, onAction, serviceMode }) {
   const units = order.laboratory.units.filter(unit => laboratoryManagerCanHandle(account, unit.certificationType));
   const pendingUnits = units.filter(unit => !unit.certificateId);
+  const canUpload = serviceMode !== 'api' || (order.trackingStatus === 'lab_received' && Boolean(order.laboratory.receivedAt));
+  const handoffs = (order.allowedWorkflowActions || []).filter(action => ['receive_lab_order','release_from_lab'].includes(action.action));
   return <div className="laboratory-order-detail">
     <button className="text-button lab-back-button" onClick={onBack}>← Back to certificate queue</button>
-    <header><div><span className="eyebrow">Order details</span><h2>{order.reference}</h2><p>{order.company} · {order.contact}</p></div><div className="lab-order-progress"><strong>{units.filter(unit => unit.certificateId).length} / {units.length} complete</strong>{pendingUnits.length > 0 && <button className="primary-button" onClick={() => onOpenUpload()} aria-expanded={Boolean(uploadPanel) && !uploadPanel.replace}>Upload Certificates</button>}</div></header>
+    <header><div><span className="eyebrow">Order details</span><h2>{order.reference}</h2><p>{order.company} · {order.contact}</p></div><div className="lab-order-progress"><strong>{units.filter(unit => unit.certificateId).length} / {units.length} complete</strong>{pendingUnits.length > 0 && canUpload && <button className="primary-button" onClick={() => onOpenUpload()} aria-expanded={Boolean(uploadPanel) && !uploadPanel.replace}>Upload Certificates</button>}</div></header>
+    {serviceMode === 'api' && <p className="workflow-helper">QC → Laboratory receipt → certificates → Dispatch receipt. {order.laboratory.receivedAt ? `Laboratory receipt: ${date(order.laboratory.receivedAt)}.` : 'Awaiting QC handover and confirmation that the units have physically arrived.'}</p>}
+    {serviceMode === 'api' && handoffs.length > 0 && <WorkflowActionPanel key={`${order.id}-${order.version}-${order.trackingStatus}`} record={order} account={account} actions={handoffs} onAction={onAction} title="Laboratory handover" description="Confirm physical receipt, then send certified units to Dispatch. All required certificates must be uploaded before release." />}
     <dl className="lab-order-facts"><div><dt>Job number</dt><dd>{order.planning?.internalJobNumber || order.internalJobNumber || 'Pending'}</dd></div><div><dt>Sales Order</dt><dd>{order.salesOrderNumber || 'Pending'}</dd></div><div><dt>Customer PO</dt><dd>{order.customerPoNumber || 'Not recorded'}</dd></div><div><dt>Representative</dt><dd>{order.selectedRep?.name || 'Not assigned'}</dd></div><div><dt>Branch</dt><dd>{order.selectedRep?.branchName || order.area || 'Not recorded'}</dd></div><div><dt>Urgency</dt><dd>{order.priority === 'urgent' || order.emergency === 'yes' ? 'Urgent' : 'Standard'}</dd></div></dl>
     {uploadPanel && <CertificateUploadPanel key={`${uploadPanel.replace}-${uploadPanel.preferredUnitId}`} units={units} preferredUnitId={uploadPanel.preferredUnitId} replace={uploadPanel.replace} onClose={onCloseUpload} onSubmit={onSubmitUpload} />}
     <div className="lab-unit-list">{units.map(unit => {
       const item = order.items.find(value => (value.lineId || value.id) === unit.lineItemId);
       const recipient = unit.certificateRecipientSnapshot || item?.certificateRecipientSnapshot;
-      return <article key={unit.id} className="lab-unit-card"><div className="lab-unit-heading"><div><span>Unit {unit.unitNumber} of {unit.quantityInLine}</span><h3>{unit.productCode} · {unit.productName}</h3></div><b className={unit.certificateId ? 'complete' : ''}>{status(unit)}</b></div><ConfiguredUnitDetails unit={item || unit} context="Laboratory" extra={{ physicalUnit: `Unit ${unit.unitNumber}`, certificateType: unit.certificationType, serialNumber: unit.serialNumber || 'Pending', certificateNumber: unit.certificateNumber || 'Pending' }} /><div className="certificate-recipient-review"><strong>Certificate Recipient</strong><span>{recipient?.recipientType === 'customer_company' ? 'My Company' : 'My Client'}</span><span>{recipient?.recipientName || 'Recipient snapshot pending'}</span><span>{recipient?.recipientAddress || 'Address pending'}</span></div><div className="form-actions"><button className={unit.certificateId ? 'secondary-button' : 'primary-button'} onClick={() => onOpenUpload(unit, Boolean(unit.certificateId))}>{unit.certificateId ? 'Replace Certificate' : 'Upload Certificate'}</button>{unit.certificateId && <button type="button" className="secondary-button" onClick={() => onDownload(unit)}>Download Certificate</button>}</div>{unit.certificateVersions?.length > 0 && <small>{unit.certificateVersions.length} superseded version(s) preserved in audit history.</small>}</article>;
+      return <article key={unit.id} className="lab-unit-card"><div className="lab-unit-heading"><div><span>Unit {unit.unitNumber} of {unit.quantityInLine}</span><h3>{unit.productCode} · {unit.productName}</h3></div><b className={unit.certificateId ? 'complete' : ''}>{status(unit)}</b></div><ConfiguredUnitDetails unit={item || unit} context="Laboratory" extra={{ physicalUnit: `Unit ${unit.unitNumber}`, certificateType: unit.certificationType, serialNumber: unit.serialNumber || 'Pending', certificateNumber: unit.certificateNumber || 'Pending' }} /><div className="certificate-recipient-review"><strong>Certificate Recipient</strong><span>{recipient?.recipientType === 'customer_company' ? 'My Company' : 'My Client'}</span><span>{recipient?.recipientName || 'Recipient snapshot pending'}</span><span>{recipient?.recipientAddress || 'Address pending'}</span></div><div className="form-actions"><button className={unit.certificateId ? 'secondary-button' : 'primary-button'} disabled={!unit.certificateId && !canUpload} onClick={() => onOpenUpload(unit, Boolean(unit.certificateId))}>{unit.certificateId ? 'Replace Certificate' : 'Upload Certificate'}</button>{unit.certificateId && <button type="button" className="secondary-button" onClick={() => onDownload(unit)}>Download Certificate</button>}</div>{unit.certificateVersions?.length > 0 && <small>{unit.certificateVersions.length} superseded version(s) preserved in audit history.</small>}</article>;
     })}</div>
   </div>;
 }

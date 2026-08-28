@@ -64,7 +64,7 @@ export function QualityDashboard({
   return (
     <section className="app-screen operations-desktop quality-screen" aria-labelledby="quality-title">
       <header className="operations-hero quality-hero">
-        <div><span className="eyebrow">{serviceMode === 'mock' ? 'Test · ' : ''}Quality Assurance</span><h1 id="quality-title">Inspect carefully.<br /><em>Release confidently.</em></h1><p>QA receives standard orders only. SANAS and Traceable orders remain under Laboratory control and bypass this queue.</p></div>
+        <div><span className="eyebrow">{serviceMode === 'mock' ? 'Test · ' : ''}Quality Assurance</span><h1 id="quality-title">Inspect carefully.<br /><em>Release confidently.</em></h1><p>{serviceMode === 'api' ? 'QC inspects every order after production. Certified units go to Laboratory after QC; other orders go to Dispatch for confirmed receipt.' : 'QA receives standard orders only. SANAS and Traceable orders remain under Laboratory control and bypass this queue.'}</p></div>
         <div className="operations-owner"><span>{account.contact}</span><small>Quality workspace · Desktop optimised</small></div>
       </header>
       <div className="operations-metrics">
@@ -91,7 +91,7 @@ export function QualityDashboard({
         <Metric label="Currently in rework" value={monthly.inRework} />
       </div>
       <section className="operations-queue">
-        <div className="operations-section-title"><div><span className="eyebrow">Controlled inspection queue</span><h2>Standard orders</h2></div><small>Inspection attempts and rework are never overwritten</small></div>
+        <div className="operations-section-title"><div><span className="eyebrow">Controlled inspection queue</span><h2>{serviceMode === 'api' ? 'Orders requiring Quality Control' : 'Standard orders'}</h2></div><small>Inspection attempts and rework are never overwritten</small></div>
         {visible.map(order => (
           <QualityOrder
             key={order.id}
@@ -163,7 +163,7 @@ function QualityOrder({ order, expanded, values, options, onToggle, onValue, onA
             {actions.has('fail_qa') && <button className="danger-button" disabled={Boolean(busy)} type="button" onClick={() => onAction('fail_qa')}>Record problem</button>}
             {actions.has('start_qa_rework') && <button className="primary-button" disabled={Boolean(busy)} type="button" onClick={() => onAction('start_qa_rework')}>Start corrective work</button>}
             {actions.has('resubmit_to_qa') && <button className="primary-button" disabled={Boolean(busy)} type="button" onClick={() => onAction('resubmit_to_qa')}>Resubmit to QA</button>}
-            {actions.has('release_qa_order') && <button className="primary-button" disabled={Boolean(busy)} type="button" onClick={() => onAction('release_qa_order')}>Send to Dispatch</button>}
+            {actions.has('release_qa_order') && <button className="primary-button" disabled={Boolean(busy)} type="button" onClick={() => onAction('release_qa_order')}>{order.allowedWorkflowActions?.find(action => action.action === 'release_qa_order')?.label || 'Send to Dispatch'}</button>}
           </div>
           <section className="quality-history"><h3>Inspection history</h3>{history.map(inspection => <article key={inspection.id}><StatusBadge as="b" status={inspection.result} label={humanise(inspection.result)} className="status-pill" /><span><strong>Attempt {inspection.attempt}</strong><small>{inspection.customerMessage || 'Internal inspection record'} · {formatDate(inspection.createdAt)}</small></span></article>)}{!history.length && <p>No completed inspection attempt is recorded yet.</p>}</section>
         </div>

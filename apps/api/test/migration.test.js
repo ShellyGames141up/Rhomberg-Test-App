@@ -1,13 +1,32 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import fs from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { runMigrations } from '../src/db/migrate.js';
+
+test('deployment grant allowlist VALUES contain exactly one signature per row', async () => {
+  const source=await fs.readFile(new URL('../sql/phase1-runtime-grants.sql',import.meta.url),'utf8');
+  const sections=[...source.matchAll(/WITH approved\(signature\) AS \(VALUES([\s\S]*?)\n\)/g)];
+  assert.equal(sections.length,2);
+  const db=new PGlite();
+  try {
+    for(const section of sections) {
+      const rows=await db.query('SELECT * FROM (VALUES '+section[1]+') AS approved(signature)');
+      assert.ok(rows.rows.some(row=>row.signature==='app.soft_delete_order(uuid,text,text)'));
+      assert.equal(new Set(rows.rows.map(row=>row.signature)).size,rows.rows.length);
+    }
+  } finally {await db.close();}
+});
 
 test('Phase 1 migration applies to an empty PostgreSQL-compatible database with required constraints and indexes', async () => {
   const db = new PGlite();
   await runMigrations(db);
   await runMigrations(db);
   const migrationRecords = await db.query('SELECT version FROM public.rhomberg_schema_migrations');
+  assert.ok(migrationRecords.rows.some(row => row.version === '025_administrator_order_soft_delete.sql'));
+  migrationRecords.rows = migrationRecords.rows.filter(row => row.version !== '025_administrator_order_soft_delete.sql');
+  assert.ok(migrationRecords.rows.some(row => row.version === '024_representative_directory_sync.sql'));
+  migrationRecords.rows = migrationRecords.rows.filter(row => row.version !== '024_representative_directory_sync.sql');
   assert.ok(migrationRecords.rows.some(row => row.version === '023_technical_workspace_read_contract.sql'));
   migrationRecords.rows = migrationRecords.rows.filter(row => row.version !== '023_technical_workspace_read_contract.sql');
   assert.ok(migrationRecords.rows.some(row => row.version === '022_dispatch_proof_access.sql'));

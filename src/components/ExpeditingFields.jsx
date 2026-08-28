@@ -47,13 +47,13 @@ export const expeditingActionDataFor = (record, options = {}, action, changes = 
   const preferredUpdateStep = currentStepDefinition.selectableForUpdate
     ? expediting.currentStep
     : normalSteps[0]?.id || 'materials_checked';
-  const configuredStep = ACTION_COPY[action]?.step
+  const configuredStep = (action === 'complete_expediting' && options.handoffStep) || ACTION_COPY[action]?.step
     || (action === 'resume_order' && preferredResumeStep && !resumeStepDefinition.operational
       ? preferredResumeStep
       : preferredUpdateStep);
   const base = {
     expeditingProgressStep: configuredStep,
-    expeditingCustomerMessage: ACTION_COPY[action]?.message || 'Progress on your order has been updated.',
+    expeditingCustomerMessage: action === 'complete_expediting' && options.handoffDepartment ? 'Production is complete. Your order is moving to Quality Control.' : ACTION_COPY[action]?.message || 'Progress on your order has been updated.',
     expeditingInternalNote: '',
     expeditingEstimatedCompletionDate: expediting.estimatedCompletionDate || record?.planning?.estimatedCompletionDate || '',
     expeditingDelayReason: '',
@@ -166,7 +166,7 @@ export function ExpeditingFields({ action, record, options = {}, data, onChange,
 
       {showHandoff && (
         <div className="expediting-field-group is-handoff">
-          <div className="expediting-field-heading"><span>05</span><div><strong>Dispatch hand-off</strong><small>Required progress must be complete unless a controlled exception is recorded.</small></div></div>
+          <div className="expediting-field-heading"><span>05</span><div><strong>{options.handoffDepartment || 'Dispatch'} hand-off</strong><small>{options.orderedProduction ? 'All five production steps must be recorded before QC.' : 'Required progress must be complete unless a controlled exception is recorded.'}</small></div></div>
           <div className="expediting-required-steps">
             {missingBeforeHandoff.length ? (
               <>
@@ -174,15 +174,15 @@ export function ExpeditingFields({ action, record, options = {}, data, onChange,
                 <div>{missingBeforeHandoff.map(id => <span key={id}>{steps.find(item => item.id === id)?.label || expeditorProgressStepById(id).label}</span>)}</div>
               </>
             ) : (
-              <strong className="is-complete">All required production steps are recorded. This hand-off will add “Ready for dispatch”.</strong>
+              <strong className="is-complete">All required production steps are recorded. {options.orderedProduction ? 'This hand-off sends the order to QC.' : 'This hand-off will add “Ready for dispatch”.'}</strong>
             )}
           </div>
           <label className="choice-row">
             <input type="checkbox" checked={Boolean(values.expeditingCompletionCheckConfirmed)} onChange={event => set('expeditingCompletionCheckConfirmed', event.target.checked)} />
-            <span><strong>Confirm the Expeditor hand-off checks</strong><small>Confirm the order and available controlled records are ready for Dispatch.</small></span>
+            <span><strong>Confirm the Expeditor hand-off checks</strong><small>Confirm the order and available controlled records are ready for {options.handoffDepartment || 'Dispatch'}.</small></span>
           </label>
           <FieldError message={errors.expeditingCompletionCheckConfirmed} />
-          {missingBeforeHandoff.length > 0 && (
+          {missingBeforeHandoff.length > 0 && !options.orderedProduction && (
             <div className="expediting-exception">
               <label className="choice-row">
                 <input type="checkbox" checked={Boolean(values.expeditingReadyExceptionAuthorised)} onChange={event => set('expeditingReadyExceptionAuthorised', event.target.checked)} />

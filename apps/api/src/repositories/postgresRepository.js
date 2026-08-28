@@ -1,9 +1,12 @@
 import { randomUUID, createHash } from 'node:crypto';
-import { notFound, validationError } from '../errors.js';
+import { ApiError, notFound, validationError } from '../errors.js';
+import { assertProductionProgress, HANDOFF_MESSAGES } from '../domain/productionHandoffs.js';
+import { laboratoryUnitsForOrder } from '../services/laboratoryService.js';
 import { qualityProjection } from '../domain/qualityProjection.js';
 import { quotationProjection } from '../domain/quotation.js';
 import { applyDispatchAction, dispatchProjection, DISPATCH_ACTIONS } from '../domain/dispatchWorkflow.js';
 import { requirePermission } from '../authorization/permissions.js';
+import { orderScope, hasDepartmentActionScope } from '../authorization/orderScope.js';
 
 const json = value => JSON.stringify(value ?? {});
 
@@ -18,10 +21,15 @@ function expeditingProjection(details = {}, actor) {
   }));
   const last = updates.at(-1);
   return {
-    details: customer ? { ...details, laboratory, qualityUpdates: undefined, qualityAssurance: undefined, expeditingUpdates: updates, dispatch: dispatchProjection(details, actor).dispatch, dispatchUpdates: undefined } : details,
+    details: customer ? {
+      quotationDate: details.quotationDate, quotationRevision: details.quotationRevision,
+      purchaseOrderDate: details.purchaseOrderDate,
+      planning: details.planning ? { plannedStartDate: details.planning.plannedStartDate, estimatedCompletionDate: details.planning.estimatedCompletionDate } : undefined,
+      laboratory, expeditingUpdates: updates, dispatch: dispatchProjection(details, actor).dispatch,
+    } : details,
     laboratory,
     ...dispatchProjection(details, actor),
-    ...(!customer ? { qualityAssurance: qualityProjection(details), internalJobNumber: details.planning?.internalJobNumber || '', salesOrderNumber: details.planning?.salesOrderNumber || '' } : {}),
+    ...(!customer ? { planning: details.planning, qualityAssurance: qualityProjection(details), internalJobNumber: details.planning?.internalJobNumber || '', salesOrderNumber: details.planning?.salesOrderNumber || '' } : {}),
     expediting: { updates, currentStep: last?.progressStep || '', estimatedCompletionDate: last?.estimatedCompletionDate || details.planning?.estimatedCompletionDate || '', currentDelayReason: last?.delayReason || '' },
   };
 }
@@ -328,6 +336,7 @@ export function createPostgresRepository(pool) {
             GROUP BY company.id,assignment.representative_id ORDER BY company.name`);
         const representatives = await client.query('SELECT id,user_id,display_name,branch_name,branch_id,code,is_active FROM app.representatives ORDER BY display_name');
         const auditCount = await client.query('SELECT count(*)::integer AS count FROM app.audit_events');
+        const orderRecords = await client.query('SELECT o.id,o.reference,o.status,o.row_version,c.name AS company FROM app.orders o JOIN app.companies c ON c.id=o.company_id WHERE o.deleted_at IS NULL ORDER BY o.updated_at DESC LIMIT 200');
         const mappedInternalUsers = users.rows.map(user => ({
           id: user.id, contact: user.display_name, displayName: user.display_name,
           email: user.email, signInName: user.username, username: user.username,
@@ -350,7 +359,7 @@ export function createPostgresRepository(pool) {
           representatives: representatives.rows.map(rep => ({ id: rep.id, userId: rep.user_id, name: rep.display_name, displayName: rep.display_name, branch: rep.branch_name, branchName: rep.branch_name, branchId: rep.branch_id || '', code: rep.code || '', active: rep.is_active })),
           branches: [], departments: [],
           accountStatuses: ['active', 'disabled', 'archived'], authenticationTypes: ['password'],
-          activationMethods: ['administrator_temporary_password'], correctionRecords: [], archivedRecords: [],
+          activationMethods: ['administrator_temporary_password'], correctionRecords: orderRecords.rows.map(row=>({id:row.id,reference:row.reference,company:row.company,workflowType:'order',trackingStatus:row.status,version:row.row_version})), archivedRecords: [],
           roles: roles.rows.map(role => ({ id: role.code, label: role.name, permissions: rolePermissions.rows.filter(item => item.role_code === role.code).map(item => item.permission_code) })),
           permissions: permissions.rows.map(item => item.code), catalogue: { categories: [], products: [] }, configurations: {},
         };
@@ -427,6 +436,15 @@ export function createPostgresRepository(pool) {
         if(error.code==='22023') { error.code='VALIDATION_ERROR'; error.statusCode=422; }
         if(error.code==='P0002') { error.code='NOT_FOUND'; error.statusCode=404; }
         if(error.code==='42501') { error.code='FORBIDDEN'; error.statusCode=403; }
+        throw error;
+      }
+    },
+    async softDeleteOrder(actor,orderId,payload,correlationId) {
+      try {
+        return await inTransaction(async client => (await client.query('SELECT app.soft_delete_order($1,$2,$3) AS result',[orderId,payload.reason,correlationId])).rows[0].result,{actor});
+      } catch (error) {
+        const codes = { '22023':['VALIDATION_ERROR',422], P0002:['NOT_FOUND',404], '42501':['FORBIDDEN',403], '23514':['LEGAL_HOLD',409] };
+        if (codes[error.code]) [error.code,error.statusCode]=codes[error.code];
         throw error;
       }
     },
@@ -684,24 +702,7 @@ export function createPostgresRepository(pool) {
     async listOrders(actor, { forReporting = false, forLaboratory = false } = {}) {
       return inTransaction(async client => {
         if (forLaboratory) requirePermission(actor, 'view_lab_queue');
-        const queueStatuses = actor.permissions.includes('view_planning_queue') ? ['awaiting_planning','planning_in_progress','planned']
-          : actor.permissions.includes('view_expediting_queue') ? ['awaiting_lab_receipt_expediting','submitted_to_expediting','expediting_in_progress','qa_failed','returned_to_expediting','awaiting_qa','awaiting_dispatch','on_hold']
-            : actor.permissions.includes('view_lab_queue') ? ['awaiting_lab','lab_received','calibration_in_progress','calibration_on_hold','calibration_completed','awaiting_lab_release','released_from_lab']
-              : actor.permissions.includes('view_qa_queue') ? ['awaiting_qa','qa_in_progress','qa_failed','returned_to_expediting','qa_reinspection_required','qa_passed']
-                : actor.permissions.includes('view_dispatch_queue') ? ['awaiting_lab_receipt_dispatch','awaiting_dispatch','ready_for_collection','out_for_delivery','delivered','collected'] : null;
-        let predicate = actor.permissions.includes('view_all_orders') ? 'TRUE'
-          : queueStatuses ? 'o.status = ANY($1::text[])' : 'o.company_id = ANY($1::uuid[])';
-        const values = actor.permissions.includes('view_all_orders') ? [] : [queueStatuses || actor.companyIds];
-        // Certificate preparation is independent of physical fulfilment at launch.
-        // Include active and historical certificate tasks, not only old technician stages.
-        if (forLaboratory || (!forReporting && actor.permissions.includes('view_lab_queue') && !actor.permissions.includes('view_planning_queue') && !actor.permissions.includes('view_expediting_queue'))) {
-          predicate = "o.status <> 'cancelled' AND (EXISTS (SELECT 1 FROM app.order_items li WHERE li.order_id=o.id AND (li.configuration->>'sanas' ~* '^(yes|required)' OR li.configuration->>'traceability' ~* '^(yes|required)')) OR o.details ? 'laboratory')";
-          values.length = 0;
-        }
-        if (actor.permissions.includes('view_assigned_orders') && !actor.permissions.includes('view_all_orders') && !forLaboratory) {
-          predicate += ` AND o.representative_id = $${values.length + 1}`;
-          values.push(actor.representativeId);
-        }
+        const { predicate, values } = orderScope(actor, { forLaboratory });
         const result = await client.query(`SELECT o.*, c.name AS company_name, customer.display_name AS customer_name,
           rep.display_name AS representative_name, rep.branch_name, rep.branch_id
           FROM app.orders o JOIN app.companies c ON c.id = o.company_id
@@ -740,15 +741,40 @@ export function createPostgresRepository(pool) {
     async performWorkflowAction(actor,command) {
       return inTransaction(async client => {
         const table=command.entityType==='rfq'?'rfqs':'orders';
-        const record=(await client.query(`SELECT * FROM app.${table} WHERE id=$1 FOR UPDATE`,[command.id])).rows[0];
+        const record=(await client.query(`SELECT * FROM app.${table} WHERE id=$1 ${table==='orders'?'AND deleted_at IS NULL':''} FOR UPDATE`,[command.id])).rows[0];
         if (!record) throw notFound(`The ${command.entityType === 'rfq' ? 'RFQ' : 'order'} was not found or is outside your authorised scope.`);
         if (!command.definition.from.includes(record.status)) { const error=new Error(`This action is not allowed while the record is ${record.status}.`); error.code='INVALID_WORKFLOW_TRANSITION'; error.statusCode=409; throw error; }
-        if (actor.role==='sales_representative' && record.representative_id!==actor.representativeId) { const error=new Error('This record is assigned to another representative.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }
+        if (actor.role==='sales_representative' && record.representative_id!==actor.representativeId && !(command.entityType==='order' && hasDepartmentActionScope(actor, command.action, command.definition.permission))) { const error=new Error('This record is assigned to another representative.'); error.code='FORBIDDEN'; error.statusCode=403; throw error; }
         if (command.entityType==='rfq' && command.action==='mark_quoted') {
           const pending=await client.query("SELECT 1 FROM app.technical_support_requests WHERE rfq_id=$1 AND status NOT IN ('technical_support_completed','technical_support_cancelled') LIMIT 1",[record.id]);
           if (pending.rows[0]) { const error=new Error('Technical Review Pending. Complete or formally override the technical request before marking the RFQ quoted.'); error.code='TECHNICAL_REVIEW_PENDING'; error.statusCode=409; throw error; }
         }
         let toStatus=command.definition.to; const details={...(record.details || {})};
+        if (command.entityType === 'order') {
+          if (['start_expediting','add_expediting_update','complete_expediting'].includes(command.action)) {
+            assertProductionProgress(details, command.action, command.data);
+            details.physicalWorkflow = 'qc_before_laboratory';
+          }
+          if (['release_qa_order','receive_lab_order','release_from_lab'].includes(command.action)) {
+            const units = laboratoryUnitsForOrder(await loadOrder(client, record.id, actor));
+            if (command.action === 'release_qa_order') {
+              toStatus = units.length ? 'awaiting_lab' : 'awaiting_dispatch';
+              details.physicalWorkflow = 'qc_before_laboratory';
+              if (units.length) details.laboratory = { ...details.laboratory, sentByQcAt: new Date().toISOString() };
+              else details.dispatch = { ...details.dispatch, sourceDepartment: 'quality_assurance' };
+            } else {
+              if (!units.length) throw validationError({ order: 'This order has no units requiring Laboratory certification.' });
+              if (command.action === 'receive_lab_order') details.laboratory = { ...details.laboratory, receivedAt: new Date().toISOString(), receivedBy: actor.id };
+              if (command.action === 'release_from_lab') {
+                if (!details.laboratory?.receivedAt || units.some(unit => !unit.certificateId)) throw new ApiError('INVALID_WORKFLOW_TRANSITION', 'Confirm Laboratory receipt and upload every required unit certificate before sending to Dispatch.', 409);
+                const certificates = await client.query("SELECT id FROM app.document_metadata WHERE order_id=$1 AND kind='certificate' AND deleted_at IS NULL AND scan_status <> 'rejected'", [record.id]);
+                if (units.some(unit => !certificates.rows.some(document => document.id === unit.certificateId))) throw validationError({ certificate: 'A required certificate is missing or rejected.' });
+                details.laboratory = { ...details.laboratory, releasedAt: new Date().toISOString(), releasedBy: actor.id, releaseDestination: 'dispatch' };
+                details.dispatch = { ...details.dispatch, sourceDepartment: 'laboratory' };
+              }
+            }
+          }
+        }
         if (toStatus === '__same__') toStatus = record.status;
         if (DISPATCH_ACTIONS.includes(command.action)) details.dispatch = applyDispatchAction(record, command.action, command.data, actor, new Date().toISOString());
         if (command.action === 'fail_qa') {
@@ -794,15 +820,15 @@ export function createPostgresRepository(pool) {
           details.orderId=orderId; details.orderReference=orderReference;
         }
         await client.query(`UPDATE app.${table} SET status=$2,details=$3::jsonb,row_version=row_version+1,updated_at=now()${command.entityType==='order' && ['complete_collection','complete_delivery'].includes(command.action)?',completed_at=now()':''} WHERE id=$1`,[record.id,toStatus,json(details)]);
-        const companyId=record.company_id; const eventId=randomUUID(); const customerNote=String((DISPATCH_ACTIONS.includes(command.action) ? details.dispatch.customerMessage : '') || command.data?.customerMessage || command.data?.qaFailure?.customerMessage || command.data?.qaPass?.customerMessage || command.data?.qaRework?.customerMessage || command.data?.expeditingUpdate?.customerMessage || command.data?.dispatchUpdate?.customerMessage || '').trim();
+        const companyId=record.company_id; const eventId=randomUUID(); const customerNote=String(HANDOFF_MESSAGES[command.action] || (command.action === 'release_qa_order' ? (toStatus === 'awaiting_lab' ? 'Quality Control is complete. Your units have been sent to the Laboratory for certification.' : 'Quality Control is complete. Your order has been sent to Dispatch.') : '') || (DISPATCH_ACTIONS.includes(command.action) ? details.dispatch.customerMessage : '') || command.data?.customerMessage || command.data?.qaFailure?.customerMessage || command.data?.qaPass?.customerMessage || command.data?.qaRework?.customerMessage || command.data?.expeditingUpdate?.customerMessage || command.data?.dispatchUpdate?.customerMessage || '').trim();
         await client.query(`INSERT INTO app.workflow_events(id,company_id,entity_type,entity_id,from_status,to_status,action,customer_note,internal_note,customer_visible,actor_user_id,actor_role,metadata)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)`,[eventId,companyId,command.entityType,record.id,record.status,toStatus,command.action,customerNote || null,command.comment || null,Boolean(customerNote || ['acknowledge_quotation','accept_order','start_planning','submit_to_expediting','mark_ready_for_collection','start_delivery','confirm_collection','confirm_delivery','complete_collection','complete_delivery'].includes(command.action)),actor.id,actor.role,json({orderId,orderReference})]);
         await client.query(`INSERT INTO app.audit_events(event_type,actor_user_id,actor_role,company_id,action,entity_type,entity_id,outcome,correlation_id,details)
           VALUES('workflow.transition',$1,$2,$3,$4,$5,$6,'success',$7,$8::jsonb)`,[actor.id,actor.role,companyId,command.action,command.entityType,record.id,command.correlationId,json({fromStatus:record.status,toStatus,orderId})]);
         const customerUserId=command.entityType==='rfq'?record.requester_user_id:record.customer_user_id; const representative=(await client.query('SELECT user_id FROM app.representatives WHERE id=$1',[record.representative_id])).rows[0]?.user_id;
         const recipients=new Set([customerUserId,representative].filter(Boolean));
-        const roleForAction=command.action==='accept_order'?'planning':command.action==='submit_to_expediting'?'expeditor':command.action==='release_qa_order'?'dispatch':null;
-        if (roleForAction) for (const row of (await client.query('SELECT user_id FROM app.user_roles WHERE role_code=$1 AND revoked_at IS NULL',[roleForAction])).rows) recipients.add(row.user_id);
+        const rolesForAction = command.action==='accept_order' ? ['planning'] : command.action==='submit_to_expediting' ? ['expeditor'] : command.action==='complete_expediting' ? ['quality_assurance','quality_manager'] : command.action==='release_qa_order' ? (toStatus==='awaiting_lab' ? ['laboratory_manager'] : ['dispatch']) : command.action==='release_from_lab' ? ['dispatch'] : [];
+        if (rolesForAction.length) for (const row of (await client.query('SELECT DISTINCT user_id FROM app.user_roles WHERE role_code=ANY($1::text[]) AND revoked_at IS NULL',[rolesForAction])).rows) recipients.add(row.user_id);
         for (const recipient of recipients) await client.query(`INSERT INTO app.notifications(id,company_id,recipient_user_id,rfq_id,order_id,event_type,title,message,customer_visible,link_path)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[randomUUID(),companyId,recipient,command.entityType==='rfq'?record.id:null,command.entityType==='order'?record.id:orderId,`workflow_${command.action}`,command.definition.label,customerNote || `Status updated to ${toStatus.replaceAll('_',' ')}.`,recipient===customerUserId,command.entityType==='rfq'?`/rfqs/${record.id}`:`/orders/${record.id}`]);
         return command.entityType==='rfq' ? { enquiry:await loadEnquiry(client,record.id,actor),order:orderId?await loadOrder(client,orderId,actor):null } : { order:await loadOrder(client,record.id,actor) };
@@ -1006,6 +1032,7 @@ export function createPostgresRepository(pool) {
         const order = (await client.query('SELECT id,company_id,status,details FROM app.orders WHERE id=$1 AND deleted_at IS NULL FOR UPDATE', [command.orderId])).rows[0];
         if (!order) throw notFound('The order was not found or is outside your authorised scope.');
         if (['cancelled','archived'].includes(order.status)) throw notFound('The order is closed to certificate uploads.');
+        if (!command.replacement && order.details?.physicalWorkflow === 'qc_before_laboratory' && (order.status !== 'lab_received' || !order.details.laboratory?.receivedAt)) throw new ApiError('INVALID_WORKFLOW_TRANSITION', 'Confirm the units have arrived from QC before uploading certificates.', 409);
         const laboratory = order.details?.laboratory || {};
         const savedUnits = new Map((laboratory.units || []).map(unit => [unit.id, unit]));
         const units = (command.units || [command.unit]).map(unit => savedUnits.get(unit.id) || { ...unit, certificateId: '' });

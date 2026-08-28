@@ -2,7 +2,8 @@ import { validationError } from '../errors.js';
 import { requirePermission } from '../authorization/permissions.js';
 import { averageHours, buildOperationalStatistics, reportRecord } from '../domain/operationalStatistics.js';
 import { QA_PROBLEM_CATEGORIES, QA_SEVERITIES, QA_REWORK_DESTINATIONS } from '../domain/qualityOptions.js';
-import { EXPEDITOR_PROGRESS_STEPS, REQUIRED_EXPEDITOR_STEP_IDS, EXPEDITOR_DOCUMENT_TYPES } from '../domain/expeditingOptions.js';
+import { EXPEDITOR_DOCUMENT_TYPES } from '../domain/expeditingOptions.js';
+import { PRODUCTION_STEPS, PRODUCTION_REQUIRED_STEPS } from '../domain/productionHandoffs.js';
 import { DISPATCH_METHODS, DISPATCH_PROOF_TYPES } from '../domain/dispatchWorkflow.js';
 import { buildSalesPerformanceAnalytics, formatDurationDaysHours, resolveManagementPeriod } from '../domain/salesAnalytics.js';
 import { MANAGEMENT_REPORT_SECTIONS, generateManagementPdfReport } from '../domain/managementReports.js';
@@ -123,12 +124,13 @@ export function createPhase1WorkspaceService({ repository, maxUploadBytes, clock
       return { users: [{ id: actor.id, name: actor.contact, displayName: actor.contact }], locations, priorities: ['standard', 'high', 'urgent'] };
     },
     getExpeditingOptions: () => ({
-      progressSteps: clone(EXPEDITOR_PROGRESS_STEPS),
-      requiredStepIds: [...REQUIRED_EXPEDITOR_STEP_IDS],
+      progressSteps: clone(PRODUCTION_STEPS),
+      requiredStepIds: [...PRODUCTION_REQUIRED_STEPS],
+      handoffStep: 'quality_check', handoffDepartment: 'Quality Control', orderedProduction: true,
       documentTypes: clone(EXPEDITOR_DOCUMENT_TYPES), approachingCompletionDays: 3,
     }),
     getDispatchOptions: () => ({ methods: DISPATCH_METHODS, proofTypes: DISPATCH_PROOF_TYPES, maxProofBytes: maxUploadBytes }),
-    getLaboratoryOptions: () => ({ certificationTypes: ['SANAS', 'Traceable'], releaseDestinations: ['expediting', 'dispatch'], maxCertificateBytes: maxUploadBytes }),
+    getLaboratoryOptions: () => ({ certificationTypes: ['SANAS', 'Traceable'], releaseDestinations: ['dispatch'], maxCertificateBytes: maxUploadBytes }),
     getQualityOptions: () => ({ problemCategories: clone(QA_PROBLEM_CATEGORIES), severities: clone(QA_SEVERITIES), reworkDestinations: clone(QA_REWORK_DESTINATIONS) }),
     getLocations: actor => repository.listLocations(actor),
     async saveLocation(actor, candidate, correlationId) {

@@ -314,10 +314,13 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
     assert.equal((await action(planning,'orders',orderId,'complete_planning',{planning:{internalJobNumber:'JOB-PG-FAB-001',salesOrderNumber:'SO-PG-FAB-001',assignedPlanningUserId:ids.planning}})).statusCode,200);
     assert.equal((await action(planning,'orders',orderId,'submit_to_expediting')).statusCode,200);
     assert.equal((await action(expeditor,'orders',orderId,'start_expediting',{progressStep:'planning_received',customerMessage:'Fabricated work has started.'})).statusCode,200);
-    assert.equal((await action(expeditor,'orders',orderId,'add_expediting_update',{progressStep:'quality_check',customerMessage:'Fabricated work is ready for inspection.'})).statusCode,200);
-    assert.equal((await action(expeditor,'orders',orderId,'complete_expediting')).statusCode,200);
+    for (const progressStep of ['parts_on_floor','assembly_started','first_standard_calibration','final_assembly','final_standard_calibration']) {
+      const progress = await action(expeditor,'orders',orderId,'add_expediting_update',{progressStep,customerMessage:'Fabricated production step completed.'});
+      assert.equal(progress.statusCode,200,progress.body);
+    }
+    assert.equal((await action(expeditor,'orders',orderId,'complete_expediting',{completionCheckConfirmed:true})).statusCode,200);
     assert.equal((await action(quality,'orders',orderId,'start_qa')).statusCode,200);
-    assert.equal((await action(quality,'orders',orderId,'pass_qa')).statusCode,200);
+    assert.equal((await action(quality,'orders',orderId,'pass_qa',{qaPass:{checklistConfirmed:true,meetsRequirements:true}})).statusCode,200);
     assert.equal((await action(quality,'orders',orderId,'release_qa_order')).statusCode,200);
     // This RFQ requests delivery. Exercise the required receipt and handover
     // evidence rather than bypassing Dispatch's current controlled workflow.
@@ -396,6 +399,8 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
       VALUES($1,$2,$3,$4,$5,'representative_loaded_order','expediting_in_progress','Fabricated live update validation','collect',$6)`,
       [orderId, 'OR-FABRICATED-LIVE-' + orderId, ids.companyA, ids.customerA, ids.repA, ids.repUserA]);
     const headers = auth => ({ cookie: auth.cookie, 'x-csrf-token': auth.csrf });
+    const receipt = await app.inject({method:'POST',url:'/api/v1/orders/'+orderId+'/workflow-actions',headers:headers(expeditor),payload:{action:'start_expediting',data:{progressStep:'planning_received',customerMessage:'Fabricated receipt confirmed.'}}});
+    assert.equal(receipt.statusCode,200,receipt.body);
     const revision = async auth => {
       const response = await app.inject({ url: '/api/v1/workspace/updates', headers: headers(auth) });
       assert.equal(response.statusCode, 200, response.body);
@@ -406,16 +411,16 @@ test('real PostgreSQL Phase 1 vertical slice and database security controls', { 
     const initialA = await revision(authA), initialB = await revision(authB);
     assert.equal(await revision(authA), initialA, 'unchanged database has a stable token');
     const options = await app.inject({ url: '/api/v1/expediting/workspace-options', headers: headers(expeditor) });
-    assert.ok(options.json().data.progressSteps.find(step => step.id === 'materials_checked').selectableForUpdate);
+    assert.ok(options.json().data.progressSteps.find(step => step.id === 'parts_on_floor').selectableForUpdate);
     const update = await app.inject({ method: 'POST', url: '/api/v1/orders/' + orderId + '/workflow-actions', headers: headers(expeditor),
-      payload: { action: 'add_expediting_update', data: { expeditingUpdate: { progressStep: 'materials_checked', customerMessage: 'Fabricated materials checked.', internalNote: 'FABRICATED-PRIVATE-EXPEDITING-SENTINEL' } } } });
+      payload: { action: 'add_expediting_update', data: { expeditingUpdate: { progressStep: 'parts_on_floor', customerMessage: 'Fabricated materials checked.', internalNote: 'FABRICATED-PRIVATE-EXPEDITING-SENTINEL' } } } });
     assert.equal(update.statusCode, 200, update.body);
     assert.notEqual(await revision(authA), initialA);
     assert.equal(await revision(authB), initialB, 'another company does not observe this update');
     const customerOrders = await app.inject({ url: '/api/v1/orders', headers: headers(authA) });
     assert.ok(!customerOrders.body.includes('FABRICATED-PRIVATE-EXPEDITING-SENTINEL'));
     const visible = customerOrders.json().data.find(item => item.id === orderId);
-    assert.equal(visible.expediting.updates.at(-1).progressStep, 'materials_checked');
+    assert.equal(visible.expediting.updates.at(-1).progressStep, 'parts_on_floor');
     const staffOrders = await app.inject({ url: '/api/v1/orders', headers: headers(expeditor) });
     assert.ok(staffOrders.body.includes('FABRICATED-PRIVATE-EXPEDITING-SENTINEL'));
     const invalid = await app.inject({ method: 'POST', url: '/api/v1/orders/' + orderId + '/workflow-actions', headers: headers(expeditor),

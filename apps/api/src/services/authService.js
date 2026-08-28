@@ -3,7 +3,7 @@ import { ApiError } from '../errors.js';
 import { hashPassword, hashSessionToken, randomToken, sha256, verifyPassword } from '../security/crypto.js';
 
 const safeUser = actor => ({
-  id: actor.id, companyId: actor.companyId, company: actor.company, contact: actor.contact,
+  id: actor.id, companyId: actor.companyId, companyIds: [...(actor.companyIds || [])], company: actor.company, contact: actor.contact,
   username: actor.username, email: actor.email, role: actor.role, roles: actor.roles, permissions: actor.permissions,
   forcePasswordChange: Boolean(actor.forcePasswordChange),
 });
