@@ -1872,12 +1872,12 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
   const enquiries = {
     async list() {
       const account = requireAccount();
-      return clone(readAllEnquiries().filter(enquiry => canReadRecord(account, enquiry)).map(enquiry => presentRecord(account, enquiry)));
+      return clone(readAllEnquiries().filter(enquiry => !enquiry.deletedAt && canReadRecord(account, enquiry)).map(enquiry => presentRecord(account, enquiry)));
     },
 
     async getById(enquiryId) {
       const account = requireAccount();
-      const enquiry = readAllEnquiries().find(item => item.id === enquiryId);
+      const enquiry = readAllEnquiries().find(item => item.id === enquiryId && !item.deletedAt);
       if (!enquiry || !canReadRecord(account, enquiry)) throw new ServiceError('The RFQ was not found or is outside your authorised company account.', { code: 'ENQUIRY_NOT_FOUND', status: 404 });
       return clone(presentRecord(account, enquiry));
     },
@@ -1888,7 +1888,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
         throw new ServiceError('Your account does not have a representative RFQ inbox.', { code: 'FORBIDDEN', status: 403 });
       }
       return clone(readAllEnquiries()
-        .filter(enquiry => canReadRecord(account, enquiry))
+        .filter(enquiry => !enquiry.deletedAt && canReadRecord(account, enquiry))
         .map(enquiry => presentRecord(account, enquiry)));
     },
 
@@ -2125,6 +2125,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     async list() {
       const account = requireAccount();
       return clone(refreshRetentionStates()
+        .filter(order => !order.deletedAt)
         .filter(order => order.retentionStatus !== 'archived')
         .filter(order => canReadRecord(account, order))
         .map(order => presentRecord(account, order)));
@@ -2132,7 +2133,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
 
     async getById(orderId) {
       const account = requireAccount();
-      const order = refreshRetentionStates().find(item => item.id === orderId && item.retentionStatus !== 'archived');
+      const order = refreshRetentionStates().find(item => item.id === orderId && !item.deletedAt && item.retentionStatus !== 'archived');
       if (!order || !canReadRecord(account, order)) throw new ServiceError('The order was not found or is outside your authorised company account.', { code: 'ORDER_NOT_FOUND', status: 404 });
       return clone(presentRecord(account, order));
     },
@@ -6065,6 +6066,56 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     },
   };
 
+  const recordControl = {
+    async deleteRecord(entityType, recordId, input = {}) {
+      const actor = requireAccount();
+      if (!accountCan(actor, PERMISSIONS.DELETE_OPERATIONAL_RECORDS)) {
+        throw new ServiceError('Your account cannot remove operational records.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const reason = String(input.reason || '').trim();
+      if (reason.length < 8 || reason.length > 1000) {
+        throw new ServiceError('Enter a clear deletion reason of 8–1000 characters.', { code: 'VALIDATION_ERROR', status: 422, fieldErrors: { reason: 'Enter at least 8 characters.' } });
+      }
+      if (!['rfq', 'order'].includes(entityType)) {
+        throw new ServiceError('Select an RFQ or order.', { code: 'VALIDATION_ERROR', status: 422 });
+      }
+      const roles = new Set([actor.role, ...(actor.roles || [])]);
+      const administrator = roles.has(USER_ROLES.ADMINISTRATOR);
+      if (entityType === 'rfq' && !administrator) {
+        throw new ServiceError('Only an Administrator may remove an RFQ.', { code: 'FORBIDDEN', status: 403 });
+      }
+      const state = readWorkflowState();
+      const collection = entityType === 'rfq' ? state.enquiries : state.orders;
+      const index = collection.findIndex(record => record.id === recordId && !record.deletedAt);
+      if (index < 0) throw new ServiceError('The record was not found.', { code: 'NOT_FOUND', status: 404 });
+      const record = collection[index];
+      if (!administrator && (!roles.has(USER_ROLES.PLANNING) || !['awaiting_planning', 'planning_in_progress', 'planned'].includes(record.trackingStatus))) {
+        throw new ServiceError('Planning may remove only orders still in the Planning queue.', { code: 'FORBIDDEN', status: 403 });
+      }
+      if (record.legalHold?.active || record.details?.legalHold?.active) {
+        throw new ServiceError('This record is protected by a legal hold.', { code: 'LEGAL_HOLD', status: 409 });
+      }
+      const deletedAt = now().toISOString();
+      collection[index] = { ...record, deletedAt, updatedAt: deletedAt };
+      writeWorkflowState(state);
+      appendAuditEvent({
+        id: makeId('audit'),
+        eventType: `${entityType}.soft_deleted`,
+        action: `delete_${entityType}`,
+        outcome: 'success',
+        entityType,
+        entityId: recordId,
+        companyId: record.companyId,
+        actorId: actor.id,
+        actorRole: administrator ? USER_ROLES.ADMINISTRATOR : USER_ROLES.PLANNING,
+        details: { reason, reference: record.reference, previousStatus: record.trackingStatus, hardDeleted: false },
+        immutable: true,
+        createdAt: deletedAt,
+      });
+      return { id: recordId, status: 'deleted', deletedAt };
+    },
+  };
+
   return {
     mode: 'mock',
     initialize,
@@ -6092,6 +6143,7 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
     executiveDemo,
     personalisation,
     userSettings,
+    recordControl,
     products: productService,
     preferences,
     preview: {

@@ -20,6 +20,12 @@ export function createAdministrationService({ repository, storage, identityProvi
     return { [field]: [...new Set(values)], reason: input.reason.trim() };
   }
   return Object.freeze({
+    deleteOperationalRecord(actor,entityType,recordId,input,correlationId) {
+      requirePermission(actor,'delete_operational_records');
+      if (!['rfq','order'].includes(entityType)) throw validationError({entityType:'Select an RFQ or order.'});
+      if (String(input?.reason || '').trim().length < 8) throw validationError({reason:'Record why this operational record is being removed.'});
+      return repository.softDeleteOperationalRecord(actor,entityType,recordId,{reason:String(input.reason).trim()},correlationId);
+    },
     deleteOrder(actor,orderId,input,correlationId) {
       requirePermission(actor,'administer_users');
       if (!(actor.roles || [actor.role]).includes('administrator')) throw new ApiError('FORBIDDEN','Administrator role required.',403);

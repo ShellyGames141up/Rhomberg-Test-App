@@ -376,8 +376,8 @@ export function createApiServices(config = {}) {
     assignAccountBranch: (accountId, input) => client.post(`/admin/users/${encodeURIComponent(accountId)}/branch`, input),
     resetUserLogin: (accountId, input) => client.post(`/admin/users/${encodeURIComponent(accountId)}/temporary-password`, input),
     archiveEmployee: (accountId, input) => client.post(`/admin/users/${encodeURIComponent(accountId)}/archive`, input),
-    deleteAccount: (accountId, input) => client.delete(`/admin/users/${encodeURIComponent(accountId)}`, { reason: input.reason || '' }),
-    deleteOrder: (orderId, input) => client.delete(`/admin/orders/${encodeURIComponent(orderId)}`, { reason: input.reason || '' }),
+    deleteAccount: (accountId, input) => client.delete(`/admin/users/${encodeURIComponent(accountId)}`, { body: { reason: input.reason || '' } }),
+    deleteOrder: (orderId, input) => client.delete(`/admin/orders/${encodeURIComponent(orderId)}`, { body: { reason: input.reason || '' } }),
     uploadEmployeeProfileImage: (accountId, file, input = {}) => {
       const body = new FormData();
       body.append('file', file);
@@ -408,6 +408,13 @@ export function createApiServices(config = {}) {
         status: 404,
       });
     },
+  };
+
+  const recordControl = {
+    deleteRecord: (entityType, recordId, input) => client.delete(
+      `/records/${encodeURIComponent(entityType)}/${encodeURIComponent(recordId)}`,
+      { body: { reason: input.reason || '' } },
+    ),
   };
 
   const notifications = {
@@ -606,6 +613,7 @@ export function createApiServices(config = {}) {
     archive,
     management,
     administration,
+    recordControl,
     notifications,
     planning,
     expediting,

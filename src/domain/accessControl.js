@@ -39,9 +39,10 @@ const INTERNAL_VIEWS = Object.freeze(['expeditor', 'notifications', 'account', '
 const REPRESENTATIVE_ORDER_VIEWS = Object.freeze([...INTERNAL_VIEWS, 'load-order', 'clients']);
 const TECHNICAL_VIEWS = Object.freeze(['technical', 'notifications', 'account', 'settings']);
 const OVERSIGHT_VIEWS = Object.freeze([...INTERNAL_VIEWS, 'archive', 'audit']);
-const ADMIN_VIEWS = Object.freeze(['administration', 'load-order', 'technical', 'clients', 'settings', ...OVERSIGHT_VIEWS]);
+const ADMIN_VIEWS = Object.freeze(['administration', 'records', 'load-order', 'technical', 'clients', 'settings', ...OVERSIGHT_VIEWS]);
 const ADMIN_NAVIGATION = Object.freeze([
   navItem('administration', 'A', 'Admin'),
+  navItem('records', 'D', 'Records'),
   navItem('expeditor', '\u25C7', 'Overview'),
   navItem('technical', 'T', 'Technical'),
   navItem('clients', 'L', 'Locations'),
@@ -134,6 +135,13 @@ export const ROLE_PROFILES = Object.freeze({
     role: USER_ROLES.PLANNING,
     label: 'Planning',
     workspaceLabel: 'Planning',
+    navigation: Object.freeze([
+      navItem('expeditor', '↻', 'Planning'),
+      navItem('records', 'D', 'Records'),
+      navItem('notifications', '!', 'Alerts'),
+      navItem('account', '○', 'Account'),
+    ]),
+    allowedViews: Object.freeze([...INTERNAL_VIEWS, 'records']),
     dashboard: {
       eyebrow: 'Planning workspace',
       headline: 'Accepted orders need a plan.',

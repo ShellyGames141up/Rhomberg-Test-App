@@ -202,7 +202,7 @@ export function createPostgresRepository(pool) {
   };
 
   const loadEnquiry = async (client, id, actor) => {
-    const result = await client.query(`${enquirySelect} WHERE r.id = $1`, [id]);
+    const result = await client.query(`${enquirySelect} WHERE r.id = $1 AND r.deleted_at IS NULL`, [id]);
     if (!result.rows[0]) throw notFound('The RFQ was not found or is outside your authorised company account.');
     const items = await client.query('SELECT * FROM app.rfq_items WHERE rfq_id = $1 ORDER BY line_number', [id]);
     const documents = await client.query('SELECT * FROM app.document_metadata WHERE rfq_id = $1 AND deleted_at IS NULL ORDER BY created_at', [id]);
@@ -442,6 +442,18 @@ export function createPostgresRepository(pool) {
     async softDeleteOrder(actor,orderId,payload,correlationId) {
       try {
         return await inTransaction(async client => (await client.query('SELECT app.soft_delete_order($1,$2,$3) AS result',[orderId,payload.reason,correlationId])).rows[0].result,{actor});
+      } catch (error) {
+        const codes = { '22023':['VALIDATION_ERROR',422], P0002:['NOT_FOUND',404], '42501':['FORBIDDEN',403], '23514':['LEGAL_HOLD',409] };
+        if (codes[error.code]) [error.code,error.statusCode]=codes[error.code];
+        throw error;
+      }
+    },
+    async softDeleteOperationalRecord(actor,entityType,recordId,payload,correlationId) {
+      try {
+        return await inTransaction(async client => (await client.query(
+          'SELECT app.soft_delete_operational_record($1,$2,$3,$4) AS result',
+          [entityType,recordId,payload.reason,correlationId],
+        )).rows[0].result,{actor});
       } catch (error) {
         const codes = { '22023':['VALIDATION_ERROR',422], P0002:['NOT_FOUND',404], '42501':['FORBIDDEN',403], '23514':['LEGAL_HOLD',409] };
         if (codes[error.code]) [error.code,error.statusCode]=codes[error.code];
@@ -990,7 +1002,7 @@ export function createPostgresRepository(pool) {
           predicate += ` AND r.representative_id = $${values.length + 1}`;
           values.push(actor.representativeId);
         }
-        const result = await client.query(`${enquirySelect} WHERE ${predicate} ORDER BY r.created_at DESC ${forReporting ? '' : 'LIMIT 100'}`, values);
+        const result = await client.query(`${enquirySelect} WHERE r.deleted_at IS NULL AND (${predicate}) ORDER BY r.created_at DESC ${forReporting ? '' : 'LIMIT 100'}`, values);
         // Batch only the authorised parent IDs on this transaction's RLS context.
         const lines = result.rows.length ? (await client.query(
           'SELECT * FROM app.rfq_items WHERE rfq_id = ANY($1::uuid[]) ORDER BY rfq_id, line_number',

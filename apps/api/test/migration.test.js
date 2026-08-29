@@ -13,6 +13,7 @@ test('deployment grant allowlist VALUES contain exactly one signature per row', 
     for(const section of sections) {
       const rows=await db.query('SELECT * FROM (VALUES '+section[1]+') AS approved(signature)');
       assert.ok(rows.rows.some(row=>row.signature==='app.soft_delete_order(uuid,text,text)'));
+      assert.ok(rows.rows.some(row=>row.signature==='app.soft_delete_operational_record(text,uuid,text,text)'));
       assert.equal(new Set(rows.rows.map(row=>row.signature)).size,rows.rows.length);
     }
   } finally {await db.close();}
@@ -23,6 +24,8 @@ test('Phase 1 migration applies to an empty PostgreSQL-compatible database with 
   await runMigrations(db);
   await runMigrations(db);
   const migrationRecords = await db.query('SELECT version FROM public.rhomberg_schema_migrations');
+  assert.ok(migrationRecords.rows.some(row => row.version === '026_controlled_operational_record_deletion.sql'));
+  migrationRecords.rows = migrationRecords.rows.filter(row => row.version !== '026_controlled_operational_record_deletion.sql');
   assert.ok(migrationRecords.rows.some(row => row.version === '025_administrator_order_soft_delete.sql'));
   migrationRecords.rows = migrationRecords.rows.filter(row => row.version !== '025_administrator_order_soft_delete.sql');
   assert.ok(migrationRecords.rows.some(row => row.version === '024_representative_directory_sync.sql'));

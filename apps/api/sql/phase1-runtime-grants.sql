@@ -25,7 +25,7 @@ DECLARE
     'app.create_customer_account(uuid,uuid,text,text,text,text,text,text,text,uuid,text,text)',
     'app.register_customer_account(uuid,uuid,text,text,text,text,text,text,text,text,text)',
     'app.resolve_rfq_representative(uuid,uuid,text)',
-    'app.soft_delete_user(uuid,text,text)','app.soft_delete_order(uuid,text,text)',
+    'app.soft_delete_user(uuid,text,text)','app.soft_delete_order(uuid,text,text)','app.soft_delete_operational_record(text,uuid,text,text)',
     'app.administer_user(uuid,text,jsonb,text)',
     'app.administer_company(uuid,text,jsonb,text)',
     'app.admin_user_login_history(uuid)',
@@ -143,7 +143,7 @@ WITH approved(signature) AS (VALUES
   ('app.list_internal_users()'),('app.list_technical_advisors()'),('app.complete_internal_user_profile(uuid,text,text,text,text[],uuid,text,text)'),
   ('app.create_customer_account(uuid,uuid,text,text,text,text,text,text,text,uuid,text,text)'),
   ('app.register_customer_account(uuid,uuid,text,text,text,text,text,text,text,text,text)'),
-  ('app.resolve_rfq_representative(uuid,uuid,text)'),('app.soft_delete_user(uuid,text,text)'),('app.soft_delete_order(uuid,text,text)'),
+  ('app.resolve_rfq_representative(uuid,uuid,text)'),('app.soft_delete_user(uuid,text,text)'),('app.soft_delete_order(uuid,text,text)'),('app.soft_delete_operational_record(text,uuid,text,text)'),
   ('app.administer_user(uuid,text,jsonb,text)'),('app.administer_company(uuid,text,jsonb,text)'),
   ('app.admin_user_login_history(uuid)'),('app.change_own_password(text,text)')
 )
@@ -159,7 +159,7 @@ WITH approved(signature) AS (VALUES
   ('app.list_internal_users()'),('app.list_technical_advisors()'),('app.complete_internal_user_profile(uuid,text,text,text,text[],uuid,text,text)'),
   ('app.create_customer_account(uuid,uuid,text,text,text,text,text,text,text,uuid,text,text)'),
   ('app.register_customer_account(uuid,uuid,text,text,text,text,text,text,text,text,text)'),
-  ('app.resolve_rfq_representative(uuid,uuid,text)'),('app.soft_delete_user(uuid,text,text)'),('app.soft_delete_order(uuid,text,text)'),
+  ('app.resolve_rfq_representative(uuid,uuid,text)'),('app.soft_delete_user(uuid,text,text)'),('app.soft_delete_order(uuid,text,text)'),('app.soft_delete_operational_record(text,uuid,text,text)'),
   ('app.administer_user(uuid,text,jsonb,text)'),('app.administer_company(uuid,text,jsonb,text)'),
   ('app.admin_user_login_history(uuid)'),('app.change_own_password(text,text)')
 )

@@ -83,6 +83,18 @@ All signed-in roles receive only the notification rows produced for their existi
 
 `retry_notification_delivery` is granted to Manager and Administrator only. It queues a failed email/push delivery for the background worker and never changes an RFQ/order status. Every retry is audited. Buyer has no workflow notification queue while its workflow remains inactive.
 
+## Controlled record removal
+
+| Capability | Customer | Sales / other departments | Planning | Administrator |
+| --- | :---: | :---: | :---: | :---: |
+| Open Records work dock | No | No | Yes | Yes |
+| Soft-delete RFQ | No | No | No | Yes |
+| Soft-delete order awaiting/in Planning | No | No | Yes | Yes |
+| Soft-delete order after Planning hand-off | No | No | No | Yes, unless legal hold applies |
+| Hard-delete documents or audit history | No | No | No | No |
+
+The `delete_operational_records` permission enables the dock but does not override the server-side role and status restrictions. Every removal requires a reason and creates immutable audit evidence.
+
 ## Phase 21 specialised permissions
 
 | Capability | Customer | Rep | Lab | QA | Dispatch | Manager/Admin |

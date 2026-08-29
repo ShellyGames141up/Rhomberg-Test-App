@@ -55,3 +55,4 @@ await import('./api-contract-audit.test.mjs');
 await import('./management-workspace-routing.test.mjs');
 await import('./laboratory-sanas-selection.test.mjs');
 await import('./production-handoffs-ui.test.mjs');
+await import('./record-control.test.mjs');

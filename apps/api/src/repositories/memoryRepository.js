@@ -282,7 +282,7 @@ export function createMemoryRepository(seed = {}) {
     },
     async listOrders(actor) {
       const operationalQueue = ['view_planning_queue','view_expediting_queue','view_lab_queue','view_qa_queue','view_dispatch_queue'].some(permission => actor.permissions.includes(permission));
-      return clone(state.orders.filter(order => actor.permissions.includes('view_all_orders') || operationalQueue || actor.companyIds.includes(order.companyId) || order.representativeId === actor.representativeId));
+      return clone(state.orders.filter(order => !order.deletedAt && (actor.permissions.includes('view_all_orders') || operationalQueue || actor.companyIds.includes(order.companyId) || order.representativeId === actor.representativeId)));
     },
     async getOrder(actor,id) {
       const order=state.orders.find(item=>item.id===id && canReadOrder(actor,item));
@@ -360,9 +360,22 @@ export function createMemoryRepository(seed = {}) {
       const row = { value: clone(value), updated_at: new Date().toISOString() };
       state.policies.set(code, row); return clone(row);
     },
-    async listEnquiries(actor) { return clone(state.enquiries.filter(item => canRead(actor, item))); },
+    async listEnquiries(actor) { return clone(state.enquiries.filter(item => !item.deletedAt && canRead(actor, item))); },
+    async softDeleteOperationalRecord(actor,entityType,recordId,payload,correlationId) {
+      const collection=entityType==='rfq'?state.enquiries:state.orders;
+      const record=collection.find(item=>item.id===recordId&&!item.deletedAt);
+      if(!record) throw notFound('The operational record was not found.');
+      const roles=actor.roles || [actor.role];
+      const administrator=roles.includes('administrator');
+      if(!administrator && !(roles.includes('planning')&&entityType==='order'&&['awaiting_planning','planning_in_progress','planned'].includes(record.trackingStatus))) {
+        const error=new Error('You are not authorised to remove this record.');error.code='FORBIDDEN';error.statusCode=403;throw error;
+      }
+      record.deletedAt=new Date().toISOString();
+      state.audits.push({id:state.audits.length+1,eventType:`${entityType}.soft_deleted`,actorUserId:actor.id,actorRole:actor.role,companyId:record.companyId,action:`delete_${entityType}`,entityType,entityId:recordId,outcome:'success',correlationId,details:{reason:payload.reason,reference:record.reference,hardDeleted:false},createdAt:record.deletedAt});
+      return clone({id:recordId,status:'deleted',deletedAt:record.deletedAt});
+    },
     async getEnquiry(actor, id) {
-      const enquiry = state.enquiries.find(item => item.id === id);
+      const enquiry = state.enquiries.find(item => item.id === id && !item.deletedAt);
       if (!enquiry || !canRead(actor, enquiry)) throw notFound('The RFQ was not found or is outside your authorised company account.');
       return clone(enquiry);
     },

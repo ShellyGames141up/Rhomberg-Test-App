@@ -11,6 +11,7 @@ import { Configurator } from './components/Configurator.jsx';
 import { Enquiry } from './components/Enquiry.jsx';
 import { DispatchDashboard } from './components/DispatchDashboard.jsx';
 import { ExpeditorDashboard } from './components/ExpeditorDashboard.jsx';
+import { RecordsControlDock } from './components/RecordsControlDock.jsx';
 import { Home } from './components/Home.jsx';
 import { Intro } from './components/Intro.jsx';
 import { AppHeader, BottomNav, Toast } from './components/Layout.jsx';
@@ -974,6 +975,7 @@ export default function App() {
           {isStaff ? (
             <>
               {view === 'administration' && <AdministratorDashboard refreshToken={liveRevision} account={account} administrationActions={services.administration} serviceMode={services.mode} onOpenManagement={() => navigate('expeditor')} onOpenAudit={() => navigate('audit')} onOpenArchive={() => navigate('archive')} onRecordsChanged={refreshAfterManagementAction} />}
+              {view === 'records' && services.recordControl && <RecordsControlDock account={account} enquiries={enquiries} orders={orders} actions={services.recordControl} onRecordsChanged={refreshOperationalRecords} />}
               {view === 'load-order' && <RepresentativeOrderLoader actions={services.representativeOrders} maxDocumentBytes={services.preview.maxRepresentativeOrderDocumentBytes} onCreated={representativeOrderCreated} onClose={() => navigate('expeditor')} />}
               {view === 'expeditor' && (usesSalesWorkspace(account)
                 && notificationTarget?.entityType !== 'order'

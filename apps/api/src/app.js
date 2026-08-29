@@ -600,6 +600,13 @@ export async function buildApp({ config, repository, storage, identityProvider, 
     preHandler: requireCsrf,
     schema: { params:{type:'object',required:['orderId'],properties:{orderId:{type:'string',format:'uuid'}}}, body:{type:'object',additionalProperties:false,required:['reason'],properties:{reason:{type:'string',minLength:8,maxLength:1000}}} },
   }, async request => ({ data:await administrationService.deleteOrder(request.actor,request.params.orderId,request.body,request.id),meta:{requestId:request.id} }));
+  app.delete('/api/v1/records/:entityType/:recordId', {
+    preHandler: requireCsrf,
+    schema: {
+      params:{type:'object',required:['entityType','recordId'],properties:{entityType:{type:'string',enum:['rfq','order']},recordId:{type:'string',format:'uuid'}}},
+      body:{type:'object',additionalProperties:false,required:['reason'],properties:{reason:{type:'string',minLength:8,maxLength:1000}}},
+    },
+  }, async request => ({ data:await administrationService.deleteOperationalRecord(request.actor,request.params.entityType,request.params.recordId,request.body,request.id),meta:{requestId:request.id} }));
   app.post('/api/v1/admin/users/:accountId/roles', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } }, preHandler: requireCsrf }, async request => ({ data: await administrationService.assignRoles(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
   app.post('/api/v1/admin/users/:accountId/branch', { preHandler: requireCsrf }, async request => ({ data: await administrationService.assignBranch(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
   app.put('/api/v1/administration/users/:accountId/permissions', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } }, preHandler: requireCsrf }, async request => ({ data: await administrationService.setPermissions(request.actor,request.params.accountId,request.body || {},request.id), meta:{requestId:request.id} }));
