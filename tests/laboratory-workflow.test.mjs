@@ -37,9 +37,9 @@ assert.notEqual(active.laboratory.units[0].certificateId, oldId);
 assert.equal(active.laboratory.units[0].certificateVersions[0].status, 'superseded');
 
 const pressure = products.find(product => product.category === 'pressure' && product.configurations.some(field => field.key === 'sanas'));
-const temperature = products.find(product => product.category === 'temperature' && product.configurations.some(field => field.key === 'traceability'));
+const temperature = products.find(product => product.category === 'temperature' && product.configurations.some(field => field.key === 'sanas'));
 assert.deepEqual(pressure.configurations.find(field => field.key === 'sanas').options, ['Yes — SANAS', 'No SANAS']);
-assert.deepEqual(temperature.configurations.find(field => field.key === 'traceability').options, ['Yes — Traceable', 'No Traceable Certificate']);
+assert.deepEqual(temperature.configurations.find(field => field.key === 'sanas').options, ['Yes — SANAS', 'No SANAS']);
 const clientSnapshot = certificateRecipientSnapshot({ configuration: { certificateRecipientType: 'My Client', certificateClientName: 'Fabricated Client', certificateAddressLine1: '1 Test Road', certificateCity: 'Cape Town', certificateProvince: 'Western Cape', certificatePostalCode: '8000', certificateCountry: 'South Africa' } }, DEMO_ACCOUNT, '2026-08-14T10:00:00.000Z');
 assert.equal(clientSnapshot.recipientType, 'customer_client');
 assert.equal(clientSnapshot.recipientName, 'Fabricated Client');

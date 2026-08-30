@@ -68,7 +68,7 @@ function SpecGroup({ group }) {
 }
 
 function ConfigurationOverview({ product }) {
-  const visibleFields = product.configurations.filter(field => !['customRange', 'chemicalSealNotes'].includes(field.key));
+  const visibleFields = product.configurations.filter(field => !field.legacy && !['customRange', 'chemicalSealNotes'].includes(field.key));
   return (
     <div className="configuration-overview">
       <span className="eyebrow">Only relevant choices</span><h2>Available configurations</h2>

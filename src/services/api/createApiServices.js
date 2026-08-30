@@ -395,6 +395,7 @@ export function createApiServices(config = {}) {
       input,
     ),
     updateCompany: (companyId, input) => client.patch(`/administration/companies/${encodeURIComponent(companyId)}`, input),
+    deleteCompany: (companyId, input) => client.delete(`/administration/companies/${encodeURIComponent(companyId)}`, { body: { reason: input.reason || '' } }),
     updateAccount: (accountId, input) => client.patch(`/administration/users/${encodeURIComponent(accountId)}`, input),
     setAccountPermissions: (accountId, input) => client.put(`/administration/users/${encodeURIComponent(accountId)}/permissions`, input),
     updateNotificationPreferences: (accountId, input) => client.put(`/administration/users/${encodeURIComponent(accountId)}/notification-preferences`, input),

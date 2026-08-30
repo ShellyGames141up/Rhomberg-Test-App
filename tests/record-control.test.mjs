@@ -39,5 +39,12 @@ assert.match(migration, /Planning may remove only records still in the Planning 
 assert.match(migration, /INSERT INTO app\.audit_events/);
 assert.match(migration, /'hardDeleted',false/);
 assert.match(migration, /legalHold/);
+const companyDeletionMigration = readFileSync('apps/api/migrations/027_controlled_company_deletion.sql', 'utf8');
+assert.match(companyDeletionMigration, /p_operation='delete'/);
+assert.match(companyDeletionMigration, /UPDATE app\.company_users SET revoked_at/);
+assert.match(companyDeletionMigration, /status='archived'/);
+assert.match(readFileSync('src/components/AdministratorDashboard.jsx', 'utf8'), /Delete company/);
+assert.match(readFileSync('src/services/api/createApiServices.js', 'utf8'), /deleteCompany/);
+assert.match(readFileSync('docs/api/openapi.yaml', 'utf8'), /deleteAdministrationCompany/);
 
 console.log('Controlled account and operational-record deletion coverage passed.');

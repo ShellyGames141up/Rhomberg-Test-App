@@ -5445,6 +5445,20 @@ export function createMockServices({ storage, emailSender = sendRfqEmail, now = 
       return clone(newValue);
     },
 
+    async deleteCompany(companyId, input = {}) {
+      const actor = requireAdministrator(PERMISSIONS.MANAGE_CUSTOMER_COMPANIES);
+      if (!canAdministerCompany(actor, companyId)) throw new ServiceError('The company is outside your authorised scope.', { code: 'FORBIDDEN', status: 403 });
+      const reason = administrativeReason(input.reason);
+      const accountRecords = readAccounts();
+      const indexes = accountRecords.map((item, index) => ({ item, index })).filter(entry => entry.item.companyId === companyId && entry.item.role === USER_ROLES.CUSTOMER);
+      if (!indexes.length) throw new ServiceError('The customer company was not found.', { code: 'COMPANY_NOT_FOUND', status: 404 });
+      const occurredAt = now().toISOString();
+      for (const entry of indexes) accountRecords[entry.index] = { ...entry.item, status: 'archived', deletedAt: occurredAt, companyId: '' };
+      writeAccounts(accountRecords);
+      administrationAudit({ actor, action: 'administration.company_deleted', entityType: 'company', entityId: companyId, companyId, previousValue: { name: indexes[0].item.company }, newValue: { status: 'deleted' }, fieldsChanged: ['status'], reason });
+      return { id: companyId, operation: 'delete', status: 'deleted' };
+    },
+
     async updateAccount(accountId, input = {}) {
       const actor = requireAdministrator(PERMISSIONS.ADMINISTER_USERS);
       const reason = administrativeReason(input.reason);

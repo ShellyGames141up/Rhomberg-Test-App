@@ -3045,6 +3045,26 @@ paths:
         '200': { description: Updated company and immutable audit reference }
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ApiError' }
+    delete:
+      operationId: deleteAdministrationCompany
+      summary: Remove a customer company from active records while retaining history
+      description: Requires Administrator company-management authority. The company, customer memberships and representative assignments are soft-deleted or ended; RFQs, orders, documents and immutable audit evidence remain retained.
+      parameters: [{ $ref: '#/components/parameters/CompanyId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 8, maxLength: 1000 }
+      responses:
+        '200': { description: Company removed from active records and immutable audit reference recorded }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Company missing, deleted or inaccessible }
+        '422': { $ref: '#/components/responses/ApiError' }
   /administration/catalogue/{catalogueKind}/{itemId}:
     patch:
       operationId: updateAdministrationCatalogueItem

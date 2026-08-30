@@ -78,7 +78,7 @@ export function RepresentativeOrderLoader({ actions, maxDocumentBytes, onCreated
   const selectedContact = options.contacts.find(contact => contact.id === values.customerContactId);
   const selectedRepresentative = options.representatives.find(representative => representative.id === values.representativeId);
   const visibleConfigurationFields = useMemo(
-    () => selectedProduct?.configurations?.filter(field => shouldShowField(field, configuration)) || [],
+    () => selectedProduct?.configurations?.filter(field => !field.legacy && shouldShowField(field, configuration)) || [],
     [configuration, selectedProduct],
   );
 
@@ -106,7 +106,7 @@ export function RepresentativeOrderLoader({ actions, maxDocumentBytes, onCreated
   const updateConfiguration = (field, value) => {
     setConfiguration(current => {
       const next = { ...current, [field.key]: value };
-      selectedProduct.configurations.forEach(candidate => {
+      selectedProduct.configurations.filter(candidate => !candidate.legacy).forEach(candidate => {
         if (candidate.key === field.key) return;
         if (!shouldShowField(candidate, next)) delete next[candidate.key];
         else if (candidate.optionsBy && next[candidate.key] !== undefined && !optionsForField(candidate, next).includes(next[candidate.key])) delete next[candidate.key];

@@ -61,7 +61,7 @@ export function createLaboratoryService({ repository, storage, workflowService }
     requirePermission(actor, 'manage_certificates');
     requirePermission(actor, 'view_lab_queue');
     const metadata = validateEntry(entry, { replacement });
-    if (!file || file.mediaType !== 'application/pdf' || !/\.pdf$/i.test(file.originalName || '')) throw validationError({ certificate: 'Attach a non-empty PDF certificate.' });
+    if (!file || file.mediaType !== 'application/pdf' || !/\.pdf$/i.test(file.originalName || '') || !Buffer.isBuffer(file.buffer) || !file.buffer.subarray(0, 5).equals(Buffer.from('%PDF-'))) throw validationError({ certificate: 'Attach a valid PDF certificate.' });
     const order = await repository.getOrder(actor, orderId);
     const unit = laboratoryUnitsForOrder(order).find(candidate => candidate.id === unitId);
     if (!unit) throw validationError({ unitId: 'Select a Laboratory unit from this order.' });

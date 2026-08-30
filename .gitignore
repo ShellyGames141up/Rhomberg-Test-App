@@ -17,6 +17,10 @@ dist-production/
 dist-internal-staging/
 tmp/
 
+# Generated RHOMAPP staging release handoff artifacts are retained outside Git.
+/RhombergConnect-Staging-*.zip
+/RhombergConnect-Staging-*/
+
 # Native signing material must remain outside source control.
 *.jks
 *.keystore

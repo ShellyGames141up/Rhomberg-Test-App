@@ -249,7 +249,7 @@ const tpsConfig = product => [
   choice('probeDiameter', 'Probe diameter', product.probeDiameters),
   select('stemLength', 'Probe / stem length', ['63 mm', '100 mm', '150 mm', '228 mm', '304 mm', '381 mm', '457 mm', '610 mm', 'Custom length - sales review']),
   withOptionsBy(choice('processConnection', 'Process connection', allTemperatureConnections), 'probeDiameter', temperatureConnectionsByProbe, allTemperatureConnections),
-  choice('traceability', 'Traceability', ['No traceability certificate', 'Traceability certificate required']),
+  choice('sanas', 'SANAS calibration', ['No SANAS certificate', 'SANAS calibration required']),
   textarea('specialRequirements', 'Special requirements', 'Thermowell, sanitary connection, response time or process notes', false),
 ];
 
@@ -261,7 +261,7 @@ const tpbConfig = product => [
   choice('probeDiameter', 'Probe diameter', ['6 mm', '8 mm', '9.52 mm (3/8 inch)', '10 mm', '12 mm']),
   select('probeLength', 'Probe length', ['100 mm', '150 mm', '200 mm', '250 mm', '300 mm', '350 mm', '400 mm', '450 mm', 'Custom length - sales review']),
   withOptionsBy(choice('processConnection', 'Process connection', allTemperatureConnections), 'probeDiameter', temperatureConnectionsByProbe, allTemperatureConnections),
-  choice('traceability', 'Traceability', ['No traceability certificate', 'Traceability certificate required']),
+  choice('sanas', 'SANAS calibration', ['No SANAS certificate', 'SANAS calibration required']),
   textarea('specialRequirements', 'Special requirements', 'Thermowell, sanitary connection, capillary protection or process notes', false),
 ];
 
@@ -271,7 +271,7 @@ const temperatureElectronicConfig = product => [
   choice('output', 'Output / switching', product.outputs || ['4-20 mA']),
   choice('processConnection', 'Process connection', product.connections || ['1/4 inch BSP', '1/4 inch NPT', '1/2 inch BSP', '1/2 inch NPT']),
   choice('electricalConnection', 'Electrical connection', product.electrical || ['DIN head / terminal', 'M12 connector', 'Cable outlet']),
-  choice('traceability', 'Traceability', ['No traceability certificate', 'Traceability certificate required']),
+  choice('sanas', 'SANAS calibration', ['No SANAS certificate', 'SANAS calibration required']),
   textarea('specialRequirements', 'Special requirements', 'Probe, thermowell, display, hazardous area or installation notes', false),
 ];
 
@@ -282,7 +282,7 @@ const temperatureSensorConfig = product => [
   text('probeLength', 'Probe length', 'Example: 150 mm', true),
   choice('processConnection', 'Process connection', ['Plain probe', '1/4 inch BSP', '1/4 inch NPT', '1/2 inch BSP', '1/2 inch NPT', 'Adjustable union', 'Custom connection']),
   choice('termination', 'Termination', ['Flying leads', 'Terminal head', 'M12 connector', 'Plug and socket', 'Cable - specify length']),
-  choice('traceability', 'Traceability', ['No traceability certificate', 'Traceability certificate required']),
+  choice('sanas', 'SANAS calibration', ['No SANAS certificate', 'SANAS calibration required']),
   textarea('specialRequirements', 'Special requirements', 'Lead length, sheath material, head type, thermowell or response-time notes', false),
 ];
 
@@ -300,7 +300,7 @@ const thermowellConfig = product => {
   } else {
     fields.push(choice('externalConnection', 'External process connection', ['1/4 inch NPT', '3/8 inch NPT', '1/2 inch NPT', '3/4 inch NPT', '1/4 inch BSP', '3/8 inch BSP', '1/2 inch BSP', '3/4 inch BSP', 'Weld-on', 'Ball joint', 'Flange - sales review']));
   }
-  fields.push(choice('traceability', 'Traceability', ['No traceability certificate', 'Traceability certificate required']));
+  fields.push(choice('sanas', 'SANAS calibration', ['No SANAS certificate', 'SANAS calibration required']));
   fields.push(textarea('specialRequirements', 'Special requirements', 'Pressure, velocity, material certificate or dimensional notes', false));
   return fields;
 };
@@ -471,8 +471,8 @@ const defineProduct = input => {
     documents,
     documentSourceStatus: documents.length ? 'approved_documents_available' : 'missing_approved_datasheet_source',
     rules: {
-      sanas: product.category === 'pressure',
-      traceability: product.category === 'temperature',
+      sanas: product.category === 'pressure' || product.category === 'temperature',
+      traceability: false,
       chemicalSealRequest: product.category === 'pressure' && product.variant === 'gauge' && product.gaugeFamily === 'process' && product.allowChemicalSeal !== false,
     },
   };

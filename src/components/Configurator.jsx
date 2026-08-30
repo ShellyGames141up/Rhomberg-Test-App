@@ -12,7 +12,7 @@ export function Configurator({ product, existingLine, account, onSave, onCancel 
 
   const steps = useMemo(() => [
     { key: '__quantity', label: 'Quantity', type: 'quantity', required: true },
-    ...product.configurations.filter(field => shouldShowField(field, values)),
+    ...product.configurations.filter(field => !field.legacy && shouldShowField(field, values)),
     { key: '__review', label: 'Review configuration', type: 'review' },
   ], [product, values]);
 
@@ -27,7 +27,7 @@ export function Configurator({ product, existingLine, account, onSave, onCancel 
     setError('');
     setValues(current => {
       const next = { ...current, [field.key]: value };
-      product.configurations.forEach(candidate => {
+      product.configurations.filter(candidate => !candidate.legacy).forEach(candidate => {
         if (candidate.key === field.key) return;
         if (!shouldShowField(candidate, next)) {
           delete next[candidate.key];
@@ -70,6 +70,7 @@ export function Configurator({ product, existingLine, account, onSave, onCancel 
       variant: product.variant || '',
       quantity: normaliseQuantity(quantity),
       configuration: Object.fromEntries(product.configurations
+        .filter(configField => !configField.legacy)
         .filter(configField => shouldShowField(configField, values))
         .filter(configField => values[configField.key] !== undefined)
         .map(configField => [configField.key, values[configField.key]])),
@@ -96,7 +97,7 @@ export function Configurator({ product, existingLine, account, onSave, onCancel 
         {field.type === 'text' && <TextStep field={field} value={values[field.key] || ''} onChange={update} />}
         {field.type === 'textarea' && <TextAreaStep field={field} value={values[field.key] || ''} onChange={update} />}
         {field.type === 'toggle' && <ToggleStep field={field} value={Boolean(values[field.key])} onChange={update} />}
-        {field.type === 'review' && <ReviewStep product={product} quantity={quantity} values={values} fields={product.configurations} account={account} />}
+        {field.type === 'review' && <ReviewStep product={product} quantity={quantity} values={values} fields={product.configurations.filter(item => !item.legacy)} account={account} />}
         {error && <p className="config-error" role="alert">{error}</p>}
       </div>
 
